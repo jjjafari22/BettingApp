@@ -200,15 +200,16 @@
         newBet.Status = "Pending";
         newBet.CreatedAt = DateTime.UtcNow;
 
-        DbFactory.Bets.Add(newBet);
-        await DbFactory.SaveChangesAsync();
+        using var context = DbFactory.CreateDbContext(); 
+        context.Bets.Add(newBet);
+        await context.SaveChangesAsync();
         
+        // Reset form
         newBet = new Bet();
         uploadedFile = null; 
         
+        // Reload data (which will also use a fresh context)
         await LoadData();
-        // Since we are in an event handler, StateHasChanged is usually automatic, 
-        // but explicit call handles async gaps.
         StateHasChanged(); 
     }
     
