@@ -29,16 +29,13 @@ builder.Services.AddAuthentication(options =>
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-// 1. Register the Factory (Singleton) - Used by your Blazor Components
+// 1. Register Factory as SCOPED (This prevents the "Root Provider" crash)
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseSqlite(connectionString), lifetime: ServiceLifetime.Scoped);
+
+// 2. Register Standard Context (This allows Identity/Login to work normally)
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(connectionString));
-
-// 2. Register the Context (Scoped) - Used by Identity
-// This tells Identity: "When you need a context, ask the Factory to create one for you."
-builder.Services.AddScoped<ApplicationDbContext>(p => 
-    p.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
-
-builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
