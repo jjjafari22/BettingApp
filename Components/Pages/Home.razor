@@ -4,11 +4,11 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore 
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthState
 @inject NavigationManager Nav
 @inject IWebHostEnvironment Env
-@attribute [Authorize] 
+@attribute [Authorize]
 
 <PageTitle>Dashboard</PageTitle>
 @if (IsLoading)
@@ -150,11 +150,11 @@
     }
 
     private async Task LoadData()
-    {
-        myBets = await Db.Bets.Where(b => b.UserId == userId)
-                              .OrderByDescending(b => b.CreatedAt)
-                              .AsNoTracking()
-                              .ToListAsync();
+    {      
+        using var context = DbFactory.CreateDbContext();
+        myBets = await context.Bets.Where(b => b.UserId == userId)
+                                .AsNoTracking()
+                                .ToListAsync();
 
         var usedCredit = myBets.Where(b => b.Status == "Pending" || b.Status == "Lost")
                                .Sum(b => b.AmountNOK);
@@ -200,8 +200,8 @@
         newBet.Status = "Pending";
         newBet.CreatedAt = DateTime.UtcNow;
 
-        Db.Bets.Add(newBet);
-        await Db.SaveChangesAsync();
+        DbFactory.Bets.Add(newBet);
+        await DbFactory.SaveChangesAsync();
         
         newBet = new Bet();
         uploadedFile = null; 
