@@ -99,7 +99,16 @@
         newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
 
         await LoadData();
-        await SetupSignalR();
+        
+        try 
+        {
+            await SetupSignalR();
+        }
+        catch (Exception ex)
+        {
+            // This keeps the page alive even if SignalR fails
+            Console.WriteLine($"SignalR connection failed: {ex.Message}");
+        }
     }
 
     private async Task LoadData()
