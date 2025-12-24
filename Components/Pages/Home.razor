@@ -23,7 +23,7 @@
     <div class="card mb-4">
         <div class="card-header">New Bet</div>
         <div class="card-body">
-            <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="BetForm">
+            <EditForm Model="@newBet" OnValidSubmit="PlaceBet">
                 <DataAnnotationsValidator />
                 
                 <div class="mb-3">
@@ -46,16 +46,28 @@
         <thead>
             <tr>
                 <th>Date</th>
+                <th>Time</th>
                 <th>Amount</th>
-                <th>Status</th>
+                <th>Screenshot</th> <th>Status</th>
             </tr>
         </thead>
         <tbody>
             @foreach (var bet in myBets)
             {
                 <tr class="@GetRowClass(bet.Status)">
-                    <td>@bet.CreatedAt.ToShortDateString()</td>
+                    <td>@bet.CreatedAt.ToLocalTime().ToShortDateString()</td>
+                    <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
                     <td>@bet.AmountNOK kr</td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                        {
+                            <a href="@bet.ScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
+                        }
+                        else
+                        {
+                            <span class="text-muted">None</span>
+                        }
+                    </td>
                     <td>@bet.Status</td>
                 </tr>
             }
@@ -64,7 +76,6 @@
 </div>
 
 @code {
-    [SupplyParameterFromForm]
     private Bet newBet { get; set; } = new();
     
     private List<Bet> myBets = new();
@@ -146,7 +157,8 @@
         newBet.UserName = auth.User.Identity?.Name;
 
         newBet.Status = "Pending";
-        
+        newBet.CreatedAt = DateTime.UtcNow;
+
         Db.Bets.Add(newBet);
         await Db.SaveChangesAsync();
         
