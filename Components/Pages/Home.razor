@@ -11,6 +11,10 @@
 @attribute [Authorize] 
 
 <PageTitle>Dashboard</PageTitle>
+@if (IsLoading)
+{
+    <div class="alert alert-info">Loading your data...</div>
+}
 
 @if (!string.IsNullOrEmpty(ErrorMessage))
 {
@@ -95,41 +99,53 @@
     private HubConnection? hubConnection;
     private string userId;
     
-    // Stores the error message to show on screen
+    // Track if we are still loading data
+    private bool IsLoading = true;
     private string? ErrorMessage;
 
     protected override async Task OnInitializedAsync()
     {
-        // We wrap EVERYTHING in a try-catch to prevent the blank page crash
-        try 
+        // Get User ID immediately so we have it ready
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+        
+        if (userId != null)
         {
-            var auth = await AuthState.GetAuthenticationStateAsync();
-            userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
-            
-            if (userId == null) return;
-            
             newBet.UserId = userId;
             newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
+        }
+    }
 
-            // If the DB table is missing, this line will throw an error
-            await LoadData();
-
-            // We wrap SignalR separately so a connection error doesn't break the whole app
+    // This method runs AFTER the browser has painted the HTML
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && userId != null)
+        {
             try 
             {
-                await SetupSignalR();
+                // 1. Load Data
+                await LoadData();
+                
+                // 2. Start SignalR (Safely)
+                try 
+                {
+                    await SetupSignalR();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"SignalR ignored: {ex.Message}");
+                }
+
+                // 3. Update UI to show we are done
+                IsLoading = false;
+                StateHasChanged(); // Force the page to refresh with data
             }
-            catch (Exception ex)
+            catch (Exception criticalEx)
             {
-                Console.WriteLine($"SignalR Connection Warning: {ex.Message}");
-                // We don't stop the app here, just log it
+                ErrorMessage = criticalEx.Message;
+                IsLoading = false;
+                StateHasChanged(); // Show the error message
             }
-        }
-        catch (Exception criticalEx)
-        {
-            // Capture the real error (like missing DB table) and show it on the UI
-            ErrorMessage = criticalEx.Message;
-            Console.WriteLine(criticalEx);
         }
     }
 
@@ -187,10 +203,13 @@
         Db.Bets.Add(newBet);
         await Db.SaveChangesAsync();
         
-        // Reset form
         newBet = new Bet();
-        uploadedFile = null; // Clear file selection
+        uploadedFile = null; 
+        
         await LoadData();
+        // Since we are in an event handler, StateHasChanged is usually automatic, 
+        // but explicit call handles async gaps.
+        StateHasChanged(); 
     }
     
     private string GetRowClass(string status) => status switch
