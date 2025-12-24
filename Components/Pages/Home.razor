@@ -116,36 +116,26 @@
         }
     }
 
-    // This method runs AFTER the browser has painted the HTML
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && userId != null)
+        if (firstRender)
         {
-            try 
+            if (userId != null)
             {
-                // 1. Load Data
-                await LoadData();
-                
-                // 2. Start SignalR (Safely)
                 try 
                 {
+                    await LoadData();
                     await SetupSignalR();
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"SignalR ignored: {ex.Message}");
+                    ErrorMessage = ex.Message;
                 }
-
-                // 3. Update UI to show we are done
-                IsLoading = false;
-                StateHasChanged(); // Force the page to refresh with data
             }
-            catch (Exception criticalEx)
-            {
-                ErrorMessage = criticalEx.Message;
-                IsLoading = false;
-                StateHasChanged(); // Show the error message
-            }
+            
+            // ALWAYS turn off loading, even if user is null or error occurred
+            IsLoading = false; 
+            StateHasChanged();
         }
     }
 
