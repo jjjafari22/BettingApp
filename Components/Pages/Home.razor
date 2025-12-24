@@ -12,6 +12,15 @@
 
 <PageTitle>Dashboard</PageTitle>
 
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger">
+        <strong>Critical Error:</strong> 
+        <pre>@ErrorMessage</pre>
+        <p><em>Tip: If the error says "no such table", run <code>dotnet ef database update</code> in your terminal.</em></p>
+    </div>
+}
+
 <div class="container mt-4">
     <div class="card bg-light mb-4">
         <div class="card-body text-center">
@@ -24,7 +33,7 @@
     <div class="card mb-4">
         <div class="card-header">New Bet</div>
         <div class="card-body">
-            <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
+            <EditForm Model="@newBet" OnValidSubmit="PlaceBet">
                 <DataAnnotationsValidator />
                 
                 <div class="mb-3">
@@ -49,7 +58,8 @@
                 <th>Date</th>
                 <th>Time</th>
                 <th>Amount</th>
-                <th>Screenshot</th> <th>Status</th>
+                <th>Screenshot</th> 
+                <th>Status</th>
             </tr>
         </thead>
         <tbody>
@@ -77,43 +87,54 @@
 </div>
 
 @code {
-    [SupplyParameterFromForm]
     private Bet newBet { get; set; } = new();
-    
     private List<Bet> myBets = new();
     private decimal CreditLimit = 5000;
     private decimal AvailableCredit = 5000;
     private IBrowserFile? uploadedFile;
     private HubConnection? hubConnection;
     private string userId;
+    
+    // Stores the error message to show on screen
+    private string? ErrorMessage;
 
     protected override async Task OnInitializedAsync()
     {
-        var auth = await AuthState.GetAuthenticationStateAsync();
-        userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
-        
-        // If user is not logged in, stop here
-        if (userId == null) return;
-
-        newBet.UserId = userId;
-        newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
-
-        await LoadData();
-        
+        // We wrap EVERYTHING in a try-catch to prevent the blank page crash
         try 
         {
-            await SetupSignalR();
+            var auth = await AuthState.GetAuthenticationStateAsync();
+            userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+            
+            if (userId == null) return;
+            
+            newBet.UserId = userId;
+            newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
+
+            // If the DB table is missing, this line will throw an error
+            await LoadData();
+
+            // We wrap SignalR separately so a connection error doesn't break the whole app
+            try 
+            {
+                await SetupSignalR();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SignalR Connection Warning: {ex.Message}");
+                // We don't stop the app here, just log it
+            }
         }
-        catch (Exception ex)
+        catch (Exception criticalEx)
         {
-            // This keeps the page alive even if SignalR fails
-            Console.WriteLine($"SignalR connection failed: {ex.Message}");
+            // Capture the real error (like missing DB table) and show it on the UI
+            ErrorMessage = criticalEx.Message;
+            Console.WriteLine(criticalEx);
         }
     }
 
     private async Task LoadData()
     {
-        // We use AsNoTracking for read-only lists to make it faster
         myBets = await Db.Bets.Where(b => b.UserId == userId)
                               .OrderByDescending(b => b.CreatedAt)
                               .AsNoTracking()
@@ -132,7 +153,6 @@
 
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
-            // When admin approves, reload my data instantly
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
@@ -149,24 +169,18 @@
     {
         if (uploadedFile != null)
         {
-            // Create uploads folder if not exists
             var uploadPath = Path.Combine(Env.WebRootPath, "uploads");
             Directory.CreateDirectory(uploadPath);
-            
-            // Safe file name
             var fileName = $"{Guid.NewGuid()}_{uploadedFile.Name}";
             var path = Path.Combine(uploadPath, fileName);
-            
             await using FileStream fs = new(path, FileMode.Create);
             await uploadedFile.OpenReadStream(maxAllowedSize: 5000000).CopyToAsync(fs);
             newBet.ScreenshotUrl = $"/uploads/{fileName}";
         }
 
-        // Re-assign UserID in case form reset cleared it
         var auth = await AuthState.GetAuthenticationStateAsync();
         newBet.UserId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
         newBet.UserName = auth.User.Identity?.Name;
-
         newBet.Status = "Pending";
         newBet.CreatedAt = DateTime.UtcNow;
 
@@ -175,6 +189,7 @@
         
         // Reset form
         newBet = new Bet();
+        uploadedFile = null; // Clear file selection
         await LoadData();
     }
     
