@@ -1,0 +1,63 @@
+@page "/admin"
+@using Microsoft.AspNetCore.Authorization  
+@using Microsoft.AspNetCore.SignalR
+@using BettingApp.Hubs
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject IHubContext<BetHub> HubContext
+@attribute [Authorize] 
+
+<h3>Admin Queue</h3>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>User</th>
+            <th>Amount</th>
+            <th>Screenshot</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var bet in pendingBets)
+        {
+            <tr>
+                <td>@bet.UserName</td>
+                <td>@bet.AmountNOK</td>
+                <td>
+                    @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                    {
+                        <a href="@bet.ScreenshotUrl" target="_blank">View</a>
+                    }
+                </td>
+                <td>
+                    <button class="btn btn-success btn-sm" @onclick='() => ProcessBet(bet, "Approved")'>Approve</button>
+                    <button class="btn btn-danger btn-sm" @onclick='() => ProcessBet(bet, "Rejected")'>Reject</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<Bet> pendingBets = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        pendingBets = await Db.Bets.Where(b => b.Status == "Pending").ToListAsync();
+    }
+
+    private async Task ProcessBet(Bet bet, string status)
+    {
+        // 1. Update Database
+        bet.Status = status;
+        await Db.SaveChangesAsync();
+        
+        // 2. Remove from list UI
+        pendingBets.Remove(bet);
+
+        // 3. Send Notification
+        await HubContext.Clients.User(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet was {status}");
+    }
+}

@@ -1,0 +1,162 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.SignalR.Client
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore 
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthState
+@inject NavigationManager Nav
+@inject IWebHostEnvironment Env
+@attribute [Authorize] 
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="container mt-4">
+    <div class="card bg-light mb-4">
+        <div class="card-body text-center">
+            <h3>Available Credit</h3>
+            <h1 class="display-4 text-success">@AvailableCredit kr</h1>
+            <small class="text-muted">Limit: @CreditLimit kr</small>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">New Bet</div>
+        <div class="card-body">
+            <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="BetForm">
+                <DataAnnotationsValidator />
+                
+                <div class="mb-3">
+                    <label>Amount (NOK)</label>
+                    <InputNumber @bind-Value="newBet.AmountNOK" class="form-control" />
+                </div>
+
+                <div class="mb-3">
+                    <label>Screenshot</label>
+                    <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" />
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Submit Bet</button>
+            </EditForm>
+        </div>
+    </div>
+
+    <h4>My History</h4>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var bet in myBets)
+            {
+                <tr class="@GetRowClass(bet.Status)">
+                    <td>@bet.CreatedAt.ToShortDateString()</td>
+                    <td>@bet.AmountNOK kr</td>
+                    <td>@bet.Status</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private Bet newBet { get; set; } = new();
+    
+    private List<Bet> myBets = new();
+    private decimal CreditLimit = 5000;
+    private decimal AvailableCredit = 5000;
+    private IBrowserFile? uploadedFile;
+    private HubConnection? hubConnection;
+    private string userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+        
+        // If user is not logged in, stop here
+        if (userId == null) return;
+
+        newBet.UserId = userId;
+        newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
+
+        await LoadData();
+        await SetupSignalR();
+    }
+
+    private async Task LoadData()
+    {
+        // We use AsNoTracking for read-only lists to make it faster
+        myBets = await Db.Bets.Where(b => b.UserId == userId)
+                              .OrderByDescending(b => b.CreatedAt)
+                              .AsNoTracking()
+                              .ToListAsync();
+
+        var usedCredit = myBets.Where(b => b.Status == "Pending" || b.Status == "Lost")
+                               .Sum(b => b.AmountNOK);
+        AvailableCredit = CreditLimit - usedCredit;
+    }
+
+    private async Task SetupSignalR()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/bethub"))
+            .Build();
+
+        hubConnection.On<string>("ReceiveUpdate", async (message) =>
+        {
+            // When admin approves, reload my data instantly
+            await LoadData();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        uploadedFile = e.File;
+    }
+
+    private async Task PlaceBet()
+    {
+        if (uploadedFile != null)
+        {
+            // Create uploads folder if not exists
+            var uploadPath = Path.Combine(Env.WebRootPath, "uploads");
+            Directory.CreateDirectory(uploadPath);
+            
+            // Safe file name
+            var fileName = $"{Guid.NewGuid()}_{uploadedFile.Name}";
+            var path = Path.Combine(uploadPath, fileName);
+            
+            await using FileStream fs = new(path, FileMode.Create);
+            await uploadedFile.OpenReadStream(maxAllowedSize: 5000000).CopyToAsync(fs);
+            newBet.ScreenshotUrl = $"/uploads/{fileName}";
+        }
+
+        // Re-assign UserID in case form reset cleared it
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        newBet.UserId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+        newBet.UserName = auth.User.Identity?.Name;
+
+        Db.Bets.Add(newBet);
+        await Db.SaveChangesAsync();
+        
+        // Reset form
+        newBet = new Bet();
+        await LoadData();
+    }
+    
+    private string GetRowClass(string status) => status switch
+    {
+        "Approved" => "table-success",
+        "Rejected" => "table-danger",
+        _ => "table-warning"
+    };
+}
