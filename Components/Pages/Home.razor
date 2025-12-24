@@ -24,7 +24,7 @@
     <div class="card mb-4">
         <div class="card-header">New Bet</div>
         <div class="card-body">
-            <EditForm Model="@newBet" OnValidSubmit="PlaceBet">
+            <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
                 <DataAnnotationsValidator />
                 
                 <div class="mb-3">
@@ -77,6 +77,7 @@
 </div>
 
 @code {
+    [SupplyParameterFromForm]
     private Bet newBet { get; set; } = new();
     
     private List<Bet> myBets = new();
