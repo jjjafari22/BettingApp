@@ -9,64 +9,145 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 
-<h3>Admin Queue</h3>
+<h3>Admin Dashboard</h3>
 
-<table class="table">
-    <thead>
-        <tr>
-            <th>Date</th>
-            <th>Time</th>
-            <th>User</th>
-            <th>Amount</th>
-            <th>Screenshot</th>
-            <th>Action</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var bet in pendingBets)
-        {
-            <tr>
-                <td>@bet.CreatedAt.ToLocalTime().ToShortDateString()</td>
-                <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
-                <td>@bet.UserName</td>
-                <td>@bet.AmountNOK</td>
-                <td>
-                    @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
-                    {
-                        <a href="@bet.ScreenshotUrl" target="_blank">View</a>
-                    }
-                </td>
-                <td>
-                    <button class="btn btn-success btn-sm" @onclick='() => ProcessBet(bet, "Approved")'>Approve</button>
-                    <button class="btn btn-danger btn-sm" @onclick='() => ProcessBet(bet, "Rejected")'>Reject</button>
-                </td>
-            </tr>
-        }
-    </tbody>
-</table>
+<div class="row">
+    @* Existing Queue *@
+    <div class="col-md-8">
+        <h4>Pending Bets Queue</h4>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>User</th>
+                    <th>Amount</th>
+                    <th>Proof</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var bet in pendingBets)
+                {
+                    <tr>
+                        <td>@bet.CreatedAt.ToLocalTime().ToString("g")</td>
+                        <td>@bet.UserName</td>
+                        <td>@bet.AmountNOK</td>
+                        <td>
+                            @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                            {
+                                <a href="@bet.ScreenshotUrl" target="_blank">View</a>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-success btn-sm" @onclick='() => ProcessBet(bet, "Approved")'>Approve</button>
+                            <button class="btn btn-danger btn-sm" @onclick='() => ProcessBet(bet, "Rejected")'>Reject</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @* [NEW] Add Transaction Panel *@
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">Add Transaction</div>
+            <div class="card-body">
+                @if (successMessage != null)
+                {
+                    <div class="alert alert-success">@successMessage</div>
+                }
+                
+                <div class="mb-3">
+                    <label>Select User</label>
+                    <select class="form-select" @bind="newTrans.UserId">
+                        <option value="">-- Select User --</option>
+                        @foreach (var user in allUsers)
+                        {
+                            <option value="@user.Id">@user.UserName</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label>Type</label>
+                    <select class="form-select" @bind="newTrans.Type">
+                        <option value="Deposit">Deposit</option>
+                        <option value="Withdrawal">Withdrawal</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label>Platform</label>
+                    <input type="text" class="form-control" placeholder="e.g. Bank, Vipps" @bind="newTrans.Platform" />
+                </div>
+
+                <div class="mb-3">
+                    <label>Amount (NOK)</label>
+                    <input type="number" class="form-control" @bind="newTrans.AmountNOK" />
+                </div>
+
+                <button class="btn btn-primary w-100" @onclick="AddTransaction">Add Transaction</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @code {
     private List<Bet> pendingBets = new();
+    
+    // [NEW] Admin Tool variables
+    private List<ApplicationUser> allUsers = new();
+    private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
+    private string? successMessage;
 
     protected override async Task OnInitializedAsync()
     {
-        // Added OrderByDescending to sort by newest first
+        // Load pending bets
         pendingBets = await Db.Bets
             .Where(b => b.Status == "Pending")
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
+
+        // [NEW] Load users for the dropdown
+        allUsers = await Db.Users.ToListAsync();
     }
 
     private async Task ProcessBet(Bet bet, string status)
     {
-        // 1. Update Database
         bet.Status = status;
         await Db.SaveChangesAsync();
-        
-        // 2. Remove from list UI
         pendingBets.Remove(bet);
-
-        // 3. Send Notification
         await HubContext.Clients.User(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet was {status}");
+    }
+
+    // [NEW] Function to add transaction
+    private async Task AddTransaction()
+    {
+        if (string.IsNullOrEmpty(newTrans.UserId) || newTrans.AmountNOK <= 0 || string.IsNullOrEmpty(newTrans.Platform))
+        {
+            return; // Add better validation if needed
+        }
+
+        var selectedUser = allUsers.FirstOrDefault(u => u.Id == newTrans.UserId);
+        newTrans.UserName = selectedUser?.UserName ?? "Unknown";
+        newTrans.Date = DateTime.UtcNow;
+
+        Db.Transactions.Add(newTrans);
+        await Db.SaveChangesAsync();
+
+        // Notify user their data changed
+        await HubContext.Clients.User(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
+
+        successMessage = "Transaction added successfully!";
+        
+        // Reset form (keep Type for convenience)
+        var type = newTrans.Type; 
+        newTrans = new Transaction { Type = type, Date = DateTime.UtcNow };
+        
+        // Clear success message after 3 seconds
+        await Task.Delay(3000);
+        successMessage = null;
+        StateHasChanged();
     }
 }
