@@ -171,7 +171,7 @@
     private List<Bet> myBets = new();
     private List<Transaction> myTransactions = new();
     
-    private decimal CreditLimit = 1000;
+    private decimal CreditLimit = 0;
     private decimal Balance = 0;
     private decimal AvailableCredit = 1000;
 
@@ -229,6 +229,15 @@
     private async Task LoadData()
     {      
         using var context = DbFactory.CreateDbContext();
+
+        var user = await context.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == userId);
+        
+        if (user != null)
+        {
+            CreditLimit = user.CreditLimit; 
+        }
+
         myBets = await context.Bets
                         .Where(b => b.UserId == userId)
                         .OrderByDescending(b => b.CreatedAt)
