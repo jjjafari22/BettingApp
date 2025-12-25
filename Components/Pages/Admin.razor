@@ -6,7 +6,8 @@
 @using Microsoft.EntityFrameworkCore
 @inject ApplicationDbContext Db
 @inject IHubContext<BetHub> HubContext
-@attribute [Authorize] 
+@attribute [Authorize]
+@rendermode InteractiveServer
 
 <h3>Admin Queue</h3>
 
