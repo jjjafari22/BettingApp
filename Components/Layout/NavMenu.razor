@@ -15,12 +15,21 @@
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
+        
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
+            @if (isAdmin)
+            {
+                <NavLink class="nav-link" href="admin">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Admin Home
+                </NavLink>
+            }
+            else
+            {
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                </NavLink>
+            }
         </div>
-
         <AuthorizeView>
             <Authorized>
                 @if (isAdmin)
@@ -78,14 +87,12 @@
 
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-
         if (user.Identity?.IsAuthenticated == true)
         {
             using var context = DbFactory.CreateDbContext();
             var dbUser = await context.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
-
             isAdmin = dbUser?.IsAdmin ?? false;
         }
     }
