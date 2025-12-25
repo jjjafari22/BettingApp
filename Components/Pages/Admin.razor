@@ -4,10 +4,13 @@
 @using BettingApp.Hubs
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager Nav
 @inject ApplicationDbContext Db
 @inject IHubContext<BetHub> HubContext
 @attribute [Authorize]
 @rendermode InteractiveServer
+@implements IAsyncDisposable
 
 <h3>Admin Dashboard</h3>
 
@@ -155,6 +158,7 @@
     private List<ApplicationUser> allUsers = new();
     private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
     private string? successMessage;
+    private HubConnection? hubConnection;
 
     protected override async Task OnInitializedAsync()
     {
@@ -172,6 +176,39 @@
 
         // Load users for the dropdown
         allUsers = await Db.Users.ToListAsync();
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/bethub"))
+            .Build();
+
+        hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
+        {
+            // Refresh the Pending Bets list
+            pendingBets = await Db.Bets
+                .Where(b => b.Status == "Pending")
+                .OrderByDescending(b => b.CreatedAt)
+                .ToListAsync();
+
+            // Optional: Show a temporary success message
+            successMessage = message; 
+            StateHasChanged();
+
+            // Clear message after 3 seconds
+            await Task.Delay(3000);
+            successMessage = null;
+            StateHasChanged();
+        });
+
+        await hubConnection.StartAsync();
+        await hubConnection.InvokeAsync("JoinAdminGroup");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
     }
 
     private async Task ProcessBet(Bet bet, string status)

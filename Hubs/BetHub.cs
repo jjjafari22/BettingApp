@@ -8,5 +8,11 @@ namespace BettingApp.Hubs
         {
             await Clients.User(userId).SendAsync("ReceiveUpdate", message);
         }
+
+        // Add this method
+        public async Task JoinAdminGroup()
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, "Admins");
+        }
     }
 }
