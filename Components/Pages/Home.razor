@@ -275,6 +275,7 @@
         });
 
         await hubConnection.StartAsync();
+        await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
 
     private void HandleFileSelected(InputFileChangeEventArgs e)

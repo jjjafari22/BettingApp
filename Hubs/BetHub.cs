@@ -9,10 +9,15 @@ namespace BettingApp.Hubs
             await Clients.User(userId).SendAsync("ReceiveUpdate", message);
         }
 
-        // Add this method
         public async Task JoinAdminGroup()
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, "Admins");
+        }
+
+        public async Task JoinUserGroup(string userId)
+        {
+            // Allows the client (Home.razor) to subscribe to messages for this specific user
+            await Groups.AddToGroupAsync(Context.ConnectionId, userId);
         }
     }
 }
