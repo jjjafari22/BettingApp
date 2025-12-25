@@ -11,6 +11,13 @@ namespace BettingApp.Data
         [Required]
         [Range(1, 100000, ErrorMessage = "Amount must be positive")]
         public decimal AmountNOK { get; set; }
+
+        [Required]
+        [Range(1.0, 1000.0, ErrorMessage = "Odds must be at least 1.0")]
+        public decimal Odds { get; set; }
+
+        // Helper property to calculate payout (not necessarily stored in DB if not needed)
+        public decimal PotentialPayout => AmountNOK * Odds;
         
         public string? ScreenshotUrl { get; set; }
         public string Status { get; set; } = "Pending";

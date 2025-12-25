@@ -11,6 +11,7 @@
 @attribute [Authorize]
 
 <PageTitle>Dashboard</PageTitle>
+
 @if (IsLoading)
 {
     <div class="alert alert-info">Loading your data...</div>
@@ -21,7 +22,7 @@
     <div class="alert alert-danger">
         <strong>Critical Error:</strong> 
         <pre>@ErrorMessage</pre>
-        <p><em>Tip: If the error says "no such table" or "column not found", run <code>dotnet ef migrations add AddOutcome</code> and <code>dotnet ef database update</code>.</em></p>
+        <p><em>Tip: If the error says "no such table" or "column not found", run <code>dotnet ef migrations add AddOdds</code> and <code>dotnet ef database update</code>.</em></p>
     </div>
 }
 
@@ -43,9 +44,22 @@
             <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
                 <DataAnnotationsValidator />
                 
-                <div class="mb-3">
-                    <label>Amount (NOK)</label>
-                    <InputNumber @bind-Value="newBet.AmountNOK" class="form-control" />
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label>Bet Amount (NOK) *</label>
+                        @* Use @bind-Value:after to trigger UI update for payout calc *@
+                        <InputNumber @bind-Value="newBet.AmountNOK" @bind-Value:after="StateHasChanged" class="form-control" />
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label>Odds *</label>
+                        <InputNumber @bind-Value="newBet.Odds" @bind-Value:after="StateHasChanged" class="form-control" step="0.01" />
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label>Potential Payout</label>
+                        <input type="text" class="form-control" value="@((newBet.AmountNOK * newBet.Odds).ToString("N2")) kr" disabled />
+                    </div>
                 </div>
 
                 <div class="mb-3">
@@ -64,7 +78,9 @@
             <tr>
                 <th>Date</th>
                 <th>Time</th>
-                <th>Amount</th>
+                <th>Bet Amount</th>
+                <th>Odds</th>
+                <th>Potential Payout</th>
                 <th>Screenshot</th> 
                 <th>Status</th>
                 <th>Bet Outcome</th>
@@ -77,6 +93,8 @@
                     <td>@bet.CreatedAt.ToLocalTime().ToShortDateString()</td>
                     <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
                     <td>@bet.AmountNOK kr</td>
+                    <td>@bet.Odds.ToString("N2")</td>
+                    <td>@bet.PotentialPayout.ToString("N2") kr</td>
                     <td>
                         @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
                         {
@@ -147,7 +165,7 @@
 </div>
 
 @code {
-    private Bet newBet { get; set; } = new();
+    private Bet newBet { get; set; } = new() { Odds = 1.0m }; // Initialize Odds to 1
     private List<Bet> myBets = new();
     private List<Transaction> myTransactions = new();
     
@@ -210,7 +228,6 @@
     private async Task LoadData()
     {      
         using var context = DbFactory.CreateDbContext();
-        
         myBets = await context.Bets
                         .Where(b => b.UserId == userId)
                         .OrderByDescending(b => b.CreatedAt)
@@ -222,13 +239,13 @@
                         .OrderByDescending(t => t.Date)
                         .AsNoTracking()
                         .ToListAsync();
-        
+
         var totalDeposits = myTransactions.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
         var totalWithdrawals = myTransactions.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
         
         var liability = myBets.Where(b => b.Status == "Pending" || b.Status == "Lost")
                               .Sum(b => b.AmountNOK);
-
+                              
         Balance = totalDeposits - totalWithdrawals - liability;
         AvailableCredit = Balance + CreditLimit;
     }
@@ -276,7 +293,7 @@
         context.Bets.Add(newBet);
         await context.SaveChangesAsync();
         
-        newBet = new Bet();
+        newBet = new Bet { Odds = 1.0m }; // Reset with Odds 1
         uploadedFile = null;
 
         await LoadData();
