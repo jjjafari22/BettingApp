@@ -485,3 +485,4 @@ $RECYCLE.BIN/
 *.db-shm
 *.db-wal
 Data/app.db
+wwwroot/uploads/

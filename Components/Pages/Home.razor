@@ -1,5 +1,5 @@
 ﻿@page "/"
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.SignalR.Client
 @using BettingApp.Data
@@ -154,9 +154,12 @@
     private async Task LoadData()
     {      
         using var context = DbFactory.CreateDbContext();
-        myBets = await context.Bets.Where(b => b.UserId == userId)
-                                .AsNoTracking()
-                                .ToListAsync();
+        
+        myBets = await context.Bets
+                        .Where(b => b.UserId == userId)
+                        .OrderByDescending(b => b.CreatedAt) // <--- Add this line
+                        .AsNoTracking()
+                        .ToListAsync();
 
         var usedCredit = myBets.Where(b => b.Status == "Pending" || b.Status == "Lost")
                                .Sum(b => b.AmountNOK);
