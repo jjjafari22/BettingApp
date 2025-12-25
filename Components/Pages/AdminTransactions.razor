@@ -1,0 +1,165 @@
+@page "/admin/transactions"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.SignalR        @* <--- ADDED THIS *@
+@using Microsoft.AspNetCore.SignalR.Client
+@using BettingApp.Hubs
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IHubContext<BetHub> HubContext
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<h3>Manage Transactions</h3>
+
+<div style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
+    @if (successMessage != null)
+    {
+        <div class="alert alert-success shadow-lg border-success">
+            <i class="bi bi-bell-fill me-2"></i> @successMessage
+        </div>
+    }
+</div>
+
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">Add Transaction</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label>Select User</label>
+                        <select class="form-select" @bind="newTrans.UserId">
+                            <option value="">-- Select User --</option>
+                            @foreach (var user in allUsers)
+                            {
+                                <option value="@user.Id">@user.UserName</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-md-2 mb-3">
+                        <label>Type</label>
+                        <select class="form-select" @bind="newTrans.Type">
+                            <option value="Deposit">Deposit</option>
+                            <option value="Withdrawal">Withdrawal</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <label>Platform</label>
+                        <input type="text" class="form-control" placeholder="e.g. Bank, Vipps" @bind="newTrans.Platform" />
+                    </div>
+
+                    <div class="col-md-2 mb-3">
+                        <label>Amount (NOK)</label>
+                        <input type="number" class="form-control" @bind="newTrans.AmountNOK" />
+                    </div>
+
+                    <div class="col-md-2 mb-3 d-flex align-items-end">
+                        <button class="btn btn-primary w-100" @onclick="AddTransaction">Add</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h4 class="mb-3">Transaction History</h4>
+<table class="table table-striped table-hover">
+    <thead class="table-dark">
+        <tr>
+            <th>Date</th>
+            <th>User</th>
+            <th>Type</th>
+            <th>Platform</th>
+            <th>Amount</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var t in allTransactions)
+        {
+            <tr>
+                <td>@t.Date.ToLocalTime().ToString("g")</td>
+                <td>@t.UserName</td>
+                <td>
+                    <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
+                        @t.Type
+                    </span>
+                </td>
+                <td>@t.Platform</td>
+                <td>@t.AmountNOK.ToString("N0") kr</td>
+            </tr>
+        }
+        @if (allTransactions.Count == 0)
+        {
+            <tr><td colspan="5" class="text-muted text-center">No transactions found.</td></tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<ApplicationUser> allUsers = new();
+    private List<Transaction> allTransactions = new();
+    private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        using var context = DbFactory.CreateDbContext();
+        var dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+
+        // Security check: Only allow Admins
+        if (dbUser == null || !dbUser.IsAdmin)
+        {
+            Nav.NavigateTo("/");
+            return;
+        }
+
+        allUsers = await context.Users.ToListAsync();
+        await LoadTransactions(context);
+    }
+
+    private async Task LoadTransactions(ApplicationDbContext context)
+    {
+        allTransactions = await context.Transactions
+            .OrderByDescending(t => t.Date)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+
+    private async Task AddTransaction()
+    {
+        if (string.IsNullOrEmpty(newTrans.UserId) || newTrans.AmountNOK <= 0 || string.IsNullOrEmpty(newTrans.Platform))
+        {
+            return;
+        }
+
+        using var context = DbFactory.CreateDbContext();
+        var selectedUser = allUsers.FirstOrDefault(u => u.Id == newTrans.UserId);
+        newTrans.UserName = selectedUser?.UserName ?? "Unknown";
+        newTrans.Date = DateTime.UtcNow;
+
+        context.Transactions.Add(newTrans);
+        await context.SaveChangesAsync();
+
+        // Notify user via SignalR
+        await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
+
+        successMessage = "Transaction added successfully!";
+        
+        // Refresh the list and reset form
+        var type = newTrans.Type;
+        newTrans = new Transaction { Type = type, Date = DateTime.UtcNow };
+        await LoadTransactions(context);
+
+        await Task.Delay(3000);
+        successMessage = null;
+        StateHasChanged();
+    }
+}

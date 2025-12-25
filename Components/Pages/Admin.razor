@@ -8,7 +8,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
-@inject IDbContextFactory<ApplicationDbContext> DbFactory  /* CHANGE 1: Inject Factory */
+@inject IDbContextFactory<ApplicationDbContext> DbFactory 
 @inject IHubContext<BetHub> HubContext
 @attribute [Authorize]
 @rendermode InteractiveServer
@@ -26,8 +26,8 @@
 </div>
 
 <div class="row">
-    @* Queue Section *@
-    <div class="col-md-8">
+    @* Bets Section - Now Full Width *@
+    <div class="col-md-12">
         
         @* 1. Pending Bets Queue *@
         <h4 class="mb-3">Pending Bets Queue</h4>
@@ -113,59 +113,12 @@
                 }
             </tbody>
         </table>
-
-    </div>
-
-    @* Add Transaction Panel *@
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header bg-primary text-white">Add Transaction</div>
-            <div class="card-body">
-                @if (successMessage != null)
-                {
-                    <div class="alert alert-success">@successMessage</div>
-                }
-                
-                <div class="mb-3">
-                    <label>Select User</label>
-                    <select class="form-select" @bind="newTrans.UserId">
-                        <option value="">-- Select User --</option>
-                        @foreach (var user in allUsers)
-                        {
-                            <option value="@user.Id">@user.UserName</option>
-                        }
-                    </select>
-                </div>
-
-                <div class="mb-3">
-                    <label>Type</label>
-                    <select class="form-select" @bind="newTrans.Type">
-                        <option value="Deposit">Deposit</option>
-                        <option value="Withdrawal">Withdrawal</option>
-                    </select>
-                </div>
-
-                <div class="mb-3">
-                    <label>Platform</label>
-                    <input type="text" class="form-control" placeholder="e.g. Bank, Vipps" @bind="newTrans.Platform" />
-                </div>
-
-                <div class="mb-3">
-                    <label>Amount (NOK)</label>
-                    <input type="number" class="form-control" @bind="newTrans.AmountNOK" />
-                </div>
-
-                <button class="btn btn-primary w-100" @onclick="AddTransaction">Add Transaction</button>
-            </div>
-        </div>
     </div>
 </div>
 
 @code {
     private List<Bet> pendingBets = new();
     private List<Bet> approvedBets = new();
-    private List<ApplicationUser> allUsers = new();
-    private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
     private string? successMessage;
     private HubConnection? hubConnection;
 
@@ -176,11 +129,8 @@
         var user = authState.User;
 
         // 2. CHECK IF ADMIN
-        // We create a context to check the DB directly (most secure)
         using var context = DbFactory.CreateDbContext();
-        
-        var dbUser = await context.Users
-            .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+        var dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
 
         // If user not found OR not admin, redirect to Home
         if (dbUser == null || !dbUser.IsAdmin)
@@ -199,8 +149,6 @@
             .Where(b => b.Status == "Approved" && string.IsNullOrEmpty(b.Outcome))
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
-
-        allUsers = await context.Users.ToListAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -213,8 +161,6 @@
 
             hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
             {
-                Console.WriteLine($"NOTIFICATION RECEIVED: {message}"); // Check Browser Console (F12)
-
                 using var context = DbFactory.CreateDbContext();
                 
                 pendingBets = await context.Bets
@@ -224,10 +170,6 @@
 
                 successMessage = message;
                 await InvokeAsync(StateHasChanged);
-
-                // Play a sound (Optional, requires JS interop)
-                // await JSRuntime.InvokeVoidAsync("playNotificationSound");
-
                 await Task.Delay(5000);
                 successMessage = null;
                 await InvokeAsync(StateHasChanged);
@@ -248,23 +190,19 @@
 
     private async Task ProcessBet(Bet bet, string status)
     {
-        // Use a fresh context for the operation
         using var context = DbFactory.CreateDbContext();
-        
-        // Re-fetch or attach the entity to modify it
         var dbBet = await context.Bets.FindAsync(bet.Id);
+        
         if (dbBet != null)
         {
             dbBet.Status = status;
             await context.SaveChangesAsync();
         }
 
-        // Update UI list manually for instant feedback
-        pendingBets.Remove(bet); // Remove from UI list
+        pendingBets.Remove(bet);
         if (status == "Approved")
         {
-            // Update the object properties locally so it displays correctly if moved
-            bet.Status = status; 
+            bet.Status = status;
             approvedBets.Insert(0, bet);
         }
 
@@ -283,34 +221,6 @@
         }
 
         approvedBets.Remove(bet);
-
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet outcome is: {outcome}");
-    }
-
-    private async Task AddTransaction()
-    {
-        if (string.IsNullOrEmpty(newTrans.UserId) || newTrans.AmountNOK <= 0 || string.IsNullOrEmpty(newTrans.Platform))
-        {
-            return;
-        }
-
-        using var context = DbFactory.CreateDbContext();
-        
-        var selectedUser = allUsers.FirstOrDefault(u => u.Id == newTrans.UserId);
-        newTrans.UserName = selectedUser?.UserName ?? "Unknown";
-        newTrans.Date = DateTime.UtcNow;
-
-        context.Transactions.Add(newTrans);
-        await context.SaveChangesAsync();
-        
-        await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
-        
-        successMessage = "Transaction added successfully!";
-        var type = newTrans.Type;
-        newTrans = new Transaction { Type = type, Date = DateTime.UtcNow };
-        
-        await Task.Delay(3000);
-        successMessage = null;
-        StateHasChanged();
     }
 }
