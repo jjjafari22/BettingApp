@@ -250,7 +250,7 @@
             approvedBets.Insert(0, bet);
         }
 
-        await HubContext.Clients.User(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet was {status}");
+        await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet was {status}");
     }
 
     private async Task SetOutcome(Bet bet, string outcome)
@@ -266,7 +266,7 @@
 
         approvedBets.Remove(bet);
 
-        await HubContext.Clients.User(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet outcome is: {outcome}");
+        await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet outcome is: {outcome}");
     }
 
     private async Task AddTransaction()
@@ -285,7 +285,7 @@
         context.Transactions.Add(newTrans);
         await context.SaveChangesAsync();
         
-        await HubContext.Clients.User(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
+        await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
         
         successMessage = "Transaction added successfully!";
         var type = newTrans.Type;
