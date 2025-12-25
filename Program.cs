@@ -29,17 +29,15 @@ builder.Services.AddAuthentication(options =>
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-// 1. Register the Factory as SCOPED
-// This is the SINGLE source of truth for database connections.
+// Register the Factory (Singleton)
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseSqlite(connectionString), lifetime: ServiceLifetime.Scoped);
+    options.UseSqlite(connectionString));
 
-// 2. Alias the Standard Context to use the Factory
-// This tells Identity: "Do not create your own context. Ask the Factory for one."
+// Register the Scoped Context manually using the Factory.
+// This provides the "ApplicationDbContext" that Identity needs, 
+// but avoids the configuration conflict that caused your crash.
 builder.Services.AddScoped<ApplicationDbContext>(p => 
     p.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
-
-builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
     .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -53,7 +51,7 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseMigrationsEndPoint();
+    // app.UseMigrationsEndPoint();
 }
 else
 {
@@ -66,6 +64,8 @@ app.UseHttpsRedirection();
 
 
 app.UseAntiforgery();
+
+app.UseStaticFiles();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

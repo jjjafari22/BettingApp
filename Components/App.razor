@@ -14,7 +14,12 @@
 </head>
 
 <body>
-    <Routes />
+    <CascadingAuthenticationState>
+        <ErrorBoundary>
+            <Routes />
+        </ErrorBoundary>
+    </CascadingAuthenticationState>
+    
     <script src="_framework/blazor.web.js"></script>
 </body>
 

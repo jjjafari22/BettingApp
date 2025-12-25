@@ -37,7 +37,7 @@
     <div class="card mb-4">
         <div class="card-header">New Bet</div>
         <div class="card-body">
-            <EditForm Model="@newBet" OnValidSubmit="PlaceBet">
+            <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
                 <DataAnnotationsValidator />
                 
                 <div class="mb-3">
@@ -105,14 +105,23 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Get User ID immediately so we have it ready
-        var auth = await AuthState.GetAuthenticationStateAsync();
-        userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
-        
-        if (userId != null)
+        try
         {
-            newBet.UserId = userId;
-            newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
+            // Wrap this in try-catch because if it fails, the whole page crashes
+            var auth = await AuthState.GetAuthenticationStateAsync();
+            userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+            
+            if (userId != null)
+            {
+                newBet.UserId = userId;
+                newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
+            }
+        }
+        catch (Exception ex)
+        {
+            // This will print the ACTUAL error to the screen
+            ErrorMessage = $"Startup Error: {ex.Message}";
+            Console.WriteLine(ex);
         }
     }
 
@@ -120,22 +129,25 @@
     {
         if (firstRender)
         {
-            if (userId != null)
+            try
             {
-                try 
+                if (userId != null)
                 {
                     await LoadData();
                     await SetupSignalR();
                 }
-                catch (Exception ex)
-                {
-                    ErrorMessage = ex.Message;
-                }
             }
-            
-            // ALWAYS turn off loading, even if user is null or error occurred
-            IsLoading = false; 
-            StateHasChanged();
+            catch (Exception ex)
+            {
+                ErrorMessage = $"Error loading data: {ex.Message}";
+                Console.WriteLine(ex);
+            }
+            finally
+            {
+                // This guarantees the "Loading..." text is removed
+                IsLoading = false;
+                StateHasChanged();
+            }
         }
     }
 
