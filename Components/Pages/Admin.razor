@@ -6,13 +6,22 @@
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.SignalR.Client
 @inject NavigationManager Nav
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory  /* CHANGE 1: Inject Factory */
 @inject IHubContext<BetHub> HubContext
 @attribute [Authorize]
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 
 <h3>Admin Dashboard</h3>
+
+<div style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
+    @if (successMessage != null)
+    {
+        <div class="alert alert-success shadow-lg border-success">
+            <i class="bi bi-bell-fill me-2"></i> @successMessage
+        </div>
+    }
+</div>
 
 <div class="row">
     @* Queue Section *@
@@ -153,8 +162,6 @@
 @code {
     private List<Bet> pendingBets = new();
     private List<Bet> approvedBets = new();
-    
-    // Admin Tool variables
     private List<ApplicationUser> allUsers = new();
     private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
     private string? successMessage;
@@ -162,45 +169,55 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Load pending bets
-        pendingBets = await Db.Bets
+        // Load initial data using a short-lived context
+        using var context = DbFactory.CreateDbContext();
+        
+        pendingBets = await context.Bets
             .Where(b => b.Status == "Pending")
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
 
-        // Load approved bets that haven't been resolved yet
-        approvedBets = await Db.Bets
+        approvedBets = await context.Bets
             .Where(b => b.Status == "Approved" && string.IsNullOrEmpty(b.Outcome))
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
 
-        // Load users for the dropdown
-        allUsers = await Db.Users.ToListAsync();
+        allUsers = await context.Users.ToListAsync();
+    }
 
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(Nav.ToAbsoluteUri("/bethub"))
-            .Build();
-
-        hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
         {
-            // Refresh the Pending Bets list
-            pendingBets = await Db.Bets
-                .Where(b => b.Status == "Pending")
-                .OrderByDescending(b => b.CreatedAt)
-                .ToListAsync();
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Nav.ToAbsoluteUri("/bethub"))
+                .Build();
 
-            // Optional: Show a temporary success message
-            successMessage = message; 
-            StateHasChanged();
+            hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
+            {
+                Console.WriteLine($"NOTIFICATION RECEIVED: {message}"); // Check Browser Console (F12)
 
-            // Clear message after 3 seconds
-            await Task.Delay(3000);
-            successMessage = null;
-            StateHasChanged();
-        });
+                using var context = DbFactory.CreateDbContext();
+                
+                pendingBets = await context.Bets
+                    .Where(b => b.Status == "Pending")
+                    .OrderByDescending(b => b.CreatedAt)
+                    .ToListAsync();
 
-        await hubConnection.StartAsync();
-        await hubConnection.InvokeAsync("JoinAdminGroup");
+                successMessage = message;
+                await InvokeAsync(StateHasChanged);
+
+                // Play a sound (Optional, requires JS interop)
+                // await JSRuntime.InvokeVoidAsync("playNotificationSound");
+
+                await Task.Delay(5000);
+                successMessage = null;
+                await InvokeAsync(StateHasChanged);
+            });
+
+            await hubConnection.StartAsync();
+            await hubConnection.InvokeAsync("JoinAdminGroup");
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -213,14 +230,23 @@
 
     private async Task ProcessBet(Bet bet, string status)
     {
-        bet.Status = status;
-        await Db.SaveChangesAsync();
+        // Use a fresh context for the operation
+        using var context = DbFactory.CreateDbContext();
         
-        pendingBets.Remove(bet);
+        // Re-fetch or attach the entity to modify it
+        var dbBet = await context.Bets.FindAsync(bet.Id);
+        if (dbBet != null)
+        {
+            dbBet.Status = status;
+            await context.SaveChangesAsync();
+        }
 
-        // If approved, move to the Approved Bets list immediately
+        // Update UI list manually for instant feedback
+        pendingBets.Remove(bet); // Remove from UI list
         if (status == "Approved")
         {
+            // Update the object properties locally so it displays correctly if moved
+            bet.Status = status; 
             approvedBets.Insert(0, bet);
         }
 
@@ -229,8 +255,14 @@
 
     private async Task SetOutcome(Bet bet, string outcome)
     {
-        bet.Outcome = outcome;
-        await Db.SaveChangesAsync();
+        using var context = DbFactory.CreateDbContext();
+        var dbBet = await context.Bets.FindAsync(bet.Id);
+        
+        if (dbBet != null)
+        {
+            dbBet.Outcome = outcome;
+            await context.SaveChangesAsync();
+        }
 
         approvedBets.Remove(bet);
 
@@ -244,12 +276,14 @@
             return;
         }
 
+        using var context = DbFactory.CreateDbContext();
+        
         var selectedUser = allUsers.FirstOrDefault(u => u.Id == newTrans.UserId);
         newTrans.UserName = selectedUser?.UserName ?? "Unknown";
         newTrans.Date = DateTime.UtcNow;
 
-        Db.Transactions.Add(newTrans);
-        await Db.SaveChangesAsync();
+        context.Transactions.Add(newTrans);
+        await context.SaveChangesAsync();
         
         await HubContext.Clients.User(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
         
