@@ -20,9 +20,8 @@
 @if (!string.IsNullOrEmpty(ErrorMessage))
 {
     <div class="alert alert-danger">
-        <strong>Critical Error:</strong> 
+        <strong>Error:</strong> 
         <pre>@ErrorMessage</pre>
-        <p><em>Tip: If the error says "no such table" or "column not found", run <code>dotnet ef migrations add AddOdds</code> and <code>dotnet ef database update</code>.</em></p>
     </div>
 }
 
@@ -186,7 +185,6 @@
         {
             var auth = await AuthState.GetAuthenticationStateAsync();
             userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
-            
             if (userId != null)
             {
                 newBet.UserId = userId;
@@ -243,9 +241,10 @@
         var totalDeposits = myTransactions.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
         var totalWithdrawals = myTransactions.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
         
+        // Liability is the sum of pending/lost bets (bets that count against balance)
         var liability = myBets.Where(b => b.Status == "Pending" || b.Status == "Lost")
                               .Sum(b => b.AmountNOK);
-                              
+
         Balance = totalDeposits - totalWithdrawals - liability;
         AvailableCredit = Balance + CreditLimit;
     }
@@ -272,6 +271,16 @@
 
     private async Task PlaceBet()
     {
+        // Reset error message at the start of attempt
+        ErrorMessage = null;
+
+        // 1. Validation Logic: Check if bet exceeds available credit
+        if (newBet.AmountNOK > AvailableCredit)
+        {
+            ErrorMessage = $"You cannot bet more than your available credit ({AvailableCredit:N0} kr).";
+            return;
+        }
+
         if (uploadedFile != null)
         {
             var uploadPath = Path.Combine(Env.WebRootPath, "uploads");
