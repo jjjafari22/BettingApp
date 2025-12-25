@@ -487,3 +487,5 @@ $RECYCLE.BIN/
 Data/app.db
 wwwroot/uploads/
 site.zip
+betting.db.zip
+Data/betting.db
