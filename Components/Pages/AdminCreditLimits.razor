@@ -29,7 +29,7 @@ else
         </div>
     </div>
 
-    <table class="table table-striped">
+    <table class="table table-striped align-middle">
         <thead>
             <tr>
                 <th>User</th>
@@ -49,9 +49,19 @@ else
                                @bind="user.CreditLimit" step="100" />
                     </td>
                     <td>
-                        <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
-                            Update
-                        </button>
+                        <div class="d-flex align-items-center">
+                            <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
+                                Update
+                            </button>
+                            
+                            @* --- NEW: Success Indicator --- *@
+                            @if (saveStatus.TryGetValue(user.Id, out var isSaved) && isSaved)
+                            {
+                                <span class="text-success ms-2 fw-bold fade-in-out">
+                                    <i class="bi bi-check-circle-fill"></i> Saved!
+                                </span>
+                            }
+                        </div>
                     </td>
                 </tr>
             }
@@ -63,8 +73,10 @@ else
     private List<ApplicationUser>? users;
     private string searchTerm = "";
     private bool isAdmin = false;
+    
+    // --- NEW: Dictionary to track save status per user ---
+    private Dictionary<string, bool> saveStatus = new();
 
-    // Filter users based on the search term
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
             ? users ?? new List<ApplicationUser>() 
@@ -73,7 +85,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        // 1. Verify Admin status
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
@@ -83,7 +94,6 @@ else
             var currentUser = await context.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
-            
             isAdmin = currentUser?.IsAdmin ?? false;
         }
 
@@ -96,7 +106,6 @@ else
     private async Task LoadUsers()
     {
         using var context = DbFactory.CreateDbContext();
-        // Fetch all users who are NOT admins
         users = await context.Users
             .Where(u => !u.IsAdmin)
             .ToListAsync();
@@ -111,7 +120,22 @@ else
         {
             dbUser.CreditLimit = userToUpdate.CreditLimit;
             await context.SaveChangesAsync();
-            // Optional: Show a success message or toast here
+
+            // --- NEW: Trigger the success message ---
+            if (!saveStatus.ContainsKey(userToUpdate.Id))
+            {
+                saveStatus.Add(userToUpdate.Id, true);
+            }
+            else
+            {
+                saveStatus[userToUpdate.Id] = true;
+            }
+            StateHasChanged();
+
+            // Wait 2 seconds then hide it
+            await Task.Delay(2000);
+            saveStatus[userToUpdate.Id] = false;
+            StateHasChanged();
         }
     }
 }
