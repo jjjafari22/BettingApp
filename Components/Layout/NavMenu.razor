@@ -1,6 +1,9 @@
 ﻿@implements IDisposable
-
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore
 @inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -20,11 +23,14 @@
 
         <AuthorizeView>
             <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="admin/transactions">
-                        <span class="bi bi-list-check" aria-hidden="true"></span> Transactions
-                    </NavLink>
-                </div>
+                @if (isAdmin)
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="admin/transactions">
+                            <span class="bi bi-list-check" aria-hidden="true"></span> Transactions
+                        </NavLink>
+                    </div>
+                }
             </Authorized>
         </AuthorizeView>
 
@@ -63,11 +69,25 @@
 
 @code {
     private string? currentUrl;
+    private bool isAdmin;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            using var context = DbFactory.CreateDbContext();
+            var dbUser = await context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+
+            isAdmin = dbUser?.IsAdmin ?? false;
+        }
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
