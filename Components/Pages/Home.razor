@@ -21,16 +21,19 @@
     <div class="alert alert-danger">
         <strong>Critical Error:</strong> 
         <pre>@ErrorMessage</pre>
-        <p><em>Tip: If the error says "no such table", run <code>dotnet ef database update</code> in your terminal.</em></p>
+        <p><em>Tip: If the error says "no such table" or "column not found", run <code>dotnet ef migrations add AddOutcome</code> and <code>dotnet ef database update</code>.</em></p>
     </div>
 }
 
 <div class="container mt-4">
     <div class="card bg-light mb-4">
         <div class="card-body text-center">
-            <h3>Available Credit</h3>
-            <h1 class="display-4 text-success">@AvailableCredit kr</h1>
-            <small class="text-muted">Limit: @CreditLimit kr</small>
+            <h3>Balance</h3>
+            <h1 class="display-4 @GetBalanceClass(Balance)">@Balance.ToString("N0") kr</h1>
+            <small class="text-muted">
+                Available Credit: <strong>@AvailableCredit.ToString("N0") kr</strong> 
+                (Limit: @CreditLimit.ToString("N0") kr)
+            </small>
         </div>
     </div>
 
@@ -56,7 +59,7 @@
     </div>
 
     <h4>My Bets History</h4>
-    <table class="table">
+    <table class="table align-middle">
         <thead>
             <tr>
                 <th>Date</th>
@@ -64,6 +67,7 @@
                 <th>Amount</th>
                 <th>Screenshot</th> 
                 <th>Status</th>
+                <th>Bet Outcome</th>
             </tr>
         </thead>
         <tbody>
@@ -84,6 +88,27 @@
                         }
                     </td>
                     <td>@bet.Status</td>
+                    <td>
+                        @if (bet.Outcome == "Won")
+                        {
+                            <span class="d-inline-block bg-success border border-dark" style="width: 20px; height: 20px;" title="Won"></span>
+                            <span class="ms-1">Won</span>
+                        }
+                        else if (bet.Outcome == "Lost")
+                        {
+                            <span class="d-inline-block bg-danger border border-dark" style="width: 20px; height: 20px;" title="Lost"></span>
+                            <span class="ms-1">Lost</span>
+                        }
+                        else if (bet.Outcome == "Void")
+                        {
+                            <span class="d-inline-block bg-warning border border-dark" style="width: 20px; height: 20px;" title="Void"></span>
+                            <span class="ms-1">Void</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">-</span>
+                        }
+                    </td>
                 </tr>
             }
         </tbody>
@@ -125,13 +150,15 @@
     private Bet newBet { get; set; } = new();
     private List<Bet> myBets = new();
     private List<Transaction> myTransactions = new();
+    
     private decimal CreditLimit = 5000;
+    private decimal Balance = 0;
     private decimal AvailableCredit = 5000;
+
     private IBrowserFile? uploadedFile;
     private HubConnection? hubConnection;
     private string userId;
     
-    // Track if we are still loading data
     private bool IsLoading = true;
     private string? ErrorMessage;
 
@@ -139,7 +166,6 @@
     {
         try
         {
-            // Wrap this in try-catch because if it fails, the whole page crashes
             var auth = await AuthState.GetAuthenticationStateAsync();
             userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
             
@@ -151,7 +177,6 @@
         }
         catch (Exception ex)
         {
-            // This will print the ACTUAL error to the screen
             ErrorMessage = $"Startup Error: {ex.Message}";
             Console.WriteLine(ex);
         }
@@ -176,7 +201,6 @@
             }
             finally
             {
-                // This guarantees the "Loading..." text is removed
                 IsLoading = false;
                 StateHasChanged();
             }
@@ -187,23 +211,26 @@
     {      
         using var context = DbFactory.CreateDbContext();
         
-        // Load Bets
         myBets = await context.Bets
                         .Where(b => b.UserId == userId)
                         .OrderByDescending(b => b.CreatedAt)
                         .AsNoTracking()
                         .ToListAsync();
 
-        // Load Transactions
         myTransactions = await context.Transactions
                         .Where(t => t.UserId == userId)
                         .OrderByDescending(t => t.Date)
                         .AsNoTracking()
                         .ToListAsync();
+        
+        var totalDeposits = myTransactions.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
+        var totalWithdrawals = myTransactions.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
+        
+        var liability = myBets.Where(b => b.Status == "Pending" || b.Status == "Lost")
+                              .Sum(b => b.AmountNOK);
 
-        var usedCredit = myBets.Where(b => b.Status == "Pending" || b.Status == "Lost")
-                               .Sum(b => b.AmountNOK);
-        AvailableCredit = CreditLimit - usedCredit;
+        Balance = totalDeposits - totalWithdrawals - liability;
+        AvailableCredit = Balance + CreditLimit;
     }
 
     private async Task SetupSignalR()
@@ -249,13 +276,11 @@
         context.Bets.Add(newBet);
         await context.SaveChangesAsync();
         
-        // Reset form
         newBet = new Bet();
-        uploadedFile = null; 
-        
-        // Reload data (which will also use a fresh context)
+        uploadedFile = null;
+
         await LoadData();
-        StateHasChanged(); 
+        StateHasChanged();
     }
     
     private string GetRowClass(string status) => status switch
@@ -263,5 +288,11 @@
         "Approved" => "table-success",
         "Rejected" => "table-danger",
         _ => "table-warning"
+    };
+
+    private string GetBalanceClass(decimal balance) => balance switch
+    {
+        >= 0 => "text-success",
+        _ => "text-danger"
     };
 }

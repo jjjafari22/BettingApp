@@ -13,7 +13,10 @@ namespace BettingApp.Data
         public decimal AmountNOK { get; set; }
         
         public string? ScreenshotUrl { get; set; }
-        public string Status { get; set; } = "Pending"; 
+        public string Status { get; set; } = "Pending";
+
+        // Outcome tracks the bet result (e.g., Won, Lost, Void)
+        public string? Outcome { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
