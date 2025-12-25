@@ -12,16 +12,18 @@
 <h3>Admin Dashboard</h3>
 
 <div class="row">
-    @* Existing Queue *@
+    @* Queue Section *@
     <div class="col-md-8">
-        <h4>Pending Bets Queue</h4>
-        <table class="table">
+        
+        @* 1. Pending Bets Queue *@
+        <h4 class="mb-3">Pending Bets Queue</h4>
+        <table class="table table-striped mb-5">
             <thead>
                 <tr>
                     <th>Date</th>
                     <th>User</th>
                     <th>Amount</th>
-                    <th>Proof</th>
+                    <th>Screenshot</th> @* Renamed from Proof *@
                     <th>Action</th>
                 </tr>
             </thead>
@@ -44,11 +46,56 @@
                         </td>
                     </tr>
                 }
+                @if (pendingBets.Count == 0)
+                {
+                    <tr><td colspan="5" class="text-muted">No pending bets.</td></tr>
+                }
             </tbody>
         </table>
+
+        @* 2. Active (Approved) Bets Table *@
+        <h4 class="mb-3">Active Bets (Awaiting Outcome)</h4>
+        <table class="table table-bordered border-primary">
+            <thead class="table-light">
+                <tr>
+                    <th>Date</th>
+                    <th>User</th>
+                    <th>Amount</th>
+                    <th>Screenshot</th> @* NEW Column *@
+                    <th>Set Outcome</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var bet in approvedBets)
+                {
+                    <tr>
+                        <td>@bet.CreatedAt.ToLocalTime().ToString("g")</td>
+                        <td>@bet.UserName</td>
+                        <td>@bet.AmountNOK</td>
+                        <td>
+                            @* NEW: Display Screenshot Link *@
+                            @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                            {
+                                <a href="@bet.ScreenshotUrl" target="_blank">View</a>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-success btn-sm" @onclick='() => SetOutcome(bet, "Won")'>Won</button>
+                            <button class="btn btn-danger btn-sm" @onclick='() => SetOutcome(bet, "Lost")'>Lost</button>
+                            <button class="btn btn-secondary btn-sm" @onclick='() => SetOutcome(bet, "Void")'>Void</button>
+                        </td>
+                    </tr>
+                }
+                @if (approvedBets.Count == 0)
+                {
+                    <tr><td colspan="5" class="text-muted">No active bets.</td></tr>
+                }
+            </tbody>
+        </table>
+
     </div>
 
-    @* [NEW] Add Transaction Panel *@
+    @* Add Transaction Panel *@
     <div class="col-md-4">
         <div class="card">
             <div class="card-header bg-primary text-white">Add Transaction</div>
@@ -95,8 +142,9 @@
 
 @code {
     private List<Bet> pendingBets = new();
+    private List<Bet> approvedBets = new();
     
-    // [NEW] Admin Tool variables
+    // Admin Tool variables
     private List<ApplicationUser> allUsers = new();
     private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
     private string? successMessage;
@@ -109,7 +157,13 @@
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
 
-        // [NEW] Load users for the dropdown
+        // Load approved bets that haven't been resolved yet
+        approvedBets = await Db.Bets
+            .Where(b => b.Status == "Approved" && string.IsNullOrEmpty(b.Outcome))
+            .OrderByDescending(b => b.CreatedAt)
+            .ToListAsync();
+
+        // Load users for the dropdown
         allUsers = await Db.Users.ToListAsync();
     }
 
@@ -117,16 +171,33 @@
     {
         bet.Status = status;
         await Db.SaveChangesAsync();
+        
         pendingBets.Remove(bet);
+
+        // If approved, move to the Approved Bets list immediately
+        if (status == "Approved")
+        {
+            approvedBets.Insert(0, bet); 
+        }
+
         await HubContext.Clients.User(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet was {status}");
     }
 
-    // [NEW] Function to add transaction
+    private async Task SetOutcome(Bet bet, string outcome)
+    {
+        bet.Outcome = outcome;
+        await Db.SaveChangesAsync();
+
+        approvedBets.Remove(bet);
+
+        await HubContext.Clients.User(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet outcome is: {outcome}");
+    }
+
     private async Task AddTransaction()
     {
         if (string.IsNullOrEmpty(newTrans.UserId) || newTrans.AmountNOK <= 0 || string.IsNullOrEmpty(newTrans.Platform))
         {
-            return; // Add better validation if needed
+            return;
         }
 
         var selectedUser = allUsers.FirstOrDefault(u => u.Id == newTrans.UserId);
@@ -135,17 +206,14 @@
 
         Db.Transactions.Add(newTrans);
         await Db.SaveChangesAsync();
-
-        // Notify user their data changed
+        
         await HubContext.Clients.User(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
-
+        
         successMessage = "Transaction added successfully!";
         
-        // Reset form (keep Type for convenience)
-        var type = newTrans.Type; 
+        var type = newTrans.Type;
         newTrans = new Transaction { Type = type, Date = DateTime.UtcNow };
         
-        // Clear success message after 3 seconds
         await Task.Delay(3000);
         successMessage = null;
         StateHasChanged();
