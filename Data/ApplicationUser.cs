@@ -6,4 +6,5 @@ public class ApplicationUser : IdentityUser
 {
     // Add this new property
     public bool IsAdmin { get; set; }
+    public decimal CreditLimit { get; set; }
 }

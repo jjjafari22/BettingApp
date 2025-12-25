@@ -1,0 +1,117 @@
+@page "/admin/creditlimits"
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
+
+<h3>User Credit Limits</h3>
+
+@if (!isAdmin)
+{
+    <p>You are not authorized to view this page.</p>
+}
+else if (users == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text">Search User</span>
+                <input type="text" class="form-control" placeholder="Username..." 
+                       @bind="searchTerm" @bind:event="oninput" />
+            </div>
+        </div>
+    </div>
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Current Credit Limit (NOK)</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in FilteredUsers)
+            {
+                <tr>
+                    <td>@user.UserName</td>
+                    <td>@user.Email</td>
+                    <td>
+                        <input type="number" class="form-control" style="width: 150px;" 
+                               @bind="user.CreditLimit" step="100" />
+                    </td>
+                    <td>
+                        <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
+                            Update
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<ApplicationUser>? users;
+    private string searchTerm = "";
+    private bool isAdmin = false;
+
+    // Filter users based on the search term
+    private IEnumerable<ApplicationUser> FilteredUsers => 
+        string.IsNullOrWhiteSpace(searchTerm) 
+            ? users ?? new List<ApplicationUser>() 
+            : users.Where(u => u.UserName != null && 
+                               u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 1. Verify Admin status
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            using var context = DbFactory.CreateDbContext();
+            var currentUser = await context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+            
+            isAdmin = currentUser?.IsAdmin ?? false;
+        }
+
+        if (isAdmin)
+        {
+            await LoadUsers();
+        }
+    }
+
+    private async Task LoadUsers()
+    {
+        using var context = DbFactory.CreateDbContext();
+        // Fetch all users who are NOT admins
+        users = await context.Users
+            .Where(u => !u.IsAdmin)
+            .ToListAsync();
+    }
+
+    private async Task SaveCreditLimit(ApplicationUser userToUpdate)
+    {
+        using var context = DbFactory.CreateDbContext();
+        var dbUser = await context.Users.FindAsync(userToUpdate.Id);
+        
+        if (dbUser != null)
+        {
+            dbUser.CreditLimit = userToUpdate.CreditLimit;
+            await context.SaveChangesAsync();
+            // Optional: Show a success message or toast here
+        }
+    }
+}
