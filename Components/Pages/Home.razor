@@ -51,30 +51,13 @@
     </div>
 
     <div class="card mb-4">
-        <div class="card-header">New Bet</div>
+        <div class="card-header">New Pick</div>
         <div class="card-body">
             <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
                 <DataAnnotationsValidator />
                 
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label>Bet Amount (NOK) *</label>
-                        <InputNumber @bind-Value="newBet.AmountNOK" @bind-Value:after="StateHasChanged" class="form-control" placeholder="0" />
-                    </div>
-                    
-                    <div class="col-md-4 mb-3">
-                        <label>Odds *</label>
-                        <InputNumber @bind-Value="newBet.Odds" @bind-Value:after="StateHasChanged" class="form-control" step="0.01" />
-                    </div>
-
-                    <div class="col-md-4 mb-3">
-                        <label>Potential Payout</label>
-                        <input type="text" class="form-control" value="@(Math.Floor((decimal)(newBet.AmountNOK ?? 0) * newBet.Odds).ToString("N0")) kr" disabled />
-                    </div>
-                </div>
-
                 <div class="mb-3">
-                    <label>Screenshot</label>
+                    <label>Screenshot *</label>
                     <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" />
                 </div>
 
@@ -82,11 +65,11 @@
                     @if (IsSubmitting)
                     {
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        <span class="ms-2">Submitting Bet...</span>
+                        <span class="ms-2">Sending Pick...</span>
                     }
                     else
                     {
-                        <span>Submit Bet</span>
+                       <span>Send Pick</span>
                     }
                 </button>
             </EditForm>
@@ -265,7 +248,6 @@
                         .OrderByDescending(b => b.CreatedAt)
                         .AsNoTracking()
                         .ToListAsync();
-
         myTransactions = await context.Transactions
                         .Where(t => t.UserId == userId)
                         .OrderByDescending(t => t.Date)
@@ -275,12 +257,10 @@
         var totalDeposits = myTransactions.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
         var totalWithdrawals = myTransactions.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
         var winnings = myBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
-        
         var liability = myBets.Where(b => 
             b.Status == "Pending" || 
             (b.Status == "Approved" && b.Outcome != "Void")
         ).Sum(b => (decimal)(b.AmountNOK ?? 0));
-
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
     }
@@ -290,13 +270,11 @@
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
-
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
-
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
@@ -314,9 +292,9 @@
 
         try
         {
-            if ((newBet.AmountNOK ?? 0) > AvailableCredit)
+            if (uploadedFile == null)
             {
-                ErrorMessage = $"You cannot bet more than your available credit ({AvailableCredit:N0} kr).";
+                ErrorMessage = "You must upload a screenshot for your pick.";
                 IsSubmitting = false;
                 return;
             }
@@ -325,13 +303,11 @@
             {
                 // Scale the image in the browser (max 1200px width/height) before uploading
                 var resizedFile = await uploadedFile.RequestImageFileAsync("image/jpeg", 1200, 1200);
-
                 var uploadPath = Path.Combine(Env.WebRootPath, "uploads");
                 Directory.CreateDirectory(uploadPath);
                 
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var path = Path.Combine(uploadPath, fileName);
-                
                 await using FileStream fs = new(path, FileMode.Create);
                 await resizedFile.OpenReadStream(maxAllowedSize: 2000000).CopyToAsync(fs);
                 newBet.ScreenshotUrl = $"/uploads/{fileName}";
@@ -342,16 +318,14 @@
             newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             newBet.Status = "Pending";
             newBet.CreatedAt = DateTime.UtcNow;
-
             using var context = DbFactory.CreateDbContext(); 
             context.Bets.Add(newBet);
             await context.SaveChangesAsync();
 
             await NotifyDiscord(newBet);
 
-            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New bet submitted by {newBet.UserName}");
-
-            SuccessMessage = "Bet Successfully submitted for approval.";
+            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
+            SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
             await LoadData();
@@ -378,7 +352,7 @@
                 var client = HttpClientFactory.CreateClient();
                 var messageContent = new 
                 { 
-                    content = $"🎰 **New Bet Placed!**\n" +
+                    content = $"🎰 **New Pick Placed!**\n" +
                               $"**User:** {bet.UserName}\n" +
                               $"**Amount:** {(bet.AmountNOK ?? 0):N0} kr\n" +
                               $"**Odds:** {bet.Odds:N2}\n" +

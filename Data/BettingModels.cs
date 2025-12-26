@@ -9,13 +9,10 @@ namespace BettingApp.Data
         public string UserId { get; set; } = string.Empty;
         public string UserName { get; set; } = string.Empty;
         
-        [Required]
-        [Range(1, 100000, ErrorMessage = "Amount must be positive")]
-        // Changed to int? to prevent pre-filled '0' and enforce whole numbers
+        // Removed Required and Range to allow submission without amount
         public int? AmountNOK { get; set; }
 
-        [Required]
-        [Range(1.0, 1000.0, ErrorMessage = "Odds must be at least 1.0")]
+        // Removed Required and Range to allow submission without specifying odds
         public decimal Odds { get; set; }
 
         // Round down to the nearest whole number
