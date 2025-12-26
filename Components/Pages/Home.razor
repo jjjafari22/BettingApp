@@ -78,64 +78,66 @@
     </div>
 
     <h4>My Bets History</h4>
-    <table class="table align-middle">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Bet Amount</th>
-                <th>Odds</th>
-                <th>Potential Payout</th>
-                <th>Screenshot</th> 
-                <th>Status</th>
-                <th>Bet Outcome</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var bet in myBets)
-            {
-                <tr class="@GetRowClass(bet.Status)">
-                    <td>@bet.CreatedAt.ToLocalTime().ToShortDateString()</td>
-                    <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
-                    <td>@(bet.AmountNOK ?? 0) kr</td>
-                    <td>@bet.Odds.ToString("N2")</td>
-                    <td>@bet.PotentialPayout.ToString("N0") kr</td>
-                    <td>
-                        @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
-                        {
-                            <a href="@bet.ScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
-                        }
-                        else
-                        {
-                            <span class="text-muted">None</span>
-                        }
-                    </td>
-                    <td>@bet.Status</td>
-                    <td>
-                        @if (bet.Outcome == "Won")
-                        {
-                            <span class="d-inline-block bg-success border border-dark" style="width: 20px; height: 20px;" title="Won"></span>
-                            <span class="ms-1">Won</span>
-                        }
-                        else if (bet.Outcome == "Lost")
-                        {
-                            <span class="d-inline-block bg-danger border border-dark" style="width: 20px; height: 20px;" title="Lost"></span>
-                            <span class="ms-1">Lost</span>
-                        }
-                        else if (bet.Outcome == "Void")
-                        {
-                            <span class="d-inline-block bg-warning border border-dark" style="width: 20px; height: 20px;" title="Void"></span>
-                            <span class="ms-1">Void</span>
-                        }
-                        else
-                        {
-                            <span class="text-muted">-</span>
-                        }
-                    </td>
+    <div class="table-responsive">
+        <table class="table align-middle text-nowrap">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Bet Amount</th>
+                    <th>Odds</th>
+                    <th>Potential Payout</th>
+                    <th>Screenshot</th> 
+                    <th>Status</th>
+                    <th>Bet Outcome</th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach (var bet in myBets)
+                {
+                    <tr class="@GetRowClass(bet.Status)">
+                        <td>@bet.CreatedAt.ToLocalTime().ToShortDateString()</td>
+                        <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
+                        <td>@(bet.AmountNOK ?? 0) kr</td>
+                        <td>@bet.Odds.ToString("N2")</td>
+                        <td>@bet.PotentialPayout.ToString("N0") kr</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                            {
+                                <a href="@bet.ScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">None</span>
+                            }
+                        </td>
+                        <td>@bet.Status</td>
+                        <td>
+                            @if (bet.Outcome == "Won")
+                            {
+                                <span class="d-inline-block bg-success border border-dark" style="width: 20px; height: 20px;" title="Won"></span>
+                                <span class="ms-1">Won</span>
+                            }
+                            else if (bet.Outcome == "Lost")
+                            {
+                                <span class="d-inline-block bg-danger border border-dark" style="width: 20px; height: 20px;" title="Lost"></span>
+                                <span class="ms-1">Lost</span>
+                            }
+                            else if (bet.Outcome == "Void")
+                            {
+                                <span class="d-inline-block bg-warning border border-dark" style="width: 20px; height: 20px;" title="Void"></span>
+                                <span class="ms-1">Void</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 
     <h4 class="mt-5">My Transactions</h4>
     <table class="table table-striped">
@@ -246,6 +248,7 @@
                         .OrderByDescending(b => b.CreatedAt)
                         .AsNoTracking()
                         .ToListAsync();
+
         myTransactions = await context.Transactions
                         .Where(t => t.UserId == userId)
                         .OrderByDescending(t => t.Date)
@@ -254,10 +257,8 @@
 
         var totalDeposits = myTransactions.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
         var totalWithdrawals = myTransactions.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
-        
         // 1. Calculate Winnings: Add Potential Payout only for bets that are explicitly "Won"
         var winnings = myBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
-        
         // 2. Calculate Liability (Stakes):
         // We deduct the Bet Amount if the bet is "Pending" OR "Approved" (Active/In-Play).
         // We also keep the deduction if it is "Lost" or "Won" (because Status stays "Approved").
@@ -266,7 +267,6 @@
             b.Status == "Pending" || 
             (b.Status == "Approved" && b.Outcome != "Void")
         ).Sum(b => (decimal)(b.AmountNOK ?? 0));
-        
         // 3. Final Balance Formula
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
@@ -295,7 +295,6 @@
     {
         // Reset error message at the start of attempt
         ErrorMessage = null;
-        
         // 1. Validation Logic: Check if bet exceeds available credit
         if ((newBet.AmountNOK ?? 0) > AvailableCredit)
         {
