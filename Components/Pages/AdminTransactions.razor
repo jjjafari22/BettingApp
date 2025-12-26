@@ -1,6 +1,6 @@
 @page "/admin/transactions"
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.SignalR        @* <--- ADDED THIS *@
+@using Microsoft.AspNetCore.SignalR
 @using Microsoft.AspNetCore.SignalR.Client
 @using BettingApp.Hubs
 @using BettingApp.Data
@@ -68,42 +68,45 @@
 </div>
 
 <h4 class="mb-3">Transaction History</h4>
-<table class="table table-striped table-hover">
-    <thead class="table-dark">
-        <tr>
-            <th>Date</th>
-            <th>User</th>
-            <th>Type</th>
-            <th>Platform</th>
-            <th>Amount</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var t in allTransactions)
-        {
+<div class="table-responsive">
+    <table class="table table-striped table-hover text-nowrap">
+        <thead class="table-dark">
             <tr>
-                <td>@t.Date.ToLocalTime().ToString("g")</td>
-                <td>@t.UserName</td>
-                <td>
-                    <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
-                        @t.Type
-                    </span>
-                </td>
-                <td>@t.Platform</td>
-                <td>@t.AmountNOK.ToString("N0") kr</td>
+                <th>Date</th>
+                <th>User</th>
+                <th>Type</th>
+                <th>Platform</th>
+                <th>Amount</th>
             </tr>
-        }
-        @if (allTransactions.Count == 0)
-        {
-            <tr><td colspan="5" class="text-muted text-center">No transactions found.</td></tr>
-        }
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            @foreach (var t in allTransactions)
+            {
+                <tr>
+                    <td>@t.Date.ToLocalTime().ToString("g")</td>
+                    <td>@t.UserName</td>
+                    <td>
+                        <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
+                            @t.Type
+                        </span>
+                    </td>
+                    <td>@t.Platform</td>
+                    <td>@t.AmountNOK.ToString("N0") kr</td>
+                </tr>
+            }
+            @if (allTransactions.Count == 0)
+            {
+                <tr><td colspan="5" class="text-muted text-center">No transactions found.</td></tr>
+            }
+        </tbody>
+    </table>
+</div>
 
 @code {
     private List<ApplicationUser> allUsers = new();
     private List<Transaction> allTransactions = new();
     private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
+    
     private string? successMessage;
 
     protected override async Task OnInitializedAsync()
@@ -113,7 +116,6 @@
 
         using var context = DbFactory.CreateDbContext();
         
-        // --- Fix Start: Safely access Identity.Name ---
         var userName = user.Identity?.Name; 
         
         ApplicationUser? dbUser = null;
@@ -121,7 +123,6 @@
         {
             dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == userName);
         }
-        // --- Fix End ---
 
         // Security check: Only allow Admins
         if (dbUser == null || !dbUser.IsAdmin)
@@ -159,7 +160,7 @@
 
         // Notify user via SignalR
         await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
-
+        
         successMessage = "Transaction added successfully!";
         
         // Refresh the list and reset form

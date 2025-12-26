@@ -29,58 +29,58 @@ else
         </div>
     </div>
 
-    <table class="table table-striped align-middle">
-        <thead>
-            <tr>
-                <th>User</th>
-                <th>Email</th>
-                <th>Current Credit Limit (NOK)</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var user in FilteredUsers)
-            {
+    <div class="table-responsive">
+        <table class="table table-striped align-middle text-nowrap">
+            <thead>
                 <tr>
-                    <td>@user.UserName</td>
-                    <td>@user.Email</td>
-                    <td>
-                        <input type="number" class="form-control" style="width: 150px;" 
-                               @bind="user.CreditLimit" step="100" />
-                    </td>
-                    <td>
-                        <div class="d-flex align-items-center">
-                            <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
-                                Update
-                            </button>
-                            
-                            @* --- NEW: Success Indicator --- *@
-                            @if (saveStatus.TryGetValue(user.Id, out var isSaved) && isSaved)
-                            {
-                                <span class="text-success ms-2 fw-bold fade-in-out">
-                                    <i class="bi bi-check-circle-fill"></i> Saved!
-                                </span>
-                            }
-                        </div>
-                    </td>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Current Credit Limit (NOK)</th>
+                    <th>Action</th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach (var user in FilteredUsers)
+                {
+                    <tr>
+                        <td>@user.UserName</td>
+                        <td>@user.Email</td>
+                        <td>
+                            <input type="number" class="form-control" style="width: 150px;" 
+                                   @bind="user.CreditLimit" step="100" />
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
+                                    Update
+                                </button>
+                                
+                                @if (saveStatus.TryGetValue(user.Id, out var isSaved) && isSaved)
+                                {
+                                    <span class="text-success ms-2 fw-bold fade-in-out">
+                                        <i class="bi bi-check-circle-fill"></i> Saved!
+                                    </span>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 }
 
 @code {
     private List<ApplicationUser>? users;
     private string searchTerm = "";
     private bool isAdmin = false;
-    
-    // --- NEW: Dictionary to track save status per user ---
+    // Dictionary to track save status per user
     private Dictionary<string, bool> saveStatus = new();
 
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
             ? users ?? new List<ApplicationUser>() 
-            : (users ?? new List<ApplicationUser>()) // <--- Fix: Handle null here
+            : (users ?? new List<ApplicationUser>()) 
                 .Where(u => u.UserName != null && 
                             u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
 
@@ -122,7 +122,7 @@ else
             dbUser.CreditLimit = userToUpdate.CreditLimit;
             await context.SaveChangesAsync();
 
-            // --- NEW: Trigger the success message ---
+            // Trigger the success message
             if (!saveStatus.ContainsKey(userToUpdate.Id))
             {
                 saveStatus.Add(userToUpdate.Id, true);

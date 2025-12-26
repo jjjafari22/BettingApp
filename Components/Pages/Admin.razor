@@ -28,91 +28,95 @@
 <div class="row">
     @* Bets Section - Now Full Width *@
     <div class="col-md-12">
-        
+ 
         @* 1. Pending Bets Queue *@
         <h4 class="mb-3">Pending Bets Queue</h4>
-        <table class="table table-striped mb-5">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>User</th>
-                    <th>Bet Amount</th>
-                    <th>Odds</th>
-                    <th>Potential Payout</th>
-                    <th>Screenshot</th> 
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var bet in pendingBets)
-                {
+        <div class="table-responsive">
+            <table class="table table-striped mb-5 text-nowrap">
+                <thead>
                     <tr>
-                        <td>@bet.CreatedAt.ToLocalTime().ToString("g")</td>
-                        <td>@bet.UserName</td>
-                        <td>@bet.AmountNOK</td>
-                        <td>@bet.Odds</td>
-                        <td>@bet.PotentialPayout.ToString("N0")</td>
-                        <td>
-                            @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
-                            {
-                                <a href="@bet.ScreenshotUrl" target="_blank">View</a>
-                            }
-                        </td>
-                        <td>
-                            <button class="btn btn-success btn-sm" @onclick='() => ProcessBet(bet, "Approved")'>Approve</button>
-                            <button class="btn btn-danger btn-sm" @onclick='() => ProcessBet(bet, "Rejected")'>Reject</button>
-                        </td>
+                        <th>Date</th>
+                        <th>User</th>
+                        <th>Bet Amount</th>
+                        <th>Odds</th>
+                        <th>Potential Payout</th>
+                        <th>Screenshot</th> 
+                        <th>Action</th>
                     </tr>
-                }
-                @if (pendingBets.Count == 0)
-                {
-                    <tr><td colspan="7" class="text-muted">No pending bets.</td></tr>
-                }
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    @foreach (var bet in pendingBets)
+                    {
+                        <tr>
+                            <td>@bet.CreatedAt.ToLocalTime().ToString("g")</td>
+                            <td>@bet.UserName</td>
+                            <td>@bet.AmountNOK</td>
+                            <td>@bet.Odds</td>
+                            <td>@bet.PotentialPayout.ToString("N0")</td>
+                            <td>
+                                @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                                {
+                                    <a href="@bet.ScreenshotUrl" target="_blank">View</a>
+                                }
+                            </td>
+                            <td>
+                                <button class="btn btn-success btn-sm" @onclick='() => ProcessBet(bet, "Approved")'>Approve</button>
+                                <button class="btn btn-danger btn-sm" @onclick='() => ProcessBet(bet, "Rejected")'>Reject</button>
+                            </td>
+                        </tr>
+                    }
+                    @if (pendingBets.Count == 0)
+                    {
+                        <tr><td colspan="7" class="text-muted">No pending bets.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
 
         @* 2. Active (Approved) Bets Table *@
         <h4 class="mb-3">Active Bets (Awaiting Outcome)</h4>
-        <table class="table table-bordered border-primary">
-            <thead class="table-light">
-                <tr>
-                    <th>Date</th>
-                    <th>User</th>
-                    <th>Bet Amount</th>
-                    <th>Odds</th>
-                    <th>Potential Payout</th>
-                    <th>Screenshot</th>
-                    <th>Set Outcome</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var bet in approvedBets)
-                {
+        <div class="table-responsive">
+            <table class="table table-bordered border-primary text-nowrap">
+                <thead class="table-light">
                     <tr>
-                        <td>@bet.CreatedAt.ToLocalTime().ToString("g")</td>
-                        <td>@bet.UserName</td>
-                        <td>@bet.AmountNOK</td>
-                        <td>@bet.Odds</td>
-                        <td>@bet.PotentialPayout.ToString("N0")</td>
-                        <td>
-                            @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
-                            {
-                                <a href="@bet.ScreenshotUrl" target="_blank">View</a>
-                            }
-                        </td>
-                        <td>
-                            <button class="btn btn-success btn-sm" @onclick='() => SetOutcome(bet, "Won")'>Won</button>
-                            <button class="btn btn-danger btn-sm" @onclick='() => SetOutcome(bet, "Lost")'>Lost</button>
-                            <button class="btn btn-secondary btn-sm" @onclick='() => SetOutcome(bet, "Void")'>Void</button>
-                        </td>
+                        <th>Date</th>
+                        <th>User</th>
+                        <th>Bet Amount</th>
+                        <th>Odds</th>
+                        <th>Potential Payout</th>
+                        <th>Screenshot</th>
+                        <th>Set Outcome</th>
                     </tr>
-                }
-                @if (approvedBets.Count == 0)
-                {
-                    <tr><td colspan="7" class="text-muted">No active bets.</td></tr>
-                }
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    @foreach (var bet in approvedBets)
+                    {
+                        <tr>
+                            <td>@bet.CreatedAt.ToLocalTime().ToString("g")</td>
+                            <td>@bet.UserName</td>
+                            <td>@bet.AmountNOK</td>
+                            <td>@bet.Odds</td>
+                            <td>@bet.PotentialPayout.ToString("N0")</td>
+                            <td>
+                                @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                                {
+                                    <a href="@bet.ScreenshotUrl" target="_blank">View</a>
+                                }
+                            </td>
+                            <td>
+                                <button class="btn btn-success btn-sm" @onclick='() => SetOutcome(bet, "Won")'>Won</button>
+                                <button class="btn btn-danger btn-sm" @onclick='() => SetOutcome(bet, "Lost")'>Lost</button>
+                                <button class="btn btn-secondary btn-sm" @onclick='() => SetOutcome(bet, "Void")'>Void</button>
+                            </td>
+                        </tr>
+                    }
+                    @if (approvedBets.Count == 0)
+                    {
+                        <tr><td colspan="7" class="text-muted">No active bets.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -130,19 +134,11 @@
 
         // 2. CHECK IF ADMIN
         using var context = DbFactory.CreateDbContext();
-
         var currentUserName = user.Identity?.Name;
         var dbUser = currentUserName != null 
             ? await context.Users.FirstOrDefaultAsync(u => u.UserName == currentUserName)
             : null;
 
-        if (dbUser == null || !dbUser.IsAdmin)
-        {
-            Nav.NavigateTo("/");
-            return;
-        }
-
-        // If user not found OR not admin, redirect to Home
         if (dbUser == null || !dbUser.IsAdmin)
         {
             Nav.NavigateTo("/");
@@ -210,6 +206,7 @@
         }
 
         pendingBets.Remove(bet);
+
         if (status == "Approved")
         {
             bet.Status = status;
