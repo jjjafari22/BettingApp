@@ -11,6 +11,8 @@
 @inject NavigationManager Nav
 @inject IWebHostEnvironment Env
 @inject IHubContext<BetHub> HubContext
+@inject IConfiguration Config
+@inject IHttpClientFactory HttpClientFactory
 @attribute [Authorize]
 
 <PageTitle>Dashboard</PageTitle>
@@ -324,6 +326,33 @@
         using var context = DbFactory.CreateDbContext(); 
         context.Bets.Add(newBet);
         await context.SaveChangesAsync();
+
+        try 
+        {
+            var webhookUrl = Config["Discord:WebhookUrl"];
+            if (!string.IsNullOrEmpty(webhookUrl))
+            {
+                var client = HttpClientFactory.CreateClient();
+                
+                // Format the message using Discord's Markdown
+                var messageContent = new 
+                { 
+                    content = $"🎰 **New Bet Placed!**\n" +
+                              $"**User:** {newBet.UserName}\n" +
+                              $"**Amount:** {newBet.AmountNOK:N0} kr\n" +
+                              $"**Odds:** {newBet.Odds:N2}\n" +
+                              $"**Potential Payout:** {newBet.PotentialPayout:N0} kr\n" +
+                              (string.IsNullOrEmpty(newBet.ScreenshotUrl) ? "" : $"[View Screenshot]({Nav.BaseUri.TrimEnd('/')}{newBet.ScreenshotUrl})")
+                };
+
+                await client.PostAsJsonAsync(webhookUrl, messageContent);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't stop the user flow just because Discord failed
+            Console.WriteLine($"Discord Notification Failed: {ex.Message}");
+        }
 
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New bet submitted by {newBet.UserName}");
         
