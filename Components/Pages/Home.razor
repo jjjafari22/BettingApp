@@ -179,7 +179,7 @@
 
     private IBrowserFile? uploadedFile;
     private HubConnection? hubConnection;
-    private string userId;
+    private string userId = string.Empty;
     
     private bool IsLoading = true;
     private string? ErrorMessage;
@@ -189,9 +189,12 @@
         try
         {
             var auth = await AuthState.GetAuthenticationStateAsync();
-            userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
-            if (userId != null)
+
+            var uid = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+            
+            if (!string.IsNullOrEmpty(uid))
             {
+                userId = uid;
                 newBet.UserId = userId;
                 newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             }
@@ -318,8 +321,8 @@
         }
 
         var auth = await AuthState.GetAuthenticationStateAsync();
-        newBet.UserId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
-        newBet.UserName = auth.User.Identity?.Name;
+        newBet.UserId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value ?? string.Empty;
+        newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
         newBet.Status = "Pending";
         newBet.CreatedAt = DateTime.UtcNow;
 

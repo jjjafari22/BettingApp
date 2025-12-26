@@ -112,7 +112,16 @@
         var user = authState.User;
 
         using var context = DbFactory.CreateDbContext();
-        var dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+        
+        // --- Fix Start: Safely access Identity.Name ---
+        var userName = user.Identity?.Name; 
+        
+        ApplicationUser? dbUser = null;
+        if (!string.IsNullOrEmpty(userName))
+        {
+            dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == userName);
+        }
+        // --- Fix End ---
 
         // Security check: Only allow Admins
         if (dbUser == null || !dbUser.IsAdmin)

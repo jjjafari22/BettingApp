@@ -80,8 +80,9 @@ else
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
             ? users ?? new List<ApplicationUser>() 
-            : users.Where(u => u.UserName != null && 
-                               u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+            : (users ?? new List<ApplicationUser>()) // <--- Fix: Handle null here
+                .Where(u => u.UserName != null && 
+                            u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {

@@ -130,7 +130,17 @@
 
         // 2. CHECK IF ADMIN
         using var context = DbFactory.CreateDbContext();
-        var dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+
+        var currentUserName = user.Identity?.Name;
+        var dbUser = currentUserName != null 
+            ? await context.Users.FirstOrDefaultAsync(u => u.UserName == currentUserName)
+            : null;
+
+        if (dbUser == null || !dbUser.IsAdmin)
+        {
+            Nav.NavigateTo("/");
+            return;
+        }
 
         // If user not found OR not admin, redirect to Home
         if (dbUser == null || !dbUser.IsAdmin)

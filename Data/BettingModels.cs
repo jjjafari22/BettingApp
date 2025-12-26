@@ -5,8 +5,9 @@ namespace BettingApp.Data
     public class Bet
     {
         public int Id { get; set; }
-        public string UserId { get; set; } 
-        public string UserName { get; set; }
+        // Initialize with default values to prevent CS8618
+        public string UserId { get; set; } = string.Empty;
+        public string UserName { get; set; } = string.Empty;
         
         [Required]
         [Range(1, 100000, ErrorMessage = "Amount must be positive")]
@@ -16,13 +17,10 @@ namespace BettingApp.Data
         [Range(1.0, 1000.0, ErrorMessage = "Odds must be at least 1.0")]
         public decimal Odds { get; set; }
 
-        // Helper property to calculate payout (not necessarily stored in DB if not needed)
         public decimal PotentialPayout => AmountNOK * Odds;
         
         public string? ScreenshotUrl { get; set; }
         public string Status { get; set; } = "Pending";
-
-        // Outcome tracks the bet result (e.g., Won, Lost, Void)
         public string? Outcome { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
@@ -30,17 +28,18 @@ namespace BettingApp.Data
     public class Transaction
     {
         public int Id { get; set; }
-        public string UserId { get; set; }
-        public string UserName { get; set; } // Store name for easier display in Admin
+        // Initialize with default values to prevent CS8618
+        public string UserId { get; set; } = string.Empty;
+        public string UserName { get; set; } = string.Empty;
         
         [Required]
-        public string Type { get; set; } // "Deposit" or "Withdrawal"
+        public string Type { get; set; } = string.Empty; // Initialize
         
         [Required]
         public decimal AmountNOK { get; set; }
         
         [Required]
-        public string Platform { get; set; } // e.g., "Bank", "Vipps", "Crypto"
+        public string Platform { get; set; } = string.Empty; // Initialize
         
         public DateTime Date { get; set; } = DateTime.UtcNow;
     }
