@@ -7,7 +7,7 @@
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">BettingApp</a>
+        <a class="navbar-brand" href="">Castle of Happiness</a>
     </div>
 </div>
 
@@ -43,7 +43,7 @@
                         </NavLink>
                     </div>
                     <div class="nav-item px-3">
-                        @* FIX: Added 'd-flex align-items-center' to the link *@
+                         @* FIX: Added 'd-flex align-items-center' to the link *@
                         <NavLink class="nav-link d-flex align-items-center" href="admin/creditlimits">
                             @* FIX: Added 'line-height: 1;' and 'vertical-align: text-bottom;' to force alignment *@
                             <span class="bi bi-cash-coin" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
@@ -51,7 +51,7 @@
                         </NavLink>
                     </div>
                     <div class="nav-item px-3">
-                        <NavLink class="nav-link d-flex align-items-center" href="admin/users">
+                         <NavLink class="nav-link d-flex align-items-center" href="admin/users">
                             <span class="bi bi-people-fill" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
                             <span>All Users</span>
                         </NavLink>
@@ -104,12 +104,14 @@
 
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+
         if (user.Identity?.IsAuthenticated == true)
         {
             using var context = DbFactory.CreateDbContext();
             var dbUser = await context.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+            
             isAdmin = dbUser?.IsAdmin ?? false;
         }
     }
