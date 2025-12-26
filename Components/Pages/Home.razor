@@ -95,7 +95,7 @@
             <tbody>
                 @foreach (var bet in myBets)
                 {
-                    <tr class="@GetRowClass(bet.Status)">
+                    <tr class="@GetRowClass(bet)">
                         <td>@bet.CreatedAt.ToLocalTime().ToShortDateString()</td>
                         <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
                         <td>@(bet.AmountNOK ?? 0) kr</td>
@@ -248,7 +248,6 @@
                         .OrderByDescending(b => b.CreatedAt)
                         .AsNoTracking()
                         .ToListAsync();
-
         myTransactions = await context.Transactions
                         .Where(t => t.UserId == userId)
                         .OrderByDescending(t => t.Date)
@@ -353,12 +352,30 @@
         StateHasChanged();
     }
     
-    private string GetRowClass(string status) => status switch
+    private string GetRowClass(Bet bet)
     {
-        "Approved" => "table-success",
-        "Rejected" => "table-danger",
-        _ => "table-warning"
-    };
+        // 1. Outcome Coloring (Priority)
+        if (!string.IsNullOrEmpty(bet.Outcome))
+        {
+            return bet.Outcome switch
+            {
+                "Won" => "table-success",    // Green
+                "Lost" => "table-danger",    // Red
+                "Void" => "table-secondary", // Grey
+                _ => ""
+            };
+        }
+        
+        // 2. Status Coloring (for active/pending bets)
+        return bet.Status switch
+        {
+            "Rejected" => "table-danger",    // Red
+            "Approved" => "table-warning",   // Yellow (Waiting for outcome)
+            "Pending" => "table-warning",    // Yellow
+            _ => ""
+        };
+    }
+
     private string GetBalanceClass(decimal balance) => balance switch
     {
         >= 0 => "text-success",
