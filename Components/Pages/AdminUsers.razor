@@ -95,11 +95,9 @@ else
     private string searchTerm = "";
     private bool hasAccess = false;
     private bool isLoading = true;
-    
     // Sorting state
     private string sortColumn = "DateJoined";
     private bool sortAscending = true;
-
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -116,7 +114,6 @@ else
         }
 
         if (!hasAccess) return;
-
         // 2. Load Data
         await LoadData(context);
         isLoading = false;
@@ -130,7 +127,6 @@ else
         var transactions = await context.Transactions.AsNoTracking().ToListAsync();
 
         allUsersVM = new List<UserViewModel>();
-
         foreach (var u in users)
         {
             // Filter data for this user
@@ -144,13 +140,14 @@ else
             var winnings = userBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
             
             // Liability: Pending OR (Approved but NOT Void)
+            // FIXED: Added (decimal) cast and null coalescing (?? 0) to fix build error
             var liability = userBets.Where(b => 
                 b.Status == "Pending" || 
                 (b.Status == "Approved" && b.Outcome != "Void")
-            ).Sum(b => b.AmountNOK);
-
+            ).Sum(b => (decimal)(b.AmountNOK ?? 0));
+            
             var balance = totalDeposits - totalWithdrawals - liability + winnings;
-
+            
             // --- Date Joined Heuristic ---
             // Since IdentityUser doesn't have a CreatedDate, we approximate using their first activity
             // (either first bet or first transaction).
@@ -164,7 +161,7 @@ else
                 dateJoined = firstBet.Value;
             else if (firstTrans.HasValue)
                 dateJoined = firstTrans.Value;
-
+            
             allUsersVM.Add(new UserViewModel
             {
                 Id = u.Id,
@@ -204,7 +201,6 @@ else
         get
         {
             var query = allUsersVM.AsEnumerable();
-
             // Search
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -225,7 +221,6 @@ else
                 "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
                 _ => query
             };
-
             return query;
         }
     }

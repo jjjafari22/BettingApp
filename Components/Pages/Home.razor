@@ -52,7 +52,7 @@
                     <div class="col-md-4 mb-3">
                         <label>Bet Amount (NOK) *</label>
                         @* Use @bind-Value:after to trigger UI update for payout calc *@
-                        <InputNumber @bind-Value="newBet.AmountNOK" @bind-Value:after="StateHasChanged" class="form-control" />
+                        <InputNumber @bind-Value="newBet.AmountNOK" @bind-Value:after="StateHasChanged" class="form-control" placeholder="0" />
                     </div>
                     
                     <div class="col-md-4 mb-3">
@@ -62,7 +62,8 @@
 
                     <div class="col-md-4 mb-3">
                         <label>Potential Payout</label>
-                        <input type="text" class="form-control" value="@((newBet.AmountNOK * newBet.Odds).ToString("N2")) kr" disabled />
+                        @* Round down and show as whole number *@
+                        <input type="text" class="form-control" value="@(Math.Floor((decimal)(newBet.AmountNOK ?? 0) * newBet.Odds).ToString("N0")) kr" disabled />
                     </div>
                 </div>
 
@@ -96,9 +97,9 @@
                 <tr class="@GetRowClass(bet.Status)">
                     <td>@bet.CreatedAt.ToLocalTime().ToShortDateString()</td>
                     <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
-                    <td>@bet.AmountNOK kr</td>
+                    <td>@(bet.AmountNOK ?? 0) kr</td>
                     <td>@bet.Odds.ToString("N2")</td>
-                    <td>@bet.PotentialPayout.ToString("N2") kr</td>
+                    <td>@bet.PotentialPayout.ToString("N0") kr</td>
                     <td>
                         @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
                         {
@@ -161,7 +162,7 @@
                         </span>
                     </td>
                     <td>@t.Platform</td>
-                    <td>@t.AmountNOK kr</td>
+                    <td>@t.AmountNOK.ToString("N0") kr</td>
                 </tr>
             }
         </tbody>
@@ -191,7 +192,6 @@
             var auth = await AuthState.GetAuthenticationStateAsync();
 
             var uid = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
-            
             if (!string.IsNullOrEmpty(uid))
             {
                 userId = uid;
@@ -234,13 +234,11 @@
     private async Task LoadData()
     {      
         using var context = DbFactory.CreateDbContext();
-
         var user = await context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
-        
         if (user != null)
         {
-            CreditLimit = user.CreditLimit; 
+            CreditLimit = user.CreditLimit;
         }
 
         myBets = await context.Bets
@@ -248,7 +246,6 @@
                         .OrderByDescending(b => b.CreatedAt)
                         .AsNoTracking()
                         .ToListAsync();
-
         myTransactions = await context.Transactions
                         .Where(t => t.UserId == userId)
                         .OrderByDescending(t => t.Date)
@@ -260,7 +257,7 @@
         
         // 1. Calculate Winnings: Add Potential Payout only for bets that are explicitly "Won"
         var winnings = myBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
-
+        
         // 2. Calculate Liability (Stakes):
         // We deduct the Bet Amount if the bet is "Pending" OR "Approved" (Active/In-Play).
         // We also keep the deduction if it is "Lost" or "Won" (because Status stays "Approved").
@@ -268,11 +265,10 @@
         var liability = myBets.Where(b => 
             b.Status == "Pending" || 
             (b.Status == "Approved" && b.Outcome != "Void")
-        ).Sum(b => b.AmountNOK);
-
+        ).Sum(b => (decimal)(b.AmountNOK ?? 0));
+        
         // 3. Final Balance Formula
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
-
         AvailableCredit = Balance + CreditLimit;
     }
 
@@ -281,13 +277,11 @@
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
-
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
-
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
@@ -301,9 +295,9 @@
     {
         // Reset error message at the start of attempt
         ErrorMessage = null;
-
+        
         // 1. Validation Logic: Check if bet exceeds available credit
-        if (newBet.AmountNOK > AvailableCredit)
+        if ((newBet.AmountNOK ?? 0) > AvailableCredit)
         {
             ErrorMessage = $"You cannot bet more than your available credit ({AvailableCredit:N0} kr).";
             return;
@@ -325,7 +319,6 @@
         newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
         newBet.Status = "Pending";
         newBet.CreatedAt = DateTime.UtcNow;
-
         using var context = DbFactory.CreateDbContext(); 
         context.Bets.Add(newBet);
         await context.SaveChangesAsync();
@@ -336,32 +329,27 @@
             if (!string.IsNullOrEmpty(webhookUrl))
             {
                 var client = HttpClientFactory.CreateClient();
-                
                 // Format the message using Discord's Markdown
                 var messageContent = new 
                 { 
                     content = $"🎰 **New Bet Placed!**\n" +
                               $"**User:** {newBet.UserName}\n" +
-                              $"**Amount:** {newBet.AmountNOK:N0} kr\n" +
+                              $"**Amount:** {(newBet.AmountNOK ?? 0):N0} kr\n" +
                               $"**Odds:** {newBet.Odds:N2}\n" +
                               $"**Potential Payout:** {newBet.PotentialPayout:N0} kr\n" +
                               (string.IsNullOrEmpty(newBet.ScreenshotUrl) ? "" : $"[View Screenshot]({Nav.BaseUri.TrimEnd('/')}{newBet.ScreenshotUrl})")
                 };
-
                 await client.PostAsJsonAsync(webhookUrl, messageContent);
             }
         }
         catch (Exception ex)
         {
-            // Log error but don't stop the user flow just because Discord failed
             Console.WriteLine($"Discord Notification Failed: {ex.Message}");
         }
 
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New bet submitted by {newBet.UserName}");
-        
         newBet = new Bet { Odds = 1.0m }; // Reset with Odds 1
         uploadedFile = null;
-
         await LoadData();
         StateHasChanged();
     }
@@ -372,7 +360,6 @@
         "Rejected" => "table-danger",
         _ => "table-warning"
     };
-
     private string GetBalanceClass(decimal balance) => balance switch
     {
         >= 0 => "text-success",
