@@ -8,8 +8,6 @@
 @inject NavigationManager Nav
 @rendermode InteractiveServer
 
-<h3>All Users</h3>
-
 @if (!hasAccess)
 {
     <div class="alert alert-danger">You are not authorized to view this page.</div>
@@ -20,6 +18,53 @@ else if (isLoading)
 }
 else
 {
+    @* --- PENDING APPROVALS SECTION --- *@
+    <div class="card border-warning mb-4">
+        <div class="card-header bg-warning text-dark">
+            <h4 class="mb-0"><i class="bi bi-exclamation-circle-fill me-2"></i>Pending Approvals</h4>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date Joined</th>
+                            <th>User</th>
+                            <th>Email</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in pendingUsersVM)
+                        {
+                            <tr>
+                                <td>@(user.DateJoined == DateTime.MaxValue ? "-" : user.DateJoined.ToLocalTime().ToShortDateString())</td>
+                                <td>@user.UserName</td>
+                                <td>@user.Email</td>
+                                <td class="text-end">
+                                    <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
+                                        <i class="bi bi-check-lg"></i> Approve
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
+                                        <i class="bi bi-x-lg"></i> Reject
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                        @if (!pendingUsersVM.Any())
+                        {
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-3">No pending approvals.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* --- ALL USERS SECTION --- *@
+    <h3>Active Users</h3>
     <div class="row mb-3">
         <div class="col-md-6">
             <div class="input-group">
@@ -46,7 +91,6 @@ else
                     <th style="cursor: pointer;" @onclick='() => Sort("Balance")'>
                         Balance @GetSortIcon("Balance")
                     </th>
-                    @* New Column Header *@
                     <th style="cursor: pointer;" @onclick='() => Sort("LifetimeProfit")'>
                         Lifetime Profit @GetSortIcon("LifetimeProfit")
                     </th>
@@ -71,7 +115,6 @@ else
                         <td class="@(user.Balance >= 0 ? "text-success" : "text-danger") fw-bold">
                             @user.Balance.ToString("N0") kr
                         </td>
-                        @* New Column Data *@
                         <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold">
                             @user.LifetimeProfit.ToString("N0") kr
                         </td>
@@ -92,7 +135,7 @@ else
                 @if (!FilteredAndSortedUsers.Any())
                 {
                     <tr>
-                        <td colspan="8" class="text-center text-muted">No users found.</td>
+                        <td colspan="8" class="text-center text-muted">No active users found.</td>
                     </tr>
                 }
             </tbody>
@@ -102,6 +145,7 @@ else
 
 @code {
     private List<UserViewModel> allUsersVM = new();
+    private List<UserViewModel> pendingUsersVM = new(); // NEW: Separate list for pending
     private string searchTerm = "";
     private bool hasAccess = false;
     private bool isLoading = true;
@@ -140,6 +184,7 @@ else
         var transactions = await context.Transactions.AsNoTracking().ToListAsync();
 
         allUsersVM = new List<UserViewModel>();
+        pendingUsersVM = new List<UserViewModel>();
 
         foreach (var u in users)
         {
@@ -153,19 +198,16 @@ else
             
             var winnings = userBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
             
-            // NEW: Calculate Lifetime Profit (Winnings - Stakes of Settled Bets)
             var settledStakes = userBets
                 .Where(b => b.Outcome == "Won" || b.Outcome == "Lost")
                 .Sum(b => (decimal)(b.AmountNOK ?? 0));
-                
             var lifetimeProfit = winnings - settledStakes;
 
-            // Liability: Pending OR (Approved but NOT Void)
             var liability = userBets.Where(b => 
                 b.Status == "Pending" || 
                 (b.Status == "Approved" && b.Outcome != "Void")
             ).Sum(b => (decimal)(b.AmountNOK ?? 0));
-
+            
             var balance = totalDeposits - totalWithdrawals - liability + winnings;
 
             // --- Date Joined Heuristic ---
@@ -173,7 +215,6 @@ else
             var firstTrans = userTrans.OrderBy(t => t.Date).FirstOrDefault()?.Date;
             
             DateTime dateJoined = DateTime.MaxValue;
-
             if (firstBet.HasValue && firstTrans.HasValue)
                 dateJoined = firstBet.Value < firstTrans.Value ? firstBet.Value : firstTrans.Value;
             else if (firstBet.HasValue)
@@ -181,7 +222,7 @@ else
             else if (firstTrans.HasValue)
                 dateJoined = firstTrans.Value;
 
-            allUsersVM.Add(new UserViewModel
+            var vm = new UserViewModel
             {
                 Id = u.Id,
                 UserName = u.UserName ?? "Unknown",
@@ -190,9 +231,74 @@ else
                 CreditLimit = u.CreditLimit,
                 Balance = balance,
                 AvailableCredit = balance + u.CreditLimit,
-                LifetimeProfit = lifetimeProfit, // Store the new value
+                LifetimeProfit = lifetimeProfit,
                 DateJoined = dateJoined
+            };
+
+            // SEPARATION LOGIC: 
+            // We use EmailConfirmed as the flag for "Admin Approved"
+            if (u.EmailConfirmed)
+            {
+                allUsersVM.Add(vm);
+            }
+            else
+            {
+                pendingUsersVM.Add(vm);
+            }
+        }
+    }
+
+    // --- ACTIONS ---
+
+    private async Task ApproveUser(string userId)
+    {
+        using var context = DbFactory.CreateDbContext();
+        var user = await context.Users.FindAsync(userId);
+        
+        if (user != null)
+        {
+            user.EmailConfirmed = true; // Mark as approved
+            
+            // Log Action
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var adminName = authState.User.Identity?.Name ?? "System";
+            context.AuditLogs.Add(new AuditLog 
+            {
+                Action = "Approve Registration",
+                AdminUserName = adminName,
+                TargetUserName = user.UserName ?? "Unknown",
+                Details = "User approved by admin.",
+                Timestamp = DateTime.UtcNow
             });
+
+            await context.SaveChangesAsync();
+            await LoadData(context); // Refresh lists
+        }
+    }
+
+    private async Task RejectUser(string userId)
+    {
+        using var context = DbFactory.CreateDbContext();
+        var user = await context.Users.FindAsync(userId);
+        
+        if (user != null)
+        {
+            context.Users.Remove(user); // Delete the unapproved user
+            
+            // Log Action
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var adminName = authState.User.Identity?.Name ?? "System";
+            context.AuditLogs.Add(new AuditLog 
+            {
+                Action = "Reject Registration",
+                AdminUserName = adminName,
+                TargetUserName = user.UserName ?? "Unknown",
+                Details = "User rejected and deleted by admin.",
+                Timestamp = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
+            await LoadData(context); // Refresh lists
         }
     }
 
@@ -221,7 +327,7 @@ else
         get
         {
             var query = allUsersVM.AsEnumerable();
-
+            
             // Search
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
@@ -237,18 +343,16 @@ else
                 "UserName" => sortAscending ? query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
                 "Email" => sortAscending ? query.OrderBy(u => u.Email) : query.OrderByDescending(u => u.Email),
                 "Balance" => sortAscending ? query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
-                "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit), // New Sort Case
+                "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
                 "AvailableCredit" => sortAscending ? query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
                 "CreditLimit" => sortAscending ? query.OrderBy(u => u.CreditLimit) : query.OrderByDescending(u => u.CreditLimit),
                 "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
                 _ => query
             };
-
             return query;
         }
     }
 
-    // ViewModel Class
     public class UserViewModel
     {
         public string Id { get; set; } = "";
@@ -258,7 +362,7 @@ else
         public decimal CreditLimit { get; set; }
         public decimal Balance { get; set; }
         public decimal AvailableCredit { get; set; }
-        public decimal LifetimeProfit { get; set; } // New Property
+        public decimal LifetimeProfit { get; set; }
         public DateTime DateJoined { get; set; }
     }
 }
