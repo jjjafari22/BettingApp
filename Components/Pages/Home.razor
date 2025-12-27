@@ -78,7 +78,7 @@
     </div>
 
     @* --- UPDATED HEADLINE HERE --- *@
-    <h4>My Bets History (@myBets.Count)</h4>
+    <h4>My Bets History</h4>
     
     <div class="table-responsive">
         <table class="table align-middle text-nowrap">
@@ -148,6 +148,17 @@
                 }
             </tbody>
         </table>
+        
+        @* Pagination for Bets *@
+        <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
+            <button class="btn btn-outline-secondary btn-sm" @onclick="PrevBetsPage" disabled="@(betsPage <= 1)">
+                <i class="bi bi-arrow-left"></i> Previous
+            </button>
+            <span class="text-muted">Page @betsPage</span>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="NextBetsPage" disabled="@(!hasMoreBets)">
+                Next <i class="bi bi-arrow-right"></i>
+            </button>
+        </div>
     </div>
 
     <h4 class="mt-5">My Transactions</h4>
@@ -180,6 +191,17 @@
             }
         </tbody>
     </table>
+    
+    @* Pagination for Transactions *@
+    <div class="d-flex justify-content-between align-items-center mt-2 mb-5">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="PrevTransPage" disabled="@(transPage <= 1)">
+            <i class="bi bi-arrow-left"></i> Previous
+        </button>
+        <span class="text-muted">Page @transPage</span>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="NextTransPage" disabled="@(!hasMoreTrans)">
+            Next <i class="bi bi-arrow-right"></i>
+        </button>
+    </div>
 </div>
 
 @code {
@@ -199,6 +221,15 @@
     private bool IsSubmitting = false;
     private string? ErrorMessage;
     private string? SuccessMessage;
+
+    // Pagination State
+    private int betsPage = 1;
+    private bool hasMoreBets = false;
+    
+    private int transPage = 1;
+    private bool hasMoreTrans = false;
+    
+    private const int PageSize = 20;
 
     protected override async Task OnInitializedAsync()
     {
@@ -248,6 +279,8 @@
     private async Task LoadData()
     {      
         using var context = DbFactory.CreateDbContext();
+        
+        // 1. Get User Info
         var user = await context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
         if (user != null)
@@ -255,27 +288,96 @@
             CreditLimit = user.CreditLimit;
         }
 
-        myBets = await context.Bets
-                        .Where(b => b.UserId == userId)
-                        .OrderByDescending(b => b.CreatedAt)
-                        .AsNoTracking()
-                        .ToListAsync();
+        // 2. Calculate Balance (Using SumAsync for efficiency)
+        var totalDeposits = await context.Transactions
+            .Where(t => t.UserId == userId && t.Type == "Deposit")
+            .SumAsync(t => t.AmountNOK);
+            
+        var totalWithdrawals = await context.Transactions
+            .Where(t => t.UserId == userId && t.Type == "Withdrawal")
+            .SumAsync(t => t.AmountNOK);
 
-        myTransactions = await context.Transactions
-                        .Where(t => t.UserId == userId)
-                        .OrderByDescending(t => t.Date)
-                        .AsNoTracking()
-                        .ToListAsync();
+        // FIX: Calculate the Payout formula directly here so SQL can understand it
+        // Formula matches your Model: Math.Floor(Amount * Odds)
+        var winnings = await context.Bets
+            .Where(b => b.UserId == userId && b.Outcome == "Won")
+            .SumAsync(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+            
+        var liability = await context.Bets
+            .Where(b => b.UserId == userId && 
+                       (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
+            .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
 
-        var totalDeposits = myTransactions.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
-        var totalWithdrawals = myTransactions.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
-        var winnings = myBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
-        var liability = myBets.Where(b => 
-            b.Status == "Pending" || 
-            (b.Status == "Approved" && b.Outcome != "Void")
-        ).Sum(b => (decimal)(b.AmountNOK ?? 0));
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
+        
+        // 3. Load Paginated Lists
+        await LoadBetsList();
+        await LoadTransactionsList();
+    }
+    
+    private async Task LoadBetsList()
+    {
+        using var context = DbFactory.CreateDbContext();
+        var totalBets = await context.Bets.CountAsync(b => b.UserId == userId);
+        
+        myBets = await context.Bets
+            .Where(b => b.UserId == userId)
+            .OrderByDescending(b => b.CreatedAt)
+            .Skip((betsPage - 1) * PageSize)
+            .Take(PageSize)
+            .AsNoTracking()
+            .ToListAsync();
+            
+        hasMoreBets = totalBets > (betsPage * PageSize);
+    }
+    
+    private async Task LoadTransactionsList()
+    {
+        using var context = DbFactory.CreateDbContext();
+        var totalTrans = await context.Transactions.CountAsync(t => t.UserId == userId);
+        
+        myTransactions = await context.Transactions
+            .Where(t => t.UserId == userId)
+            .OrderByDescending(t => t.Date)
+            .Skip((transPage - 1) * PageSize)
+            .Take(PageSize)
+            .AsNoTracking()
+            .ToListAsync();
+            
+        hasMoreTrans = totalTrans > (transPage * PageSize);
+    }
+
+    // Pagination Methods for Bets
+    private async Task NextBetsPage()
+    {
+        betsPage++;
+        await LoadBetsList();
+    }
+
+    private async Task PrevBetsPage()
+    {
+        if (betsPage > 1)
+        {
+            betsPage--;
+            await LoadBetsList();
+        }
+    }
+
+    // Pagination Methods for Transactions
+    private async Task NextTransPage()
+    {
+        transPage++;
+        await LoadTransactionsList();
+    }
+
+    private async Task PrevTransPage()
+    {
+        if (transPage > 1)
+        {
+            transPage--;
+            await LoadTransactionsList();
+        }
     }
 
     private async Task SetupSignalR()
@@ -285,6 +387,8 @@
             .Build();
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
+            // Reload data but keep current page, or reset? 
+            // Usually simpler to just refresh the data on the current page.
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
@@ -341,6 +445,9 @@
             SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
+            
+            // Reset to page 1 to see the new bet
+            betsPage = 1;
             await LoadData();
         }
         catch (Exception ex)
