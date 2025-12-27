@@ -25,7 +25,7 @@
     }
     @if (errorMessage != null)
     {
-       <div class="alert alert-danger shadow-lg border-danger">
+        <div class="alert alert-danger shadow-lg border-danger">
             <i class="bi bi-exclamation-triangle-fill me-2"></i> @errorMessage
         </div>
     }
@@ -42,8 +42,8 @@
                     <tr>
                         <th>Date</th>
                         <th>User</th>
-                        <th style="width: 150px;">Bet Amount</th>
-                        <th style="min-width: 120px;">Odds</th>
+                        <th style="width: 140px;">Bet Amount</th>
+                        <th style="min-width: 70px;">Odds</th>
                         <th>Potential Payout</th>
                         <th>Screenshot</th> 
                         <th>Action</th>
@@ -56,16 +56,17 @@
                             <td>@bet.CreatedAt.ToLocalTime().ToString("g")</td>
                             <td>@bet.UserName</td>
                             <td>
-                                <input type="number" class="form-control" @bind="bet.AmountNOK" placeholder="Amount" />
+                                <input type="number" class="form-control form-control-sm" @bind="bet.AmountNOK" placeholder="Amount" />
                             </td>
                             <td>
-                                <input type="number" step="0.01" class="form-control" @bind="bet.Odds" placeholder="Odds" />
+                                @* step="0.01" encourages the browser to validate, but we enforce it below *@
+                                <input type="number" step="0.01" class="form-control form-control-sm" @bind="bet.Odds" placeholder="Odds" />
                             </td>
                             <td>@bet.PotentialPayout.ToString("N0")</td>
                             <td>
                                 @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
                                 {
-                                    <a href="@bet.ScreenshotUrl" target="_blank">View</a>
+                                     <a href="@bet.ScreenshotUrl" target="_blank">View</a>
                                 }
                             </td>
                             <td>
@@ -84,7 +85,7 @@
 
         @* 2. Active (Approved) Bets Table *@
         <h4 class="mb-3">Active Bets (Awaiting Outcome)</h4>
-        <div class="table-responsive">
+        <div class="table-responsive mb-5">
             <table class="table table-bordered border-primary text-nowrap">
                 <thead class="table-light">
                     <tr>
@@ -126,23 +127,92 @@
                 </tbody>
             </table>
         </div>
+
+        @* 3. Completed Bets History Table *@
+        <h4 class="mb-3">Completed Bets History</h4>
+        <div class="table-responsive">
+            <table class="table table-secondary table-hover text-nowrap">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>User</th>
+                        <th>Bet Amount</th>
+                        <th>Odds</th>
+                        <th>Outcome</th>
+                        <th>Payout</th>
+                        <th>Screenshot</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var bet in completedBets)
+                    {
+                        var rowClass = bet.Outcome == "Won" ? "table-success" : (bet.Outcome == "Lost" ? "table-danger" : "");
+                        <tr class="@rowClass">
+                            <td>@bet.CreatedAt.ToLocalTime().ToString("g")</td>
+                            <td>@bet.UserName</td>
+                            <td>@bet.AmountNOK</td>
+                            <td>@bet.Odds</td>
+                            <td><strong>@bet.Outcome</strong></td>
+                            <td>
+                                @if(bet.Outcome == "Won")
+                                {
+                                    @bet.PotentialPayout.ToString("N0")
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                            <td>
+                                @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                                {
+                                    <a href="@bet.ScreenshotUrl" target="_blank">View</a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    @if (completedBets.Count == 0)
+                    {
+                        <tr><td colspan="7" class="text-muted">No completed bets found.</td></tr>
+                    }
+                </tbody>
+            </table>
+            
+            @* Pagination Controls *@
+            <div class="d-flex justify-content-between align-items-center mt-2">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(completedPage <= 1)">
+                    <i class="bi bi-arrow-left"></i> Previous
+                </button>
+                <span class="text-muted">Page @completedPage</span>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasMoreCompletedBets)">
+                    Next <i class="bi bi-arrow-right"></i>
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
 @code {
     private List<Bet> pendingBets = new();
     private List<Bet> approvedBets = new();
+    private List<Bet> completedBets = new(); 
+    
+    // Pagination State
+    private int completedPage = 1;
+    private const int pageSize = 20;
+    private bool hasMoreCompletedBets = false;
+
     private string? successMessage;
     private string? errorMessage;
     private HubConnection? hubConnection;
-    private string? currentAdminName; // NEW: To track admin
+    private string? currentAdminName;
 
     protected override async Task OnInitializedAsync()
     {
         // 1. GET CURRENT USER STATE
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-        currentAdminName = user.Identity?.Name; // Capture Admin Name
+        currentAdminName = user.Identity?.Name;
 
         // 2. CHECK IF ADMIN
         using var context = DbFactory.CreateDbContext();
@@ -167,6 +237,9 @@
             .Where(b => b.Status == "Approved" && string.IsNullOrEmpty(b.Outcome))
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
+            
+        // 4. LOAD COMPLETED BETS
+        await LoadCompletedBets();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -176,7 +249,7 @@
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(Nav.ToAbsoluteUri("/bethub"))
                 .Build();
-
+            
             hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
             {
                 using var context = DbFactory.CreateDbContext();
@@ -192,7 +265,6 @@
                 successMessage = null;
                 await InvokeAsync(StateHasChanged);
             });
-
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         }
@@ -205,11 +277,42 @@
             await hubConnection.DisposeAsync();
         }
     }
+    
+    private async Task LoadCompletedBets()
+    {
+        using var context = DbFactory.CreateDbContext();
+        
+        var totalCompleted = await context.Bets.CountAsync(b => !string.IsNullOrEmpty(b.Outcome));
+        
+        completedBets = await context.Bets
+            .Where(b => !string.IsNullOrEmpty(b.Outcome))
+            .OrderByDescending(b => b.Id) 
+            .Skip((completedPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+            
+        hasMoreCompletedBets = totalCompleted > (completedPage * pageSize);
+    }
+
+    private async Task NextPage()
+    {
+        completedPage++;
+        await LoadCompletedBets();
+    }
+
+    private async Task PrevPage()
+    {
+        if (completedPage > 1)
+        {
+            completedPage--;
+            await LoadCompletedBets();
+        }
+    }
 
     private async Task ProcessBet(Bet bet, string status)
     {
         errorMessage = null;
-        // VALIDATION: If Approving, enforce Amount, Odds, Global Limits, and User Balance
+
         if (status == "Approved")
         {
             if (bet.AmountNOK == null || bet.AmountNOK <= 0)
@@ -222,6 +325,15 @@
             if (bet.Odds <= 1)
             {
                 errorMessage = "Odds must be greater than 1.00 to approve.";
+                StateHasChanged();
+                return;
+            }
+
+            // RE-INTRODUCED: Strict Validation (Reject instead of Rounding)
+            // This ensures "specific odds" are entered correctly by the admin.
+            if (Math.Round(bet.Odds, 2) != bet.Odds)
+            {
+                errorMessage = "Odds cannot have more than 2 decimal places. Please correct the value.";
                 StateHasChanged();
                 return;
             }
@@ -249,12 +361,10 @@
 
             // 2. Check against User's Available Credit
             using var userCheckContext = DbFactory.CreateDbContext();
-            // Fetch User for Credit Limit
             var targetUser = await userCheckContext.Users.AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Id == bet.UserId);
             var creditLimit = targetUser?.CreditLimit ?? 0m;
 
-            // Fetch History (Transactions & Bets)
             var userTrans = await userCheckContext.Transactions
                 .Where(t => t.UserId == bet.UserId)
                 .AsNoTracking()
@@ -263,20 +373,17 @@
                 .Where(b => b.UserId == bet.UserId)
                 .AsNoTracking()
                 .ToListAsync();
-
-            // Calculate Balance Components
+            
             var totalDeposits = userTrans.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
             var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
             var winnings = userBets
                 .Where(b => b.Outcome == "Won")
                 .Sum(b => b.PotentialPayout);
             
-            // Liability: Sum of all Pending or Active bets
-            // Since the current bet in the DB has Amount=0, it contributes 0 to this sum.
             var liability = userBets
                 .Where(b => b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void"))
                 .Sum(b => (decimal)(b.AmountNOK ?? 0));
-            
+                
             var currentBalance = totalDeposits - totalWithdrawals - liability + winnings;
             var availableCredit = currentBalance + creditLimit;
 
@@ -294,11 +401,9 @@
         if (dbBet != null)
         {
             dbBet.Status = status;
-            // IMPORTANT: Save the values from the editable fields
             dbBet.AmountNOK = bet.AmountNOK;
-            dbBet.Odds = bet.Odds;
+            dbBet.Odds = bet.Odds; 
 
-            // NEW: Add Audit Log
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -306,7 +411,6 @@
                 TargetUserName = bet.UserName,
                 Details = $"Bet ID: {bet.Id}, Amount: {bet.AmountNOK}, Odds: {bet.Odds}"
             });
-
             await context.SaveChangesAsync();
         }
 
@@ -328,8 +432,6 @@
         if (dbBet != null)
         {
             dbBet.Outcome = outcome;
-            
-            // NEW: Add Audit Log
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -337,11 +439,11 @@
                 TargetUserName = bet.UserName,
                 Details = $"Bet ID: {bet.Id}, Outcome: {outcome}, Payout: {dbBet.PotentialPayout:N0}"
             });
-
             await context.SaveChangesAsync();
         }
 
         approvedBets.Remove(bet);
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet outcome is: {outcome}");
+        await LoadCompletedBets();
     }
 }
