@@ -77,7 +77,9 @@
         </div>
     </div>
 
-    <h4>My Bets History</h4>
+    @* --- UPDATED HEADLINE HERE --- *@
+    <h4>My Bets History (@myBets.Count)</h4>
+    
     <div class="table-responsive">
         <table class="table align-middle text-nowrap">
             <thead>
@@ -258,7 +260,7 @@
                         .OrderByDescending(b => b.CreatedAt)
                         .AsNoTracking()
                         .ToListAsync();
-        
+
         myTransactions = await context.Transactions
                         .Where(t => t.UserId == userId)
                         .OrderByDescending(t => t.Date)
@@ -268,12 +270,10 @@
         var totalDeposits = myTransactions.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
         var totalWithdrawals = myTransactions.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
         var winnings = myBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
-        
         var liability = myBets.Where(b => 
             b.Status == "Pending" || 
             (b.Status == "Approved" && b.Outcome != "Void")
         ).Sum(b => (decimal)(b.AmountNOK ?? 0));
-        
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
     }
@@ -283,13 +283,11 @@
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
-        
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
-
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
@@ -323,7 +321,6 @@
                 
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var path = Path.Combine(uploadPath, fileName);
-                
                 await using FileStream fs = new(path, FileMode.Create);
                 await resizedFile.OpenReadStream(maxAllowedSize: 2000000).CopyToAsync(fs);
                 newBet.ScreenshotUrl = $"/uploads/{fileName}";
@@ -334,7 +331,6 @@
             newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             newBet.Status = "Pending";
             newBet.CreatedAt = DateTime.UtcNow;
-            
             using var context = DbFactory.CreateDbContext(); 
             context.Bets.Add(newBet);
             await context.SaveChangesAsync();
@@ -342,7 +338,6 @@
             await NotifyDiscord(newBet);
 
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
-            
             SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
@@ -387,7 +382,6 @@
     private async Task CancelBet(Bet bet)
     {
         if (bet.Status != "Pending") return;
-
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this bet?");
         if (confirmed)
         {
