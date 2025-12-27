@@ -5,13 +5,21 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>aspnet-BettingApp-4a8a64cd-f902-4d72-a4a3-d311110b2a5b</UserSecretsId>
+    <EnableDefaultItems>false</EnableDefaultItems>
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Remove="**/*.resx" />
-    <Content Remove="**/*.resx" />
+    <Compile Include="Program.cs" />
+    <Compile Include="Data/**/*.cs" />
+    <Compile Include="Hubs/**/*.cs" />
+    <Compile Include="Components/**/*.cs" />
+    <Compile Include="Services/**/*.cs" />
     
-    <None Update="Data\betting.db" CopyToOutputDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="Components/**/*.razor" />
+    <Content Include="Components/**/*.css" />
+    <Content Include="wwwroot/**" />
+    <Content Include="appsettings.json" />
+    <Content Include="appsettings.Development.json" />
   </ItemGroup>
 
   <ItemGroup>
