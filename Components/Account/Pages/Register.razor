@@ -13,6 +13,8 @@
 @inject ILogger<Register> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
+@inject IConfiguration Config
+@inject IHttpClientFactory HttpClientFactory
 
 <PageTitle>Register</PageTitle>
 
@@ -60,11 +62,13 @@
     public async Task RegisterUser(EditContext editContext)
     {
         var user = CreateUser();
+
         await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
         var emailStore = GetEmailStore();
         await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
         
-        // Create user. Default EmailConfirmed is false, so they require approval.
+        // Create user.
+        // Default EmailConfirmed is false, so they require approval.
         var result = await UserManager.CreateAsync(user, Input.Password);
 
         if (!result.Succeeded)
@@ -75,11 +79,38 @@
 
         Logger.LogInformation("User created a new account with password.");
 
+        // Notify Discord admins about the new registration
+        await NotifyDiscordNewUser(Input.Email);
+
         // REMOVED: Email Sending
         // REMOVED: SignInManager.SignInAsync (Do not sign in unapproved users)
 
         // Redirect to Login with a query flag to show the success message
         RedirectManager.RedirectTo("Account/Login?registered=true");
+    }
+
+    private async Task NotifyDiscordNewUser(string userEmail)
+    {
+        try 
+        {
+            var webhookUrl = Config["Discord:WebhookUrl"];
+            if (!string.IsNullOrEmpty(webhookUrl))
+            {
+                var client = HttpClientFactory.CreateClient();
+                var messageContent = new 
+                { 
+                    content = $"🚨 **New User Registered** 🚨\n" +
+                              $"**Email:** {userEmail}\n" +
+                              $"**Action Required:** Admin approval needed."
+                };
+                await client.PostAsJsonAsync(webhookUrl, messageContent);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log the error but don't stop the registration flow
+            Logger.LogError($"Discord Notification Failed: {ex.Message}");
+        }
     }
 
     private ApplicationUser CreateUser()
