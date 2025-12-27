@@ -206,9 +206,10 @@
 
     private async Task ProcessBet(Bet bet, string status)
     {
-        errorMessage = null; // Clear any previous errors
+        errorMessage = null;
+        // Clear any previous errors
 
-        // VALIDATION: If Approving, enforce Amount and Odds
+        // VALIDATION: If Approving, enforce Amount, Odds, AND Global Limits
         if (status == "Approved")
         {
             if (bet.AmountNOK == null || bet.AmountNOK <= 0)
@@ -224,6 +225,28 @@
                 StateHasChanged();
                 return;
             }
+
+            // --- FIX START: Check against Admin Settings ---
+            using var settingsContext = DbFactory.CreateDbContext();
+            var settings = await settingsContext.Settings.FirstOrDefaultAsync();
+
+            if (settings != null)
+            {
+                if (bet.Odds > settings.MaxOdds)
+                {
+                    errorMessage = $"The odds ({bet.Odds}) exceed the maximum allowed limit of {settings.MaxOdds}.";
+                    StateHasChanged();
+                    return;
+                }
+
+                if (bet.PotentialPayout > settings.MaxPayout)
+                {
+                    errorMessage = $"The potential payout ({bet.PotentialPayout:N0}) exceeds the maximum allowed limit of {settings.MaxPayout:N0}.";
+                    StateHasChanged();
+                    return;
+                }
+            }
+            // --- FIX END ---
         }
 
         using var context = DbFactory.CreateDbContext();
@@ -232,7 +255,6 @@
         if (dbBet != null)
         {
             dbBet.Status = status;
-            
             // IMPORTANT: Save the values from the editable fields
             dbBet.AmountNOK = bet.AmountNOK;
             dbBet.Odds = bet.Odds;
