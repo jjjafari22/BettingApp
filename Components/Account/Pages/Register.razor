@@ -101,7 +101,8 @@
                 { 
                     content = $"🚨 **New User Registered** 🚨\n" +
                               $"**Email:** {userEmail}\n" +
-                              $"**Action Required:** Admin approval needed."
+                              $"**Action Required:** Admin approval needed.\n" +
+                              $"[Approve Here](https://castle-of-happiness-gmcwb5eeafacfphc.canadacentral-01.azurewebsites.net/admin/users)\n"
                 };
                 await client.PostAsJsonAsync(webhookUrl, messageContent);
             }

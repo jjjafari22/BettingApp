@@ -372,6 +372,7 @@
                 { 
                     content = $"**New Pick Placed!**\n" +
                               $"**User:** {bet.UserName}\n" +
+                              $"[Approve Here](https://castle-of-happiness-gmcwb5eeafacfphc.canadacentral-01.azurewebsites.net/admin)\n" +
                               (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({Nav.BaseUri.TrimEnd('/')}{bet.ScreenshotUrl})")
                 };
                 await client.PostAsJsonAsync(webhookUrl, messageContent);
