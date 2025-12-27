@@ -1,0 +1,114 @@
+@page "/admin/settings"
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
+
+<h3>Admin Settings</h3>
+
+@if (!hasAccess)
+{
+    <div class="alert alert-danger">You are not authorized to view this page.</div>
+}
+else if (isLoading)
+{
+    <p><em>Loading settings...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    Global Betting Limits
+                </div>
+                <div class="card-body">
+                    @if (showSuccess)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            Settings updated successfully!
+                            <button type="button" class="btn-close" @onclick="() => showSuccess = false"></button>
+                        </div>
+                    }
+
+                    <EditForm Model="settings" OnValidSubmit="SaveSettings">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <div class="mb-3">
+                            <label for="maxOdds" class="form-label">Max Odds Accepted</label>
+                            <InputNumber id="maxOdds" class="form-control" @bind-Value="settings.MaxOdds" />
+                            <div class="form-text">The maximum odds allowed for a single bet.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="maxPayout" class="form-label">Max Payout (NOK)</label>
+                            <InputNumber id="maxPayout" class="form-control" @bind-Value="settings.MaxPayout" />
+                            <div class="form-text">The maximum potential payout allowed for a single bet.</div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private SystemSetting settings = new();
+    private bool hasAccess = false;
+    private bool isLoading = true;
+    private bool showSuccess = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        using var context = DbFactory.CreateDbContext();
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var dbUser = await context.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+            hasAccess = dbUser?.IsAdmin ?? false;
+        }
+
+        if (hasAccess)
+        {
+            // Load settings or create default if none exist
+            var existingSettings = await context.Settings.FirstOrDefaultAsync();
+            if (existingSettings == null)
+            {
+                settings = new SystemSetting { MaxOdds = 20.0m, MaxPayout = 10000m };
+                context.Settings.Add(settings);
+                await context.SaveChangesAsync();
+            }
+            else
+            {
+                settings = existingSettings;
+            }
+        }
+        isLoading = false;
+    }
+
+    private async Task SaveSettings()
+    {
+        showSuccess = false;
+        using var context = DbFactory.CreateDbContext();
+        
+        // Fetch fresh entity to update
+        var dbSettings = await context.Settings.FirstOrDefaultAsync();
+        if (dbSettings != null)
+        {
+            dbSettings.MaxOdds = settings.MaxOdds;
+            dbSettings.MaxPayout = settings.MaxPayout;
+            await context.SaveChangesAsync();
+            showSuccess = true;
+        }
+    }
+}

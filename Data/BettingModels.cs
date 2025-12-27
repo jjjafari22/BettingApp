@@ -42,4 +42,12 @@ namespace BettingApp.Data
         
         public DateTime Date { get; set; } = DateTime.UtcNow;
     }
+
+    // NEW CLASS
+    public class SystemSetting
+    {
+        public int Id { get; set; }
+        public decimal MaxOdds { get; set; } = 20.0m; // Default value
+        public decimal MaxPayout { get; set; } = 50000m; // Default value
+    }
 }
