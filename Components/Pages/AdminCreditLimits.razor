@@ -24,7 +24,7 @@ else
             <div class="input-group">
                 <span class="input-group-text">Search User</span>
                 <input type="text" class="form-control" placeholder="Username..." 
-                       @bind="searchTerm" @bind:event="oninput" />
+                      @bind="searchTerm" @bind:event="oninput" />
             </div>
         </div>
     </div>
@@ -46,7 +46,7 @@ else
                         <td>@user.UserName</td>
                         <td>@user.Email</td>
                         <td>
-                            <input type="number" class="form-control" style="width: 150px;" 
+                            <input type="number" class="form-control" style="width: 150px;"
                                    @bind="user.CreditLimit" step="100" />
                         </td>
                         <td>
@@ -54,7 +54,7 @@ else
                                 <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
                                     Update
                                 </button>
-                                
+                                 
                                 @if (saveStatus.TryGetValue(user.Id, out var isSaved) && isSaved)
                                 {
                                     <span class="text-success ms-2 fw-bold fade-in-out">
@@ -74,8 +74,8 @@ else
     private List<ApplicationUser>? users;
     private string searchTerm = "";
     private bool isAdmin = false;
-    // Dictionary to track save status per user
     private Dictionary<string, bool> saveStatus = new();
+    private string? currentAdminName; // NEW
 
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
@@ -88,6 +88,7 @@ else
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+        currentAdminName = user.Identity?.Name; // Capture Admin Name
 
         if (user.Identity?.IsAuthenticated == true)
         {
@@ -119,7 +120,20 @@ else
         
         if (dbUser != null)
         {
+            // Capture old value for log
+            var oldLimit = dbUser.CreditLimit;
+            
             dbUser.CreditLimit = userToUpdate.CreditLimit;
+
+            // NEW: Add Audit Log
+            context.AuditLogs.Add(new AuditLog
+            {
+                AdminUserName = currentAdminName ?? "Unknown",
+                Action = "Changed Credit Limit",
+                TargetUserName = userToUpdate.UserName ?? "Unknown",
+                Details = $"Old: {oldLimit}, New: {userToUpdate.CreditLimit}"
+            });
+
             await context.SaveChangesAsync();
 
             // Trigger the success message

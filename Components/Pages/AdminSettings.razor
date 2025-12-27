@@ -63,11 +63,13 @@ else
     private bool hasAccess = false;
     private bool isLoading = true;
     private bool showSuccess = false;
+    private string? currentAdminName; // NEW
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+        currentAdminName = user.Identity?.Name; // Capture Admin Name
 
         using var context = DbFactory.CreateDbContext();
 
@@ -105,8 +107,22 @@ else
         var dbSettings = await context.Settings.FirstOrDefaultAsync();
         if (dbSettings != null)
         {
+            // Capture old values for log
+            var oldOdds = dbSettings.MaxOdds;
+            var oldPayout = dbSettings.MaxPayout;
+
             dbSettings.MaxOdds = settings.MaxOdds;
             dbSettings.MaxPayout = settings.MaxPayout;
+
+            // NEW: Add Audit Log
+            context.AuditLogs.Add(new AuditLog
+            {
+                AdminUserName = currentAdminName ?? "Unknown",
+                Action = "Changed System Settings",
+                TargetUserName = "System",
+                Details = $"MaxOdds: {oldOdds}->{settings.MaxOdds}, MaxPayout: {oldPayout}->{settings.MaxPayout}"
+            });
+
             await context.SaveChangesAsync();
             showSuccess = true;
         }

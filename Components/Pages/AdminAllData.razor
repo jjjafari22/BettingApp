@@ -1,0 +1,96 @@
+@page "/admin/alldata"
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
+
+<h3>All Data (Audit Logs)</h3>
+
+@if (!isAdmin)
+{
+    <div class="alert alert-danger">You are not authorized to view this page.</div>
+}
+else
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Filter by Affected User (Target)</label>
+                    <input type="text" class="form-control" @bind="targetFilter" @bind:event="oninput" placeholder="Search user..." />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Filter by Admin</label>
+                    <input type="text" class="form-control" @bind="adminFilter" @bind:event="oninput" placeholder="Search admin..." />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Time (Local)</th>
+                    <th>Admin</th>
+                    <th>Action</th>
+                    <th>Target User</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var log in FilteredLogs)
+                {
+                    <tr>
+                        <td>@log.Timestamp.ToLocalTime().ToString("g")</td>
+                        <td><span class="badge bg-secondary">@log.AdminUserName</span></td>
+                        <td><span class="fw-bold">@log.Action</span></td>
+                        <td>@log.TargetUserName</td>
+                        <td class="text-muted small">@log.Details</td>
+                    </tr>
+                }
+                @if (!FilteredLogs.Any())
+                {
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No logs found.</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<AuditLog> allLogs = new();
+    private string targetFilter = "";
+    private string adminFilter = "";
+    private bool isAdmin = false;
+
+    private IEnumerable<AuditLog> FilteredLogs => allLogs
+        .Where(l => (string.IsNullOrEmpty(targetFilter) || l.TargetUserName.Contains(targetFilter, StringComparison.OrdinalIgnoreCase)) &&
+                    (string.IsNullOrEmpty(adminFilter) || l.AdminUserName.Contains(adminFilter, StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        using var context = DbFactory.CreateDbContext();
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+            isAdmin = dbUser?.IsAdmin ?? false;
+        }
+
+        if (isAdmin)
+        {
+            allLogs = await context.AuditLogs
+                .OrderByDescending(l => l.Timestamp)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+    }
+}

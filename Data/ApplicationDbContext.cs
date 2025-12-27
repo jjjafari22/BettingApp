@@ -8,4 +8,5 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Bet> Bets { get; set; }
     public DbSet<Transaction> Transactions { get; set; }
     public DbSet<SystemSetting> Settings { get; set; } // NEW
+    public DbSet<AuditLog> AuditLogs { get; set; } // NEW: For tracking history
 }

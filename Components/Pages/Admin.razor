@@ -25,7 +25,7 @@
     }
     @if (errorMessage != null)
     {
-        <div class="alert alert-danger shadow-lg border-danger">
+       <div class="alert alert-danger shadow-lg border-danger">
             <i class="bi bi-exclamation-triangle-fill me-2"></i> @errorMessage
         </div>
     }
@@ -135,12 +135,14 @@
     private string? successMessage;
     private string? errorMessage;
     private HubConnection? hubConnection;
+    private string? currentAdminName; // NEW: To track admin
 
     protected override async Task OnInitializedAsync()
     {
         // 1. GET CURRENT USER STATE
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+        currentAdminName = user.Identity?.Name; // Capture Admin Name
 
         // 2. CHECK IF ADMIN
         using var context = DbFactory.CreateDbContext();
@@ -207,7 +209,6 @@
     private async Task ProcessBet(Bet bet, string status)
     {
         errorMessage = null;
-
         // VALIDATION: If Approving, enforce Amount, Odds, Global Limits, and User Balance
         if (status == "Approved")
         {
@@ -248,7 +249,6 @@
 
             // 2. Check against User's Available Credit
             using var userCheckContext = DbFactory.CreateDbContext();
-
             // Fetch User for Credit Limit
             var targetUser = await userCheckContext.Users.AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Id == bet.UserId);
@@ -259,7 +259,6 @@
                 .Where(t => t.UserId == bet.UserId)
                 .AsNoTracking()
                 .ToListAsync();
-
             var userBets = await userCheckContext.Bets
                 .Where(b => b.UserId == bet.UserId)
                 .AsNoTracking()
@@ -268,17 +267,16 @@
             // Calculate Balance Components
             var totalDeposits = userTrans.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
             var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
-
             var winnings = userBets
                 .Where(b => b.Outcome == "Won")
                 .Sum(b => b.PotentialPayout);
-
+            
             // Liability: Sum of all Pending or Active bets
             // Since the current bet in the DB has Amount=0, it contributes 0 to this sum.
             var liability = userBets
                 .Where(b => b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void"))
                 .Sum(b => (decimal)(b.AmountNOK ?? 0));
-
+            
             var currentBalance = totalDeposits - totalWithdrawals - liability + winnings;
             var availableCredit = currentBalance + creditLimit;
 
@@ -299,6 +297,15 @@
             // IMPORTANT: Save the values from the editable fields
             dbBet.AmountNOK = bet.AmountNOK;
             dbBet.Odds = bet.Odds;
+
+            // NEW: Add Audit Log
+            context.AuditLogs.Add(new AuditLog
+            {
+                AdminUserName = currentAdminName ?? "Unknown",
+                Action = $"Bet {status}",
+                TargetUserName = bet.UserName,
+                Details = $"Bet ID: {bet.Id}, Amount: {bet.AmountNOK}, Odds: {bet.Odds}"
+            });
 
             await context.SaveChangesAsync();
         }
@@ -321,6 +328,16 @@
         if (dbBet != null)
         {
             dbBet.Outcome = outcome;
+            
+            // NEW: Add Audit Log
+            context.AuditLogs.Add(new AuditLog
+            {
+                AdminUserName = currentAdminName ?? "Unknown",
+                Action = "Set Bet Outcome",
+                TargetUserName = bet.UserName,
+                Details = $"Bet ID: {bet.Id}, Outcome: {outcome}, Payout: {dbBet.PotentialPayout:N0}"
+            });
+
             await context.SaveChangesAsync();
         }
 

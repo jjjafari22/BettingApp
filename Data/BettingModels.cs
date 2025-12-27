@@ -50,4 +50,15 @@ namespace BettingApp.Data
         public decimal MaxOdds { get; set; } = 20.0m; // Default value
         public decimal MaxPayout { get; set; } = 50000m; // Default value
     }
+
+    // NEW CLASS: Audit Log
+    public class AuditLog
+    {
+        public int Id { get; set; }
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        public string AdminUserName { get; set; } = string.Empty; // Who performed the action
+        public string Action { get; set; } = string.Empty; // e.g., "Approved Bet", "Deposit"
+        public string TargetUserName { get; set; } = string.Empty; // Who was affected
+        public string Details { get; set; } = string.Empty; // Specifics (Amounts, IDs, etc.)
+    }
 }

@@ -108,16 +108,17 @@
     private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
     
     private string? successMessage;
+    private string? currentAdminName; // NEW
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+        currentAdminName = user.Identity?.Name; // Capture Admin Name
 
         using var context = DbFactory.CreateDbContext();
         
-        var userName = user.Identity?.Name; 
-        
+        var userName = user.Identity?.Name;
         ApplicationUser? dbUser = null;
         if (!string.IsNullOrEmpty(userName))
         {
@@ -156,11 +157,21 @@
         newTrans.Date = DateTime.UtcNow;
 
         context.Transactions.Add(newTrans);
-        await context.SaveChangesAsync();
+        
+        // NEW: Add Audit Log
+        context.AuditLogs.Add(new AuditLog
+        {
+            AdminUserName = currentAdminName ?? "Unknown",
+            Action = $"Added {newTrans.Type}",
+            TargetUserName = newTrans.UserName,
+            Details = $"Amount: {newTrans.AmountNOK}, Platform: {newTrans.Platform}"
+        });
 
+        await context.SaveChangesAsync();
+        
         // Notify user via SignalR
         await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
-        
+
         successMessage = "Transaction added successfully!";
         
         // Refresh the list and reset form
