@@ -7,7 +7,7 @@ using BettingApp.Data;
 using BettingApp.Hubs;
 using Microsoft.AspNetCore.DataProtection;
 using System.IO;
-using System.Runtime.InteropServices; // Important for Mac compatibility
+using System.Runtime.InteropServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,20 +18,29 @@ builder.Services.AddRazorComponents()
 builder.Services.AddHttpClient();
 builder.Services.AddSignalR();
 
-// --- AZURE FIX (Safe for Mac) ---
-// This block only runs on Windows (Azure). It is skipped on your Mac.
+// --- UNIVERSAL DATA PROTECTION (Works on Azure, Linux, Mac, & Windows) ---
+// This ensures keys are persisted to a folder so users don't get logged out on restart.
+var dataProtectionPath = Path.Combine(Environment.GetEnvironmentVariable("HOME") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".aspnet", "DataProtection-Keys");
+
+// On Windows Azure, use the specific HOME environment variable if available
+if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HOME")))
+{
+    dataProtectionPath = Path.Combine(Environment.GetEnvironmentVariable("HOME")!, "ASP.NET", "DataProtection-Keys");
+}
+
+// Ensure the directory exists
+Directory.CreateDirectory(dataProtectionPath);
+
+// Configure Data Protection to persist keys
+var dataProtectionBuilder = builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath));
+
+// On Windows, protect keys with DPAPI (standard practice)
 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 {
-    var azureHome = Environment.GetEnvironmentVariable("HOME");
-    if (!string.IsNullOrEmpty(azureHome))
-    {
-        var keyPath = Path.Combine(azureHome, "ASP.NET", "DataProtection-Keys");
-        builder.Services.AddDataProtection()
-            .PersistKeysToFileSystem(new DirectoryInfo(keyPath))
-            .ProtectKeysWithDpapi();
-    }
+    dataProtectionBuilder.ProtectKeysWithDpapi();
 }
-// -------------------------------
+// -------------------------------------------------------------------------
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();
@@ -44,6 +53,19 @@ builder.Services.AddAuthentication(options =>
         options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     })
     .AddIdentityCookies();
+
+// --- CRITICAL FIX FOR PWA / HOME SCREEN APPS ---
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    // Lax is required for OAuth and some PWA scenarios on iOS/Android
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    // Ensure cookies are only sent over HTTPS
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    // Ensure the cookie persists even if the app is closed (aligns with 'isPersistent: true' in login)
+    options.ExpireTimeSpan = TimeSpan.FromDays(14);
+    options.SlidingExpiration = true;
+});
+// -----------------------------------------------
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
@@ -63,11 +85,28 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 
 var app = builder.Build();
 
-app.UseDeveloperExceptionPage();
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseHsts();
+}
+
 app.UseHttpsRedirection();
-app.UseAntiforgery();
+
 app.UseStaticFiles();
 app.MapStaticAssets();
+
+// --- CRITICAL MIDDLEWARE ORDER ---
+app.UseAuthentication(); // Must be before Antiforgery
+app.UseAuthorization();  // Must be before Antiforgery
+app.UseAntiforgery();
+// --------------------------------
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
