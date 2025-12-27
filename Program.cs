@@ -5,6 +5,9 @@ using BettingApp.Components;
 using BettingApp.Components.Account;
 using BettingApp.Data;
 using BettingApp.Hubs;
+using Microsoft.AspNetCore.DataProtection;
+using System.IO;
+using System.Runtime.InteropServices; // Important for Mac compatibility
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +17,21 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddHttpClient();
 builder.Services.AddSignalR();
+
+// --- AZURE FIX (Safe for Mac) ---
+// This block only runs on Windows (Azure). It is skipped on your Mac.
+if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+{
+    var azureHome = Environment.GetEnvironmentVariable("HOME");
+    if (!string.IsNullOrEmpty(azureHome))
+    {
+        var keyPath = Path.Combine(azureHome, "ASP.NET", "DataProtection-Keys");
+        builder.Services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(keyPath))
+            .ProtectKeysWithDpapi();
+    }
+}
+// -------------------------------
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();
@@ -30,13 +48,9 @@ builder.Services.AddAuthentication(options =>
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-// Register the Factory (Singleton)
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlite(connectionString));
 
-// Register the Scoped Context manually using the Factory.
-// This provides the "ApplicationDbContext" that Identity needs, 
-// but avoids the configuration conflict that caused your crash.
 builder.Services.AddScoped<ApplicationDbContext>(p => 
     p.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
 
@@ -49,36 +63,24 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 
 var app = builder.Build();
 
-// FORCE Developer Exception Page to show the real error
 app.UseDeveloperExceptionPage();
-// app.UseExceptionHandler("/Error", createScopeForErrors: true); 
-// app.UseHsts();
-
 app.UseHttpsRedirection();
-
-
 app.UseAntiforgery();
-
 app.UseStaticFiles();
-
 app.MapStaticAssets();
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapHub<BetHub>("/bethub");
-
-// Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 
-// This scope is created once on startup to run database migrations
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
-        // This executes "dotnet ef database update" programmatically
-        // It keeps existing data and just adds the new columns/tables.
         context.Database.Migrate(); 
     }
     catch (Exception ex)
