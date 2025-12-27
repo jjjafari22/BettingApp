@@ -77,8 +77,7 @@
         </div>
     </div>
 
-    @* --- UPDATED HEADLINE HERE --- *@
-    <h4>My Bets History</h4>
+    <h4>My Bets History (@totalBets)</h4>
     
     <div class="table-responsive">
         <table class="table align-middle text-nowrap">
@@ -161,7 +160,7 @@
         </div>
     </div>
 
-    <h4 class="mt-5">My Transactions</h4>
+    <h4 class="mt-5">My Transactions (@totalTransactions)</h4>
     <table class="table table-striped">
         <thead>
             <tr>
@@ -208,7 +207,6 @@
     private Bet newBet { get; set; } = new() { Odds = 1.0m }; 
     private List<Bet> myBets = new();
     private List<Transaction> myTransactions = new();
-    
     private decimal CreditLimit = 0;
     private decimal Balance = 0;
     private decimal AvailableCredit = 1000;
@@ -225,9 +223,11 @@
     // Pagination State
     private int betsPage = 1;
     private bool hasMoreBets = false;
-    
+    private int totalBets = 0; // Field for displaying count
+
     private int transPage = 1;
     private bool hasMoreTrans = false;
+    private int totalTransactions = 0; // Field for displaying count
     
     private const int PageSize = 20;
 
@@ -279,7 +279,6 @@
     private async Task LoadData()
     {      
         using var context = DbFactory.CreateDbContext();
-        
         // 1. Get User Info
         var user = await context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
@@ -297,12 +296,14 @@
             .Where(t => t.UserId == userId && t.Type == "Withdrawal")
             .SumAsync(t => t.AmountNOK);
 
-        // FIX: Calculate the Payout formula directly here so SQL can understand it
-        // Formula matches your Model: Math.Floor(Amount * Odds)
-        var winnings = await context.Bets
+        // FIX: Calculate the Payout formula in memory to avoid SQL translation error with Math.Floor
+        var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
-            .SumAsync(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-            
+            .Select(b => new { b.AmountNOK, b.Odds })
+            .ToListAsync();
+
+        var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+
         var liability = await context.Bets
             .Where(b => b.UserId == userId && 
                        (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
@@ -310,7 +311,7 @@
 
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
-        
+
         // 3. Load Paginated Lists
         await LoadBetsList();
         await LoadTransactionsList();
@@ -319,7 +320,7 @@
     private async Task LoadBetsList()
     {
         using var context = DbFactory.CreateDbContext();
-        var totalBets = await context.Bets.CountAsync(b => b.UserId == userId);
+        totalBets = await context.Bets.CountAsync(b => b.UserId == userId);
         
         myBets = await context.Bets
             .Where(b => b.UserId == userId)
@@ -335,7 +336,7 @@
     private async Task LoadTransactionsList()
     {
         using var context = DbFactory.CreateDbContext();
-        var totalTrans = await context.Transactions.CountAsync(t => t.UserId == userId);
+        totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
         
         myTransactions = await context.Transactions
             .Where(t => t.UserId == userId)
@@ -345,7 +346,7 @@
             .AsNoTracking()
             .ToListAsync();
             
-        hasMoreTrans = totalTrans > (transPage * PageSize);
+        hasMoreTrans = totalTransactions > (transPage * PageSize);
     }
 
     // Pagination Methods for Bets
@@ -387,8 +388,7 @@
             .Build();
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
-            // Reload data but keep current page, or reset? 
-            // Usually simpler to just refresh the data on the current page.
+            // Reload data but keep current page
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
@@ -435,6 +435,7 @@
             newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             newBet.Status = "Pending";
             newBet.CreatedAt = DateTime.UtcNow;
+
             using var context = DbFactory.CreateDbContext(); 
             context.Bets.Add(newBet);
             await context.SaveChangesAsync();
@@ -445,7 +446,6 @@
             SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
-            
             // Reset to page 1 to see the new bet
             betsPage = 1;
             await LoadData();
