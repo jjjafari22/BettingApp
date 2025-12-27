@@ -13,6 +13,7 @@
 @inject IHubContext<BetHub> HubContext
 @inject IConfiguration Config
 @inject IHttpClientFactory HttpClientFactory
+@inject IJSRuntime JSRuntime
 @attribute [Authorize]
 
 <PageTitle>Dashboard</PageTitle>
@@ -89,6 +90,7 @@
                     <th>Screenshot</th> 
                     <th>Status</th>
                     <th>Bet Outcome</th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -130,6 +132,14 @@
                             else
                             {
                                 <span class="text-muted">-</span>
+                            }
+                        </td>
+                        <td>
+                            @if (bet.Status == "Pending")
+                            {
+                                <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelBet(bet)">
+                                    Cancel
+                                </button>
                             }
                         </td>
                     </tr>
@@ -248,6 +258,7 @@
                         .OrderByDescending(b => b.CreatedAt)
                         .AsNoTracking()
                         .ToListAsync();
+        
         myTransactions = await context.Transactions
                         .Where(t => t.UserId == userId)
                         .OrderByDescending(t => t.Date)
@@ -257,10 +268,12 @@
         var totalDeposits = myTransactions.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
         var totalWithdrawals = myTransactions.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
         var winnings = myBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
+        
         var liability = myBets.Where(b => 
             b.Status == "Pending" || 
             (b.Status == "Approved" && b.Outcome != "Void")
         ).Sum(b => (decimal)(b.AmountNOK ?? 0));
+        
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
     }
@@ -270,11 +283,13 @@
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
+        
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
+
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
@@ -308,6 +323,7 @@
                 
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var path = Path.Combine(uploadPath, fileName);
+                
                 await using FileStream fs = new(path, FileMode.Create);
                 await resizedFile.OpenReadStream(maxAllowedSize: 2000000).CopyToAsync(fs);
                 newBet.ScreenshotUrl = $"/uploads/{fileName}";
@@ -318,6 +334,7 @@
             newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             newBet.Status = "Pending";
             newBet.CreatedAt = DateTime.UtcNow;
+            
             using var context = DbFactory.CreateDbContext(); 
             context.Bets.Add(newBet);
             await context.SaveChangesAsync();
@@ -325,6 +342,7 @@
             await NotifyDiscord(newBet);
 
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
+            
             SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
@@ -367,6 +385,42 @@
             Console.WriteLine($"Discord Notification Failed: {ex.Message}");
         }
     }
+
+    private async Task CancelBet(Bet bet)
+    {
+        if (bet.Status != "Pending") return;
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this bet?");
+        if (confirmed)
+        {
+            try
+            {
+                using var context = DbFactory.CreateDbContext();
+                var dbBet = await context.Bets.FindAsync(bet.Id);
+                
+                if (dbBet != null && dbBet.UserId == userId && dbBet.Status == "Pending")
+                {
+                    dbBet.Status = "Cancelled";
+                    await context.SaveChangesAsync();
+
+                    await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"Pick cancelled by {dbBet.UserName}");
+
+                    SuccessMessage = "Bet cancelled successfully.";
+                    await LoadData();
+                }
+                else
+                {
+                    ErrorMessage = "Unable to cancel bet. It may have already been processed.";
+                    await LoadData();
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"Error cancelling bet: {ex.Message}";
+                Console.WriteLine(ex);
+            }
+        }
+    }
     
     private string GetRowClass(Bet bet)
     {
@@ -384,6 +438,7 @@
         return bet.Status switch
         {
             "Rejected" => "table-danger",
+            "Cancelled" => "table-secondary",
             "Approved" => "table-warning",
             "Pending" => "table-warning",
             _ => ""
