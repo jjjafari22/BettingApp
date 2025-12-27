@@ -46,6 +46,10 @@ else
                     <th style="cursor: pointer;" @onclick='() => Sort("Balance")'>
                         Balance @GetSortIcon("Balance")
                     </th>
+                    @* New Column Header *@
+                    <th style="cursor: pointer;" @onclick='() => Sort("LifetimeProfit")'>
+                        Lifetime Profit @GetSortIcon("LifetimeProfit")
+                    </th>
                     <th style="cursor: pointer;" @onclick='() => Sort("AvailableCredit")'>
                         Avail. Credit @GetSortIcon("AvailableCredit")
                     </th>
@@ -67,6 +71,10 @@ else
                         <td class="@(user.Balance >= 0 ? "text-success" : "text-danger") fw-bold">
                             @user.Balance.ToString("N0") kr
                         </td>
+                        @* New Column Data *@
+                        <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold">
+                            @user.LifetimeProfit.ToString("N0") kr
+                        </td>
                         <td>@user.AvailableCredit.ToString("N0") kr</td>
                         <td>@user.CreditLimit.ToString("N0") kr</td>
                         <td>
@@ -84,7 +92,7 @@ else
                 @if (!FilteredAndSortedUsers.Any())
                 {
                     <tr>
-                        <td colspan="7" class="text-center text-muted">No users found.</td>
+                        <td colspan="8" class="text-center text-muted">No users found.</td>
                     </tr>
                 }
             </tbody>
@@ -132,6 +140,7 @@ else
         var transactions = await context.Transactions.AsNoTracking().ToListAsync();
 
         allUsersVM = new List<UserViewModel>();
+
         foreach (var u in users)
         {
             // Filter data for this user
@@ -144,12 +153,19 @@ else
             
             var winnings = userBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
             
+            // NEW: Calculate Lifetime Profit (Winnings - Stakes of Settled Bets)
+            var settledStakes = userBets
+                .Where(b => b.Outcome == "Won" || b.Outcome == "Lost")
+                .Sum(b => (decimal)(b.AmountNOK ?? 0));
+                
+            var lifetimeProfit = winnings - settledStakes;
+
             // Liability: Pending OR (Approved but NOT Void)
             var liability = userBets.Where(b => 
                 b.Status == "Pending" || 
                 (b.Status == "Approved" && b.Outcome != "Void")
             ).Sum(b => (decimal)(b.AmountNOK ?? 0));
-            
+
             var balance = totalDeposits - totalWithdrawals - liability + winnings;
 
             // --- Date Joined Heuristic ---
@@ -157,6 +173,7 @@ else
             var firstTrans = userTrans.OrderBy(t => t.Date).FirstOrDefault()?.Date;
             
             DateTime dateJoined = DateTime.MaxValue;
+
             if (firstBet.HasValue && firstTrans.HasValue)
                 dateJoined = firstBet.Value < firstTrans.Value ? firstBet.Value : firstTrans.Value;
             else if (firstBet.HasValue)
@@ -173,6 +190,7 @@ else
                 CreditLimit = u.CreditLimit,
                 Balance = balance,
                 AvailableCredit = balance + u.CreditLimit,
+                LifetimeProfit = lifetimeProfit, // Store the new value
                 DateJoined = dateJoined
             });
         }
@@ -219,11 +237,13 @@ else
                 "UserName" => sortAscending ? query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
                 "Email" => sortAscending ? query.OrderBy(u => u.Email) : query.OrderByDescending(u => u.Email),
                 "Balance" => sortAscending ? query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
+                "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit), // New Sort Case
                 "AvailableCredit" => sortAscending ? query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
                 "CreditLimit" => sortAscending ? query.OrderBy(u => u.CreditLimit) : query.OrderByDescending(u => u.CreditLimit),
                 "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
                 _ => query
             };
+
             return query;
         }
     }
@@ -238,6 +258,7 @@ else
         public decimal CreditLimit { get; set; }
         public decimal Balance { get; set; }
         public decimal AvailableCredit { get; set; }
+        public decimal LifetimeProfit { get; set; } // New Property
         public DateTime DateJoined { get; set; }
     }
 }
