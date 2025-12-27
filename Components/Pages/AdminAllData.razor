@@ -5,6 +5,7 @@
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
 @rendermode InteractiveServer
 
 <h3>Audit Logs</h3>
@@ -18,13 +19,33 @@ else
     <div class="card mb-4">
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label">Filter by Affected User (Target)</label>
-                    <input type="text" class="form-control" @bind="targetFilter" @bind:event="oninput" placeholder="Search user..." />
+                <div class="col-md-3">
+                    <label class="form-label">Filter by Affected User</label>
+                    <input type="text" class="form-control" 
+                           @bind="targetFilter" 
+                           @onkeyup="HandleKeyUp"
+                           placeholder="Search user (Press Enter)..." />
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Filter by Admin</label>
-                    <input type="text" class="form-control" @bind="adminFilter" @bind:event="oninput" placeholder="Search admin..." />
+                    <input type="text" class="form-control" 
+                           @bind="adminFilter" 
+                           @onkeyup="HandleKeyUp"
+                           placeholder="Search admin (Press Enter)..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Start Date</label>
+                    <input type="date" class="form-control" @bind="startDate" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">End Date</label>
+                    <input type="date" class="form-control" @bind="endDate" />
+                </div>
+                <div class="col-md-2 d-flex align-items-end gap-2">
+                    <button class="btn btn-primary flex-grow-1" @onclick="SearchLogs">Search</button>
+                    <button class="btn btn-outline-secondary" @onclick="ClearFilters" title="Clear Filters">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
                 </div>
             </div>
         </div>
@@ -42,7 +63,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var log in FilteredLogs)
+                @foreach (var log in logs)
                 {
                     <tr>
                         <td>@log.Timestamp.ToLocalTime().ToString("g")</td>
@@ -52,26 +73,46 @@ else
                         <td class="text-muted small">@log.Details</td>
                     </tr>
                 }
-                @if (!FilteredLogs.Any())
+                @if (logs.Count == 0)
                 {
                     <tr>
-                        <td colspan="5" class="text-center text-muted">No logs found.</td>
+                        <td colspan="5" class="text-center text-muted">No logs found matching criteria.</td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
+
+    @* Pagination Controls *@
+    <div class="d-flex justify-content-between align-items-center mt-2">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(currentPage <= 1)">
+            <i class="bi bi-arrow-left"></i> Previous
+        </button>
+        <span class="text-muted">Page @currentPage of @totalPages (Total: @totalLogs)</span>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasNextPage)">
+            Next <i class="bi bi-arrow-right"></i>
+        </button>
+    </div>
 }
 
 @code {
-    private List<AuditLog> allLogs = new();
+    private List<AuditLog> logs = new();
+    
+    // Filters
     private string targetFilter = "";
     private string adminFilter = "";
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private int timeZoneOffsetMinutes = 0;
+
+    // Pagination State
+    private int currentPage = 1;
+    private const int pageSize = 20;
+    private int totalLogs = 0;
     private bool isAdmin = false;
 
-    private IEnumerable<AuditLog> FilteredLogs => allLogs
-        .Where(l => (string.IsNullOrEmpty(targetFilter) || l.TargetUserName.Contains(targetFilter, StringComparison.OrdinalIgnoreCase)) &&
-                    (string.IsNullOrEmpty(adminFilter) || l.AdminUserName.Contains(adminFilter, StringComparison.OrdinalIgnoreCase)));
+    private int totalPages => totalLogs == 0 ? 1 : (int)Math.Ceiling((double)totalLogs / pageSize);
+    private bool hasNextPage => currentPage < totalPages;
 
     protected override async Task OnInitializedAsync()
     {
@@ -87,10 +128,116 @@ else
 
         if (isAdmin)
         {
-            allLogs = await context.AuditLogs
-                .OrderByDescending(l => l.Timestamp)
-                .AsNoTracking()
-                .ToListAsync();
+            await LoadLogs();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && isAdmin)
+        {
+            try
+            {
+                // Retrieve Browser's Timezone Offset (in minutes relative to UTC)
+                // e.g., PST is 480 minutes (8 hours) "behind" UTC.
+                // We use 'eval' here as a quick way to get the offset without a custom JS file.
+                timeZoneOffsetMinutes = await JS.InvokeAsync<int>("eval", "new Date().getTimezoneOffset()");
+            }
+            catch
+            {
+                // Fallback to UTC if JS fails
+                timeZoneOffsetMinutes = 0;
+            }
+        }
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchLogs();
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        targetFilter = "";
+        adminFilter = "";
+        startDate = null;
+        endDate = null;
+        await SearchLogs();
+    }
+
+    private async Task SearchLogs()
+    {
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private async Task LoadLogs()
+    {
+        using var context = DbFactory.CreateDbContext();
+        var query = context.AuditLogs.AsNoTracking();
+
+        // Apply Text Filters (Case Insensitive)
+        if (!string.IsNullOrWhiteSpace(targetFilter))
+        {
+            var term = targetFilter.Trim().ToLower();
+            query = query.Where(l => l.TargetUserName.ToLower().Contains(term));
+        }
+
+        if (!string.IsNullOrWhiteSpace(adminFilter))
+        {
+            var term = adminFilter.Trim().ToLower();
+            query = query.Where(l => l.AdminUserName.ToLower().Contains(term));
+        }
+
+        // Apply Date Filters (Adjusted for TimeZone)
+        if (startDate.HasValue)
+        {
+            // Convert the user's "00:00 Local" to the equivalent UTC time
+            // Example: 12/26 00:00 PST (+480 min) -> 12/26 08:00 UTC
+            var startLocal = startDate.Value.Date; 
+            var startUtc = startLocal.AddMinutes(timeZoneOffsetMinutes);
+            
+            query = query.Where(l => l.Timestamp >= startUtc);
+        }
+
+        if (endDate.HasValue)
+        {
+            // Convert the user's "Next Day 00:00 Local" to UTC
+            var endLocal = endDate.Value.Date.AddDays(1);
+            var endUtc = endLocal.AddMinutes(timeZoneOffsetMinutes);
+
+            query = query.Where(l => l.Timestamp < endUtc);
+        }
+
+        // Get Total Count
+        totalLogs = await query.CountAsync();
+
+        // Get Paged Data
+        logs = await query
+            .OrderByDescending(l => l.Timestamp)
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+    }
+
+    private async Task NextPage()
+    {
+        if (hasNextPage)
+        {
+            currentPage++;
+            await LoadLogs();
+        }
+    }
+
+    private async Task PrevPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            await LoadLogs();
         }
     }
 }
