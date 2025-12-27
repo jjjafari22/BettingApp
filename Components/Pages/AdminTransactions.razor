@@ -14,19 +14,19 @@
 
 <h3>Manage Transactions</h3>
 
-<div style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
-    @if (successMessage != null)
-    {
-        <div class="alert alert-success shadow-lg border-success">
-            <i class="bi bi-bell-fill me-2"></i> @successMessage
-        </div>
-    }
-</div>
+@* --- PERSISTENT NOTIFICATION AREA --- *@
+@if (successMessage != null)
+{
+    <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+        <i class="bi bi-bell-fill me-2"></i> @successMessage
+        <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+    </div>
+}
 
 <div class="row">
     <div class="col-md-12 mb-4">
         <div class="card">
-            <div class="card-header bg-primary text-white">Add Transaction</div>
+             <div class="card-header bg-primary text-white">Add Transaction</div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-3 mb-3">
@@ -38,12 +38,12 @@
                                 <option value="@user.Id">@user.UserName</option>
                             }
                         </select>
-                    </div>
+                     </div>
 
                     <div class="col-md-2 mb-3">
                         <label>Type</label>
                         <select class="form-select" @bind="newTrans.Type">
-                            <option value="Deposit">Deposit</option>
+                             <option value="Deposit">Deposit</option>
                             <option value="Withdrawal">Withdrawal</option>
                         </select>
                     </div>
@@ -82,7 +82,7 @@
         <tbody>
             @foreach (var t in allTransactions)
             {
-                <tr>
+               <tr>
                     <td>@t.Date.ToLocalTime().ToString("g")</td>
                     <td>@t.UserName</td>
                     <td>
@@ -108,16 +108,15 @@
     private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
     
     private string? successMessage;
-    private string? currentAdminName; // NEW
+    private string? currentAdminName;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-        currentAdminName = user.Identity?.Name; // Capture Admin Name
+        currentAdminName = user.Identity?.Name;
 
         using var context = DbFactory.CreateDbContext();
-        
         var userName = user.Identity?.Name;
         ApplicationUser? dbUser = null;
         if (!string.IsNullOrEmpty(userName))
@@ -125,7 +124,6 @@
             dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == userName);
         }
 
-        // Security check: Only allow Admins
         if (dbUser == null || !dbUser.IsAdmin)
         {
             Nav.NavigateTo("/");
@@ -157,8 +155,6 @@
         newTrans.Date = DateTime.UtcNow;
 
         context.Transactions.Add(newTrans);
-        
-        // NEW: Add Audit Log
         context.AuditLogs.Add(new AuditLog
         {
             AdminUserName = currentAdminName ?? "Unknown",
@@ -166,21 +162,16 @@
             TargetUserName = newTrans.UserName,
             Details = $"Amount: {newTrans.AmountNOK}, Platform: {newTrans.Platform}"
         });
-
         await context.SaveChangesAsync();
         
-        // Notify user via SignalR
         await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", "New transaction added");
-
+        
+        // UPDATED: Persistent message (No Task.Delay)
         successMessage = "Transaction added successfully!";
         
-        // Refresh the list and reset form
         var type = newTrans.Type;
         newTrans = new Transaction { Type = type, Date = DateTime.UtcNow };
         await LoadTransactions(context);
-
-        await Task.Delay(3000);
-        successMessage = null;
         StateHasChanged();
     }
 }

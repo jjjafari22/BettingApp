@@ -9,6 +9,15 @@
 
 <h3>User Credit Limits</h3>
 
+@* --- PERSISTENT NOTIFICATION AREA --- *@
+@if (!string.IsNullOrEmpty(successMessage))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i> @successMessage
+        <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+    </div>
+}
+
 @if (!isAdmin)
 {
     <p>You are not authorized to view this page.</p>
@@ -24,7 +33,7 @@ else
             <div class="input-group">
                 <span class="input-group-text">Search User</span>
                 <input type="text" class="form-control" placeholder="Username..." 
-                      @bind="searchTerm" @bind:event="oninput" />
+                     @bind="searchTerm" @bind:event="oninput" />
             </div>
         </div>
     </div>
@@ -46,22 +55,12 @@ else
                         <td>@user.UserName</td>
                         <td>@user.Email</td>
                         <td>
-                            <input type="number" class="form-control" style="width: 150px;"
-                                   @bind="user.CreditLimit" step="100" />
+                            <input type="number" class="form-control" style="width: 150px;" @bind="user.CreditLimit" step="100" />
                         </td>
                         <td>
-                            <div class="d-flex align-items-center">
-                                <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
-                                    Update
-                                </button>
-                                 
-                                @if (saveStatus.TryGetValue(user.Id, out var isSaved) && isSaved)
-                                {
-                                    <span class="text-success ms-2 fw-bold fade-in-out">
-                                        <i class="bi bi-check-circle-fill"></i> Saved!
-                                    </span>
-                                }
-                            </div>
+                            <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
+                                Update
+                            </button>
                         </td>
                     </tr>
                 }
@@ -74,8 +73,8 @@ else
     private List<ApplicationUser>? users;
     private string searchTerm = "";
     private bool isAdmin = false;
-    private Dictionary<string, bool> saveStatus = new();
-    private string? currentAdminName; // NEW
+    private string? successMessage; 
+    private string? currentAdminName;
 
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
@@ -88,7 +87,7 @@ else
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-        currentAdminName = user.Identity?.Name; // Capture Admin Name
+        currentAdminName = user.Identity?.Name;
 
         if (user.Identity?.IsAuthenticated == true)
         {
@@ -120,12 +119,9 @@ else
         
         if (dbUser != null)
         {
-            // Capture old value for log
             var oldLimit = dbUser.CreditLimit;
-            
             dbUser.CreditLimit = userToUpdate.CreditLimit;
 
-            // NEW: Add Audit Log
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -133,23 +129,10 @@ else
                 TargetUserName = userToUpdate.UserName ?? "Unknown",
                 Details = $"Old: {oldLimit}, New: {userToUpdate.CreditLimit}"
             });
-
             await context.SaveChangesAsync();
 
-            // Trigger the success message
-            if (!saveStatus.ContainsKey(userToUpdate.Id))
-            {
-                saveStatus.Add(userToUpdate.Id, true);
-            }
-            else
-            {
-                saveStatus[userToUpdate.Id] = true;
-            }
-            StateHasChanged();
-
-            // Wait 2 seconds then hide it
-            await Task.Delay(2000);
-            saveStatus[userToUpdate.Id] = false;
+            // UPDATED: Persistent message (No Task.Delay)
+            successMessage = $"Credit limit updated for {userToUpdate.UserName}!";
             StateHasChanged();
         }
     }
