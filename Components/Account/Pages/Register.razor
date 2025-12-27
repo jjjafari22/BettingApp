@@ -6,6 +6,8 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
 @using BettingApp.Data
+@using Microsoft.AspNetCore.SignalR
+@using BettingApp.Hubs
 
 @inject UserManager<ApplicationUser> UserManager
 @inject IUserStore<ApplicationUser> UserStore
@@ -15,6 +17,7 @@
 @inject IdentityRedirectManager RedirectManager
 @inject IConfiguration Config
 @inject IHttpClientFactory HttpClientFactory
+@inject IHubContext<BetHub> HubContext
 
 <PageTitle>Register</PageTitle>
 
@@ -62,7 +65,6 @@
     public async Task RegisterUser(EditContext editContext)
     {
         var user = CreateUser();
-
         await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
         var emailStore = GetEmailStore();
         await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
@@ -78,12 +80,12 @@
         }
 
         Logger.LogInformation("User created a new account with password.");
-
+        
         // Notify Discord admins about the new registration
         await NotifyDiscordNewUser(Input.Email);
 
-        // REMOVED: Email Sending
-        // REMOVED: SignInManager.SignInAsync (Do not sign in unapproved users)
+        // Notify Admin Dashboard via SignalR
+        await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
 
         // Redirect to Login with a query flag to show the success message
         RedirectManager.RedirectTo("Account/Login?registered=true");
