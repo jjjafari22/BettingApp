@@ -207,15 +207,14 @@
     private async Task ProcessBet(Bet bet, string status)
     {
         errorMessage = null;
-        // Clear any previous errors
 
-        // VALIDATION: If Approving, enforce Amount, Odds, AND Global Limits
+        // VALIDATION: If Approving, enforce Amount, Odds, Global Limits, and User Balance
         if (status == "Approved")
         {
             if (bet.AmountNOK == null || bet.AmountNOK <= 0)
             {
                 errorMessage = "Bet Amount is required and must be greater than 0 to approve.";
-                StateHasChanged(); // Ensure UI updates to show error
+                StateHasChanged();
                 return;
             }
 
@@ -226,7 +225,7 @@
                 return;
             }
 
-            // --- FIX START: Check against Admin Settings ---
+            // 1. Check against Global Admin Settings
             using var settingsContext = DbFactory.CreateDbContext();
             var settings = await settingsContext.Settings.FirstOrDefaultAsync();
 
@@ -246,7 +245,49 @@
                     return;
                 }
             }
-            // --- FIX END ---
+
+            // 2. Check against User's Available Credit
+            using var userCheckContext = DbFactory.CreateDbContext();
+
+            // Fetch User for Credit Limit
+            var targetUser = await userCheckContext.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == bet.UserId);
+            var creditLimit = targetUser?.CreditLimit ?? 0m;
+
+            // Fetch History (Transactions & Bets)
+            var userTrans = await userCheckContext.Transactions
+                .Where(t => t.UserId == bet.UserId)
+                .AsNoTracking()
+                .ToListAsync();
+
+            var userBets = await userCheckContext.Bets
+                .Where(b => b.UserId == bet.UserId)
+                .AsNoTracking()
+                .ToListAsync();
+
+            // Calculate Balance Components
+            var totalDeposits = userTrans.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
+            var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
+
+            var winnings = userBets
+                .Where(b => b.Outcome == "Won")
+                .Sum(b => b.PotentialPayout);
+
+            // Liability: Sum of all Pending or Active bets
+            // Since the current bet in the DB has Amount=0, it contributes 0 to this sum.
+            var liability = userBets
+                .Where(b => b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void"))
+                .Sum(b => (decimal)(b.AmountNOK ?? 0));
+
+            var currentBalance = totalDeposits - totalWithdrawals - liability + winnings;
+            var availableCredit = currentBalance + creditLimit;
+
+            if (bet.AmountNOK > availableCredit)
+            {
+                errorMessage = $"Insufficient funds. User has {availableCredit:N0} kr available, but bet is {bet.AmountNOK:N0} kr.";
+                StateHasChanged();
+                return;
+            }
         }
 
         using var context = DbFactory.CreateDbContext();
