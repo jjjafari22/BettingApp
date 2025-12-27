@@ -93,7 +93,7 @@ namespace BettingApp.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("AmountNOK")
+                    b.Property<int?>("AmountNOK")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")

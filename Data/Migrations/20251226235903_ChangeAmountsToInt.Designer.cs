@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BettingApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20251226003139_ChangeAmountsToInt")]
+    [Migration("20251226235903_ChangeAmountsToInt")]
     partial class ChangeAmountsToInt
     {
         /// <inheritdoc />
@@ -96,7 +96,7 @@ namespace BettingApp.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("AmountNOK")
+                    b.Property<int?>("AmountNOK")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
