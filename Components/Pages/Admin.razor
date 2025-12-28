@@ -67,7 +67,7 @@
                             <td>
                                 @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
                                 {
-                                     <a href="@bet.ScreenshotUrl" target="_blank">View</a>
+                                    <a href="@bet.ScreenshotUrl" target="_blank">View</a>
                                 }
                             </td>
                             <td>
@@ -219,6 +219,7 @@
         var dbUser = currentUserName != null 
             ? await context.Users.FirstOrDefaultAsync(u => u.UserName == currentUserName)
             : null;
+
         if (dbUser == null || !dbUser.IsAdmin)
         {
             Nav.NavigateTo("/");
@@ -229,10 +230,12 @@
             .Where(b => b.Status == "Pending")
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
+
         approvedBets = await context.Bets
             .Where(b => b.Status == "Approved" && string.IsNullOrEmpty(b.Outcome))
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
+
         await LoadCompletedBets();
     }
 
@@ -243,6 +246,7 @@
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(Nav.ToAbsoluteUri("/bethub"))
                 .Build();
+
             hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
             {
                 using var context = DbFactory.CreateDbContext();
@@ -255,6 +259,7 @@
                 successMessage = message;
                 await InvokeAsync(StateHasChanged);
             });
+
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         }
@@ -278,6 +283,7 @@
             .Skip((completedPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
+            
         hasMoreCompletedBets = totalCompletedBets > (completedPage * pageSize);
     }
 
@@ -299,6 +305,7 @@
     private async Task ProcessBet(Bet bet, string status)
     {
         errorMessage = null;
+
         if (status == "Approved")
         {
             if (bet.AmountNOK == null || bet.AmountNOK <= 0)
@@ -345,26 +352,33 @@
             using var userCheckContext = DbFactory.CreateDbContext();
             var targetUser = await userCheckContext.Users.AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Id == bet.UserId);
+
             var creditLimit = targetUser?.CreditLimit ?? 0m;
 
             var userTrans = await userCheckContext.Transactions
                 .Where(t => t.UserId == bet.UserId)
                 .AsNoTracking()
                 .ToListAsync();
+
             var userBets = await userCheckContext.Bets
                 .Where(b => b.UserId == bet.UserId)
                 .AsNoTracking()
                 .ToListAsync();
+
             var totalDeposits = userTrans.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
             var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
+
             var winnings = userBets
                 .Where(b => b.Outcome == "Won")
                 .Sum(b => b.PotentialPayout);
+
             var liability = userBets
                 .Where(b => b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void"))
                 .Sum(b => (decimal)(b.AmountNOK ?? 0));
+
             var currentBalance = totalDeposits - totalWithdrawals - liability + winnings;
             var availableCredit = currentBalance + creditLimit;
+
             if (bet.AmountNOK > availableCredit)
             {
                 errorMessage = $"Insufficient funds. User has {availableCredit:N0} kr available, but bet is {bet.AmountNOK:N0} kr.";
@@ -377,6 +391,7 @@
         var dbBet = await context.Bets.FindAsync(bet.Id);
         // NEW: Fetch user for Discord notification
         var dbUser = await context.Users.FindAsync(bet.UserId);
+
         if (dbBet != null)
         {
             dbBet.Status = status;
@@ -395,9 +410,13 @@
 
         pendingBets.Remove(bet);
         
-        // Prepare common message details
+        // --- FIX: Handle Absolute URLs for Screenshots correctly ---
+        string fullScreenshotUrl = string.IsNullOrEmpty(bet.ScreenshotUrl) 
+            ? "" 
+            : (bet.ScreenshotUrl.StartsWith("http") ? bet.ScreenshotUrl : $"{Nav.BaseUri.TrimEnd('/')}{bet.ScreenshotUrl}");
+
         string messageDetails = $"\nUser: {bet.UserName}\nAmount: {bet.AmountNOK} NOK\nOdds: {bet.Odds}\nPotential Payout: {bet.PotentialPayout:N0} NOK\n" +
-        (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({Nav.BaseUri.TrimEnd('/')}{bet.ScreenshotUrl})");
+        (string.IsNullOrEmpty(fullScreenshotUrl) ? "" : $"[View Screenshot]({fullScreenshotUrl})");
 
         if (status == "Approved")
         {
@@ -426,7 +445,7 @@
         var dbBet = await context.Bets.FindAsync(bet.Id);
         // NEW: Fetch user for Discord notification
         var dbUser = await context.Users.FindAsync(bet.UserId);
-        
+
         if (dbBet != null)
         {
             dbBet.Outcome = outcome;
@@ -449,11 +468,11 @@
             string msg = outcome == "Won" 
                 ? $"🎉 **WINNER!**\nYour bet (ID: {bet.Id}) WON!\nPayout: {bet.PotentialPayout:N0} NOK" 
                 : $"📉 **Bet Result**\nYour bet (ID: {bet.Id}) outcome: {outcome}.";
+
             _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, msg);
         }
 
         await LoadCompletedBets();
-
         successMessage = $"Bet for {bet.UserName} marked as {outcome}.";
         StateHasChanged();
     }
