@@ -377,7 +377,6 @@
         var dbBet = await context.Bets.FindAsync(bet.Id);
         // NEW: Fetch user for Discord notification
         var dbUser = await context.Users.FindAsync(bet.UserId);
-
         if (dbBet != null)
         {
             dbBet.Status = status;
@@ -395,6 +394,11 @@
         }
 
         pendingBets.Remove(bet);
+        
+        // Prepare common message details
+        string messageDetails = $"\nUser: {bet.UserName}\nAmount: {bet.AmountNOK} NOK\nOdds: {bet.Odds}\nPotential Payout: {bet.PotentialPayout:N0} NOK\n" +
+        (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({Nav.BaseUri.TrimEnd('/')}{bet.ScreenshotUrl})");
+
         if (status == "Approved")
         {
             bet.Status = status;
@@ -403,12 +407,12 @@
             // --- NEW: Send Discord Notification ---
             if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
             {
-                _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, $"✅ **Bet Approved!**\nYour bet on {bet.UserName} (ID: {bet.Id}) has been approved.\nAmount: {bet.AmountNOK} NOK\nOdds: {bet.Odds}");
+                _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, $"✅ **Bet Approved!**{messageDetails}");
             }
         }
         else if (status == "Rejected" && dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
         {
-             _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, $"❌ **Bet Rejected**\nYour bet (ID: {bet.Id}) was rejected.");
+             _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, $"❌ **Bet Rejected**{messageDetails}");
         }
 
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet was {status}");
