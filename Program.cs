@@ -5,6 +5,7 @@ using BettingApp.Components;
 using BettingApp.Components.Account;
 using BettingApp.Data;
 using BettingApp.Hubs;
+using BettingApp.Services; // NEW NAMESPACE
 using Microsoft.AspNetCore.DataProtection;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -18,24 +19,24 @@ builder.Services.AddRazorComponents()
 builder.Services.AddHttpClient();
 builder.Services.AddSignalR();
 
+// --- NEW: Register Discord Service ---
+builder.Services.AddSingleton<DiscordNotificationService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<DiscordNotificationService>());
+// -------------------------------------
+
 // --- UNIVERSAL DATA PROTECTION (Works on Azure, Linux, Mac, & Windows) ---
-// This ensures keys are persisted to a folder so users don't get logged out on restart.
 var dataProtectionPath = Path.Combine(Environment.GetEnvironmentVariable("HOME") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".aspnet", "DataProtection-Keys");
 
-// On Windows Azure, use the specific HOME environment variable if available
 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HOME")))
 {
     dataProtectionPath = Path.Combine(Environment.GetEnvironmentVariable("HOME")!, "ASP.NET", "DataProtection-Keys");
 }
 
-// Ensure the directory exists
 Directory.CreateDirectory(dataProtectionPath);
 
-// Configure Data Protection to persist keys
 var dataProtectionBuilder = builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath));
 
-// On Windows, protect keys with DPAPI (standard practice)
 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 {
     dataProtectionBuilder.ProtectKeysWithDpapi();
@@ -54,18 +55,13 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-// --- CRITICAL FIX FOR PWA / HOME SCREEN APPS ---
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    // Lax is required for OAuth and some PWA scenarios on iOS/Android
     options.Cookie.SameSite = SameSiteMode.Lax;
-    // Ensure cookies are only sent over HTTPS
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-    // Ensure the cookie persists even if the app is closed (aligns with 'isPersistent: true' in login)
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
     options.SlidingExpiration = true;
 });
-// -----------------------------------------------
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
@@ -85,7 +81,6 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
@@ -93,7 +88,6 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
@@ -102,11 +96,9 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.MapStaticAssets();
 
-// --- CRITICAL MIDDLEWARE ORDER ---
-app.UseAuthentication(); // Must be before Antiforgery
-app.UseAuthorization();  // Must be before Antiforgery
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
-// --------------------------------
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

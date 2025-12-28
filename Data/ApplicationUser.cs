@@ -4,7 +4,9 @@ namespace BettingApp.Data;
 
 public class ApplicationUser : IdentityUser
 {
-    // Add this new property
     public bool IsAdmin { get; set; }
     public decimal CreditLimit { get; set; } = 1000m;
+
+    // --- NEW: Discord Integration ---
+    public string? DiscordUserId { get; set; }
 }

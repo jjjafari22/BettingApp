@@ -19,15 +19,27 @@
         <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
             <DataAnnotationsValidator />
             <ValidationSummary class="text-danger" role="alert" />
+            
             <div class="form-floating mb-3">
                 <input type="text" value="@username" id="username" class="form-control" placeholder="Choose your username." disabled />
                 <label for="username" class="form-label">Username</label>
             </div>
+            
             <div class="form-floating mb-3">
                 <InputText @bind-Value="Input.PhoneNumber" id="Input.PhoneNumber" class="form-control" placeholder="Enter your phone number" />
                 <label for="Input.PhoneNumber" class="form-label">Phone number</label>
                 <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
             </div>
+
+            @* --- NEW: Discord ID Input --- *@
+            <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.DiscordUserId" id="Input.DiscordUserId" class="form-control" placeholder="Discord User ID" />
+                <label for="Input.DiscordUserId" class="form-label">Discord User ID (Right-click profile > Copy ID)</label>
+                <div class="form-text text-muted">You must share a server with the bot or have DMs open to receive notifications.</div>
+                <ValidationMessage For="() => Input.DiscordUserId" class="text-danger" />
+            </div>
+            @* ----------------------------- *@
+
             <button type="submit" class="w-100 btn btn-lg btn-primary">Save</button>
         </EditForm>
     </div>
@@ -51,21 +63,44 @@
         phoneNumber = await UserManager.GetPhoneNumberAsync(user);
 
         Input.PhoneNumber ??= phoneNumber;
+        
+        // Load existing ID
+        Input.DiscordUserId ??= user.DiscordUserId;
     }
 
     private async Task OnValidSubmitAsync()
     {
+        bool hasChanges = false;
+
         if (Input.PhoneNumber != phoneNumber)
         {
             var setPhoneResult = await UserManager.SetPhoneNumberAsync(user, Input.PhoneNumber);
             if (!setPhoneResult.Succeeded)
             {
                 RedirectManager.RedirectToCurrentPageWithStatus("Error: Failed to set phone number.", HttpContext);
+                return;
             }
+            hasChanges = true;
         }
 
-        await SignInManager.RefreshSignInAsync(user);
-        RedirectManager.RedirectToCurrentPageWithStatus("Your profile has been updated", HttpContext);
+        // --- Save Discord ID ---
+        if (Input.DiscordUserId != user.DiscordUserId)
+        {
+            user.DiscordUserId = Input.DiscordUserId;
+            await UserManager.UpdateAsync(user);
+            hasChanges = true;
+        }
+        // -----------------------
+
+        if (hasChanges)
+        {
+            await SignInManager.RefreshSignInAsync(user);
+            RedirectManager.RedirectToCurrentPageWithStatus("Your profile has been updated", HttpContext);
+        }
+        else
+        {
+             RedirectManager.RedirectToCurrentPageWithStatus("No changes were made", HttpContext);
+        }
     }
 
     private sealed class InputModel
@@ -73,5 +108,8 @@
         [Phone]
         [Display(Name = "Phone number")]
         public string? PhoneNumber { get; set; }
+
+        [Display(Name = "Discord User ID")]
+        public string? DiscordUserId { get; set; }
     }
 }
