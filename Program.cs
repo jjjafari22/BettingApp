@@ -5,10 +5,11 @@ using BettingApp.Components;
 using BettingApp.Components.Account;
 using BettingApp.Data;
 using BettingApp.Hubs;
-using BettingApp.Services; // NEW NAMESPACE
+using BettingApp.Services;
 using Microsoft.AspNetCore.DataProtection;
 using System.IO;
 using System.Runtime.InteropServices;
+using Azure.Storage.Blobs; // <--- Added this
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,7 +23,11 @@ builder.Services.AddSignalR();
 // --- NEW: Register Discord Service ---
 builder.Services.AddSingleton<DiscordNotificationService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<DiscordNotificationService>());
-// -------------------------------------
+
+// --- NEW: Register Azure Blob Storage ---
+// This reads the connection string we set in the Portal or appsettings
+builder.Services.AddSingleton(x => new BlobServiceClient(builder.Configuration["AzureStorage:ConnectionString"]));
+// ----------------------------------------
 
 // --- UNIVERSAL DATA PROTECTION (Works on Azure, Linux, Mac, & Windows) ---
 var dataProtectionPath = Path.Combine(Environment.GetEnvironmentVariable("HOME") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".aspnet", "DataProtection-Keys");

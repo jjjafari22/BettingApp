@@ -6,10 +6,12 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore 
+@using Azure.Storage.Blobs
+@using Azure.Storage.Blobs.Models
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthState
 @inject NavigationManager Nav
-@inject IWebHostEnvironment Env
+@inject BlobServiceClient BlobService
 @inject IHubContext<BetHub> HubContext
 @inject IConfiguration Config
 @inject IHttpClientFactory HttpClientFactory
@@ -57,22 +59,22 @@
             <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
                 <DataAnnotationsValidator />
                 
-               <div class="mb-3">
+                <div class="mb-3">
                     <label>Screenshot *</label>
                     <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" />
                 </div>
 
                 <button type="submit" class="btn btn-primary w-100" disabled="@IsSubmitting">
-                  @if (IsSubmitting)
+                   @if (IsSubmitting)
                     {
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                         <span class="ms-2">Sending Pick...</span>
-                     }
+                    }
                     else
                     {
                        <span>Send Pick</span>
                     }
-             </button>
+                </button>
             </EditForm>
         </div>
     </div>
@@ -104,34 +106,34 @@
                         <td>@bet.Odds.ToString("N2")</td>
                         <td>@bet.PotentialPayout.ToString("N0") kr</td>
                         <td>
-                          @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                            @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
                             {
                                 <a href="@bet.ScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
                             }
-                         else
+                            else
                             {
                                 <span class="text-muted">None</span>
                             }
                         </td>
                         <td>@bet.Status</td>
                         <td>
-                          @if (bet.Outcome == "Won")
+                           @if (bet.Outcome == "Won")
                             {
                                 <span class="d-inline-block bg-success border border-dark" style="width: 20px; height: 20px;" title="Won"></span>
                                 <span class="ms-1">Won</span>
                             }
                             else if (bet.Outcome == "Lost")
-                             {
+                            {
                                 <span class="d-inline-block bg-danger border border-dark" style="width: 20px; height: 20px;" title="Lost"></span>
                                 <span class="ms-1">Lost</span>
                             }
                             else if (bet.Outcome == "Void")
-                             {
+                            {
                                 <span class="d-inline-block bg-warning border border-dark" style="width: 20px; height: 20px;" title="Void"></span>
                                 <span class="ms-1">Void</span>
                             }
                             else
-                             {
+                            {
                                 <span class="text-muted">-</span>
                             }
                         </td>
@@ -141,7 +143,7 @@
                                 <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelBet(bet)">
                                     Cancel
                                 </button>
-                           }
+                            }
                         </td>
                     </tr>
                 }
@@ -194,7 +196,7 @@
     @* Pagination for Transactions *@
     <div class="d-flex justify-content-between align-items-center mt-2 mb-5">
         <button class="btn btn-outline-secondary btn-sm" @onclick="PrevTransPage" disabled="@(transPage <= 1)">
-           <i class="bi bi-arrow-left"></i> Previous
+            <i class="bi bi-arrow-left"></i> Previous
         </button>
         <span class="text-muted">Page @transPage</span>
         <button class="btn btn-outline-secondary btn-sm" @onclick="NextTransPage" disabled="@(!hasMoreTrans)">
@@ -245,7 +247,7 @@
                 var user = await context.Users.AsNoTracking()
                     .Select(u => new { u.Id, u.IsAdmin }) // Optimization: fetch only needed columns
                     .FirstOrDefaultAsync(u => u.Id == userId);
-
+                
                 if (user != null && user.IsAdmin)
                 {
                     Nav.NavigateTo("/admin");
@@ -300,6 +302,7 @@
         // 1. Get User Info
         var user = await context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
+
         if (user != null)
         {
             CreditLimit = user.CreditLimit;
@@ -309,10 +312,11 @@
         var totalDeposits = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Deposit")
             .SumAsync(t => t.AmountNOK);
+
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal")
             .SumAsync(t => t.AmountNOK);
-            
+
         // FIX: Calculate the Payout formula in memory to avoid SQL translation error with Math.Floor
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
@@ -320,14 +324,15 @@
             .ToListAsync();
             
         var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+
         var liability = await context.Bets
             .Where(b => b.UserId == userId && 
                        (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-            
+
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
-        
+
         // 3. Load Paginated Lists
         await LoadBetsList();
         await LoadTransactionsList();
@@ -345,6 +350,7 @@
             .Take(PageSize)
             .AsNoTracking()
             .ToListAsync();
+            
         hasMoreBets = totalBets > (betsPage * PageSize);
     }
     
@@ -360,6 +366,7 @@
             .Take(PageSize)
             .AsNoTracking()
             .ToListAsync();
+            
         hasMoreTrans = totalTransactions > (transPage * PageSize);
     }
 
@@ -400,12 +407,14 @@
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
+
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
             // Reload data but keep current page
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
+
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
@@ -434,14 +443,22 @@
             {
                 // Scale the image in the browser (max 1200px width/height) before uploading
                 var resizedFile = await uploadedFile.RequestImageFileAsync("image/jpeg", 1200, 1200);
-                var uploadPath = Path.Combine(Env.WebRootPath, "uploads");
-                Directory.CreateDirectory(uploadPath);
                 
+                // --- NEW AZURE BLOB UPLOAD LOGIC ---
+                var containerClient = BlobService.GetBlobContainerClient("uploads");
+                await containerClient.CreateIfNotExistsAsync();
+
                 var fileName = $"{Guid.NewGuid()}.jpg";
-                var path = Path.Combine(uploadPath, fileName);
-                await using FileStream fs = new(path, FileMode.Create);
-                await resizedFile.OpenReadStream(maxAllowedSize: 2000000).CopyToAsync(fs);
-                newBet.ScreenshotUrl = $"/uploads/{fileName}";
+                var blobClient = containerClient.GetBlobClient(fileName);
+
+                await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 2000000);
+                
+                // IMPORTANT: Set Content-Type so browsers display it instead of downloading
+                var headers = new BlobHttpHeaders { ContentType = "image/jpeg" };
+                await blobClient.UploadAsync(stream, new BlobUploadOptions { HttpHeaders = headers });
+
+                newBet.ScreenshotUrl = blobClient.Uri.ToString();
+                // -----------------------------------
             }
 
             var auth = await AuthState.GetAuthenticationStateAsync();
@@ -449,6 +466,7 @@
             newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             newBet.Status = "Pending";
             newBet.CreatedAt = DateTime.UtcNow;
+
             using var context = DbFactory.CreateDbContext(); 
             context.Bets.Add(newBet);
             await context.SaveChangesAsync();
@@ -456,9 +474,11 @@
             await NotifyDiscord(newBet);
 
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
+
             SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
+            
             // Reset to page 1 to see the new bet
             betsPage = 1;
             await LoadData();
@@ -488,7 +508,7 @@
                     content = $"**New Pick Placed!**\n" +
                               $"**User:** {bet.UserName}\n" +
                               $"[Approve Here](https://castle-of-happiness-gmcwb5eeafacfphc.canadacentral-01.azurewebsites.net/admin)\n" +
-                              (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({Nav.BaseUri.TrimEnd('/')}{bet.ScreenshotUrl})\n") +
+                              (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({bet.ScreenshotUrl})\n") +
                               $"------------------------------\n"
                 };
                 await client.PostAsJsonAsync(webhookUrl, messageContent);
@@ -503,6 +523,7 @@
     private async Task CancelBet(Bet bet)
     {
         if (bet.Status != "Pending") return;
+
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this bet?");
         if (confirmed)
         {
@@ -555,7 +576,6 @@
             "Approved" => "table-warning",
             "Pending" => "table-warning",
             _ => ""
-    
         };
     }
 
