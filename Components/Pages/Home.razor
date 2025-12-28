@@ -117,7 +117,7 @@
                         </td>
                         <td>@bet.Status</td>
                         <td>
-                           @if (bet.Outcome == "Won")
+                            @if (bet.Outcome == "Won")
                             {
                                 <span class="d-inline-block bg-success border border-dark" style="width: 20px; height: 20px;" title="Won"></span>
                                 <span class="ms-1">Won</span>
@@ -149,7 +149,7 @@
                 }
             </tbody>
         </table>
-       
+        
         @* Pagination for Bets *@
         <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
             <button class="btn btn-outline-secondary btn-sm" @onclick="PrevBetsPage" disabled="@(betsPage <= 1)">
@@ -247,7 +247,7 @@
                 var user = await context.Users.AsNoTracking()
                     .Select(u => new { u.Id, u.IsAdmin }) // Optimization: fetch only needed columns
                     .FirstOrDefaultAsync(u => u.Id == userId);
-                
+
                 if (user != null && user.IsAdmin)
                 {
                     Nav.NavigateTo("/admin");
@@ -302,7 +302,6 @@
         // 1. Get User Info
         var user = await context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
-
         if (user != null)
         {
             CreditLimit = user.CreditLimit;
@@ -316,7 +315,7 @@
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal")
             .SumAsync(t => t.AmountNOK);
-
+            
         // FIX: Calculate the Payout formula in memory to avoid SQL translation error with Math.Floor
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
@@ -446,13 +445,15 @@
                 
                 // --- NEW AZURE BLOB UPLOAD LOGIC ---
                 var containerClient = BlobService.GetBlobContainerClient("uploads");
-                await containerClient.CreateIfNotExistsAsync();
+                
+                // CHANGE: Ensure container is Public so images can be viewed
+                await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
+                await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob);
 
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var blobClient = containerClient.GetBlobClient(fileName);
 
                 await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 2000000);
-                
                 // IMPORTANT: Set Content-Type so browsers display it instead of downloading
                 var headers = new BlobHttpHeaders { ContentType = "image/jpeg" };
                 await blobClient.UploadAsync(stream, new BlobUploadOptions { HttpHeaders = headers });
@@ -474,7 +475,7 @@
             await NotifyDiscord(newBet);
 
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
-
+            
             SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
@@ -511,6 +512,7 @@
                               (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({bet.ScreenshotUrl})\n") +
                               $"------------------------------\n"
                 };
+
                 await client.PostAsJsonAsync(webhookUrl, messageContent);
             }
         }

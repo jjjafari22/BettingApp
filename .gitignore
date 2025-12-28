@@ -484,8 +484,17 @@ $RECYCLE.BIN/
 *.swp
 *.db-shm
 *.db-wal
+
+# BettingApp Specific Files
 Data/app.db
 wwwroot/uploads/
 site.zip
 betting.db.zip
 Data/betting.db
+
+# Azurite (Local Azure Storage Emulator)
+__blobstorage__/
+__queuestorage__/
+__tablestorage__/
+__azurite_db*
+*.json.swp
