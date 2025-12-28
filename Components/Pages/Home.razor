@@ -35,8 +35,7 @@
 {
     <div class="alert alert-success alert-dismissible fade show" role="alert">
         <strong>Success!</strong> @SuccessMessage
-        <button type="button" class="btn-close" @onclick="() => SuccessMessage = 
-null" aria-label="Close"></button>
+        <button type="button" class="btn-close" @onclick="() => SuccessMessage = null" aria-label="Close"></button>
     </div>
 }
 
@@ -47,8 +46,7 @@ null" aria-label="Close"></button>
             <h1 class="display-4 @GetBalanceClass(Balance)">@Balance.ToString("N0") kr</h1>
             <small class="text-muted">
                 Available Credit: <strong>@AvailableCredit.ToString("N0") kr</strong> 
-                
-(Limit: @CreditLimit.ToString("N0") kr)
+                (Limit: @CreditLimit.ToString("N0") kr)
             </small>
         </div>
     </div>
@@ -59,25 +57,21 @@ null" aria-label="Close"></button>
             <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
                 <DataAnnotationsValidator />
                 
- 
                <div class="mb-3">
                     <label>Screenshot *</label>
                     <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" />
                 </div>
 
                 <button type="submit" class="btn btn-primary w-100" disabled="@IsSubmitting">
-  
                   @if (IsSubmitting)
                     {
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                         <span class="ms-2">Sending Pick...</span>
-       
-             }
+                     }
                     else
                     {
                        <span>Send Pick</span>
                     }
-   
              </button>
             </EditForm>
         </div>
@@ -89,89 +83,70 @@ null" aria-label="Close"></button>
         <table class="table align-middle text-nowrap">
             <thead>
                 <tr>
-        
-            <th>Date</th>
+                    <th>Date</th>
                     <th>Time</th>
                     <th>Bet Amount</th>
                     <th>Odds</th>
                     <th>Potential Payout</th>
-      
-              <th>Screenshot</th> 
+                    <th>Screenshot</th> 
                     <th>Status</th>
                     <th>Bet Outcome</th>
                     <th>Action</th>
                 </tr>
-        
-    </thead>
+            </thead>
             <tbody>
                 @foreach (var bet in myBets)
                 {
                     <tr class="@GetRowClass(bet)">
                         <td>@bet.CreatedAt.ToLocalTime().ToShortDateString()</td>
-   
-                     <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
-                        <td>@(bet.AmountNOK ??
-0) kr</td>
+                        <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
+                        <td>@(bet.AmountNOK ?? 0) kr</td>
                         <td>@bet.Odds.ToString("N2")</td>
                         <td>@bet.PotentialPayout.ToString("N0") kr</td>
                         <td>
-                          
-  @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                          @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
                             {
                                 <a href="@bet.ScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
                             }
-   
                          else
                             {
                                 <span class="text-muted">None</span>
-              
-              }
+                            }
                         </td>
                         <td>@bet.Status</td>
                         <td>
-              
-              @if (bet.Outcome == "Won")
+                          @if (bet.Outcome == "Won")
                             {
-                                <span class="d-inline-block bg-success border border-dark" style="width: 20px; height: 20px;"
-title="Won"></span>
+                                <span class="d-inline-block bg-success border border-dark" style="width: 20px; height: 20px;" title="Won"></span>
                                 <span class="ms-1">Won</span>
                             }
                             else if (bet.Outcome == "Lost")
-       
-                     {
-                                <span class="d-inline-block bg-danger border border-dark" style="width: 20px; height: 20px;"
-title="Lost"></span>
+                             {
+                                <span class="d-inline-block bg-danger border border-dark" style="width: 20px; height: 20px;" title="Lost"></span>
                                 <span class="ms-1">Lost</span>
                             }
                             else if (bet.Outcome == "Void")
-       
-                     {
-                                <span class="d-inline-block bg-warning border border-dark" style="width: 20px; height: 20px;"
-title="Void"></span>
+                             {
+                                <span class="d-inline-block bg-warning border border-dark" style="width: 20px; height: 20px;" title="Void"></span>
                                 <span class="ms-1">Void</span>
                             }
                             else
-           
-                 {
+                             {
                                 <span class="text-muted">-</span>
                             }
-                      
-  </td>
+                        </td>
                         <td>
                             @if (bet.Status == "Pending")
                             {
-               
-                 <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelBet(bet)">
+                                <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelBet(bet)">
                                     Cancel
                                 </button>
-         
-                   }
+                           }
                         </td>
                     </tr>
                 }
             </tbody>
         </table>
- 
        
         @* Pagination for Bets *@
         <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
@@ -179,8 +154,7 @@ title="Void"></span>
                 <i class="bi bi-arrow-left"></i> Previous
             </button>
             <span class="text-muted">Page @betsPage</span>
-    
-        <button class="btn btn-outline-secondary btn-sm" @onclick="NextBetsPage" disabled="@(!hasMoreBets)">
+            <button class="btn btn-outline-secondary btn-sm" @onclick="NextBetsPage" disabled="@(!hasMoreBets)">
                 Next <i class="bi bi-arrow-right"></i>
             </button>
         </div>
@@ -190,8 +164,7 @@ title="Void"></span>
     <table class="table table-striped">
         <thead>
             <tr>
-           
-     <th>Date</th>
+                <th>Date</th>
                 <th>Type</th>
                 <th>Platform</th>
                 <th>Amount</th>
@@ -199,24 +172,20 @@ title="Void"></span>
         </thead>
         <tbody>
             @if (myTransactions.Count == 0)
-    
-        {
+            {
                 <tr><td colspan="4" class="text-center text-muted">No transactions found.</td></tr>
             }
             @foreach (var t in myTransactions)
             {
                 <tr>
-               
-     <td>@t.Date.ToLocalTime().ToString("g")</td>
+                    <td>@t.Date.ToLocalTime().ToString("g")</td>
                     <td>
-                        <span class="badge @(t.Type == "Deposit" ?
-"bg-success" : "bg-warning")">
+                        <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
                             @t.Type
                         </span>
                     </td>
                     <td>@t.Platform</td>
-      
-              <td>@t.AmountNOK.ToString("N0") kr</td>
+                    <td>@t.AmountNOK.ToString("N0") kr</td>
                 </tr>
             }
         </tbody>
@@ -225,8 +194,7 @@ title="Void"></span>
     @* Pagination for Transactions *@
     <div class="d-flex justify-content-between align-items-center mt-2 mb-5">
         <button class="btn btn-outline-secondary btn-sm" @onclick="PrevTransPage" disabled="@(transPage <= 1)">
-         
-   <i class="bi bi-arrow-left"></i> Previous
+           <i class="bi bi-arrow-left"></i> Previous
         </button>
         <span class="text-muted">Page @transPage</span>
         <button class="btn btn-outline-secondary btn-sm" @onclick="NextTransPage" disabled="@(!hasMoreTrans)">
@@ -239,41 +207,39 @@ title="Void"></span>
     private Bet newBet { get; set; } = new() { Odds = 1.0m }; 
     private List<Bet> myBets = new();
     private List<Transaction> myTransactions = new();
-private decimal CreditLimit = 0;
+    private decimal CreditLimit = 0;
     private decimal Balance = 0;
     private decimal AvailableCredit = 1000;
 
     private IBrowserFile? uploadedFile;
-    private HubConnection?
-hubConnection;
+    private HubConnection? hubConnection;
     private string userId = string.Empty;
     
     private bool IsLoading = true;
     private bool IsSubmitting = false;
     private string? ErrorMessage;
-private string? SuccessMessage;
+    private string? SuccessMessage;
 
     // Pagination State
     private int betsPage = 1;
     private bool hasMoreBets = false;
-private int totalBets = 0; // Field for displaying count
+    private int totalBets = 0; // Field for displaying count
 
     private int transPage = 1;
-private bool hasMoreTrans = false;
-    private int totalTransactions = 0;
-// Field for displaying count
+    private bool hasMoreTrans = false;
+    private int totalTransactions = 0; // Field for displaying count
     
     private const int PageSize = 20;
-protected override async Task OnInitializedAsync()
+
+    protected override async Task OnInitializedAsync()
     {
         try
         {
             var auth = await AuthState.GetAuthenticationStateAsync();
-var uid = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
+            var uid = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
             if (!string.IsNullOrEmpty(uid))
             {
                 userId = uid;
-
                 // --- NEW CODE: Redirect Admin to Admin Dashboard ---
                 using var context = DbFactory.CreateDbContext();
                 var user = await context.Users.AsNoTracking()
@@ -287,14 +253,19 @@ var uid = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value;
                 }
                 // ---------------------------------------------------
 
-newBet.UserId = userId;
+                newBet.UserId = userId;
                 newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             }
+        }
+        catch (Microsoft.AspNetCore.Components.NavigationException)
+        {
+            // Rethrow the navigation exception so the framework can handle the redirect
+            throw;
         }
         catch (Exception ex)
         {
             ErrorMessage = $"Startup Error: {ex.Message}";
-Console.WriteLine(ex);
+            Console.WriteLine(ex);
         }
     }
 
@@ -306,20 +277,19 @@ Console.WriteLine(ex);
             {
                 if (!string.IsNullOrEmpty(userId))
                 {
-        
-            await LoadData();
+                    await LoadData();
                     await SetupSignalR();
-}
+                }
             }
             catch (Exception ex)
             {
                 ErrorMessage = $"Error loading data: {ex.Message}";
-Console.WriteLine(ex);
+                Console.WriteLine(ex);
             }
             finally
             {
                 IsLoading = false;
-StateHasChanged();
+                StateHasChanged();
             }
         }
     }
@@ -327,42 +297,46 @@ StateHasChanged();
     private async Task LoadData()
     {      
         using var context = DbFactory.CreateDbContext();
-// 1. Get User Info
+        // 1. Get User Info
         var user = await context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
-if (user != null)
+        if (user != null)
         {
             CreditLimit = user.CreditLimit;
-}
+        }
 
         // 2. Calculate Balance (Using SumAsync for efficiency)
         var totalDeposits = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Deposit")
             .SumAsync(t => t.AmountNOK);
-var totalWithdrawals = await context.Transactions
+        var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal")
             .SumAsync(t => t.AmountNOK);
-// FIX: Calculate the Payout formula in memory to avoid SQL translation error with Math.Floor
+            
+        // FIX: Calculate the Payout formula in memory to avoid SQL translation error with Math.Floor
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
             .ToListAsync();
-var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-var liability = await context.Bets
+            
+        var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+        var liability = await context.Bets
             .Where(b => b.UserId == userId && 
                        (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-Balance = totalDeposits - totalWithdrawals - liability + winnings;
+            
+        Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
-// 3. Load Paginated Lists
+        
+        // 3. Load Paginated Lists
         await LoadBetsList();
         await LoadTransactionsList();
-}
+    }
     
     private async Task LoadBetsList()
     {
         using var context = DbFactory.CreateDbContext();
-totalBets = await context.Bets.CountAsync(b => b.UserId == userId);
+        totalBets = await context.Bets.CountAsync(b => b.UserId == userId);
         
         myBets = await context.Bets
             .Where(b => b.UserId == userId)
@@ -371,13 +345,13 @@ totalBets = await context.Bets.CountAsync(b => b.UserId == userId);
             .Take(PageSize)
             .AsNoTracking()
             .ToListAsync();
-hasMoreBets = totalBets > (betsPage * PageSize);
+        hasMoreBets = totalBets > (betsPage * PageSize);
     }
     
     private async Task LoadTransactionsList()
     {
         using var context = DbFactory.CreateDbContext();
-totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
+        totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
         
         myTransactions = await context.Transactions
             .Where(t => t.UserId == userId)
@@ -386,14 +360,14 @@ totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userI
             .Take(PageSize)
             .AsNoTracking()
             .ToListAsync();
-hasMoreTrans = totalTransactions > (transPage * PageSize);
+        hasMoreTrans = totalTransactions > (transPage * PageSize);
     }
 
     // Pagination Methods for Bets
     private async Task NextBetsPage()
     {
         betsPage++;
-await LoadBetsList();
+        await LoadBetsList();
     }
 
     private async Task PrevBetsPage()
@@ -401,7 +375,7 @@ await LoadBetsList();
         if (betsPage > 1)
         {
             betsPage--;
-await LoadBetsList();
+            await LoadBetsList();
         }
     }
 
@@ -409,7 +383,7 @@ await LoadBetsList();
     private async Task NextTransPage()
     {
         transPage++;
-await LoadTransactionsList();
+        await LoadTransactionsList();
     }
 
     private async Task PrevTransPage()
@@ -417,7 +391,7 @@ await LoadTransactionsList();
         if (transPage > 1)
         {
             transPage--;
-await LoadTransactionsList();
+            await LoadTransactionsList();
         }
     }
 
@@ -426,25 +400,25 @@ await LoadTransactionsList();
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
-hubConnection.On<string>("ReceiveUpdate", async (message) =>
+        hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
             // Reload data but keep current page
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
-await hubConnection.StartAsync();
+        await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
 
     private void HandleFileSelected(InputFileChangeEventArgs e)
     {
         uploadedFile = e.File;
-}
+    }
 
     private async Task PlaceBet()
     {
         ErrorMessage = null;
-SuccessMessage = null;
+        SuccessMessage = null;
         IsSubmitting = true;
 
         try
@@ -452,7 +426,7 @@ SuccessMessage = null;
             if (uploadedFile == null)
             {
                 ErrorMessage = "You must upload a screenshot for your pick.";
-IsSubmitting = false;
+                IsSubmitting = false;
                 return;
             }
 
@@ -460,44 +434,44 @@ IsSubmitting = false;
             {
                 // Scale the image in the browser (max 1200px width/height) before uploading
                 var resizedFile = await uploadedFile.RequestImageFileAsync("image/jpeg", 1200, 1200);
-var uploadPath = Path.Combine(Env.WebRootPath, "uploads");
+                var uploadPath = Path.Combine(Env.WebRootPath, "uploads");
                 Directory.CreateDirectory(uploadPath);
                 
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var path = Path.Combine(uploadPath, fileName);
-await using FileStream fs = new(path, FileMode.Create);
+                await using FileStream fs = new(path, FileMode.Create);
                 await resizedFile.OpenReadStream(maxAllowedSize: 2000000).CopyToAsync(fs);
                 newBet.ScreenshotUrl = $"/uploads/{fileName}";
-}
+            }
 
             var auth = await AuthState.GetAuthenticationStateAsync();
-newBet.UserId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value ?? string.Empty;
+            newBet.UserId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value ?? string.Empty;
             newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             newBet.Status = "Pending";
             newBet.CreatedAt = DateTime.UtcNow;
-using var context = DbFactory.CreateDbContext(); 
+            using var context = DbFactory.CreateDbContext(); 
             context.Bets.Add(newBet);
             await context.SaveChangesAsync();
 
             await NotifyDiscord(newBet);
 
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
-SuccessMessage = "Pick successfully sent for approval.";
+            SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
-// Reset to page 1 to see the new bet
+            // Reset to page 1 to see the new bet
             betsPage = 1;
-await LoadData();
+            await LoadData();
         }
         catch (Exception ex)
         {
             ErrorMessage = $"Submission Error: {ex.Message}";
-Console.WriteLine(ex);
+            Console.WriteLine(ex);
         }
         finally
         {
             IsSubmitting = false;
-StateHasChanged();
+            StateHasChanged();
         }
     }
 
@@ -506,57 +480,56 @@ StateHasChanged();
         try 
         {
             var webhookUrl = Config["Discord:WebhookUrl"];
-if (!string.IsNullOrEmpty(webhookUrl))
+            if (!string.IsNullOrEmpty(webhookUrl))
             {
                 var client = HttpClientFactory.CreateClient();
-var messageContent = new 
+                var messageContent = new 
                 { 
                     content = $"**New Pick Placed!**\n" +
                               $"**User:** {bet.UserName}\n" +
-                      
-        $"[Approve Here](https://castle-of-happiness-gmcwb5eeafacfphc.canadacentral-01.azurewebsites.net/admin)\n" +
+                              $"[Approve Here](https://castle-of-happiness-gmcwb5eeafacfphc.canadacentral-01.azurewebsites.net/admin)\n" +
                               (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({Nav.BaseUri.TrimEnd('/')}{bet.ScreenshotUrl})")
                 };
-await client.PostAsJsonAsync(webhookUrl, messageContent);
+                await client.PostAsJsonAsync(webhookUrl, messageContent);
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Discord Notification Failed: {ex.Message}");
-}
+        }
     }
 
     private async Task CancelBet(Bet bet)
     {
         if (bet.Status != "Pending") return;
-var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this bet?");
-if (confirmed)
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this bet?");
+        if (confirmed)
         {
             try
             {
                 using var context = DbFactory.CreateDbContext();
-var dbBet = await context.Bets.FindAsync(bet.Id);
+                var dbBet = await context.Bets.FindAsync(bet.Id);
                 
                 if (dbBet != null && dbBet.UserId == userId && dbBet.Status == "Pending")
                 {
                     dbBet.Status = "Cancelled";
-await context.SaveChangesAsync();
+                    await context.SaveChangesAsync();
 
                     await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"Pick cancelled by {dbBet.UserName}");
 
                     SuccessMessage = "Bet cancelled successfully.";
                     await LoadData();
-}
+                }
                 else
                 {
                     ErrorMessage = "Unable to cancel bet. It may have already been processed.";
-await LoadData();
+                    await LoadData();
                 }
             }
             catch (Exception ex)
             {
                 ErrorMessage = $"Error cancelling bet: {ex.Message}";
-Console.WriteLine(ex);
+                Console.WriteLine(ex);
             }
         }
     }
@@ -568,12 +541,11 @@ Console.WriteLine(ex);
             return bet.Outcome switch
             {
                 "Won" => "table-success",
-           
-     "Lost" => "table-danger",
+                "Lost" => "table-danger",
                 "Void" => "table-secondary",
                 _ => ""
             };
-}
+        }
         
         return bet.Status switch
         {
@@ -583,7 +555,7 @@ Console.WriteLine(ex);
             "Pending" => "table-warning",
             _ => ""
     
-    };
+        };
     }
 
     private string GetBalanceClass(decimal balance) => balance switch
