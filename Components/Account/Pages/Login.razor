@@ -67,19 +67,36 @@
     private bool Registered { get; set; }
 
     protected override async Task OnInitializedAsync()
+{
+    if (HttpMethods.IsGet(HttpContext.Request.Method))
     {
-        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        // NEW: Check if user is already logged in
+        if (HttpContext.User.Identity?.IsAuthenticated == true)
         {
-            // Clear the existing external cookie to ensure a clean login process
-            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
-
-            // Display success message if redirected from Register
-            if (Registered)
+            var user = await UserManager.GetUserAsync(HttpContext.User);
+            if (user is not null)
             {
-                errorMessage = "Registration successful. Your account is pending administrator approval.";
+                if (user.IsAdmin)
+                {
+                    RedirectManager.RedirectTo("/admin");
+                }
+                else
+                {
+                    RedirectManager.RedirectTo("/");
+                }
             }
         }
+
+        // Clear the existing external cookie to ensure a clean login process
+        await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+
+        // Display success message if redirected from Register
+        if (Registered)
+        {
+            errorMessage = "Registration successful. Your account is pending administrator approval.";
+        }
     }
+}
 
     public async Task LoginUser()
     {
