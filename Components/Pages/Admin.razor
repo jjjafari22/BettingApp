@@ -17,26 +17,36 @@
 @implements IAsyncDisposable
 
 <style>
-    /* UNIFIED VERTICAL LAYOUT (Desktop & Mobile) 
-       Strategy: Flex column. Image grows to fill space, Controls fixed at bottom.
-    */
+    /* UNIFIED VERTICAL LAYOUT (Desktop & Mobile) */
+    
+    /* 1. Prevent background scrolling when modal is open */
+    .modal {
+        overscroll-behavior: contain; /* Traps scroll inside the modal */
+    }
+
+    /* 2. Fix Layout: Make the content a Flex Column */
     .review-modal-content {
-        height: 90vh; /* Fixed high height for the modal */
-        overflow: hidden; /* Prevent outer scroll */
+        max-height: 90vh; /* Don't exceed 90% screen height */
+        height: 90vh;     /* Try to be tall */
+        display: flex;    /* Enable Flexbox */
+        flex-direction: column; /* Stack Header, Body, Footer vertically */
+        overflow: hidden; /* Hide anything outside this box */
     }
 
     .review-modal-body {
         display: flex;
         flex-direction: column;
-        height: 100%;
+        flex: 1;          /* CRITICAL FIX: Take REMAINING space, not 100% */
+        min-height: 0;    /* Allow shrinking if needed */
         padding: 0;
-        background-color: #212529; /* Dark background for image area */
+        background-color: #212529;
+        overflow-y: auto; /* Allow internal scrolling if content is too big */
     }
 
     /* Top Section: Image */
     .review-image-container {
-        flex-grow: 1; /* Takes all remaining space */
-        min-height: 0; /* Critical for flex scrolling */
+        flex-grow: 1;
+        min-height: 0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -47,7 +57,7 @@
     .review-image {
         max-height: 100%;
         max-width: 100%;
-        object-fit: contain; /* Shows full image without cropping */
+        object-fit: contain;
         box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }
 
@@ -64,8 +74,9 @@
     /* Mobile Tweaks */
     @@media (max-width: 575.98px) {
         .review-modal-content {
-            height: 95vh; /* Use more screen on mobile */
-            margin: 0.5rem; /* Small margin */
+            max-height: 95vh; /* Use slightly more space on mobile */
+            height: 95vh;
+            margin: 0.5rem;
         }
         .review-controls-container {
             padding: 0.75rem;
@@ -98,11 +109,17 @@
 @* --- Unified Review Modal (Image Top / Buttons Bottom) --- *@
 @if (reviewingBetModel != null)
 {
-    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.85);" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block" 
+         style="background-color: rgba(0,0,0,0.85);" 
+         tabindex="-1" 
+         role="dialog"
+         @ref="reviewModalRef"
+         @onkeydown="OnReviewModalKeyDown">
+         
         <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
             <div class="modal-content review-modal-content">
                 
-                @* Header *@
+                @* Header (Fixed Height via Flex) *@
                 <div class="modal-header py-2 flex-shrink-0">
                     <h5 class="modal-title fs-6 text-truncate">
                         Review @(reviewingBetModel.Status == "Pending" ? "Pending" : "Active") #@reviewingBetModel.Id 
@@ -111,7 +128,7 @@
                     <button type="button" class="btn-close" @onclick="CancelReview"></button>
                 </div>
                 
-                @* Body: Vertical Flex *@
+                @* Body: Takes remaining space *@
                 <div class="modal-body review-modal-body">
                    
                    @* Error Overlay *@
@@ -415,7 +432,7 @@
                     }
                 </tbody>
             </table>
-             
+            
             <div class="d-flex justify-content-between align-items-center mt-2">
                 <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(completedPage <= 1)">
                     <i class="bi bi-arrow-left"></i> Previous
@@ -450,6 +467,10 @@
     // For Unified Review Modal
     private Bet? reviewingBetModel;
     private string? reviewErrorMessage;
+    
+    // Setup for Modal Focus (Press ESC to Close)
+    private ElementReference reviewModalRef;
+    private bool shouldFocusReviewModal = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -510,6 +531,17 @@
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         }
+        
+        // Auto-focus the review modal so 'Esc' key works immediately
+        if (shouldFocusReviewModal)
+        {
+            shouldFocusReviewModal = false;
+            try
+            {
+                await reviewModalRef.FocusAsync();
+            }
+            catch { /* Ignore if element not visible */ }
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -565,6 +597,7 @@
         
         int? excludeBetId = editingBetModel?.Id ?? reviewingBetModel?.Id;
 
+        // Calculate liability from active bets
         var liability = userBets
             .Where(b => (excludeBetId == null || b.Id != excludeBetId) 
                         && (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
@@ -620,12 +653,23 @@
         };
         reviewErrorMessage = null;
         errorMessage = null;
+        
+        // Trigger focus after render
+        shouldFocusReviewModal = true;
     }
 
     private void CancelReview()
     {
         reviewingBetModel = null;
         reviewErrorMessage = null;
+    }
+    
+    private void OnReviewModalKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            CancelReview();
+        }
     }
 
     private async Task SaveEdit()
@@ -716,17 +760,17 @@
         {
             if (bet.AmountNOK == null || bet.AmountNOK <= 0) 
             { 
-                reviewErrorMessage = "Invalid amount"; 
+                reviewErrorMessage = "Invalid amount";
                 return; 
             }
             if (bet.Odds <= 1) 
             { 
-                reviewErrorMessage = "Invalid odds"; 
+                reviewErrorMessage = "Invalid odds";
                 return; 
             }
             if (Math.Round(bet.Odds, 2) != bet.Odds) 
             { 
-                reviewErrorMessage = "Odds max 2 decimals"; 
+                reviewErrorMessage = "Odds max 2 decimals";
                 return; 
             }
 
@@ -763,11 +807,11 @@
         
         reviewingBetModel = null;
         reviewErrorMessage = null;
-
+        
         string fullScreenshotUrl = string.IsNullOrEmpty(bet.ScreenshotUrl) 
             ? "" 
             : (bet.ScreenshotUrl.StartsWith("http") ? bet.ScreenshotUrl : $"{Nav.BaseUri.TrimEnd('/')}{bet.ScreenshotUrl}");
-
+            
         string messageDetails = $"\nUser: {bet.UserName}\nAmount: {bet.AmountNOK} NOK\nOdds: {bet.Odds}\nPotential Payout: {bet.PotentialPayout:N0} NOK\n" +
         (string.IsNullOrEmpty(fullScreenshotUrl) ? "" : $"[View Screenshot]({fullScreenshotUrl})");
 
