@@ -33,6 +33,66 @@
     </div>
 }
 
+@* --- Edit Bet Modal --- *@
+@if (editingBetModel != null)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Bet #@editingBetModel.Id</h5>
+                    <button type="button" class="btn-close" @onclick="CancelEdit"></button>
+                </div>
+                <div class="modal-body">
+                    
+                    @if (editErrorMessage != null)
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
+                            <i class="bi bi-exclamation-circle-fill me-2"></i> @editErrorMessage
+                            <button type="button" class="btn-close" @onclick="() => editErrorMessage = null"></button>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">User</label>
+                        <input type="text" class="form-control" value="@editingBetModel.UserName" disabled />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Bet Amount (NOK)</label>
+                        <input type="number" class="form-control" @bind="editingBetModel.AmountNOK" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Odds</label>
+                        <input type="number" step="0.01" class="form-control" @bind="editingBetModel.Odds" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" @bind="editingBetModel.Status">
+                            <option value="Pending">Pending</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Outcome</label>
+                        <select class="form-select" @bind="editingBetModel.Outcome">
+                            <option value="">(None - Active)</option>
+                            <option value="Won">Won</option>
+                            <option value="Lost">Lost</option>
+                            <option value="Void">Void</option>
+                        </select>
+                        <small class="text-muted">Set to "None" if the bet is still active.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveEdit">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <div class="row">
     @* Bets Section *@
     <div class="col-md-12">
@@ -97,6 +157,7 @@
                         <th>Potential Payout</th>
                         <th>Screenshot</th>
                         <th>Set Outcome</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -119,11 +180,16 @@
                                 <button class="btn btn-danger btn-sm" @onclick='() => SetOutcome(bet, "Lost")'>Lost</button>
                                 <button class="btn btn-secondary btn-sm" @onclick='() => SetOutcome(bet, "Void")'>Void</button>
                             </td>
+                            <td>
+                                <button class="btn btn-outline-primary btn-sm" @onclick="() => StartEdit(bet)">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </button>
+                            </td>
                         </tr>
                     }
                     @if (approvedBets.Count == 0)
                     {
-                        <tr><td colspan="7" class="text-muted">No active bets.</td></tr>
+                        <tr><td colspan="8" class="text-muted">No active bets.</td></tr>
                     }
                 </tbody>
             </table>
@@ -143,6 +209,7 @@
                         <th>Outcome</th>
                         <th>Payout</th>
                         <th>Screenshot</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -171,16 +238,20 @@
                                     <a href="@bet.ScreenshotUrl" target="_blank">View</a>
                                 }
                             </td>
+                            <td>
+                                <button class="btn btn-outline-dark btn-sm" @onclick="() => StartEdit(bet)">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </button>
+                            </td>
                         </tr>
                     }
                     @if (completedBets.Count == 0)
                     {
-                        <tr><td colspan="7" class="text-muted">No completed bets found.</td></tr>
+                        <tr><td colspan="8" class="text-muted">No completed bets found.</td></tr>
                     }
                 </tbody>
             </table>
             
-            @* Pagination Controls *@
             <div class="d-flex justify-content-between align-items-center mt-2">
                 <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(completedPage <= 1)">
                     <i class="bi bi-arrow-left"></i> Previous
@@ -208,6 +279,9 @@
     private HubConnection? hubConnection;
     private string? currentAdminName;
     
+    private Bet? editingBetModel;
+    private string? editErrorMessage;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -226,17 +300,27 @@
             return;
         }
 
+        await LoadPendingBets();
+        await LoadApprovedBets();
+        await LoadCompletedBets();
+    }
+    
+    private async Task LoadPendingBets()
+    {
+        using var context = DbFactory.CreateDbContext();
         pendingBets = await context.Bets
             .Where(b => b.Status == "Pending")
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
-
+    }
+    
+    private async Task LoadApprovedBets()
+    {
+        using var context = DbFactory.CreateDbContext();
         approvedBets = await context.Bets
             .Where(b => b.Status == "Approved" && string.IsNullOrEmpty(b.Outcome))
             .OrderByDescending(b => b.CreatedAt)
             .ToListAsync();
-
-        await LoadCompletedBets();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -246,16 +330,10 @@
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(Nav.ToAbsoluteUri("/bethub"))
                 .Build();
-
+            
             hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
             {
-                using var context = DbFactory.CreateDbContext();
-                
-                pendingBets = await context.Bets
-                    .Where(b => b.Status == "Pending")
-                    .OrderByDescending(b => b.CreatedAt)
-                    .ToListAsync();
-
+                await LoadPendingBets();
                 successMessage = message;
                 await InvokeAsync(StateHasChanged);
             });
@@ -283,7 +361,6 @@
             .Skip((completedPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
-            
         hasMoreCompletedBets = totalCompletedBets > (completedPage * pageSize);
     }
 
@@ -302,96 +379,220 @@
         }
     }
 
-    private async Task ProcessBet(Bet bet, string status)
+    // --- REFACTORED: Validating Helper Method ---
+    private async Task<(bool allowed, string error)> CheckUserBalance(string userId, decimal newBetAmount)
     {
-        errorMessage = null;
+        using var context = DbFactory.CreateDbContext();
+        var targetUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+        var creditLimit = targetUser?.CreditLimit ?? 0m;
 
-        if (status == "Approved")
+        var userTrans = await context.Transactions.Where(t => t.UserId == userId).AsNoTracking().ToListAsync();
+        var userBets = await context.Bets.Where(b => b.UserId == userId).AsNoTracking().ToListAsync();
+        
+        var totalDeposits = userTrans.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
+        var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
+        var winnings = userBets.Where(b => b.Outcome == "Won").Sum(b => b.PotentialPayout);
+        
+        // Calculate liability based on active bets
+        var liability = userBets
+            .Where(b => b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void"))
+            .Sum(b => (decimal)(b.AmountNOK ?? 0));
+
+        var currentBalance = totalDeposits - totalWithdrawals - liability + winnings;
+        var availableCredit = currentBalance + creditLimit;
+        
+        // Logic: The "liability" calculated above includes ALL active bets from DB.
+        // We need to verify if adding/modifying THIS bet stays within limits. 
+        // Note: For an *existing* bet being edited, the "liability" sum ALREADY includes its OLD amount.
+        // This rough check below approximates the safety check.
+        // A stricter check would exclude the specific bet ID from the sum and add the new amount.
+        
+        // Let's do the strict check:
+        liability = userBets
+            .Where(b => b.Id != editingBetModel?.Id // Exclude current editing bet to re-add new amount
+                        && (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
+            .Sum(b => (decimal)(b.AmountNOK ?? 0));
+        
+        var projectedBalance = totalDeposits - totalWithdrawals - liability - newBetAmount + winnings;
+        var projectedAvailable = projectedBalance + creditLimit;
+
+        if (projectedAvailable < 0)
         {
-            if (bet.AmountNOK == null || bet.AmountNOK <= 0)
+            return (false, $"Insufficient funds. Available: {availableCredit:N0} kr. Required for this bet: {newBetAmount:N0} kr.");
+        }
+        return (true, string.Empty);
+    }
+    // --------------------------------------------
+
+    private void StartEdit(Bet bet)
+    {
+        editingBetModel = new Bet
+        {
+            Id = bet.Id,
+            UserId = bet.UserId,
+            UserName = bet.UserName,
+            AmountNOK = bet.AmountNOK,
+            Odds = bet.Odds,
+            Status = bet.Status,
+            Outcome = bet.Outcome,
+            ScreenshotUrl = bet.ScreenshotUrl,
+            CreatedAt = bet.CreatedAt
+        };
+        editErrorMessage = null;
+        errorMessage = null;
+    }
+
+    private void CancelEdit()
+    {
+        editingBetModel = null;
+        editErrorMessage = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editingBetModel == null) return;
+        editErrorMessage = null;
+
+        // 1. Basic Validation
+        if (editingBetModel.AmountNOK <= 0)
+        {
+            editErrorMessage = "Bet amount must be greater than 0.";
+            return;
+        }
+        if (editingBetModel.Odds <= 1)
+        {
+            editErrorMessage = "Odds must be greater than 1.00.";
+            return;
+        }
+        if (Math.Round(editingBetModel.Odds, 2) != editingBetModel.Odds)
+        {
+            editErrorMessage = "Odds cannot have more than 2 decimal places.";
+            return;
+        }
+
+        // 2. System Settings Validation
+        using var settingsContext = DbFactory.CreateDbContext();
+        var settings = await settingsContext.Settings.FirstOrDefaultAsync();
+        if (settings != null)
+        {
+            if (editingBetModel.Odds > settings.MaxOdds)
             {
-                errorMessage = "Bet Amount is required and must be greater than 0 to approve.";
-                StateHasChanged();
+                editErrorMessage = $"Odds ({editingBetModel.Odds}) exceed max limit of {settings.MaxOdds}.";
                 return;
             }
-
-            if (bet.Odds <= 1)
+            decimal potentialPayout = Math.Floor((decimal)(editingBetModel.AmountNOK ?? 0) * editingBetModel.Odds);
+            if (potentialPayout > settings.MaxPayout)
             {
-                errorMessage = "Odds must be greater than 1.00 to approve.";
-                StateHasChanged();
-                return;
-            }
-
-            if (Math.Round(bet.Odds, 2) != bet.Odds)
-            {
-                errorMessage = "Odds cannot have more than 2 decimal places. Please correct the value.";
-                StateHasChanged();
-                return;
-            }
-
-            using var settingsContext = DbFactory.CreateDbContext();
-            var settings = await settingsContext.Settings.FirstOrDefaultAsync();
-
-            if (settings != null)
-            {
-                if (bet.Odds > settings.MaxOdds)
-                {
-                    errorMessage = $"The odds ({bet.Odds}) exceed the maximum allowed limit of {settings.MaxOdds}.";
-                    StateHasChanged();
-                    return;
-                }
-
-                if (bet.PotentialPayout > settings.MaxPayout)
-                {
-                    errorMessage = $"The potential payout ({bet.PotentialPayout:N0}) exceeds the maximum allowed limit of {settings.MaxPayout:N0}.";
-                    StateHasChanged();
-                    return;
-                }
-            }
-
-            using var userCheckContext = DbFactory.CreateDbContext();
-            var targetUser = await userCheckContext.Users.AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == bet.UserId);
-
-            var creditLimit = targetUser?.CreditLimit ?? 0m;
-
-            var userTrans = await userCheckContext.Transactions
-                .Where(t => t.UserId == bet.UserId)
-                .AsNoTracking()
-                .ToListAsync();
-
-            var userBets = await userCheckContext.Bets
-                .Where(b => b.UserId == bet.UserId)
-                .AsNoTracking()
-                .ToListAsync();
-
-            var totalDeposits = userTrans.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
-            var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
-
-            var winnings = userBets
-                .Where(b => b.Outcome == "Won")
-                .Sum(b => b.PotentialPayout);
-
-            var liability = userBets
-                .Where(b => b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void"))
-                .Sum(b => (decimal)(b.AmountNOK ?? 0));
-
-            var currentBalance = totalDeposits - totalWithdrawals - liability + winnings;
-            var availableCredit = currentBalance + creditLimit;
-
-            if (bet.AmountNOK > availableCredit)
-            {
-                errorMessage = $"Insufficient funds. User has {availableCredit:N0} kr available, but bet is {bet.AmountNOK:N0} kr.";
-                StateHasChanged();
+                editErrorMessage = $"Payout ({potentialPayout:N0}) exceeds max limit of {settings.MaxPayout:N0}.";
                 return;
             }
         }
 
+        // 3. User Balance Validation (CRITICAL FIX)
+        // Only check balance if the bet is Active/Approved/Pending (i.e., not Cancelled/Rejected)
+        if (editingBetModel.Status == "Approved" || editingBetModel.Status == "Pending")
+        {
+            var (allowed, error) = await CheckUserBalance(editingBetModel.UserId, (decimal)editingBetModel.AmountNOK!);
+            if (!allowed)
+            {
+                editErrorMessage = error;
+                return;
+            }
+        }
+
+        // 4. Save to DB
+        using var context = DbFactory.CreateDbContext();
+        var dbBet = await context.Bets.FindAsync(editingBetModel.Id);
+        var dbUser = await context.Users.FindAsync(editingBetModel.UserId); // Fetch for Discord
+
+        if (dbBet != null)
+        {
+            // Detect Changes for Notifications
+            bool outcomeChanged = dbBet.Outcome != editingBetModel.Outcome;
+            bool statusChanged = dbBet.Status != editingBetModel.Status;
+            
+            dbBet.AmountNOK = editingBetModel.AmountNOK;
+            dbBet.Odds = editingBetModel.Odds;
+            dbBet.Status = editingBetModel.Status;
+            dbBet.Outcome = string.IsNullOrEmpty(editingBetModel.Outcome) ? null : editingBetModel.Outcome;
+
+            context.AuditLogs.Add(new AuditLog
+            {
+                AdminUserName = currentAdminName ?? "Unknown",
+                Action = "Edit Bet",
+                TargetUserName = editingBetModel.UserName,
+                Details = $"Edited Bet ID: {dbBet.Id}. New Amount: {dbBet.AmountNOK}, Odds: {dbBet.Odds}, Status: {dbBet.Status}, Outcome: {dbBet.Outcome ?? "None"}"
+            });
+
+            await context.SaveChangesAsync();
+            
+            // 5. Notifications (CRITICAL FIX)
+            // Send SignalR update to user so their dashboard refreshes
+            await HubContext.Clients.Group(dbBet.UserId).SendAsync("ReceiveUpdate", $"Your bet (ID: {dbBet.Id}) was updated.");
+            
+            // Send Discord Notifications based on changes
+            if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
+            {
+                if (statusChanged && dbBet.Status == "Approved")
+                {
+                     _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, $"✅ **Bet Approved (Updated)**\nYour bet #{dbBet.Id} is active.");
+                }
+                else if (statusChanged && dbBet.Status == "Rejected")
+                {
+                     _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, $"❌ **Bet Rejected (Updated)**\nYour bet #{dbBet.Id} was rejected.");
+                }
+                
+                if (outcomeChanged && !string.IsNullOrEmpty(dbBet.Outcome))
+                {
+                    string msg = dbBet.Outcome == "Won" 
+                        ? $"🎉 **WINNER!**\nYour bet (ID: {dbBet.Id}) WON!\nPayout: {dbBet.PotentialPayout:N0} NOK" 
+                        : $"📉 **Bet Result**\nYour bet (ID: {dbBet.Id}) outcome: {dbBet.Outcome}.";
+                    _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, msg);
+                }
+            }
+
+            successMessage = $"Bet #{dbBet.Id} updated successfully.";
+        }
+        else
+        {
+            editErrorMessage = "Bet not found in database.";
+            return;
+        }
+
+        editingBetModel = null;
+        
+        await LoadPendingBets();
+        await LoadApprovedBets();
+        await LoadCompletedBets();
+        
+        StateHasChanged();
+    }
+
+    private async Task ProcessBet(Bet bet, string status)
+    {
+        errorMessage = null;
+        if (status == "Approved")
+        {
+            // Re-use logic for consistency
+            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { errorMessage = "Invalid amount"; return; }
+            if (bet.Odds <= 1) { errorMessage = "Invalid odds"; return; }
+            if (Math.Round(bet.Odds, 2) != bet.Odds) { errorMessage = "Odds max 2 decimals"; return; }
+
+            // Balance Check
+            var (allowed, error) = await CheckUserBalance(bet.UserId, (decimal)bet.AmountNOK);
+            if (!allowed)
+            {
+                errorMessage = error;
+                StateHasChanged();
+                return;
+            }
+        }
+        
+        // ... (Existing ProcessBet Logic remains largely the same, but safe to paste full block below) ...
         using var context = DbFactory.CreateDbContext();
         var dbBet = await context.Bets.FindAsync(bet.Id);
-        // NEW: Fetch user for Discord notification
         var dbUser = await context.Users.FindAsync(bet.UserId);
-
+        
         if (dbBet != null)
         {
             dbBet.Status = status;
@@ -408,22 +609,18 @@
             await context.SaveChangesAsync();
         }
 
-        pendingBets.Remove(bet);
+        await LoadPendingBets();
         
-        // --- FIX: Handle Absolute URLs for Screenshots correctly ---
         string fullScreenshotUrl = string.IsNullOrEmpty(bet.ScreenshotUrl) 
             ? "" 
             : (bet.ScreenshotUrl.StartsWith("http") ? bet.ScreenshotUrl : $"{Nav.BaseUri.TrimEnd('/')}{bet.ScreenshotUrl}");
-
+        
         string messageDetails = $"\nUser: {bet.UserName}\nAmount: {bet.AmountNOK} NOK\nOdds: {bet.Odds}\nPotential Payout: {bet.PotentialPayout:N0} NOK\n" +
         (string.IsNullOrEmpty(fullScreenshotUrl) ? "" : $"[View Screenshot]({fullScreenshotUrl})");
-
+        
         if (status == "Approved")
         {
-            bet.Status = status;
-            approvedBets.Insert(0, bet);
-            
-            // --- NEW: Send Discord Notification ---
+            await LoadApprovedBets();
             if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
             {
                 _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, $"✅ **Bet Approved!**{messageDetails}");
@@ -443,9 +640,8 @@
     {
         using var context = DbFactory.CreateDbContext();
         var dbBet = await context.Bets.FindAsync(bet.Id);
-        // NEW: Fetch user for Discord notification
         var dbUser = await context.Users.FindAsync(bet.UserId);
-
+        
         if (dbBet != null)
         {
             dbBet.Outcome = outcome;
@@ -459,20 +655,19 @@
             await context.SaveChangesAsync();
         }
 
-        approvedBets.Remove(bet);
+        await LoadApprovedBets();
+        await LoadCompletedBets();
+
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet outcome is: {outcome}");
         
-        // --- NEW: Send Discord Notification ---
         if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
         {
             string msg = outcome == "Won" 
                 ? $"🎉 **WINNER!**\nYour bet (ID: {bet.Id}) WON!\nPayout: {bet.PotentialPayout:N0} NOK" 
                 : $"📉 **Bet Result**\nYour bet (ID: {bet.Id}) outcome: {outcome}.";
-
             _ = DiscordService.SendDmAsync(dbUser.DiscordUserId, msg);
         }
 
-        await LoadCompletedBets();
         successMessage = $"Bet for {bet.UserName} marked as {outcome}.";
         StateHasChanged();
     }
