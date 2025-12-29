@@ -1,4 +1,10 @@
 ﻿@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Identity
+@using BettingApp.Data
+@using Microsoft.AspNetCore.Components.Authorization
+
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
 
 <div class="page">
     <div class="sidebar">
@@ -11,6 +17,12 @@
         </div>
 
         <article class="content px-2 px-md-4">
+            @if (showDiscordWarning)
+            {
+                <div class="alert alert-warning">
+                    For you to get notified when your bet is Approved/Rejected and notified when a bet is Won or Lost, you need to save your Discord client ID to your profile. <a href="Account/Manage">Click here to learn how to do this</a>.
+                </div>
+            }
             @Body
         </article>
     </main>
@@ -21,3 +33,22 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private bool showDiscordWarning = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userPrincipal = authState.User;
+
+        if (userPrincipal.Identity is not null && userPrincipal.Identity.IsAuthenticated)
+        {
+            var user = await UserManager.GetUserAsync(userPrincipal);
+            if (user is not null && string.IsNullOrEmpty(user.DiscordUserId))
+            {
+                showDiscordWarning = true;
+            }
+        }
+    }
+}
