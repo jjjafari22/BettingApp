@@ -44,13 +44,26 @@
                 </li>
                 <li class="mb-2">
                     <strong>Enable Developer Mode:</strong> 
-                    You need this to get notification on Approved Bets and if you Won or Lost the bet. Go to <a href="https://discord.com/settings/advanced" target="_blank" class="text-decoration-none">Advanced Settings</a> and toggle "Developer Mode" on.
+                    You need this to get notification on Approved Bets and if you Won or Lost the bet.
+                    Go to <a href="https://discord.com/settings/advanced" target="_blank" class="text-decoration-none">Advanced Settings</a> and toggle "Developer Mode" on.
                 </li>
                 <li class="mb-2">
                     <strong>Find your User ID:</strong> 
                     Go to <a href="https://discord.com/settings/account" target="_blank" class="text-decoration-none">My Account</a>.
                     <ul class="mt-1">
-                        <li><strong>Desktop:</strong> Click the three dots <span class="badge bg-secondary">...</span> next to your profile button and select "Copy User ID".</li>
+                        <li class="mb-3">
+                            <strong>Desktop:</strong> Click the three dots <span class="badge bg-secondary">...</span> next to your profile button and select "Copy User ID".
+                            
+                            <div class="mt-2">
+                                <a href="images/CopyUserIDDiscord.png" target="_blank" title="Click to view full size">
+                                    <img src="images/CopyUserIDDiscord.png" 
+                                         class="img-fluid border rounded shadow-sm" 
+                                         alt="How to copy Discord User ID" 
+                                         style="max-width: 100%; height: auto; cursor: pointer;" />
+                                </a>
+                                <div class="small text-muted fst-italic mt-1">Click the image to enlarge</div>
+                            </div>
+                        </li>
                         <li><strong>Mobile:</strong> Tap the three dots <span class="badge bg-secondary">...</span> in the top-right menu to find the option.</li>
                     </ul>
                 </li>
@@ -69,7 +82,7 @@
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
-    
+
     [SupplyParameterFromForm]
     private InputModel Input { get; set; } = new();
 
