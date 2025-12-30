@@ -47,7 +47,7 @@ namespace BettingApp.Data
     public class SystemSetting
     {
         public int Id { get; set; }
-        public decimal MaxOdds { get; set; } = 20.0m; // Default value
+        public decimal MinBetAmount { get; set; } = 100m; // Replaced MaxOdds
         public decimal MaxPayout { get; set; } = 50000m; // Default value
     }
 

@@ -39,9 +39,9 @@ else
                         <ValidationSummary />
 
                         <div class="mb-3">
-                            <label for="maxOdds" class="form-label">Max Odds Accepted</label>
-                            <InputNumber id="maxOdds" class="form-control" @bind-Value="settings.MaxOdds" />
-                            <div class="form-text">The maximum odds allowed for a single bet.</div>
+                            <label for="minBet" class="form-label">Minimum Bet Amount (NOK)</label>
+                            <InputNumber id="minBet" class="form-control" @bind-Value="settings.MinBetAmount" />
+                            <div class="form-text">The minimum amount required for a single bet.</div>
                         </div>
 
                         <div class="mb-3">
@@ -63,7 +63,7 @@ else
     private bool hasAccess = false;
     private bool isLoading = true;
     private bool showSuccess = false;
-    private string? currentAdminName; // NEW
+    private string? currentAdminName;
 
     protected override async Task OnInitializedAsync()
     {
@@ -72,7 +72,6 @@ else
         currentAdminName = user.Identity?.Name; // Capture Admin Name
 
         using var context = DbFactory.CreateDbContext();
-
         if (user.Identity?.IsAuthenticated == true)
         {
             var dbUser = await context.Users.AsNoTracking()
@@ -86,7 +85,7 @@ else
             var existingSettings = await context.Settings.FirstOrDefaultAsync();
             if (existingSettings == null)
             {
-                settings = new SystemSetting { MaxOdds = 20.0m, MaxPayout = 10000m };
+                settings = new SystemSetting { MinBetAmount = 100m, MaxPayout = 10000m };
                 context.Settings.Add(settings);
                 await context.SaveChangesAsync();
             }
@@ -108,21 +107,19 @@ else
         if (dbSettings != null)
         {
             // Capture old values for log
-            var oldOdds = dbSettings.MaxOdds;
+            var oldMinBet = dbSettings.MinBetAmount;
             var oldPayout = dbSettings.MaxPayout;
 
-            dbSettings.MaxOdds = settings.MaxOdds;
+            dbSettings.MinBetAmount = settings.MinBetAmount;
             dbSettings.MaxPayout = settings.MaxPayout;
-
             // NEW: Add Audit Log
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
                 Action = "Changed System Settings",
                 TargetUserName = "System",
-                Details = $"MaxOdds: {oldOdds}->{settings.MaxOdds}, MaxPayout: {oldPayout}->{settings.MaxPayout}"
+                Details = $"MinBet: {oldMinBet}->{settings.MinBetAmount}, MaxPayout: {oldPayout}->{settings.MaxPayout}"
             });
-
             await context.SaveChangesAsync();
             showSuccess = true;
         }
