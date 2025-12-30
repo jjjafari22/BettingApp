@@ -52,7 +52,7 @@ else
     </div>
 
     <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle">
+        <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
                 <tr>
                     <th>Time (Local)</th>
@@ -110,7 +110,6 @@ else
     private bool isAdmin = false;
     private int totalPages => totalLogs == 0 ? 1 : (int)Math.Ceiling((double)totalLogs / pageSize);
     private bool hasNextPage => currentPage < totalPages;
-
     // Timezone Logic
     private int TimezoneOffset { get; set; }
 

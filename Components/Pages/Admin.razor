@@ -151,10 +151,10 @@
                        }
                        else
                        {
-                            <div class="text-white-50 fst-italic text-center">
+                             <div class="text-white-50 fst-italic text-center">
                                <i class="bi bi-image-fill display-1 d-block mb-3"></i>
                                <span>No Image Available</span>
-                            </div>
+                             </div>
                        }
                    </div>
 
@@ -196,14 +196,14 @@
                                <div class="row g-3">
                                    <div class="col-6">
                                        <button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" 
-                                            @onclick='() => ProcessBet(reviewingBetModel, "Approved")'>
+                                             @onclick='() => ProcessBet(reviewingBetModel, "Approved")'>
                                             <i class="bi bi-check-lg me-1"></i> Approve
                                        </button>
                                    </div>
                                    <div class="col-6">
                                        <button class="btn btn-outline-danger w-100 btn-xl-mobile fw-bold shadow-sm" 
                                               @onclick='() => ProcessBet(reviewingBetModel, "Rejected")'>
-                                            <i class="bi bi-x-lg me-1"></i> Reject
+                                             <i class="bi bi-x-lg me-1"></i> Reject
                                        </button>
                                    </div>
                                </div>
@@ -214,14 +214,14 @@
                                <div class="row g-2">
                                    <div class="col-5">
                                        <button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" 
-                                               @onclick='() => SetOutcomeInModal(reviewingBetModel, "Won")'>
+                                                @onclick='() => SetOutcomeInModal(reviewingBetModel, "Won")'>
                                             <i class="bi bi-trophy-fill me-1"></i> Won
                                        </button>
                                    </div>
                                    <div class="col-5">
-                                      <button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm" 
+                                       <button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm" 
                                               @onclick='() => SetOutcomeInModal(reviewingBetModel, "Lost")'>
-                                            <i class="bi bi-x-lg me-1"></i> Lost
+                                             <i class="bi bi-x-lg me-1"></i> Lost
                                        </button>
                                    </div>
                                    <div class="col-2">
@@ -280,7 +280,7 @@
                         <label class="form-label">Status</label>
                         <select class="form-select" @bind="editingBetModel.Status">
                              <option value="Pending">Pending</option>
-                            <option value="Approved">Approved</option>
+                             <option value="Approved">Approved</option>
                             <option value="Rejected">Rejected</option>
                         </select>
                     </div>
@@ -310,8 +310,8 @@
         <h4 class="mb-3">Pending Bets Queue</h4>
         
         <div class="table-responsive">
-             <table class="table table-striped mb-5 text-nowrap align-middle">
-                <thead>
+            <table class="table table-sm table-striped table-hover mb-5 text-nowrap align-middle">
+                <thead class="table-dark">
                     <tr>
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
@@ -344,8 +344,8 @@
         @* 2. Active (Approved) Bets Table *@
         <h4 class="mb-3">Active Bets (Awaiting Outcome)</h4>
         <div class="table-responsive mb-5">
-            <table class="table table-bordered border-primary text-nowrap align-middle">
-                 <thead class="table-light">
+            <table class="table table-sm table-striped table-hover text-nowrap align-middle">
+                 <thead class="table-dark">
                     <tr>
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
@@ -364,7 +364,7 @@
                             <td>
                                 <button class="btn btn-success btn-sm w-100" 
                                       @onclick="() => StartReview(bet)">
-                                     <i class="bi bi-play-circle"></i> Process
+                                      <i class="bi bi-play-circle"></i> Process
                                 </button>
                             </td>
                             <td>@bet.Id</td>
@@ -392,17 +392,17 @@
         <h4 class="mb-3">Completed Bets History (@totalCompletedBets)</h4>
         
          <div class="table-responsive">
-            <table class="table table-secondary table-hover text-nowrap align-middle">
-                <thead>
+            <table class="table table-sm table-striped table-hover text-nowrap align-middle">
+                <thead class="table-dark">
                     <tr>
                          <th>Date</th>
                          <th>ID</th>
                          <th>User</th>
-                        <th>Bet Amount</th>
+                         <th>Bet Amount</th>
                         <th>Odds</th>
                         <th>Outcome</th>
                          <th>Payout</th>
-                         <th>Screenshot</th>
+                        <th>Screenshot</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -421,7 +421,7 @@
                             <td>
                                 @if(bet.Outcome == "Won")
                                 {
-                                    @bet.PotentialPayout.ToString("N0") <span>kr</span>
+                                     @bet.PotentialPayout.ToString("N0") <span>kr</span>
                                 }
                                 else
                                 {
@@ -431,7 +431,7 @@
                             <td>
                                 @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
                                 {
-                                     <a href="@bet.ScreenshotUrl" target="_blank">View</a>
+                                      <a href="@bet.ScreenshotUrl" target="_blank">View</a>
                                 }
                             </td>
                             <td>
@@ -490,7 +490,7 @@
     // --- NEW: Add Timezone Properties ---
     private int TimezoneOffset { get; set; }
     private DateTime ToUserLocal(DateTime utcDate) => utcDate.AddMinutes(-TimezoneOffset);
-    
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -502,6 +502,7 @@
         var dbUser = currentUserName != null 
             ? await context.Users.FirstOrDefaultAsync(u => u.UserName == currentUserName)
             : null;
+
         if (dbUser == null || !dbUser.IsAdmin)
         {
             Nav.NavigateTo("/");
@@ -511,6 +512,7 @@
         await LoadPendingBets();
         await LoadApprovedBets();
         await LoadCompletedBets();
+
         // --- NEW: Auto-open Review Modal if Query Param Present ---
         if (ReviewBetId.HasValue)
         {
@@ -781,7 +783,7 @@
                 // Simplified Logic using centralized service
                 if (statusChanged && (dbBet.Status == "Approved" || dbBet.Status == "Rejected"))
                 {
-                    _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet, dbBet.Status, isUpdate: true);
+                     _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet, dbBet.Status, isUpdate: true);
                 }
                 
                 if (outcomeChanged && !string.IsNullOrEmpty(dbBet.Outcome))

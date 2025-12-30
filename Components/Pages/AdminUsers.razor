@@ -38,8 +38,8 @@ else
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped mb-0 align-middle">
-                    <thead class="table-light">
+                <table class="table table-sm table-striped table-hover mb-0 align-middle text-nowrap">
+                    <thead class="table-dark">
                         <tr>
                             <th>Date Joined</th>
                             <th>User</th>
@@ -89,7 +89,7 @@ else
     </div>
 
     <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle text-nowrap">
+        <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
                 <tr>
                     <th style="cursor: pointer;" @onclick='() => Sort("DateJoined")'>
@@ -255,10 +255,8 @@ else
                 (b.Status == "Approved" && b.Outcome != "Void")
             ).Sum(b => (decimal)(b.AmountNOK ?? 0));
             var balance = totalDeposits - totalWithdrawals - liability + winnings;
-            
             // --- FIX: Use CreatedAt property (Fix from turn 1) ---
             DateTime dateJoined = u.CreatedAt;
-
             if (dateJoined == DateTime.MinValue)
             {
                  // Fallback calculation for legacy users
