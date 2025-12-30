@@ -59,7 +59,7 @@
         <div class="card-body">
             <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
                 <DataAnnotationsValidator />
-                
+                 
                 <div class="mb-3">
                     <label>Screenshot *</label>
                     <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" />
@@ -87,7 +87,6 @@
             <thead>
                 <tr>
                     <th>Date</th>
-                    <th>Time</th>
                     <th>Bet Amount</th>
                     <th>Odds</th>
                     <th>Potential Payout</th>
@@ -101,47 +100,46 @@
                 @foreach (var bet in myBets)
                 {
                     <tr class="@GetRowClass(bet)">
-                        <td>@ToUserLocal(bet.CreatedAt).ToShortDateString()</td>
-                        <td>@ToUserLocal(bet.CreatedAt).ToShortTimeString()</td>
-                        <td>@(bet.AmountNOK ?? 0) kr</td>
+                        <td>@ToUserLocal(bet.CreatedAt).ToString("g")</td>
+                        <td>@(bet.AmountNOK?.ToString("N0") ?? "0") kr</td>
                         <td>@bet.Odds.ToString("N2")</td>
                         <td>@bet.PotentialPayout.ToString("N0") kr</td>
                         <td>
-                            @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                             @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
                             {
                                 <a href="@bet.ScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
                             }
-                            else
+                             else
                             {
                                 <span class="text-muted">None</span>
                             }
                         </td>
                         <td>@bet.Status</td>
                         <td>
-                            @if (bet.Outcome == "Won")
+                             @if (bet.Outcome == "Won")
                             {
                                 <span class="d-inline-block bg-success border border-dark" style="width: 20px; height: 20px;" title="Won"></span>
                                 <span class="ms-1">Won</span>
                             }
                             else if (bet.Outcome == "Lost")
-                            {
+                             {
                                 <span class="d-inline-block bg-danger border border-dark" style="width: 20px; height: 20px;" title="Lost"></span>
                                 <span class="ms-1">Lost</span>
                             }
                             else if (bet.Outcome == "Void")
-                            {
+                             {
                                 <span class="d-inline-block bg-warning border border-dark" style="width: 20px; height: 20px;" title="Void"></span>
                                 <span class="ms-1">Void</span>
                             }
                             else
-                            {
+                             {
                                 <span class="text-muted">-</span>
                             }
                         </td>
                         <td>
                             @if (bet.Status == "Pending")
                             {
-                                <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelBet(bet)">
+                                 <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelBet(bet)">
                                     Cancel
                                 </button>
                             }
@@ -157,7 +155,7 @@
                 <i class="bi bi-arrow-left"></i> Previous
             </button>
             <span class="text-muted">Page @betsPage</span>
-             <button class="btn btn-outline-secondary btn-sm" @onclick="NextBetsPage" disabled="@(!hasMoreBets)">
+              <button class="btn btn-outline-secondary btn-sm" @onclick="NextBetsPage" disabled="@(!hasMoreBets)">
                 Next <i class="bi bi-arrow-right"></i>
             </button>
         </div>
@@ -167,7 +165,7 @@
     <table class="table table-striped">
         <thead>
             <tr>
-                <th>Date</th>
+                 <th>Date</th>
                 <th>Type</th>
                 <th>Platform</th>
                 <th>Amount</th>
@@ -181,14 +179,14 @@
             @foreach (var t in myTransactions)
             {
                 <tr>
-                    <td>@ToUserLocal(t.Date).ToString("g")</td>
+                     <td>@ToUserLocal(t.Date).ToString("g")</td>
                     <td>
                         <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
                             @t.Type
                         </span>
                     </td>
                     <td>@t.Platform</td>
-                    <td>@t.AmountNOK.ToString("N0") kr</td>
+                     <td>@t.AmountNOK.ToString("N0") kr</td>
                 </tr>
             }
         </tbody>
@@ -197,7 +195,7 @@
     @* Pagination for Transactions *@
     <div class="d-flex justify-content-between align-items-center mt-2 mb-5">
         <button class="btn btn-outline-secondary btn-sm" @onclick="PrevTransPage" disabled="@(transPage <= 1)">
-            <i class="bi bi-arrow-left"></i> Previous
+             <i class="bi bi-arrow-left"></i> Previous
         </button>
         <span class="text-muted">Page @transPage</span>
         <button class="btn btn-outline-secondary btn-sm" @onclick="NextTransPage" disabled="@(!hasMoreTrans)">
@@ -231,13 +229,11 @@
     private int transPage = 1;
     private bool hasMoreTrans = false;
     private int totalTransactions = 0;
-    
     private const int PageSize = 20;
 
     // Timezone State
     private int TimezoneOffset { get; set; }
     private DateTime ToUserLocal(DateTime utcDate) => utcDate.AddMinutes(-TimezoneOffset);
-
     protected override async Task OnInitializedAsync()
     {
         try
@@ -281,7 +277,6 @@
             {
                 // Fetch Timezone Offset
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
-                
                 if (!string.IsNullOrEmpty(userId))
                 {
                     await LoadData();
@@ -317,7 +312,6 @@
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal")
             .SumAsync(t => t.AmountNOK);
-
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
@@ -437,7 +431,6 @@
 
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var blobClient = containerClient.GetBlobClient(fileName);
-
                 await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 2000000);
                 var headers = new BlobHttpHeaders { ContentType = "image/jpeg" };
                 await blobClient.UploadAsync(stream, new BlobUploadOptions { HttpHeaders = headers });

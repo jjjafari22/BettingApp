@@ -9,7 +9,7 @@ using BettingApp.Services;
 using Microsoft.AspNetCore.DataProtection;
 using System.IO;
 using System.Runtime.InteropServices;
-using Azure.Storage.Blobs; // <--- Added this
+using Azure.Storage.Blobs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -85,6 +85,24 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
 var app = builder.Build();
+
+// --- GLOBAL DATE/TIME FORMATTING (Added) ---
+// This sets the default culture to use dd.MMM for dates and HH:mm for time.
+// This affects all .ToString("g"), ToShortDateString(), etc. across the app.
+var customCulture = new System.Globalization.CultureInfo("en-GB");
+customCulture.DateTimeFormat.ShortDatePattern = "dd.MMM"; // e.g. 28.Dec
+customCulture.DateTimeFormat.ShortTimePattern = "HH:mm";  // e.g. 14:30
+// Note: The "g" format (General) automatically combines ShortDate + ShortTime.
+
+var supportedCultures = new[] { customCulture };
+
+app.UseRequestLocalization(new RequestLocalizationOptions
+{
+    DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture(customCulture),
+    SupportedCultures = supportedCultures,
+    SupportedUICultures = supportedCultures
+});
+// -------------------------------------------
 
 if (app.Environment.IsDevelopment())
 {
