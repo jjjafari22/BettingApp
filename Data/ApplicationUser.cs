@@ -12,4 +12,8 @@ public class ApplicationUser : IdentityUser
 
     // Fix: Add creation date for new users
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // --- NEW: Personal Info ---
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
 }

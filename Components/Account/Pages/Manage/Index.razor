@@ -20,14 +20,24 @@
             <DataAnnotationsValidator />
             
             <div class="form-floating mb-3">
-               
                 <input type="text" value="@username" id="username" class="form-control" placeholder="Choose your username." disabled />
                 <label for="username" class="form-label">Username</label>
+            </div>
+
+             <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.FirstName" id="Input.FirstName" class="form-control" placeholder="First Name" />
+                <label for="Input.FirstName" class="form-label">First Name</label>
+                <ValidationMessage For="() => Input.FirstName" class="text-danger" />
+            </div>
+
+            <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.LastName" id="Input.LastName" class="form-control" placeholder="Last Name" />
+                <label for="Input.LastName" class="form-label">Last Name</label>
+                <ValidationMessage For="() => Input.LastName" class="text-danger" />
             </div>
             
             <div class="form-floating mb-3">
                 <InputText @bind-Value="Input.DiscordUserId" id="Input.DiscordUserId" class="form-control" placeholder="Discord User ID" />
-           
                 <label for="Input.DiscordUserId" class="form-label">Discord User ID</label>
                 <ValidationMessage For="() => Input.DiscordUserId" class="text-danger" />
             </div>
@@ -41,33 +51,29 @@
             <ol class="ps-3 text-muted small">
                 <li class="mb-2">
                     <strong>Join the Server:</strong> 
-                    
- <a href="https://discord.gg/nXTXdpXw7r" target="_blank" class="text-decoration-none">Click here to join our Discord Server</a>.
+                    <a href="https://discord.gg/nXTXdpXw7r" target="_blank" class="text-decoration-none">Click here to join our Discord Server</a>.
                 </li>
                 <li class="mb-2">
                     <strong>Enable Developer Mode:</strong> 
                     You need this to get notification on Approved Bets and if you Won or Lost the bet.
- Go to <a href="https://discord.com/settings/advanced" target="_blank" class="text-decoration-none">Advanced Settings</a> and toggle "Developer Mode" on.
- </li>
+                    Go to <a href="https://discord.com/settings/advanced" target="_blank" class="text-decoration-none">Advanced Settings</a> and toggle "Developer Mode" on.
+                </li>
                 <li class="mb-2">
                     <strong>Find your User ID:</strong> 
                     Go to <a href="https://discord.com/settings/account" target="_blank" class="text-decoration-none">My Account</a>.
- <ul class="mt-1">
+                    <ul class="mt-1">
                         <li class="mb-3">
                             Click the three dots <span class="badge bg-secondary">...</span> next to your profile button and select "Copy User ID".
- <div class="mt-2">
+                            <div class="mt-2">
                                 <a href="images/CopyUserIDDiscord.png" target="_blank" title="Click to view full size">
                                     <img src="images/CopyUserIDDiscord.png" 
-                      
                                          class="img-fluid border rounded shadow-sm" 
                                          alt="How to copy Discord User ID" 
-                              
-            style="max-width: 100%; height: auto; cursor: pointer;"
- />
+                                         style="max-width: 100%; height: auto; cursor: pointer;"
+                                    />
                                 </a>
                                 <div class="small text-muted fst-italic mt-1">Click the image to enlarge</div>
-                            
- </div>
+                            </div>
                         </li>
                     </ul>
                 </li>
@@ -75,7 +81,7 @@
                 <li class="mb-2">
                     <strong>Save:</strong> 
                     Paste the Discord User ID into the box above and click <strong>Save</strong>.
- </li>
+                </li>
             </ol>
         </div>
     </div>
@@ -96,24 +102,38 @@
         user = await UserAccessor.GetRequiredUserAsync(HttpContext);
         username = await UserManager.GetUserNameAsync(user);
 
-        // Load existing ID
+        // Load existing data
         Input.DiscordUserId ??= user.DiscordUserId;
+        Input.FirstName ??= user.FirstName;
+        Input.LastName ??= user.LastName;
     }
 
     private async Task OnValidSubmitAsync()
     {
         bool hasChanges = false;
-        // --- Save Discord ID ---
+        
+        // --- Save Changes ---
         if (Input.DiscordUserId != user.DiscordUserId)
         {
             user.DiscordUserId = Input.DiscordUserId;
-            await UserManager.UpdateAsync(user);
             hasChanges = true;
         }
-        // -----------------------
+
+        if (Input.FirstName != user.FirstName)
+        {
+            user.FirstName = Input.FirstName;
+            hasChanges = true;
+        }
+
+        if (Input.LastName != user.LastName)
+        {
+            user.LastName = Input.LastName;
+            hasChanges = true;
+        }
 
         if (hasChanges)
         {
+            await UserManager.UpdateAsync(user);
             await SignInManager.RefreshSignInAsync(user);
             RedirectManager.RedirectToCurrentPageWithStatus("Your profile has been updated", HttpContext);
         }
@@ -125,6 +145,12 @@
 
     private sealed class InputModel
     {
+        [Display(Name = "First Name")]
+        public string? FirstName { get; set; }
+
+        [Display(Name = "Last Name")]
+        public string? LastName { get; set; }
+
         [Display(Name = "Discord User ID")]
         [RegularExpression(@"^\d{17,19}$", ErrorMessage = "Discord User ID must be 17, 18, or 19 digits.")]
         public string? DiscordUserId { get; set; }

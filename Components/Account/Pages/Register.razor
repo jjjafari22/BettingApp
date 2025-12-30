@@ -31,6 +31,19 @@
             <h2>Create a new account.</h2>
             <hr />
             <ValidationSummary class="text-danger" role="alert" />
+
+            <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.FirstName" id="Input.FirstName" class="form-control" autocomplete="given-name" aria-required="true" placeholder="First Name" />
+                <label for="Input.FirstName">First Name</label>
+                <ValidationMessage For="() => Input.FirstName" class="text-danger" />
+            </div>
+
+            <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.LastName" id="Input.LastName" class="form-control" autocomplete="family-name" aria-required="true" placeholder="Last Name" />
+                <label for="Input.LastName">Last Name</label>
+                <ValidationMessage For="() => Input.LastName" class="text-danger" />
+            </div>
+
             <div class="form-floating mb-3">
                 <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
                 <label for="Input.Email">Email</label>
@@ -65,6 +78,12 @@
     public async Task RegisterUser(EditContext editContext)
     {
         var user = CreateUser();
+
+        // --- NEW: Set Name Properties ---
+        user.FirstName = Input.FirstName;
+        user.LastName = Input.LastName;
+        // --------------------------------
+
         await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
         var emailStore = GetEmailStore();
         await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
@@ -80,7 +99,7 @@
         }
 
         Logger.LogInformation("User created a new account with password.");
-        
+
         // Notify Discord admins about the new registration
         await NotifyDiscordNewUser(Input.Email);
 
@@ -103,6 +122,7 @@
                 { 
                     content = $"🚨 **New User Registered** 🚨\n" +
                               $"**Email:** {userEmail}\n" +
+                              $"**Name:** {Input.FirstName} {Input.LastName}\n" +
                               $"**Action Required:** Admin approval needed.\n" +
                               $"[Approve Here](https://castle-of-happiness-gmcwb5eeafacfphc.canadacentral-01.azurewebsites.net/admin/users)\n"
                 };
@@ -140,6 +160,14 @@
 
     private sealed class InputModel
     {
+        [Required]
+        [Display(Name = "First Name")]
+        public string FirstName { get; set; } = "";
+
+        [Required]
+        [Display(Name = "Last Name")]
+        public string LastName { get; set; } = "";
+
         [Required]
         [EmailAddress]
         [Display(Name = "Email")]
