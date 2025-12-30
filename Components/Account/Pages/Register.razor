@@ -33,29 +33,29 @@
             <ValidationSummary class="text-danger" role="alert" />
 
             <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.FirstName" id="Input.FirstName" class="form-control" autocomplete="given-name" aria-required="true" placeholder="First Name" />
+                <InputText @bind-Value="Input.FirstName" id="Input.FirstName" class="form-control" autocomplete="given-name" aria-required="true" placeholder="" />
                 <label for="Input.FirstName">First Name</label>
                 <ValidationMessage For="() => Input.FirstName" class="text-danger" />
             </div>
 
             <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.LastName" id="Input.LastName" class="form-control" autocomplete="family-name" aria-required="true" placeholder="Last Name" />
+                <InputText @bind-Value="Input.LastName" id="Input.LastName" class="form-control" autocomplete="family-name" aria-required="true" placeholder="" />
                 <label for="Input.LastName">Last Name</label>
                 <ValidationMessage For="() => Input.LastName" class="text-danger" />
             </div>
 
             <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
+                <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="" />
                 <label for="Input.Email">Email</label>
                 <ValidationMessage For="() => Input.Email" class="text-danger" />
             </div>
             <div class="form-floating mb-3">
-                <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+                <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="" />
                 <label for="Input.Password">Password</label>
                 <ValidationMessage For="() => Input.Password" class="text-danger" />
             </div>
             <div class="form-floating mb-3">
-                <InputText type="password" @bind-Value="Input.ConfirmPassword" id="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+                <InputText type="password" @bind-Value="Input.ConfirmPassword" id="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="" />
                 <label for="Input.ConfirmPassword">Confirm Password</label>
                 <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
             </div>
@@ -78,7 +78,6 @@
     public async Task RegisterUser(EditContext editContext)
     {
         var user = CreateUser();
-
         // --- NEW: Set Name Properties ---
         user.FirstName = Input.FirstName;
         user.LastName = Input.LastName;
@@ -99,13 +98,10 @@
         }
 
         Logger.LogInformation("User created a new account with password.");
-
         // Notify Discord admins about the new registration
         await NotifyDiscordNewUser(Input.Email);
-
         // Notify Admin Dashboard via SignalR
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
-
         // Redirect to Login with a query flag to show the success message
         RedirectManager.RedirectTo("Account/Login?registered=true");
     }
