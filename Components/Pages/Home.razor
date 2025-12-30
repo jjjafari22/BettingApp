@@ -507,12 +507,11 @@
                 var messageContent = new 
                 { 
                     content = $"**New Pick Placed!**\n" +
-                              $"**User:** {bet.UserName}\n" +
-                              $"[Approve Here](https://castle-of-happiness-gmcwb5eeafacfphc.canadacentral-01.azurewebsites.net/admin)\n" +
-                              (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({bet.ScreenshotUrl})\n") +
-                              $"------------------------------\n"
+                                $"**User:** {bet.UserName}\n" +
+                                $"[Approve Here](https://castle-of-happiness-gmcwb5eeafacfphc.canadacentral-01.azurewebsites.net/admin?ReviewBetId={bet.Id})\n" +
+                                (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({bet.ScreenshotUrl})\n") +
+                                $"------------------------------\n"
                 };
-
                 await client.PostAsJsonAsync(webhookUrl, messageContent);
             }
         }
