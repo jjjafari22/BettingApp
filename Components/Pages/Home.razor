@@ -59,7 +59,7 @@
         <div class="card-body">
             <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
                 <DataAnnotationsValidator />
-                 
+                
                 <div class="mb-3">
                     <label>Screenshot *</label>
                     <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" />
@@ -70,7 +70,7 @@
                     {
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                         <span class="ms-2">Sending Pick...</span>
-                     }
+                    }
                     else
                     {
                        <span>Send Pick</span>
@@ -86,7 +86,7 @@
         <table class="table align-middle text-nowrap">
             <thead>
                 <tr>
-                     <th>Date</th>
+                    <th>Date</th>
                     <th>Time</th>
                     <th>Bet Amount</th>
                     <th>Odds</th>
@@ -96,55 +96,55 @@
                     <th>Bet Outcome</th>
                     <th>Action</th>
                 </tr>
-             </thead>
+            </thead>
             <tbody>
                 @foreach (var bet in myBets)
                 {
                     <tr class="@GetRowClass(bet)">
-                        <td>@bet.CreatedAt.ToLocalTime().ToShortDateString()</td>
-                        <td>@bet.CreatedAt.ToLocalTime().ToShortTimeString()</td>
+                        <td>@ToUserLocal(bet.CreatedAt).ToShortDateString()</td>
+                        <td>@ToUserLocal(bet.CreatedAt).ToShortTimeString()</td>
                         <td>@(bet.AmountNOK ?? 0) kr</td>
                         <td>@bet.Odds.ToString("N2")</td>
                         <td>@bet.PotentialPayout.ToString("N0") kr</td>
                         <td>
-                             @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                            @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
                             {
                                 <a href="@bet.ScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
                             }
-                             else
+                            else
                             {
                                 <span class="text-muted">None</span>
-                             }
+                            }
                         </td>
                         <td>@bet.Status</td>
                         <td>
-                             @if (bet.Outcome == "Won")
+                            @if (bet.Outcome == "Won")
                             {
                                 <span class="d-inline-block bg-success border border-dark" style="width: 20px; height: 20px;" title="Won"></span>
                                 <span class="ms-1">Won</span>
                             }
                             else if (bet.Outcome == "Lost")
-                             {
+                            {
                                 <span class="d-inline-block bg-danger border border-dark" style="width: 20px; height: 20px;" title="Lost"></span>
                                 <span class="ms-1">Lost</span>
                             }
                             else if (bet.Outcome == "Void")
-                             {
+                            {
                                 <span class="d-inline-block bg-warning border border-dark" style="width: 20px; height: 20px;" title="Void"></span>
                                 <span class="ms-1">Void</span>
                             }
                             else
-                             {
+                            {
                                 <span class="text-muted">-</span>
                             }
-                         </td>
+                        </td>
                         <td>
                             @if (bet.Status == "Pending")
                             {
-                                 <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelBet(bet)">
+                                <button class="btn btn-outline-danger btn-sm" @onclick="() => CancelBet(bet)">
                                     Cancel
                                 </button>
-                             }
+                            }
                         </td>
                     </tr>
                 }
@@ -167,7 +167,7 @@
     <table class="table table-striped">
         <thead>
             <tr>
-                 <th>Date</th>
+                <th>Date</th>
                 <th>Type</th>
                 <th>Platform</th>
                 <th>Amount</th>
@@ -181,14 +181,14 @@
             @foreach (var t in myTransactions)
             {
                 <tr>
-                     <td>@t.Date.ToLocalTime().ToString("g")</td>
+                    <td>@ToUserLocal(t.Date).ToString("g")</td>
                     <td>
                         <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
                             @t.Type
                         </span>
                     </td>
                     <td>@t.Platform</td>
-                     <td>@t.AmountNOK.ToString("N0") kr</td>
+                    <td>@t.AmountNOK.ToString("N0") kr</td>
                 </tr>
             }
         </tbody>
@@ -197,7 +197,7 @@
     @* Pagination for Transactions *@
     <div class="d-flex justify-content-between align-items-center mt-2 mb-5">
         <button class="btn btn-outline-secondary btn-sm" @onclick="PrevTransPage" disabled="@(transPage <= 1)">
-             <i class="bi bi-arrow-left"></i> Previous
+            <i class="bi bi-arrow-left"></i> Previous
         </button>
         <span class="text-muted">Page @transPage</span>
         <button class="btn btn-outline-secondary btn-sm" @onclick="NextTransPage" disabled="@(!hasMoreTrans)">
@@ -226,13 +226,18 @@
     // Pagination State
     private int betsPage = 1;
     private bool hasMoreBets = false;
-    private int totalBets = 0; // Field for displaying count
+    private int totalBets = 0; 
 
     private int transPage = 1;
     private bool hasMoreTrans = false;
-    private int totalTransactions = 0; // Field for displaying count
+    private int totalTransactions = 0;
     
     private const int PageSize = 20;
+
+    // Timezone State
+    private int TimezoneOffset { get; set; }
+    private DateTime ToUserLocal(DateTime utcDate) => utcDate.AddMinutes(-TimezoneOffset);
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -242,25 +247,23 @@
             if (!string.IsNullOrEmpty(uid))
             {
                 userId = uid;
-                // --- NEW CODE: Redirect Admin to Admin Dashboard ---
+                // Redirect Admin to Admin Dashboard
                 using var context = DbFactory.CreateDbContext();
                 var user = await context.Users.AsNoTracking()
-                    .Select(u => new { u.Id, u.IsAdmin }) // Optimization: fetch only needed columns
+                    .Select(u => new { u.Id, u.IsAdmin }) 
                     .FirstOrDefaultAsync(u => u.Id == userId);
                 if (user != null && user.IsAdmin)
                 {
                     Nav.NavigateTo("/admin");
                     return; 
                 }
-                // ---------------------------------------------------
-
+                
                 newBet.UserId = userId;
                 newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             }
         }
         catch (Microsoft.AspNetCore.Components.NavigationException)
         {
-            // Rethrow the navigation exception so the framework can handle the redirect
             throw;
         }
         catch (Exception ex)
@@ -276,6 +279,9 @@
         {
             try
             {
+                // Fetch Timezone Offset
+                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                
                 if (!string.IsNullOrEmpty(userId))
                 {
                     await LoadData();
@@ -298,7 +304,6 @@
     private async Task LoadData()
     {      
         using var context = DbFactory.CreateDbContext();
-        // 1. Get User Info
         var user = await context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
         if (user != null)
@@ -306,14 +311,13 @@
             CreditLimit = user.CreditLimit;
         }
 
-        // 2. Calculate Balance (Using SumAsync for efficiency)
         var totalDeposits = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Deposit")
             .SumAsync(t => t.AmountNOK);
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal")
             .SumAsync(t => t.AmountNOK);
-        // FIX: Calculate the Payout formula in memory to avoid SQL translation error with Math.Floor
+
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
@@ -325,7 +329,7 @@
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
-        // 3. Load Paginated Lists
+
         await LoadBetsList();
         await LoadTransactionsList();
     }
@@ -360,7 +364,6 @@
         hasMoreTrans = totalTransactions > (transPage * PageSize);
     }
 
-    // Pagination Methods for Bets
     private async Task NextBetsPage()
     {
         betsPage++;
@@ -376,7 +379,6 @@
         }
     }
 
-    // Pagination Methods for Transactions
     private async Task NextTransPage()
     {
         transPage++;
@@ -399,7 +401,6 @@
             .Build();
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
-            // Reload data but keep current page
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
@@ -429,11 +430,8 @@
 
             if (uploadedFile != null)
             {
-                // Scale the image in the browser (max 1200px width/height) before uploading
                 var resizedFile = await uploadedFile.RequestImageFileAsync("image/jpeg", 1200, 1200);
-                // --- NEW AZURE BLOB UPLOAD LOGIC ---
                 var containerClient = BlobService.GetBlobContainerClient("uploads");
-                // CHANGE: Ensure container is Public so images can be viewed
                 await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
                 await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob);
 
@@ -441,12 +439,10 @@
                 var blobClient = containerClient.GetBlobClient(fileName);
 
                 await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 2000000);
-                // IMPORTANT: Set Content-Type so browsers display it instead of downloading
                 var headers = new BlobHttpHeaders { ContentType = "image/jpeg" };
                 await blobClient.UploadAsync(stream, new BlobUploadOptions { HttpHeaders = headers });
 
                 newBet.ScreenshotUrl = blobClient.Uri.ToString();
-                // -----------------------------------
             }
 
             var auth = await AuthState.GetAuthenticationStateAsync();
@@ -458,14 +454,11 @@
             context.Bets.Add(newBet);
             await context.SaveChangesAsync();
 
-            // Centralized Admin Notification call
             await DiscordService.NotifyAdminNewPickAsync(newBet);
-
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
             SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
-            // Reset to page 1 to see the new bet
             betsPage = 1;
             await LoadData();
         }

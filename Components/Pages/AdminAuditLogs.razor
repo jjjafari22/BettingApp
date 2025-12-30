@@ -66,7 +66,7 @@ else
                 @foreach (var log in logs)
                 {
                     <tr>
-                        <td>@log.Timestamp.ToLocalTime().ToString("g")</td>
+                        <td>@log.Timestamp.AddMinutes(-TimezoneOffset).ToString("g")</td>
                         <td><span class="badge bg-secondary">@log.AdminUserName</span></td>
                         <td><span class="fw-bold">@log.Action</span></td>
                         <td>@log.TargetUserName</td>
@@ -97,22 +97,22 @@ else
 
 @code {
     private List<AuditLog> logs = new();
-    
     // Filters
     private string targetFilter = "";
     private string adminFilter = "";
     private DateTime? startDate;
     private DateTime? endDate;
-    private int timeZoneOffsetMinutes = 0;
-
+    
     // Pagination State
     private int currentPage = 1;
     private const int pageSize = 20;
     private int totalLogs = 0;
     private bool isAdmin = false;
-
     private int totalPages => totalLogs == 0 ? 1 : (int)Math.Ceiling((double)totalLogs / pageSize);
     private bool hasNextPage => currentPage < totalPages;
+
+    // Timezone Logic
+    private int TimezoneOffset { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -138,16 +138,11 @@ else
         {
             try
             {
-                // Retrieve Browser's Timezone Offset (in minutes relative to UTC)
-                // e.g., PST is 480 minutes (8 hours) "behind" UTC.
-                // We use 'eval' here as a quick way to get the offset without a custom JS file.
-                timeZoneOffsetMinutes = await JS.InvokeAsync<int>("eval", "new Date().getTimezoneOffset()");
+                TimezoneOffset = await JS.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                // Reload logs if dates were involved, or just refresh UI
+                StateHasChanged();
             }
-            catch
-            {
-                // Fallback to UTC if JS fails
-                timeZoneOffsetMinutes = 0;
-            }
+            catch { }
         }
     }
 
@@ -179,7 +174,6 @@ else
         using var context = DbFactory.CreateDbContext();
         var query = context.AuditLogs.AsNoTracking();
 
-        // Apply Text Filters (Case Insensitive)
         if (!string.IsNullOrWhiteSpace(targetFilter))
         {
             var term = targetFilter.Trim().ToLower();
@@ -192,30 +186,22 @@ else
             query = query.Where(l => l.AdminUserName.ToLower().Contains(term));
         }
 
-        // Apply Date Filters (Adjusted for TimeZone)
         if (startDate.HasValue)
         {
-            // Convert the user's "00:00 Local" to the equivalent UTC time
-            // Example: 12/26 00:00 PST (+480 min) -> 12/26 08:00 UTC
-            var startLocal = startDate.Value.Date; 
-            var startUtc = startLocal.AddMinutes(timeZoneOffsetMinutes);
-            
+            // Convert user's 00:00 local to UTC
+            var startLocal = startDate.Value.Date;
+            var startUtc = startLocal.AddMinutes(TimezoneOffset);
             query = query.Where(l => l.Timestamp >= startUtc);
         }
 
         if (endDate.HasValue)
         {
-            // Convert the user's "Next Day 00:00 Local" to UTC
             var endLocal = endDate.Value.Date.AddDays(1);
-            var endUtc = endLocal.AddMinutes(timeZoneOffsetMinutes);
-
+            var endUtc = endLocal.AddMinutes(TimezoneOffset);
             query = query.Where(l => l.Timestamp < endUtc);
         }
 
-        // Get Total Count
         totalLogs = await query.CountAsync();
-
-        // Get Paged Data
         logs = await query
             .OrderByDescending(l => l.Timestamp)
             .Skip((currentPage - 1) * pageSize)

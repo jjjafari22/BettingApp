@@ -21,6 +21,11 @@
         </ErrorBoundary>
     </CascadingAuthenticationState>
     
+    <script>
+        window.getBrowserTimeZoneOffset = function() {
+            return new Date().getTimezoneOffset();
+        };
+    </script>
     <script src="_framework/blazor.web.js"></script>
 </body>
 

@@ -9,4 +9,7 @@ public class ApplicationUser : IdentityUser
 
     // --- NEW: Discord Integration ---
     public string? DiscordUserId { get; set; }
+
+    // Fix: Add creation date for new users
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

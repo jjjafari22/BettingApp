@@ -8,6 +8,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -40,7 +41,7 @@ else
                 <table class="table table-striped mb-0 align-middle">
                     <thead class="table-light">
                         <tr>
-                             <th>Date Joined</th>
+                            <th>Date Joined</th>
                             <th>User</th>
                             <th>Email</th>
                             <th class="text-end">Actions</th>
@@ -50,7 +51,7 @@ else
                         @foreach (var user in pendingUsersVM)
                         {
                             <tr>
-                                <td>@(user.DateJoined == DateTime.MaxValue ? "-" : user.DateJoined.ToLocalTime().ToShortDateString())</td>
+                                <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToShortDateString())</td>
                                 <td>@user.UserName</td>
                                 <td>@user.Email</td>
                                 <td class="text-end">
@@ -121,7 +122,7 @@ else
                 @foreach (var user in FilteredAndSortedUsers)
                 {
                     <tr>
-                        <td>@(user.DateJoined == DateTime.MaxValue ? "-" : user.DateJoined.ToLocalTime().ToShortDateString())</td>
+                        <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToShortDateString())</td>
                         <td>@user.UserName</td>
                         <td>@user.Email</td>
                         <td class="@(user.Balance >= 0 ? "text-success" : "text-danger") fw-bold">
@@ -162,13 +163,20 @@ else
     private bool hasAccess = false;
     private bool isLoading = true;
     private string? successMessage;
-    
     // SignalR Connection
     private HubConnection? hubConnection;
 
     // Sorting state
     private string sortColumn = "DateJoined";
     private bool sortAscending = true;
+
+    // Timezone Logic
+    private int TimezoneOffset { get; set; }
+    private DateTime ToUserLocal(DateTime utcDate)
+    {
+        if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
+        return utcDate.AddMinutes(-TimezoneOffset);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -185,23 +193,31 @@ else
         }
 
         if (!hasAccess) return;
-
         // --- SignalR Setup ---
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
-
         hubConnection.On("ReceiveUserRegistration", async () =>
         {
             await RefreshData();
         });
-
         await hubConnection.StartAsync();
         await hubConnection.SendAsync("JoinAdminGroup");
         // ---------------------
 
         await LoadData(context);
         isLoading = false;
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && hasAccess)
+        {
+            try {
+                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                StateHasChanged();
+            } catch { }
+        }
     }
 
     // Helper to refresh data when event is received
@@ -220,7 +236,6 @@ else
 
         allUsersVM = new List<UserViewModel>();
         pendingUsersVM = new List<UserViewModel>();
-
         foreach (var u in users)
         {
             var userBets = bets.Where(b => b.UserId == u.Id).ToList();
@@ -239,18 +254,26 @@ else
                 b.Status == "Pending" || 
                 (b.Status == "Approved" && b.Outcome != "Void")
             ).Sum(b => (decimal)(b.AmountNOK ?? 0));
-
             var balance = totalDeposits - totalWithdrawals - liability + winnings;
-            var firstBet = userBets.OrderBy(b => b.CreatedAt).FirstOrDefault()?.CreatedAt;
-            var firstTrans = userTrans.OrderBy(t => t.Date).FirstOrDefault()?.Date;
             
-            DateTime dateJoined = DateTime.MaxValue;
-            if (firstBet.HasValue && firstTrans.HasValue)
-                dateJoined = firstBet.Value < firstTrans.Value ? firstBet.Value : firstTrans.Value;
-            else if (firstBet.HasValue)
-                dateJoined = firstBet.Value;
-            else if (firstTrans.HasValue)
-                dateJoined = firstTrans.Value;
+            // --- FIX: Use CreatedAt property (Fix from turn 1) ---
+            DateTime dateJoined = u.CreatedAt;
+
+            if (dateJoined == DateTime.MinValue)
+            {
+                 // Fallback calculation for legacy users
+                var firstBet = userBets.OrderBy(b => b.CreatedAt).FirstOrDefault()?.CreatedAt;
+                var firstTrans = userTrans.OrderBy(t => t.Date).FirstOrDefault()?.Date;
+                
+                if (firstBet.HasValue && firstTrans.HasValue)
+                    dateJoined = firstBet.Value < firstTrans.Value ? firstBet.Value : firstTrans.Value;
+                else if (firstBet.HasValue)
+                    dateJoined = firstBet.Value;
+                else if (firstTrans.HasValue)
+                    dateJoined = firstTrans.Value;
+                else
+                    dateJoined = DateTime.MaxValue;
+            }
 
             var vm = new UserViewModel
             {
@@ -264,7 +287,6 @@ else
                 LifetimeProfit = lifetimeProfit,
                 DateJoined = dateJoined
             };
-
             if (u.EmailConfirmed)
             {
                 allUsersVM.Add(vm);
@@ -286,7 +308,6 @@ else
             user.EmailConfirmed = true;
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var adminName = authState.User.Identity?.Name ?? "System";
-            
             context.AuditLogs.Add(new AuditLog 
             {
                 Action = "Approve Registration",
@@ -295,7 +316,6 @@ else
                 Details = "User approved by admin.",
                 Timestamp = DateTime.UtcNow
             });
-
             await context.SaveChangesAsync();
             await LoadData(context); 
             
@@ -316,7 +336,6 @@ else
             
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var adminName = authState.User.Identity?.Name ?? "System";
-            
             context.AuditLogs.Add(new AuditLog 
             {
                 Action = "Reject Registration",
@@ -325,7 +344,6 @@ else
                 Details = "User rejected and deleted by admin.",
                 Timestamp = DateTime.UtcNow
             });
-
             await context.SaveChangesAsync();
             await LoadData(context); 
             

@@ -20,7 +20,8 @@
             @if (showDiscordWarning)
             {
                 <div class="alert alert-warning">
-                    For you to get notified when your bet is Approved/Rejected and notified when a bet is Won or Lost, you need to save your Discord client ID to your profile. <a href="Account/Manage">Click here to learn how to do this</a>.
+                    For you to get notified when your bet is Approved/Rejected and notified when a bet is Won or Lost, you need to save your Discord client ID to your profile.
+                    <a href="Account/Manage">Click here to learn how to do this</a>.
                 </div>
             }
             @Body
@@ -36,7 +37,7 @@
 
 @code {
     private bool showDiscordWarning = false;
-
+    
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
