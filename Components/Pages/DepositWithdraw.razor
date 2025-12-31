@@ -48,7 +48,8 @@
                     </p>
                     <h5 class="text-center my-4">abc@gmail.com</h5>
                     <p class="text-muted small">
-                        Please include your Username in the transaction note. Your balance will be updated once the admin confirms the receipt.
+                        Please include your Username in the transaction note.
+                        Your balance will be updated once the admin confirms the receipt.
                     </p>
                 </div>
             </div>
@@ -92,7 +93,7 @@
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
                 <tr>
-                    <th>Date</th>
+                    <th>Last Updated</th>
                     <th>Type</th>
                     <th>Platform</th>
                     <th>Amount</th>
@@ -107,7 +108,7 @@
                 @foreach (var t in myTransactions)
                 {
                     <tr>
-                        <td>@ToUserLocal(t.Date).ToString("g")</td>
+                        <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
                         <td>
                             <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
                                 @t.Type
@@ -145,14 +146,19 @@
     private bool IsSubmitting = false;
     private string? ErrorMessage;
     private string? SuccessMessage;
-    
     private int transPage = 1;
     private bool hasMoreTrans = false;
     private int totalTransactions = 0;
     private const int PageSize = 20;
 
     private int TimezoneOffset { get; set; }
-    private DateTime ToUserLocal(DateTime utcDate) => utcDate.AddMinutes(-TimezoneOffset);
+
+    // --- FIX: Safely handle default dates to prevent crash ---
+    private DateTime ToUserLocal(DateTime utcDate)
+    {
+        if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
+        return utcDate.AddMinutes(-TimezoneOffset);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -181,31 +187,29 @@
     private async Task LoadData()
     {
         using var context = DbFactory.CreateDbContext();
-        
         var totalDeposits = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
-        
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
             .ToListAsync();
         var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-
         var liability = await context.Bets
             .Where(b => b.UserId == userId && 
                        (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-
+        
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
 
         totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
+        
         myTransactions = await context.Transactions
             .Where(t => t.UserId == userId)
-            .OrderByDescending(t => t.Date)
+            .OrderByDescending(t => t.UpdatedAt)
             .Skip((transPage - 1) * PageSize)
             .Take(PageSize)
             .AsNoTracking()
@@ -236,10 +240,9 @@
         try 
         {
             using var context = DbFactory.CreateDbContext();
-            
             var auth = await AuthState.GetAuthenticationStateAsync();
             var userName = auth.User.Identity?.Name ?? "Unknown";
-
+            
             var transaction = new Transaction
             {
                 UserId = userId,
@@ -248,18 +251,18 @@
                 AmountNOK = withdrawRequest.AmountNOK,
                 Platform = withdrawRequest.Platform,
                 Date = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
                 Status = "Pending"
             };
 
             context.Transactions.Add(transaction);
             await context.SaveChangesAsync();
 
-            // NOTIFY ADMINS
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveUpdate", "New withdrawal request");
-
+            
             SuccessMessage = "Withdrawal request submitted successfully. Waiting for admin approval.";
             withdrawRequest.AmountNOK = 0; 
-            await LoadData(); 
+            await LoadData();
         }
         catch (Exception ex)
         {

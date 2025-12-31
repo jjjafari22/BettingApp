@@ -86,7 +86,7 @@
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
                 <tr>
-                    <th>Date</th>
+                    <th>Last Updated</th>
                     <th>Bet Amount</th>
                     <th>Odds</th>
                     <th>Potential Payout</th>
@@ -100,7 +100,7 @@
                 @foreach (var bet in myBets)
                 {
                     <tr class="@GetRowClass(bet)">
-                        <td>@ToUserLocal(bet.CreatedAt).ToString("g")</td>
+                        <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                         <td>@(bet.AmountNOK?.ToString("N0") ?? "0") kr</td>
                         <td>@bet.Odds.ToString("N2")</td>
                         <td>@bet.PotentialPayout.ToString("N0") kr</td>
@@ -183,10 +183,15 @@
     private int totalBets = 0; 
 
     private const int PageSize = 20;
-
     // Timezone State
     private int TimezoneOffset { get; set; }
-    private DateTime ToUserLocal(DateTime utcDate) => utcDate.AddMinutes(-TimezoneOffset);
+
+    // --- FIX: Safely handle default dates to prevent crash ---
+    private DateTime ToUserLocal(DateTime utcDate)
+    {
+        if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
+        return utcDate.AddMinutes(-TimezoneOffset);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -202,6 +207,7 @@
                 var user = await context.Users.AsNoTracking()
                     .Select(u => new { u.Id, u.IsAdmin }) 
                     .FirstOrDefaultAsync(u => u.Id == userId);
+
                 if (user != null && user.IsAdmin)
                 {
                     Nav.NavigateTo("/admin");
@@ -260,26 +266,22 @@
             CreditLimit = user.CreditLimit;
         }
 
-        // Updated balance calculation to filter out Rejected withdrawals (Pending count as liability)
         var totalDeposits = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
-            
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
-
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
             .ToListAsync();
         var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-
         var liability = await context.Bets
             .Where(b => b.UserId == userId && 
                        (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-
+            
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
 
@@ -293,7 +295,7 @@
         
         myBets = await context.Bets
             .Where(b => b.UserId == userId)
-            .OrderByDescending(b => b.CreatedAt)
+            .OrderByDescending(b => b.UpdatedAt) 
             .Skip((betsPage - 1) * PageSize)
             .Take(PageSize)
             .AsNoTracking()
@@ -321,6 +323,7 @@
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
+
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
             await LoadData();
@@ -371,6 +374,7 @@
             newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
             newBet.Status = "Pending";
             newBet.CreatedAt = DateTime.UtcNow;
+            newBet.UpdatedAt = DateTime.UtcNow;
 
             using var context = DbFactory.CreateDbContext(); 
             context.Bets.Add(newBet);
@@ -378,7 +382,7 @@
 
             await DiscordService.NotifyAdminNewPickAsync(newBet);
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
-
+            
             SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
@@ -400,8 +404,8 @@
     private async Task CancelBet(Bet bet)
     {
         if (bet.Status != "Pending") return;
-
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this bet?");
+
         if (confirmed)
         {
             try
@@ -412,6 +416,8 @@
                 if (dbBet != null && dbBet.UserId == userId && dbBet.Status == "Pending")
                 {
                     dbBet.Status = "Cancelled";
+                    dbBet.UpdatedAt = DateTime.UtcNow;
+                    
                     await context.SaveChangesAsync();
 
                     await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"Pick cancelled by {dbBet.UserName}");

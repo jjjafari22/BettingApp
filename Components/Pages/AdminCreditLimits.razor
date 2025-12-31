@@ -5,6 +5,7 @@
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
 
 <h3>User Credit Limits</h3>
@@ -42,6 +43,7 @@ else
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
                 <tr>
+                    <th>Last Updated</th>
                     <th>User</th>
                     <th>Email</th>
                     <th>Current Credit Limit (NOK)</th>
@@ -52,10 +54,12 @@ else
                 @foreach (var user in FilteredUsers)
                 {
                     <tr>
+                        <td>@ToUserLocal(user.UpdatedAt).ToString("g")</td>
                         <td>@user.UserName</td>
                         <td>@user.Email</td>
                         <td>
-                            <input type="number" class="form-control form-control-sm" style="width: 150px;" @bind="user.CreditLimit" step="100" />
+                            <input type="number" class="form-control form-control-sm" style="width: 150px;"
+                                   @bind="user.CreditLimit" step="100" />
                         </td>
                         <td>
                             <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
@@ -75,6 +79,8 @@ else
     private bool isAdmin = false;
     private string? successMessage; 
     private string? currentAdminName;
+    private int TimezoneOffset { get; set; }
+
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
             ? users ?? new List<ApplicationUser>() 
@@ -102,12 +108,31 @@ else
             await LoadUsers();
         }
     }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && isAdmin)
+        {
+            try {
+                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                StateHasChanged();
+            } catch { }
+        }
+    }
+    
+    private DateTime ToUserLocal(DateTime utcDate)
+    {
+        if (utcDate == DateTime.MinValue) return utcDate;
+        return utcDate.AddMinutes(-TimezoneOffset);
+    }
 
     private async Task LoadUsers()
     {
         using var context = DbFactory.CreateDbContext();
+        // Sort by UpdatedAt descending to show most recently modified users first
         users = await context.Users
             .Where(u => !u.IsAdmin)
+            .OrderByDescending(u => u.UpdatedAt)
             .ToListAsync();
     }
 
@@ -120,6 +145,7 @@ else
         {
             var oldLimit = dbUser.CreditLimit;
             dbUser.CreditLimit = userToUpdate.CreditLimit;
+            dbUser.UpdatedAt = DateTime.UtcNow; // Update timestamp
 
             context.AuditLogs.Add(new AuditLog
             {
@@ -129,8 +155,12 @@ else
                 Details = $"Old: {oldLimit}, New: {userToUpdate.CreditLimit}"
             });
             await context.SaveChangesAsync();
-            // UPDATED: Persistent message (No Task.Delay)
+
             successMessage = $"Credit limit updated for {userToUpdate.UserName}!";
+            
+            // Reload list to reflect new sort order if needed, or just update local
+            // To keep UI stable, we might not want to re-sort immediately, but let's update the timestamp locally for display
+            userToUpdate.UpdatedAt = DateTime.UtcNow;
             StateHasChanged();
         }
     }

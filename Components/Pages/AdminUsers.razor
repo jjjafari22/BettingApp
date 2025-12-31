@@ -92,8 +92,8 @@ else
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
                 <tr>
-                    <th style="cursor: pointer;" @onclick='() => Sort("DateJoined")'>
-                        Date Joined @GetSortIcon("DateJoined")
+                    <th style="cursor: pointer;" @onclick='() => Sort("LastActive")'>
+                        Last Active @GetSortIcon("LastActive")
                     </th>
                     <th style="cursor: pointer;" @onclick='() => Sort("UserName")'>
                         User @GetSortIcon("UserName")
@@ -122,7 +122,7 @@ else
                 @foreach (var user in FilteredAndSortedUsers)
                 {
                     <tr>
-                        <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToShortDateString())</td>
+                        <td>@ToUserLocal(user.LastActive).ToString("g")</td>
                         <td>@user.UserName</td>
                         <td>@user.Email</td>
                         <td class="@(user.Balance >= 0 ? "text-success" : "text-danger") fw-bold">
@@ -166,9 +166,9 @@ else
     // SignalR Connection
     private HubConnection? hubConnection;
 
-    // Sorting state
-    private string sortColumn = "DateJoined";
-    private bool sortAscending = true;
+    // Sorting state - DEFAULT TO LAST ACTIVE
+    private string sortColumn = "LastActive";
+    private bool sortAscending = false; // Descending by default for dates
 
     // Timezone Logic
     private int TimezoneOffset { get; set; }
@@ -193,14 +193,20 @@ else
         }
 
         if (!hasAccess) return;
+
         // --- SignalR Setup ---
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
+
         hubConnection.On("ReceiveUserRegistration", async () =>
         {
             await RefreshData();
         });
+        
+        // Also listen for general updates (bets/transactions) to refresh sorting
+        hubConnection.On<string>("ReceiveAdminNotification", async (msg) => { await RefreshData(); });
+        
         await hubConnection.StartAsync();
         await hubConnection.SendAsync("JoinAdminGroup");
         // ---------------------
@@ -236,6 +242,7 @@ else
 
         allUsersVM = new List<UserViewModel>();
         pendingUsersVM = new List<UserViewModel>();
+
         foreach (var u in users)
         {
             var userBets = bets.Where(b => b.UserId == u.Id).ToList();
@@ -254,8 +261,9 @@ else
                 b.Status == "Pending" || 
                 (b.Status == "Approved" && b.Outcome != "Void")
             ).Sum(b => (decimal)(b.AmountNOK ?? 0));
+
             var balance = totalDeposits - totalWithdrawals - liability + winnings;
-            // --- FIX: Use CreatedAt property (Fix from turn 1) ---
+
             DateTime dateJoined = u.CreatedAt;
             if (dateJoined == DateTime.MinValue)
             {
@@ -273,6 +281,15 @@ else
                     dateJoined = DateTime.MaxValue;
             }
 
+            // --- CALCULATE LAST ACTIVE DATE ---
+            // Max of: User Profile Update, Last Bet Update, Last Transaction Update
+            var lastBetDate = userBets.Any() ? userBets.Max(b => b.UpdatedAt) : DateTime.MinValue;
+            var lastTransDate = userTrans.Any() ? userTrans.Max(t => t.UpdatedAt) : DateTime.MinValue;
+            var userUpdateDate = u.UpdatedAt == DateTime.MinValue ? u.CreatedAt : u.UpdatedAt; // Fallback
+
+            // Find the latest of the three
+            var lastActive = new[] { userUpdateDate, lastBetDate, lastTransDate }.Max();
+
             var vm = new UserViewModel
             {
                 Id = u.Id,
@@ -283,8 +300,10 @@ else
                 Balance = balance,
                 AvailableCredit = balance + u.CreditLimit,
                 LifetimeProfit = lifetimeProfit,
-                DateJoined = dateJoined
+                DateJoined = dateJoined,
+                LastActive = lastActive // NEW PROPERTY
             };
+
             if (u.EmailConfirmed)
             {
                 allUsersVM.Add(vm);
@@ -304,8 +323,11 @@ else
         if (user != null)
         {
             user.EmailConfirmed = true;
+            user.UpdatedAt = DateTime.UtcNow; // Update timestamp
+
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var adminName = authState.User.Identity?.Name ?? "System";
+
             context.AuditLogs.Add(new AuditLog 
             {
                 Action = "Approve Registration",
@@ -314,6 +336,7 @@ else
                 Details = "User approved by admin.",
                 Timestamp = DateTime.UtcNow
             });
+
             await context.SaveChangesAsync();
             await LoadData(context); 
             
@@ -334,6 +357,7 @@ else
             
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var adminName = authState.User.Identity?.Name ?? "System";
+
             context.AuditLogs.Add(new AuditLog 
             {
                 Action = "Reject Registration",
@@ -342,6 +366,7 @@ else
                 Details = "User rejected and deleted by admin.",
                 Timestamp = DateTime.UtcNow
             });
+
             await context.SaveChangesAsync();
             await LoadData(context); 
             
@@ -359,7 +384,12 @@ else
         else
         {
             sortColumn = column;
-            sortAscending = true;
+            // Default sort direction logic: Dates/Numbers desc, Text asc
+            sortAscending = column switch 
+            {
+                "LastActive" or "DateJoined" or "Balance" or "LifetimeProfit" => false,
+                _ => true
+            };
         }
     }
 
@@ -382,6 +412,7 @@ else
         get
         {
             var query = allUsersVM.AsEnumerable();
+
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query = query.Where(u => 
@@ -391,6 +422,7 @@ else
 
             query = sortColumn switch
             {
+                "LastActive" => sortAscending ? query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
                 "DateJoined" => sortAscending ? query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
                 "UserName" => sortAscending ? query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
                 "Email" => sortAscending ? query.OrderBy(u => u.Email) : query.OrderByDescending(u => u.Email),
@@ -401,6 +433,7 @@ else
                 "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
                 _ => query
             };
+
             return query;
         }
     }
@@ -416,5 +449,6 @@ else
         public decimal AvailableCredit { get; set; }
         public decimal LifetimeProfit { get; set; }
         public DateTime DateJoined { get; set; }
+        public DateTime LastActive { get; set; } // NEW
     }
 }

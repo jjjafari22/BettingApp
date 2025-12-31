@@ -16,4 +16,7 @@ public class ApplicationUser : IdentityUser
     // --- NEW: Personal Info ---
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
+
+    // --- NEW: Track when the user profile was last updated ---
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

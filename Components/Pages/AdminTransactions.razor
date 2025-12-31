@@ -15,7 +15,6 @@
 
 <h3>Manage Transactions</h3>
 
-@* --- PERSISTENT NOTIFICATION AREA --- *@
 @if (successMessage != null)
 {
     <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
@@ -32,7 +31,6 @@
     </div>
 }
 
-@* --- PENDING WITHDRAWS SECTION --- *@
 <div class="card border-warning mb-4">
     <div class="card-header bg-warning text-dark">
         <strong>Pending Withdraw Requests</strong>
@@ -110,7 +108,7 @@
                     <div class="col-md-2 mb-3">
                         <label>Amount (NOK)</label>
                         <input type="number" class="form-control" @bind="newTrans.AmountNOK" />
-                     </div>
+                    </div>
 
                     <div class="col-md-2 mb-3 d-flex align-items-end">
                         <button class="btn btn-primary w-100" @onclick="AddTransaction">Add</button>
@@ -126,7 +124,7 @@
     <table class="table table-sm table-striped table-hover align-middle text-nowrap">
         <thead class="table-dark">
             <tr>
-                <th>Date</th>
+                <th>Last Updated</th>
                 <th>User</th>
                 <th>Type</th>
                 <th>Platform</th>
@@ -138,7 +136,7 @@
             @foreach (var t in allTransactions)
             {
                 <tr>
-                    <td>@ToUserLocal(t.Date).ToString("g")</td>
+                    <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
                     <td>@t.UserName</td>
                     <td>
                         <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
@@ -170,7 +168,13 @@
     private HubConnection? hubConnection;
 
     private int TimezoneOffset { get; set; }
-    private DateTime ToUserLocal(DateTime utcDate) => utcDate.AddMinutes(-TimezoneOffset);
+
+    // --- FIX: Safely handle default dates to prevent crash ---
+    private DateTime ToUserLocal(DateTime utcDate)
+    {
+        if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
+        return utcDate.AddMinutes(-TimezoneOffset);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -220,24 +224,22 @@
             await LoadTransactions(context);
             await InvokeAsync(StateHasChanged);
         });
-        
+
         hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
         {
-            // Specifically listen for admin notifications as well
             using var context = DbFactory.CreateDbContext();
             await LoadTransactions(context);
             await InvokeAsync(StateHasChanged);
         });
 
         await hubConnection.StartAsync();
-        // IMPORTANT: Join the "Admins" group
         await hubConnection.InvokeAsync("JoinAdminGroup");
     }
 
     private async Task LoadTransactions(ApplicationDbContext context)
     {
         allTransactions = await context.Transactions
-            .OrderByDescending(t => t.Date)
+            .OrderByDescending(t => t.UpdatedAt)
             .AsNoTracking()
             .ToListAsync();
             
@@ -255,7 +257,6 @@
 
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
             $"Are you sure that you have actually completed the actual withdraw and sent {t.AmountNOK} kr to {t.UserName}?");
-            
         if (!confirmed) return;
 
         using var context = DbFactory.CreateDbContext();
@@ -271,7 +272,8 @@
         if (dbTrans != null)
         {
             dbTrans.Status = "Completed";
-            
+            dbTrans.UpdatedAt = DateTime.UtcNow;
+
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -297,8 +299,9 @@
         var dbTrans = await context.Transactions.FindAsync(t.Id);
         if (dbTrans != null)
         {
-            dbTrans.Status = "Rejected"; 
-            
+            dbTrans.Status = "Rejected";
+            dbTrans.UpdatedAt = DateTime.UtcNow;
+
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -326,6 +329,7 @@
         var selectedUser = allUsers.FirstOrDefault(u => u.Id == newTrans.UserId);
         newTrans.UserName = selectedUser?.UserName ?? "Unknown";
         newTrans.Date = DateTime.UtcNow;
+        newTrans.UpdatedAt = DateTime.UtcNow;
         newTrans.Status = "Completed"; 
 
         context.Transactions.Add(newTrans);
@@ -366,7 +370,6 @@
             .Where(b => b.UserId == userId && 
                        (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-
         return totalDeposits - totalWithdrawals - liability + winnings;
     }
 

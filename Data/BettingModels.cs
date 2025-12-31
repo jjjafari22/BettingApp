@@ -22,6 +22,9 @@ namespace BettingApp.Data
         public string Status { get; set; } = "Pending";
         public string? Outcome { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        
+        // NEW FIELD: Tracks when the bet was last modified (settled, cancelled, etc.)
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
     public class Transaction
@@ -42,7 +45,9 @@ namespace BettingApp.Data
         
         public DateTime Date { get; set; } = DateTime.UtcNow;
 
-        // NEW FIELD
+        // NEW FIELD: Tracks when the transaction status changed
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
         public string Status { get; set; } = "Completed"; // Default to Completed
     }
 
