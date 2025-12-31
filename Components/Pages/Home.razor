@@ -160,60 +160,14 @@
             </button>
         </div>
     </div>
-
-    <h4 class="mt-5">My Transactions (@totalTransactions)</h4>
-    <div class="table-responsive">
-        <table class="table table-sm table-striped table-hover align-middle text-nowrap">
-            <thead class="table-dark">
-                <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Platform</th>
-                    <th>Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (myTransactions.Count == 0)
-                {
-                    <tr><td colspan="4" class="text-center text-muted">No transactions found.</td></tr>
-                }
-                @foreach (var t in myTransactions)
-                {
-                    <tr>
-                        <td>@ToUserLocal(t.Date).ToString("g")</td>
-                        <td>
-                            <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
-                                @t.Type
-                            </span>
-                        </td>
-                        <td>@t.Platform</td>
-                        <td>@t.AmountNOK.ToString("N0") kr</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-    
-    @* Pagination for Transactions *@
-    <div class="d-flex justify-content-between align-items-center mt-2 mb-5">
-        <button class="btn btn-outline-secondary btn-sm" @onclick="PrevTransPage" disabled="@(transPage <= 1)">
-            <i class="bi bi-arrow-left"></i> Previous
-        </button>
-        <span class="text-muted">Page @transPage</span>
-        <button class="btn btn-outline-secondary btn-sm" @onclick="NextTransPage" disabled="@(!hasMoreTrans)">
-            Next <i class="bi bi-arrow-right"></i>
-        </button>
-    </div>
 </div>
 
 @code {
     private Bet newBet { get; set; } = new() { Odds = 1.0m }; 
     private List<Bet> myBets = new();
-    private List<Transaction> myTransactions = new();
     private decimal CreditLimit = 0;
     private decimal Balance = 0;
     private decimal AvailableCredit = 1000;
-
     private IBrowserFile? uploadedFile;
     private HubConnection? hubConnection;
     private string userId = string.Empty;
@@ -228,9 +182,6 @@
     private bool hasMoreBets = false;
     private int totalBets = 0; 
 
-    private int transPage = 1;
-    private bool hasMoreTrans = false;
-    private int totalTransactions = 0;
     private const int PageSize = 20;
 
     // Timezone State
@@ -251,7 +202,6 @@
                 var user = await context.Users.AsNoTracking()
                     .Select(u => new { u.Id, u.IsAdmin }) 
                     .FirstOrDefaultAsync(u => u.Id == userId);
-                
                 if (user != null && user.IsAdmin)
                 {
                     Nav.NavigateTo("/admin");
@@ -305,37 +255,35 @@
         using var context = DbFactory.CreateDbContext();
         var user = await context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
-
         if (user != null)
         {
             CreditLimit = user.CreditLimit;
         }
 
+        // Updated balance calculation to filter out Rejected withdrawals (Pending count as liability)
         var totalDeposits = await context.Transactions
-            .Where(t => t.UserId == userId && t.Type == "Deposit")
-            .SumAsync(t => t.AmountNOK);
-        
-        var totalWithdrawals = await context.Transactions
-            .Where(t => t.UserId == userId && t.Type == "Withdrawal")
+            .Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
             
+        var totalWithdrawals = await context.Transactions
+            .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
+            .SumAsync(t => t.AmountNOK);
+
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
             .ToListAsync();
-            
         var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-        
+
         var liability = await context.Bets
             .Where(b => b.UserId == userId && 
                        (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-        
+
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
 
         await LoadBetsList();
-        await LoadTransactionsList();
     }
     
     private async Task LoadBetsList()
@@ -350,26 +298,9 @@
             .Take(PageSize)
             .AsNoTracking()
             .ToListAsync();
-            
         hasMoreBets = totalBets > (betsPage * PageSize);
     }
     
-    private async Task LoadTransactionsList()
-    {
-        using var context = DbFactory.CreateDbContext();
-        totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
-        
-        myTransactions = await context.Transactions
-            .Where(t => t.UserId == userId)
-            .OrderByDescending(t => t.Date)
-            .Skip((transPage - 1) * PageSize)
-            .Take(PageSize)
-            .AsNoTracking()
-            .ToListAsync();
-            
-        hasMoreTrans = totalTransactions > (transPage * PageSize);
-    }
-
     private async Task NextBetsPage()
     {
         betsPage++;
@@ -385,33 +316,16 @@
         }
     }
 
-    private async Task NextTransPage()
-    {
-        transPage++;
-        await LoadTransactionsList();
-    }
-
-    private async Task PrevTransPage()
-    {
-        if (transPage > 1)
-        {
-            transPage--;
-            await LoadTransactionsList();
-        }
-    }
-
     private async Task SetupSignalR()
     {
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
-            
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
-        
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }

@@ -28,6 +28,12 @@
                 <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
                     <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
                 </NavLink>
+                
+                @* FIX: Added d-flex and icon alignment styles *@
+                <NavLink class="nav-link d-flex align-items-center" href="deposit-withdraw">
+                    <span class="bi bi-wallet2" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
+                    <span>Deposit/Withdrawal</span>
+                </NavLink>
             }
         </div>
         <AuthorizeView>
@@ -35,17 +41,13 @@
                 @if (isAdmin)
                 {
                     <div class="nav-item px-3">
-                        @* FIX: Added 'd-flex align-items-center' to the link *@
                         <NavLink class="nav-link d-flex align-items-center" href="admin/transactions">
-                            @* FIX: Added 'line-height: 1;' and 'vertical-align: text-bottom;' to force alignment *@
                             <span class="bi bi-arrow-left-right" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
                             <span>Transactions</span>
                         </NavLink>
                     </div>
                     <div class="nav-item px-3">
-                        @* FIX: Added 'd-flex align-items-center' to the link *@
                         <NavLink class="nav-link d-flex align-items-center" href="admin/creditlimits">
-                            @* FIX: Added 'line-height: 1;' and 'vertical-align: text-bottom;' to force alignment *@
                             <span class="bi bi-cash-coin" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
                             <span>Credit Limits</span>
                         </NavLink>
@@ -62,7 +64,6 @@
                             <span>Admin Settings</span>
                         </NavLink>
                     </div>
-                    @* NEW LINK *@
                     <div class="nav-item px-3">
                         <NavLink class="nav-link d-flex align-items-center" href="admin/auditlogs">
                             <span class="bi bi-journal-text" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 

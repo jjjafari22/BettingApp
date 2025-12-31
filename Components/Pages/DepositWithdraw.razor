@@ -1,0 +1,296 @@
+@page "/deposit-withdraw"
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.AspNetCore.SignalR
+@using BettingApp.Hubs
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthState
+@inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
+@inject IHubContext<BetHub> HubContext
+@attribute [Authorize]
+
+<PageTitle>Deposit / Withdrawal</PageTitle>
+
+@if (IsLoading)
+{
+    <div class="alert alert-info">Loading...</div>
+}
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show">
+        @ErrorMessage
+        <button type="button" class="btn-close" @onclick="() => ErrorMessage = null"></button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(SuccessMessage))
+{
+    <div class="alert alert-success alert-dismissible fade show">
+        @SuccessMessage
+        <button type="button" class="btn-close" @onclick="() => SuccessMessage = null"></button>
+    </div>
+}
+
+<div class="container mt-4">
+    <div class="row">
+        @* Deposit Section *@
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">Deposit</div>
+                <div class="card-body">
+                    <p class="card-text">
+                        To deposit money, please deposit your desired amount via PayPal to:
+                    </p>
+                    <h5 class="text-center my-4">abc@gmail.com</h5>
+                    <p class="text-muted small">
+                        Please include your Username in the transaction note. Your balance will be updated once the admin confirms the receipt.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        @* Withdrawal Section *@
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">Withdrawal Request</div>
+                <div class="card-body">
+                    <p>Current Balance: <strong>@Balance.ToString("N0") kr</strong></p>
+                    
+                    <EditForm Model="@withdrawRequest" OnValidSubmit="RequestWithdrawal" FormName="WithdrawForm">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Platform</label>
+                            <InputSelect @bind-Value="withdrawRequest.Platform" class="form-select">
+                                <option value="PayPal">PayPal</option>
+                            </InputSelect>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Amount (NOK)</label>
+                            <InputNumber @bind-Value="withdrawRequest.AmountNOK" class="form-control" />
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100" disabled="@IsSubmitting">
+                            @if (IsSubmitting) { <span class="spinner-border spinner-border-sm"></span> }
+                            else { <span>Request Withdraw</span> }
+                        </button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Transactions History *@
+    <h4 class="mt-4">My Transactions (@totalTransactions)</h4>
+    <div class="table-responsive">
+        <table class="table table-sm table-striped table-hover align-middle text-nowrap">
+            <thead class="table-dark">
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Platform</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (myTransactions.Count == 0)
+                {
+                    <tr><td colspan="5" class="text-center text-muted">No transactions found.</td></tr>
+                }
+                @foreach (var t in myTransactions)
+                {
+                    <tr>
+                        <td>@ToUserLocal(t.Date).ToString("g")</td>
+                        <td>
+                            <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
+                                @t.Type
+                            </span>
+                        </td>
+                        <td>@t.Platform</td>
+                        <td>@t.AmountNOK.ToString("N0") kr</td>
+                         <td>
+                            <span class="badge @GetStatusBadge(t.Status)">@t.Status</span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    
+    @* Pagination for Transactions *@
+    <div class="d-flex justify-content-between align-items-center mt-2 mb-5">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="PrevTransPage" disabled="@(transPage <= 1)">
+            <i class="bi bi-arrow-left"></i> Previous
+        </button>
+        <span class="text-muted">Page @transPage</span>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="NextTransPage" disabled="@(!hasMoreTrans)">
+            Next <i class="bi bi-arrow-right"></i>
+        </button>
+    </div>
+</div>
+
+@code {
+    private Transaction withdrawRequest = new() { Platform = "PayPal", Type = "Withdrawal" };
+    private List<Transaction> myTransactions = new();
+    private decimal Balance = 0;
+    private string userId = string.Empty;
+    private bool IsLoading = true;
+    private bool IsSubmitting = false;
+    private string? ErrorMessage;
+    private string? SuccessMessage;
+    
+    private int transPage = 1;
+    private bool hasMoreTrans = false;
+    private int totalTransactions = 0;
+    private const int PageSize = 20;
+
+    private int TimezoneOffset { get; set; }
+    private DateTime ToUserLocal(DateTime utcDate) => utcDate.AddMinutes(-TimezoneOffset);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value ?? "";
+        
+        if (string.IsNullOrEmpty(userId))
+        {
+            Nav.NavigateTo("/Account/Login");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try {
+                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                await LoadData();
+            }
+            catch (Exception ex) { Console.WriteLine(ex); }
+            finally { IsLoading = false; StateHasChanged(); }
+        }
+    }
+
+    private async Task LoadData()
+    {
+        using var context = DbFactory.CreateDbContext();
+        
+        var totalDeposits = await context.Transactions
+            .Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected")
+            .SumAsync(t => t.AmountNOK);
+        var totalWithdrawals = await context.Transactions
+            .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
+            .SumAsync(t => t.AmountNOK);
+        
+        var winningBets = await context.Bets
+            .Where(b => b.UserId == userId && b.Outcome == "Won")
+            .Select(b => new { b.AmountNOK, b.Odds })
+            .ToListAsync();
+        var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+
+        var liability = await context.Bets
+            .Where(b => b.UserId == userId && 
+                       (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
+            .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
+
+        Balance = totalDeposits - totalWithdrawals - liability + winnings;
+
+        totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
+        myTransactions = await context.Transactions
+            .Where(t => t.UserId == userId)
+            .OrderByDescending(t => t.Date)
+            .Skip((transPage - 1) * PageSize)
+            .Take(PageSize)
+            .AsNoTracking()
+            .ToListAsync();
+        hasMoreTrans = totalTransactions > (transPage * PageSize);
+    }
+
+    private async Task RequestWithdrawal()
+    {
+        ErrorMessage = null;
+        SuccessMessage = null;
+        
+        await LoadData();
+
+        if (withdrawRequest.AmountNOK <= 0)
+        {
+            ErrorMessage = "Amount must be greater than 0.";
+            return;
+        }
+
+        if (withdrawRequest.AmountNOK > Balance)
+        {
+            ErrorMessage = "You cannot withdraw more than your current balance.";
+            return;
+        }
+
+        IsSubmitting = true;
+        try 
+        {
+            using var context = DbFactory.CreateDbContext();
+            
+            var auth = await AuthState.GetAuthenticationStateAsync();
+            var userName = auth.User.Identity?.Name ?? "Unknown";
+
+            var transaction = new Transaction
+            {
+                UserId = userId,
+                UserName = userName,
+                Type = "Withdrawal",
+                AmountNOK = withdrawRequest.AmountNOK,
+                Platform = withdrawRequest.Platform,
+                Date = DateTime.UtcNow,
+                Status = "Pending"
+            };
+
+            context.Transactions.Add(transaction);
+            await context.SaveChangesAsync();
+
+            // NOTIFY ADMINS
+            await HubContext.Clients.Group("Admins").SendAsync("ReceiveUpdate", "New withdrawal request");
+
+            SuccessMessage = "Withdrawal request submitted successfully. Waiting for admin approval.";
+            withdrawRequest.AmountNOK = 0; 
+            await LoadData(); 
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsSubmitting = false;
+        }
+    }
+
+    private async Task NextTransPage()
+    {
+        transPage++;
+        await LoadData();
+    }
+
+    private async Task PrevTransPage()
+    {
+        if (transPage > 1)
+        {
+            transPage--;
+            await LoadData();
+        }
+    }
+
+    private string GetStatusBadge(string status) => status switch
+    {
+        "Completed" => "bg-success",
+        "Pending" => "bg-warning text-dark",
+        "Rejected" => "bg-danger",
+        _ => "bg-secondary"
+    };
+}

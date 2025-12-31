@@ -41,6 +41,9 @@ namespace BettingApp.Data
         public string Platform { get; set; } = string.Empty;
         
         public DateTime Date { get; set; } = DateTime.UtcNow;
+
+        // NEW FIELD
+        public string Status { get; set; } = "Completed"; // Default to Completed
     }
 
     // NEW CLASS

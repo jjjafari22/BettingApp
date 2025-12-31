@@ -24,15 +24,68 @@
     </div>
 }
 
+@if (errorMessage != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i> @errorMessage
+        <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+    </div>
+}
+
+@* --- PENDING WITHDRAWS SECTION --- *@
+<div class="card border-warning mb-4">
+    <div class="card-header bg-warning text-dark">
+        <strong>Pending Withdraw Requests</strong>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>User</th>
+                        <th>Platform</th>
+                        <th>Amount</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (pendingWithdrawals.Count == 0)
+                    {
+                        <tr><td colspan="5" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
+                    }
+                    @foreach (var w in pendingWithdrawals)
+                    {
+                        <tr>
+                            <td>@ToUserLocal(w.Date).ToString("g")</td>
+                            <td>@w.UserName</td>
+                            <td>@w.Platform</td>
+                            <td><strong>@w.AmountNOK.ToString("N0") kr</strong></td>
+                            <td>
+                                <button class="btn btn-success btn-sm me-2" @onclick="() => ConfirmWithdraw(w)">
+                                    Confirm Payout
+                                </button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => RejectWithdraw(w)">
+                                    Reject
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-md-12 mb-4">
         <div class="card">
-             <div class="card-header bg-primary text-white">Add Transaction</div>
+             <div class="card-header bg-primary text-white">Add Transaction (Manual)</div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-3 mb-3">
                         <label>Select User</label>
-                        <select class="form-select" @bind="newTrans.UserId">
+                         <select class="form-select" @bind="newTrans.UserId">
                             <option value="">-- Select User --</option>
                             @foreach (var user in allUsers)
                             {
@@ -57,7 +110,7 @@
                     <div class="col-md-2 mb-3">
                         <label>Amount (NOK)</label>
                         <input type="number" class="form-control" @bind="newTrans.AmountNOK" />
-                    </div>
+                     </div>
 
                     <div class="col-md-2 mb-3 d-flex align-items-end">
                         <button class="btn btn-primary w-100" @onclick="AddTransaction">Add</button>
@@ -78,6 +131,7 @@
                 <th>Type</th>
                 <th>Platform</th>
                 <th>Amount</th>
+                <th>Status</th>
             </tr>
         </thead>
         <tbody>
@@ -93,12 +147,13 @@
                     </td>
                     <td>@t.Platform</td>
                     <td>@t.AmountNOK.ToString("N0") kr</td>
+                    <td>@t.Status</td>
                 </tr>
             }
             @if (allTransactions.Count == 0)
             {
-                <tr><td colspan="5" class="text-muted text-center">No transactions found.</td></tr>
-            }
+                <tr><td colspan="6" class="text-muted text-center">No transactions found.</td></tr>
+             }
         </tbody>
     </table>
 </div>
@@ -106,12 +161,14 @@
 @code {
     private List<ApplicationUser> allUsers = new();
     private List<Transaction> allTransactions = new();
-    private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow };
+    private List<Transaction> pendingWithdrawals = new();
+    private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow, Status = "Completed" };
     
     private string? successMessage;
+    private string? errorMessage;
     private string? currentAdminName;
+    private HubConnection? hubConnection;
 
-    // Timezone Logic
     private int TimezoneOffset { get; set; }
     private DateTime ToUserLocal(DateTime utcDate) => utcDate.AddMinutes(-TimezoneOffset);
 
@@ -145,9 +202,36 @@
         {
             try {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                await SetupSignalR();
                 StateHasChanged();
             } catch { }
         }
+    }
+
+    private async Task SetupSignalR()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/bethub"))
+            .Build();
+
+        hubConnection.On<string>("ReceiveUpdate", async (message) =>
+        {
+            using var context = DbFactory.CreateDbContext();
+            await LoadTransactions(context);
+            await InvokeAsync(StateHasChanged);
+        });
+        
+        hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
+        {
+            // Specifically listen for admin notifications as well
+            using var context = DbFactory.CreateDbContext();
+            await LoadTransactions(context);
+            await InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+        // IMPORTANT: Join the "Admins" group
+        await hubConnection.InvokeAsync("JoinAdminGroup");
     }
 
     private async Task LoadTransactions(ApplicationDbContext context)
@@ -156,6 +240,79 @@
             .OrderByDescending(t => t.Date)
             .AsNoTracking()
             .ToListAsync();
+            
+        pendingWithdrawals = await context.Transactions
+            .Where(t => t.Type == "Withdrawal" && t.Status == "Pending")
+            .OrderBy(t => t.Date)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+
+    private async Task ConfirmWithdraw(Transaction t)
+    {
+        successMessage = null;
+        errorMessage = null;
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"Are you sure that you have actually completed the actual withdraw and sent {t.AmountNOK} kr to {t.UserName}?");
+            
+        if (!confirmed) return;
+
+        using var context = DbFactory.CreateDbContext();
+        
+        var userBalance = await GetUserBalance(t.UserId, context);
+        if (userBalance < 0)
+        {
+            errorMessage = "WARNING: User balance is negative! This withdrawal may exceed available funds.";
+            return;
+        }
+
+        var dbTrans = await context.Transactions.FindAsync(t.Id);
+        if (dbTrans != null)
+        {
+            dbTrans.Status = "Completed";
+            
+            context.AuditLogs.Add(new AuditLog
+            {
+                AdminUserName = currentAdminName ?? "Unknown",
+                Action = "Confirmed Withdrawal",
+                TargetUserName = t.UserName,
+                Details = $"Amount: {t.AmountNOK}, Platform: {t.Platform}"
+            });
+            
+            await context.SaveChangesAsync();
+            await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal confirmed");
+            
+            successMessage = "Withdrawal confirmed.";
+            await LoadTransactions(context);
+        }
+    }
+
+    private async Task RejectWithdraw(Transaction t)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Reject this withdrawal request?");
+        if (!confirmed) return;
+
+        using var context = DbFactory.CreateDbContext();
+        var dbTrans = await context.Transactions.FindAsync(t.Id);
+        if (dbTrans != null)
+        {
+            dbTrans.Status = "Rejected"; 
+            
+            context.AuditLogs.Add(new AuditLog
+            {
+                AdminUserName = currentAdminName ?? "Unknown",
+                Action = "Rejected Withdrawal",
+                TargetUserName = t.UserName,
+                Details = $"Amount: {t.AmountNOK}, ID: {t.Id}"
+            });
+
+            await context.SaveChangesAsync();
+            await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal rejected");
+            
+            successMessage = "Withdrawal rejected.";
+            await LoadTransactions(context);
+        }
     }
 
     private async Task AddTransaction()
@@ -169,6 +326,7 @@
         var selectedUser = allUsers.FirstOrDefault(u => u.Id == newTrans.UserId);
         newTrans.UserName = selectedUser?.UserName ?? "Unknown";
         newTrans.Date = DateTime.UtcNow;
+        newTrans.Status = "Completed"; 
 
         context.Transactions.Add(newTrans);
         context.AuditLogs.Add(new AuditLog
@@ -184,8 +342,39 @@
         
         successMessage = "Transaction added successfully!";
         var type = newTrans.Type;
-        newTrans = new Transaction { Type = type, Date = DateTime.UtcNow };
+        newTrans = new Transaction { Type = type, Date = DateTime.UtcNow, Status = "Completed" };
         await LoadTransactions(context);
-        StateHasChanged();
+    }
+    
+    private async Task<decimal> GetUserBalance(string userId, ApplicationDbContext context)
+    {
+        var user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+        decimal creditLimit = user?.CreditLimit ?? 0;
+
+        var totalDeposits = await context.Transactions
+            .Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected")
+            .SumAsync(t => t.AmountNOK);
+        var totalWithdrawals = await context.Transactions
+            .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
+            .SumAsync(t => t.AmountNOK);
+        var winningBets = await context.Bets
+            .Where(b => b.UserId == userId && b.Outcome == "Won")
+            .Select(b => new { b.AmountNOK, b.Odds })
+            .ToListAsync();
+        var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+        var liability = await context.Bets
+            .Where(b => b.UserId == userId && 
+                       (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
+            .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
+
+        return totalDeposits - totalWithdrawals - liability + winnings;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
     }
 }
