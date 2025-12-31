@@ -17,16 +17,102 @@
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 
-@* ... [Keep CSS, Modals, and Dashboard Layout exactly as they are] ... *@
 <style>
-    /* ... existing styles ... */
-    .modal { overscroll-behavior: contain; outline: none; }
-    .review-modal-content { max-height: 90vh; height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
-    .review-modal-body { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; background-color: #212529; overflow-y: auto; }
-    .review-image-container { flex-grow: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 1rem; overflow: hidden; }
-    .review-image { max-height: 100%; max-width: 100%; object-fit: contain; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-    .review-controls-container { flex-shrink: 0; background-color: #f8f9fa; border-top: 1px solid #dee2e6; padding: 1rem; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index: 10; }
-    .action-btn { width: 100%; display: block; margin: 0 auto; font-weight: bold; font-size: inherit; white-space: nowrap; }
+    /* Prevent background scrolling when modal is open */
+    .modal { 
+        overscroll-behavior: contain; 
+        outline: none; 
+    }
+    
+    .review-modal-content { 
+        max-height: 90vh; 
+        height: 90vh; 
+        display: flex; 
+        flex-direction: column; 
+        overflow: hidden; 
+        overscroll-behavior: contain; /* Stop scroll chaining */
+    }
+    
+    .review-modal-body { 
+        display: flex; 
+        flex-direction: column; 
+        flex: 1; 
+        min-height: 0; 
+        padding: 0; 
+        background-color: #212529; 
+        overflow-y: auto; 
+        overscroll-behavior: contain; /* Stop scroll chaining */
+        position: relative;
+    }
+    
+    .review-image-container { 
+        flex-grow: 1; 
+        min-height: 0; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        padding: 1rem; 
+        overflow: hidden; 
+        position: relative; /* Needed for absolute arrows */
+    }
+    
+    .review-image { 
+        max-height: 100%; 
+        max-width: 100%; 
+        object-fit: contain; 
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
+    }
+    
+    /* Navigation Arrows Styles */
+    .nav-arrow {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 20;
+        background-color: rgba(0, 0, 0, 0.4);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .nav-arrow:hover:not(:disabled) {
+        background-color: rgba(0, 0, 0, 0.7);
+    }
+    
+    .nav-arrow:disabled {
+        opacity: 0; /* Hide if disabled */
+        pointer-events: none;
+    }
+    
+    .nav-arrow-left { left: 10px; }
+    .nav-arrow-right { right: 10px; }
+
+    .review-controls-container { 
+        flex-shrink: 0; 
+        background-color: #f8f9fa; 
+        border-top: 1px solid #dee2e6; 
+        padding: 1rem; 
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.05); 
+        z-index: 10; 
+    }
+    
+    .action-btn { 
+        width: 100%; 
+        display: block; 
+        margin: 0 auto; 
+        font-weight: bold; 
+        font-size: inherit; 
+        white-space: nowrap; 
+    }
+    
     @@media (min-width: 992px) {
         .action-btn { width: 80%; }
         .review-modal-content { max-height: 95vh; height: 95vh; margin: 0.5rem; }
@@ -52,21 +138,35 @@
     </div>
 }
 
-@* ... [Review Bet Modal - Kept same] ... *@
+@* --- Review Bet Modal (UPDATED) --- *@
 @if (reviewingBetModel != null)
 {
-    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.85);" tabindex="-1" role="dialog" @ref="reviewModalRef" @onkeydown="OnReviewModalKeyDown">
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.85);"
+         tabindex="-1" role="dialog" @ref="reviewModalRef" @onkeydown="OnReviewModalKeyDown">
         <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
-            <div class="modal-content review-modal-content">
+            <div class="modal-content review-modal-content"
+                 @ontouchstart="HandleTouchStart" 
+                 @ontouchend="HandleTouchEnd">
+                 
                 <div class="modal-header py-2 flex-shrink-0">
-                    <h5 class="modal-title fs-6 text-truncate">
-                        Review Bet #@reviewingBetModel.Id 
-                        <span class="text-muted ms-2 fw-normal">@reviewingBetModel.UserName</span>
-                    </h5>
-                    <button type="button" class="btn-close" @onclick="CancelReview"></button>
+                    <div class="d-flex align-items-center w-100 overflow-hidden">
+                        <h5 class="modal-title fs-6 text-truncate me-2 flex-grow-1">
+                            Review Bet #@reviewingBetModel.Id 
+                            <span class="text-muted ms-2 fw-normal">@reviewingBetModel.UserName</span>
+                        </h5>
+                        <button type="button" class="btn-close flex-shrink-0" @onclick="CancelReview"></button>
+                    </div>
                 </div>
                 
                 <div class="modal-body review-modal-body">
+                   @* --- Success Message Overlay (Inside Modal) --- *@
+                   @if (!string.IsNullOrEmpty(modalSuccessMessage))
+                   {
+                       <div class="alert alert-success m-0 rounded-0 text-center py-2 border-0 border-bottom border-success shadow-sm" role="alert" style="background-color: #d1e7dd; color: #0f5132;">
+                           <i class="bi bi-check-circle-fill me-2"></i> <strong>@modalSuccessMessage</strong>
+                       </div>
+                   }
+
                    @if (reviewErrorMessage != null)
                    {
                        <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
@@ -78,74 +178,88 @@
                    }
                    
                    <div class="review-image-container">
+                       @* --- Left Arrow --- *@
+                       <button class="nav-arrow nav-arrow-left shadow-lg" 
+                               @onclick="() => NavigateReview(-1)" 
+                               disabled="@(currentReviewIndex <= 0)">
+                           <i class="bi bi-chevron-left"></i>
+                       </button>
+
                        @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl))
                        {
                             <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
-                       }
+                        }
                        else
                        {
                            <div class="text-white-50 fst-italic text-center">
-                               <i class="bi bi-image-fill display-1 d-block mb-3"></i>
-                               <span>No Image Available</span>
+                                <i class="bi bi-image-fill display-1 d-block mb-3"></i>
+                                <span>No Image Available</span>
                            </div>
                        }
+
+                       @* --- Right Arrow --- *@
+                       <button class="nav-arrow nav-arrow-right shadow-lg" 
+                               @onclick="() => NavigateReview(1)" 
+                               disabled="@(currentReviewList == null || currentReviewIndex >= currentReviewList.Count - 1)">
+                           <i class="bi bi-chevron-right"></i>
+                       </button>
                    </div>
 
                    <div class="review-controls-container">
                        <div class="container-fluid p-0">
                            <div class="row g-2 mb-3">
-                               <div class="col-4">
+                                <div class="col-4">
                                    <label class="form-label fw-bold text-muted small mb-1">Amount</label>
-                                   <div class="input-group input-group-sm">
+                                    <div class="input-group input-group-sm">
                                        <input type="number" class="form-control fw-bold" @bind="reviewingBetModel.AmountNOK" placeholder="0" disabled="@(reviewingBetModel.Status != "Pending")" />
                                        <span class="input-group-text">kr</span>
-                                   </div>
+                                    </div>
                                </div>
                                <div class="col-3">
                                    <label class="form-label fw-bold text-muted small mb-1">Odds</label>
                                    <input type="number" step="0.01" class="form-control form-control-sm fw-bold" @bind="reviewingBetModel.Odds" placeholder="1.00" disabled="@(reviewingBetModel.Status != "Pending")" />
-                               </div>
+                                </div>
                                <div class="col-5">
                                    <label class="form-label fw-bold text-muted small mb-1">Payout</label>
-                                   <div class="form-control form-control-sm bg-light text-success fw-bold text-end">
+                                    <div class="form-control form-control-sm bg-light text-success fw-bold text-end">
                                        @reviewingBetModel.PotentialPayout.ToString("N0") kr
                                    </div>
-                               </div>
+                                </div>
                            </div>
 
                            @if (reviewingBetModel.Status == "Pending")
                            {
                                <div class="row g-3">
                                    <div class="col-6">
-                                       <button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'>
+                                        <button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'>
                                            <i class="bi bi-check-lg me-1"></i> Approve
-                                       </button>
+                                        </button>
                                    </div>
                                    <div class="col-6">
-                                        <button class="btn btn-outline-danger w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Rejected")'>
+                                       <button class="btn btn-outline-danger w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Rejected")'>
                                               <i class="bi bi-x-lg me-1"></i> Reject
-                                       </button>
+                                          </button>
                                    </div>
                                </div>
                            }
                            else if (reviewingBetModel.Status == "Approved")
                            {
-                               <div class="row g-2">
+                                <div class="row g-2">
                                    <div class="col-5">
                                        <button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Won")'>
                                             <i class="bi bi-trophy-fill me-1"></i> Won
                                        </button>
-                                   </div>
+                                    </div>
                                    <div class="col-5">
                                       <button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'>
                                            <i class="bi bi-x-lg me-1"></i> Lost
                                        </button>
-                                   </div>
+                                    </div>
                                    <div class="col-2">
                                        <button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>
                                             Void
                                        </button>
-                                   </div>
+                                    </div>
                                </div>
                            }
                        </div>
@@ -159,7 +273,8 @@
 @* ... [Edit Modal - Kept same] ... *@
 @if (editingBetModel != null)
 {
-    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);"
+         tabindex="-1" role="dialog">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
                 <div class="modal-header">
@@ -170,7 +285,7 @@
                     @if (editErrorMessage != null)
                     {
                         <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
-                            <i class="bi bi-exclamation-circle-fill me-2"></i> @editErrorMessage
+                             <i class="bi bi-exclamation-circle-fill me-2"></i> @editErrorMessage
                             <button type="button" class="btn-close" @onclick="() => editErrorMessage = null"></button>
                         </div>
                     }
@@ -190,7 +305,7 @@
                         <input type="number" step="0.01" class="form-control" @bind="editingBetModel.Odds" />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Status</label>
+                         <label class="form-label">Status</label>
                         <select class="form-select" @bind="editingBetModel.Status">
                              <option value="Pending">Pending</option>
                              <option value="Approved">Approved</option>
@@ -218,7 +333,7 @@
         <div class="table-responsive">
              <table class="table table-sm table-striped table-hover mb-5 text-nowrap align-middle">
                 <thead class="table-dark">
-                    <tr>
+                     <tr>
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
                         <th>Last Updated</th>
@@ -250,7 +365,7 @@
         <h4 class="mb-3">Active Bets (Approved)</h4>
         <div class="table-responsive mb-5">
             <table class="table table-sm table-striped table-hover text-nowrap align-middle">
-                 <thead class="table-dark">
+                <thead class="table-dark">
                     <tr>
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
@@ -267,7 +382,7 @@
                     {
                         <tr>
                             <td>
-                                  <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
+                                <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
                                       <i class="bi bi-play-circle"></i> Process
                                   </button>
                             </td>
@@ -277,7 +392,7 @@
                              <td>@bet.AmountNOK?.ToString("N0") kr</td>
                              <td>@bet.Odds.ToString("N2")</td>
                              <td>@bet.PotentialPayout.ToString("N0") kr</td>
-                            <td>
+                             <td>
                                  <button class="btn btn-outline-secondary btn-sm" @onclick="() => StartEdit(bet)">
                                     <i class="bi bi-pencil"></i>
                                 </button>
@@ -292,11 +407,10 @@
             </table>
         </div>
 
-        @* ... [Completed Bets Table - Kept same] ... *@
         <h4 class="mb-3">Completed Bets History (@totalCompletedBets)</h4>
         <div class="table-responsive">
             <table class="table table-sm table-striped table-hover text-nowrap align-middle">
-                <thead class="table-dark">
+                 <thead class="table-dark">
                     <tr>
                          <th>Action</th>
                          <th>ID</th>
@@ -316,7 +430,7 @@
                      <tr class="@rowClass">
                             <td>
                                   <button class="btn btn-outline-dark btn-sm" @onclick="() => StartEdit(bet)">
-                                      <i class="bi bi-pencil"></i> Edit
+                                       <i class="bi bi-pencil"></i> Edit
                                   </button>
                             </td>
                             <td>@bet.Id</td>
@@ -326,25 +440,25 @@
                             <td>@bet.Odds.ToString("N2")</td>
                             <td><strong>@bet.Status</strong></td>
                             <td>
-                                @if(bet.Status == "Won")
+                                 @if(bet.Status == "Won")
                                 {
                                     @bet.PotentialPayout.ToString("N0") <span>kr</span>
-                                }
+                                 }
                                 else if (bet.Status == "Lost")
                                 {
-                                    <span>0 kr</span>
+                                   <span>0 kr</span>
                                 }
                                 else
-                                {
+                               {
                                    <span class="text-muted">-</span>
                                 }
-                            </td>
+                             </td>
                             <td>
                                  @if(!string.IsNullOrEmpty(bet.ScreenshotUrl))
                                  {
                                     <a href="@bet.ScreenshotUrl" target="_blank">View</a>
                                 }
-                            </td>
+                             </td>
                         </tr>
                     }
                     @if (completedBets.Count == 0)
@@ -355,12 +469,12 @@
             </table>
             
             <div class="d-flex justify-content-between align-items-center mt-2">
-                <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(completedPage <= 1)">
+                 <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(completedPage <= 1)">
                     <i class="bi bi-arrow-left"></i> Previous
                 </button>
                 <span class="text-muted">Page @completedPage</span>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasMoreCompletedBets)">
-                    Next <i class="bi bi-arrow-right"></i>
+                     Next <i class="bi bi-arrow-right"></i>
                 </button>
             </div>
         </div>
@@ -368,7 +482,6 @@
 </div>
 
 @code {
-    // ... [Keep all existing variables and OnInitializedAsync etc.] ...
     private List<Bet> pendingBets = new();
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
@@ -386,14 +499,23 @@
     private Bet? reviewingBetModel;
     private string? reviewErrorMessage;
     
+    // NEW: Success message shown INSIDE the modal
+    private string? modalSuccessMessage; 
+    
     private ElementReference reviewModalRef;
     private bool shouldFocusReviewModal = false;
+    
+    // --- NAVIGATION STATE ---
+    private List<Bet> currentReviewList = new();
+    private int currentReviewIndex = -1;
+    private double touchStartX = 0;
+    private double touchEndX = 0;
+    
     [SupplyParameterFromQuery]
     public int? ReviewBetId { get; set; }
 
     private int TimezoneOffset { get; set; }
 
-    // ... [Keep helpers like ToUserLocal, OnInitializedAsync, LoadBets, etc.] ...
     private DateTime ToUserLocal(DateTime utcDate)
     {
         if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
@@ -447,7 +569,6 @@
         }
     }
     
-    // ... [Keep Load methods] ...
     private async Task LoadPendingBets()
     {
         using var context = DbFactory.CreateDbContext();
@@ -508,7 +629,6 @@
         if (hubConnection is not null) { await hubConnection.DisposeAsync(); }
     }
 
-    // ... [Keep CheckUserBalance] ...
     private async Task<(bool allowed, string error)> CheckUserBalance(string userId, decimal newBetAmount)
     {
         using var context = DbFactory.CreateDbContext();
@@ -533,22 +653,88 @@
         return (true, string.Empty);
     }
 
-    // ... [Keep Start/Cancel Review/Edit methods] ...
     private void StartEdit(Bet bet)
     {
         editingBetModel = new Bet { Id = bet.Id, UserId = bet.UserId, UserName = bet.UserName, AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt };
         editErrorMessage = null; errorMessage = null;
     }
     private void CancelEdit() { editingBetModel = null; editErrorMessage = null; }
+
     private void StartReview(Bet bet)
     {
-        reviewingBetModel = new Bet { Id = bet.Id, UserId = bet.UserId, UserName = bet.UserName, AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt };
+        if (pendingBets.Any(b => b.Id == bet.Id))
+        {
+            currentReviewList = pendingBets;
+            currentReviewIndex = pendingBets.FindIndex(b => b.Id == bet.Id);
+        }
+        else if (approvedBets.Any(b => b.Id == bet.Id))
+        {
+            currentReviewList = approvedBets;
+            currentReviewIndex = approvedBets.FindIndex(b => b.Id == bet.Id);
+        }
+        else
+        {
+            currentReviewList = new List<Bet> { bet };
+            currentReviewIndex = 0;
+        }
+
+        reviewingBetModel = new Bet 
+        { 
+            Id = bet.Id, UserId = bet.UserId, UserName = bet.UserName, 
+            AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, 
+            ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt
+        };
+        
+        // Clear old messages
+        modalSuccessMessage = null; 
         reviewErrorMessage = null; errorMessage = null; shouldFocusReviewModal = true;
     }
-    private void CancelReview() { reviewingBetModel = null; reviewErrorMessage = null; }
-    private void OnReviewModalKeyDown(KeyboardEventArgs e) { if (e.Key == "Escape") { CancelReview(); } }
 
-    // --- REVISED SaveEdit with Logic Checks ---
+    private void CancelReview() { reviewingBetModel = null; reviewErrorMessage = null; modalSuccessMessage = null; }
+
+    // --- NAVIGATION HELPERS ---
+    private void NavigateReview(int direction)
+    {
+        if (currentReviewList == null || currentReviewList.Count == 0) return;
+
+        // Clear success message when user manually navigates
+        modalSuccessMessage = null; 
+        
+        int newIndex = currentReviewIndex + direction;
+
+        if (newIndex < 0) newIndex = 0;
+        if (newIndex >= currentReviewList.Count) newIndex = currentReviewList.Count - 1;
+
+        if (newIndex != currentReviewIndex)
+        {
+            var nextBet = currentReviewList[newIndex];
+            StartReview(nextBet);
+        }
+    }
+
+    private void OnReviewModalKeyDown(KeyboardEventArgs e) 
+    { 
+        if (e.Key == "Escape") CancelReview();
+        else if (e.Key == "ArrowRight") NavigateReview(1);
+        else if (e.Key == "ArrowLeft") NavigateReview(-1);
+    }
+
+    private void HandleTouchStart(TouchEventArgs e)
+    {
+        touchStartX = e.Touches[0].ClientX;
+    }
+
+    private void HandleTouchEnd(TouchEventArgs e)
+    {
+        touchEndX = e.ChangedTouches[0].ClientX;
+        var diff = touchStartX - touchEndX;
+        if (Math.Abs(diff) > 50)
+        {
+            if (diff > 0) NavigateReview(1); // Swipe Left -> Next
+            else NavigateReview(-1); // Swipe Right -> Prev
+        }
+    }
+
     private async Task SaveEdit()
     {
         if (editingBetModel == null) return;
@@ -571,7 +757,7 @@
             decimal potentialPayout = Math.Floor((decimal)(editingBetModel.AmountNOK ?? 0) * editingBetModel.Odds);
             if (potentialPayout > settings.MaxPayout) 
             { 
-                editErrorMessage = $"Payout ({potentialPayout:N0}) exceeds max limit of {settings.MaxPayout:N0}."; 
+                editErrorMessage = $"Payout ({potentialPayout:N0}) exceeds max limit of {settings.MaxPayout:N0}.";
                 return;
             }
         }
@@ -598,7 +784,7 @@
                 Action = "Edit Bet",
                 TargetUserName = editingBetModel.UserName,
                 Details = $"Edited Bet ID: {dbBet.Id}. Amount: {dbBet.AmountNOK}, Odds: {dbBet.Odds}, Status: {dbBet.Status}"
-            });
+             });
             await context.SaveChangesAsync();
             await HubContext.Clients.Group(dbBet.UserId).SendAsync("ReceiveUpdate", $"Your bet (ID: {dbBet.Id}) was updated.");
             if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId) && statusChanged)
@@ -620,49 +806,34 @@
         StateHasChanged();
     }
 
-    // --- REVISED ProcessBet with STRICT Validation ---
     private async Task ProcessBet(Bet bet, string newStatus)
     {
         errorMessage = null;
         reviewErrorMessage = null;
+        modalSuccessMessage = null; // Clear previous modal message
+        string originalStatus = bet.Status;
 
         if (newStatus == "Approved")
         {
-            if (bet.AmountNOK == null || bet.AmountNOK <= 0) 
-            { 
-                reviewErrorMessage = "Invalid amount";
-                return; 
-            }
-            if (bet.Odds <= 1) 
-            { 
-                reviewErrorMessage = "Invalid odds";
-                return; 
-            }
-            if (Math.Round(bet.Odds, 2) != bet.Odds) 
-            { 
-                reviewErrorMessage = "Odds max 2 decimals";
-                return; 
-            }
+            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount"; return; }
+            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds"; return; }
+            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals"; return; }
 
             using var settingsContext = DbFactory.CreateDbContext();
             var settings = await settingsContext.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
             if (settings != null)
             {
-                // Validate Minimum Bet
                 if ((decimal)(bet.AmountNOK ?? 0) < settings.MinBetAmount)
                 {
                     reviewErrorMessage = $"Bet amount ({bet.AmountNOK}) is below the minimum limit of {settings.MinBetAmount:N0} kr.";
-                    StateHasChanged();
-                    return;
+                    StateHasChanged(); return;
                 }
 
-                // --- ADDED: Validate Maximum Payout ---
                 decimal potentialPayout = Math.Floor((decimal)(bet.AmountNOK ?? 0) * bet.Odds);
                 if (potentialPayout > settings.MaxPayout)
                 {
                     reviewErrorMessage = $"Payout ({potentialPayout:N0} kr) exceeds the system limit of {settings.MaxPayout:N0} kr.";
-                    StateHasChanged();
-                    return;
+                    StateHasChanged(); return;
                 }
             }
 
@@ -693,23 +864,52 @@
                 Action = $"Bet {newStatus}",
                 TargetUserName = bet.UserName,
                 Details = $"Bet ID: {bet.Id}, Status: {newStatus}, Payout: {dbBet.PotentialPayout:N0}"
-            });
+             });
             await context.SaveChangesAsync();
         }
 
+        // --- UPDATED Auto-Advance Logic ---
         await LoadPendingBets();
         await LoadApprovedBets();
         await LoadCompletedBets();
-        
-        reviewingBetModel = null;
-        reviewErrorMessage = null;
+
         if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
         {
             _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet!, newStatus, isUpdate: false);
         }
 
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet status is now: {newStatus}");
-        successMessage = $"Bet for {bet.UserName} set to {newStatus}.";
+        
+        // Show success in modal for instant feedback
+        modalSuccessMessage = $"Bet #{bet.Id} {newStatus}";
+        
+        List<Bet> targetList = (originalStatus == "Pending") ? pendingBets : approvedBets;
+        
+        // Update context to refreshed list
+        currentReviewList = targetList;
+
+        if (currentReviewList.Count > 0)
+        {
+            // Keep the current index (clamped) to show the "next" item in the list
+            int nextIndex = Math.Min(currentReviewIndex, currentReviewList.Count - 1);
+            currentReviewIndex = nextIndex;
+            
+            var nextBet = currentReviewList[currentReviewIndex];
+            
+            reviewingBetModel = new Bet 
+            { 
+                Id = nextBet.Id, UserId = nextBet.UserId, UserName = nextBet.UserName, 
+                AmountNOK = nextBet.AmountNOK, Odds = nextBet.Odds, Status = nextBet.Status, 
+                ScreenshotUrl = nextBet.ScreenshotUrl, CreatedAt = nextBet.CreatedAt
+            };
+        }
+        else
+        {
+            reviewingBetModel = null;
+            modalSuccessMessage = null; // No modal to show message in
+            successMessage = $"Bet #{bet.Id} processed. Queue empty.";
+        }
+
         StateHasChanged();
     }
 }
