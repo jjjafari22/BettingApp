@@ -1,6 +1,7 @@
-﻿@implements IDisposable
+﻿@implements IAsyncDisposable
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.SignalR.Client
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
@@ -19,8 +20,13 @@
         <div class="nav-item px-3">
             @if (isAdmin)
             {
-                <NavLink class="nav-link" href="admin" Match="NavLinkMatch.All">
-                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Admin Home
+                <NavLink class="nav-link d-flex align-items-center" href="admin" Match="NavLinkMatch.All">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> 
+                    <span>Admin Home</span>
+                    @if (adminHomeTasks > 0)
+                    {
+                        <span class="badge rounded-pill bg-danger ms-2">@adminHomeTasks</span>
+                    }
                 </NavLink>
             }
             else
@@ -29,7 +35,6 @@
                     <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
                 </NavLink>
                 
-                @* FIX: Added d-flex and icon alignment styles *@
                 <NavLink class="nav-link d-flex align-items-center" href="deposit-withdraw">
                     <span class="bi bi-wallet2" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
                     <span>Deposit/Withdrawal</span>
@@ -44,6 +49,10 @@
                         <NavLink class="nav-link d-flex align-items-center" href="admin/transactions">
                             <span class="bi bi-arrow-left-right" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
                             <span>Transactions</span>
+                            @if (transactionTasks > 0)
+                            {
+                                <span class="badge rounded-pill bg-danger ms-2">@transactionTasks</span>
+                            }
                         </NavLink>
                     </div>
                     <div class="nav-item px-3">
@@ -56,6 +65,10 @@
                         <NavLink class="nav-link d-flex align-items-center" href="admin/users">
                             <span class="bi bi-people-fill" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
                             <span>All Users</span>
+                            @if (userTasks > 0)
+                            {
+                                <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
+                            }
                         </NavLink>
                     </div>
                     <div class="nav-item px-3">
@@ -110,6 +123,12 @@
 @code {
     private string? currentUrl;
     private bool isAdmin;
+    private HubConnection? hubConnection;
+    
+    // Task Counters
+    private int adminHomeTasks = 0;
+    private int transactionTasks = 0;
+    private int userTasks = 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -125,18 +144,91 @@
             var dbUser = await context.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+            
             isAdmin = dbUser?.IsAdmin ?? false;
+
+            if (isAdmin)
+            {
+                // Initial Load
+                await LoadAdminTasks(context);
+
+                // Setup SignalR for Real-time Updates
+                try 
+                {
+                    hubConnection = new HubConnectionBuilder()
+                        .WithUrl(NavigationManager.ToAbsoluteUri("/bethub"))
+                        .Build();
+
+                    // Listen for various admin events to refresh counters
+                    hubConnection.On<string>("ReceiveAdminNotification", async (message) => await RefreshTasks());
+                    hubConnection.On("ReceiveUserRegistration", async () => await RefreshTasks());
+                    hubConnection.On<string>("ReceiveUpdate", async (message) => await RefreshTasks());
+
+                    await hubConnection.StartAsync();
+                    await hubConnection.InvokeAsync("JoinAdminGroup");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"NavMenu SignalR Error: {ex.Message}");
+                }
+            }
         }
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        StateHasChanged();
+        
+        // Also refresh on navigation to be safe
+        if (isAdmin)
+        {
+            _ = InvokeAsync(RefreshTasks);
+        }
+        else 
+        {
+            StateHasChanged();
+        }
     }
 
-    public void Dispose()
+    private async Task RefreshTasks()
+    {
+        try 
+        {
+            using var context = DbFactory.CreateDbContext();
+            await LoadAdminTasks(context);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refreshing admin tasks: {ex.Message}");
+        }
+    }
+
+    private async Task LoadAdminTasks(ApplicationDbContext context)
+    {
+        // Admin Home: Pending bets (review) + Active bets (process outcome)
+        var pendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
+        var activeBets = await context.Bets.CountAsync(b => b.Status == "Approved" && string.IsNullOrEmpty(b.Outcome));
+        adminHomeTasks = pendingBets + activeBets;
+
+        // Transactions: Pending withdrawals
+        transactionTasks = await context.Transactions.CountAsync(t => t.Type == "Withdrawal" && t.Status == "Pending");
+
+        // Users: Accounts waiting for approval (EmailConfirmed is false)
+        userTasks = await context.Users.CountAsync(u => !u.EmailConfirmed);
+    }
+
+    public async ValueTask DisposeAsync()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
+        
+        if (hubConnection is not null)
+        {
+            try 
+            {
+                await hubConnection.DisposeAsync();
+            }
+            catch { /* Ignore disposal errors */ }
+        }
     }
 }
