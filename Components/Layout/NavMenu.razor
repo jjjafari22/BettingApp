@@ -16,6 +16,13 @@
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
+@if (isAdmin && (adminHomeTasks + transactionTasks + userTasks) > 0)
+{
+    <span class="badge rounded-pill bg-danger navbar-toggler-badge">
+        @(adminHomeTasks + transactionTasks + userTasks)
+    </span>
+}
+
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
         
@@ -69,7 +76,7 @@
                             <span>All Users</span>
                             @if (userTasks > 0)
                             {
-                                 <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
+                                  <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
                             }
                         </NavLink>
                     </div>
@@ -156,7 +163,6 @@
                     hubConnection = new HubConnectionBuilder()
                         .WithUrl(NavigationManager.ToAbsoluteUri("/bethub"))
                         .Build();
-
                     // Listen for various admin events to refresh counters
                     hubConnection.On<string>("ReceiveAdminNotification", async (message) => await RefreshTasks());
                     hubConnection.On("ReceiveUserRegistration", async () => await RefreshTasks());

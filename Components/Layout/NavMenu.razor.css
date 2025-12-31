@@ -15,6 +15,16 @@
     background-color: rgba(255, 255, 255, 0.5);
 }
 
+.navbar-toggler-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    z-index: 1000;
+    pointer-events: none;
+    transform: translate(30%, -30%);
+    font-size: 0.75rem;
+}
+
 .top-row {
     min-height: 3.5rem;
     background-color: rgba(0,0,0,0.4);
@@ -114,7 +124,8 @@
 }
 
 @media (min-width: 768px) {
-    .navbar-toggler {
+    .navbar-toggler,
+    .navbar-toggler-badge {
         display: none;
     }
 
