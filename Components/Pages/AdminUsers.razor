@@ -42,6 +42,9 @@ else
                     <thead class="table-dark">
                         <tr>
                             <th>Date Joined</th>
+                            @* --- CHANGE: Added First and Last Name columns --- *@
+                            <th>First Name</th>
+                            <th>Last Name</th>
                             <th>User</th>
                             <th>Email</th>
                             <th class="text-end">Actions</th>
@@ -52,6 +55,9 @@ else
                         {
                             <tr>
                                 <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToShortDateString())</td>
+                                @* --- CHANGE: Display First and Last Name --- *@
+                                <td>@user.FirstName</td>
+                                <td>@user.LastName</td>
                                 <td>@user.UserName</td>
                                 <td>@user.Email</td>
                                 <td class="text-end">
@@ -67,7 +73,8 @@ else
                         @if (!pendingUsersVM.Any())
                         {
                             <tr>
-                                <td colspan="4" class="text-center text-muted py-3">No pending approvals.</td>
+                                @* Updated colspan to 6 to match new column count *@
+                                <td colspan="6" class="text-center text-muted py-3">No pending approvals.</td>
                             </tr>
                         }
                     </tbody>
@@ -107,7 +114,6 @@ else
                     <th style="cursor: pointer;" @onclick='() => Sort("Balance")'>
                         Balance @GetSortIcon("Balance")
                     </th>
-                    @* --- MOVED: Available Credit (Now after Balance) --- *@
                     <th style="cursor: pointer;" @onclick='() => Sort("AvailableCredit")'>
                         Avail. Credit @GetSortIcon("AvailableCredit")
                     </th>
@@ -117,7 +123,10 @@ else
                     <th style="cursor: pointer;" @onclick='() => Sort("LifetimeProfit")'>
                         Lifetime Profit @GetSortIcon("LifetimeProfit")
                     </th>
-                    @* --- REMOVED: Credit Limit --- *@
+                    
+                    @* --- CHANGE: Added Discord Column before Admin --- *@
+                    <th class="text-center">Discord</th>
+
                     <th style="cursor: pointer;" @onclick='() => Sort("IsAdmin")'>
                         Admin @GetSortIcon("IsAdmin")
                     </th>
@@ -134,7 +143,6 @@ else
                         <td class="@(user.Balance >= 0 ? "text-success" : "text-danger") fw-bold">
                             @user.Balance.ToString("N0") kr
                         </td>
-                        @* --- MOVED: Available Credit (Now after Balance) --- *@
                         <td>@user.AvailableCredit.ToString("N0") kr</td>
                         <td class="fw-bold">
                             @user.Handle.ToString("N0") kr
@@ -142,7 +150,19 @@ else
                         <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold">
                             @user.LifetimeProfit.ToString("N0") kr
                         </td>
-                        @* --- REMOVED: Credit Limit TD --- *@
+
+                        @* --- CHANGE: Added Discord Status Cell --- *@
+                        <td class="text-center">
+                            @if (!string.IsNullOrEmpty(user.DiscordUserId))
+                            {
+                                <i class="bi bi-discord text-primary" title="Connected"></i>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        </td>
+
                         <td>
                             @if (user.IsAdmin)
                             {
@@ -158,8 +178,8 @@ else
                 @if (!FilteredAndSortedUsers.Any())
                 {
                     <tr>
-                        @* Adjusted colspan to 9 *@
-                        <td colspan="9" class="text-center text-muted">No active users found.</td>
+                        @* Updated colspan to 10 to match new column count *@
+                        <td colspan="10" class="text-center text-muted">No active users found.</td>
                     </tr>
                 }
             </tbody>
@@ -177,7 +197,6 @@ else
     private string? successMessage;
     // SignalR Connection
     private HubConnection? hubConnection;
-
     // Sorting state - DEFAULT TO LAST ACTIVE
     private string sortColumn = "LastActive";
     private bool sortAscending = false; // Descending by default for dates
@@ -267,14 +286,11 @@ else
             var liability = userBets.Where(b => 
                 b.Status == "Pending" || b.Status == "Approved"
             ).Sum(b => (decimal)(b.AmountNOK ?? 0));
-            
             var balance = totalDeposits - totalWithdrawals - liability + winnings;
-
             // --- CALCULATE HANDLE (Total Amount Betted) ---
             var handle = userBets
                 .Where(b => b.Status != "Rejected" && b.Status != "Cancelled")
                 .Sum(b => (decimal)(b.AmountNOK ?? 0));
-
             DateTime dateJoined = u.CreatedAt;
             if (dateJoined == DateTime.MinValue)
             {
@@ -298,7 +314,6 @@ else
             var userUpdateDate = u.UpdatedAt == DateTime.MinValue ? u.CreatedAt : u.UpdatedAt;
             
             var lastActive = new[] { userUpdateDate, lastBetDate, lastTransDate }.Max();
-
             var vm = new UserViewModel
             {
                 Id = u.Id,
@@ -313,9 +328,9 @@ else
                 AvailableCredit = balance + u.CreditLimit,
                 LifetimeProfit = lifetimeProfit,
                 DateJoined = dateJoined,
-                LastActive = lastActive 
+                LastActive = lastActive,
+                DiscordUserId = u.DiscordUserId // --- MAP DISCORD ID ---
             };
-
             if (u.EmailConfirmed)
             {
                 allUsersVM.Add(vm);
@@ -339,7 +354,6 @@ else
 
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var adminName = authState.User.Identity?.Name ?? "System";
-
             context.AuditLogs.Add(new AuditLog 
             {
                 Action = "Approve Registration",
@@ -442,7 +456,6 @@ else
                 "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
                 "AvailableCredit" => sortAscending ? query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
                 "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
-                // Removed CreditLimit sort case
                 _ => query
             };
             return query;
@@ -464,5 +477,6 @@ else
         public decimal LifetimeProfit { get; set; }
         public DateTime DateJoined { get; set; }
         public DateTime LastActive { get; set; }
+        public string? DiscordUserId { get; set; } // --- ADDED ---
     }
 }
