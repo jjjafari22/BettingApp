@@ -64,8 +64,8 @@ h1:focus {
     border-radius: 0.5rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
     border: 1px solid #dee2e6;
-    overflow-x: auto; /* Changed from 'hidden' to 'auto' to enable scrolling */
-    -webkit-overflow-scrolling: touch; /* Ensures smooth scrolling on iOS */
+    overflow-x: auto; 
+    -webkit-overflow-scrolling: touch; 
     margin-bottom: 1rem;
     background-color: white;
 }
@@ -80,18 +80,22 @@ h1:focus {
 .table td {
     border: 1px solid #dee2e6; 
     vertical-align: middle;
+    padding: 0.25rem !important; /* Reduced padding */
+    font-size: 0.9rem; /* Slightly smaller text */
 }
 
 /* Enhance header styling */
 .table thead th {
     border-bottom: 2px solid #dee2e6;
-    white-space: nowrap;
+    white-space: normal !important; /* Allow wrapping */
+    vertical-align: bottom; /* Align text to bottom */
+    font-size: 0.8rem; /* Smaller text for headers */
 }
 
 /* Mobile specific tweaks */
 @media (max-width: 576px) {
     .table th, .table td {
-        padding: 0.5rem;
-        font-size: 0.9rem;
+        padding: 0.2rem !important; /* Even tighter padding on mobile */
+        font-size: 0.75rem; /* Smaller text on mobile to fit columns */
     }
 }

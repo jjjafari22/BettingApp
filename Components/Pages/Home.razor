@@ -105,11 +105,11 @@
                         <td>@bet.Odds.ToString("N2")</td>
                         <td>@bet.PotentialPayout.ToString("N0") kr</td>
                         <td>
-                            @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
+                             @if (!string.IsNullOrEmpty(bet.ScreenshotUrl))
                             {
                                 <a href="@bet.ScreenshotUrl" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
                             }
-                             else
+                            else
                             {
                                 <span class="text-muted">None</span>
                             }
@@ -183,6 +183,7 @@
     private int totalBets = 0; 
 
     private const int PageSize = 20;
+
     // Timezone State
     private int TimezoneOffset { get; set; }
 
@@ -202,12 +203,13 @@
             if (!string.IsNullOrEmpty(uid))
             {
                 userId = uid;
+
                 // Redirect Admin to Admin Dashboard
                 using var context = DbFactory.CreateDbContext();
                 var user = await context.Users.AsNoTracking()
                     .Select(u => new { u.Id, u.IsAdmin }) 
                     .FirstOrDefaultAsync(u => u.Id == userId);
-
+                
                 if (user != null && user.IsAdmin)
                 {
                     Nav.NavigateTo("/admin");
@@ -237,6 +239,7 @@
             {
                 // Fetch Timezone Offset
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+
                 if (!string.IsNullOrEmpty(userId))
                 {
                     await LoadData();
@@ -261,6 +264,7 @@
         using var context = DbFactory.CreateDbContext();
         var user = await context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId);
+
         if (user != null)
         {
             CreditLimit = user.CreditLimit;
@@ -269,19 +273,23 @@
         var totalDeposits = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
+
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
+
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Outcome == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
             .ToListAsync();
+
         var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+
         var liability = await context.Bets
             .Where(b => b.UserId == userId && 
                        (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-            
+
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
         AvailableCredit = Balance + CreditLimit;
 
@@ -300,6 +308,7 @@
             .Take(PageSize)
             .AsNoTracking()
             .ToListAsync();
+            
         hasMoreBets = totalBets > (betsPage * PageSize);
     }
     
@@ -329,6 +338,7 @@
             await LoadData();
             await InvokeAsync(StateHasChanged);
         });
+
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
@@ -356,14 +366,17 @@
             if (uploadedFile != null)
             {
                 var resizedFile = await uploadedFile.RequestImageFileAsync("image/jpeg", 1200, 1200);
+                
                 var containerClient = BlobService.GetBlobContainerClient("uploads");
                 await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
                 await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob);
 
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var blobClient = containerClient.GetBlobClient(fileName);
+
                 await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 2000000);
                 var headers = new BlobHttpHeaders { ContentType = "image/jpeg" };
+
                 await blobClient.UploadAsync(stream, new BlobUploadOptions { HttpHeaders = headers });
 
                 newBet.ScreenshotUrl = blobClient.Uri.ToString();
@@ -382,7 +395,7 @@
 
             await DiscordService.NotifyAdminNewPickAsync(newBet);
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
-            
+
             SuccessMessage = "Pick successfully sent for approval.";
             newBet = new Bet { Odds = 1.0m }; 
             uploadedFile = null;
@@ -404,6 +417,7 @@
     private async Task CancelBet(Bet bet)
     {
         if (bet.Status != "Pending") return;
+        
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to cancel this bet?");
 
         if (confirmed)
