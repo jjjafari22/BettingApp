@@ -4,12 +4,14 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @using BettingApp.Hubs
 @using BettingApp.Data
+@using BettingApp.Services
 @using Microsoft.EntityFrameworkCore
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IHubContext<BetHub> HubContext
 @inject IJSRuntime JSRuntime
+@inject DiscordNotificationService DiscordService
 @attribute [Authorize]
 @rendermode InteractiveServer
 
@@ -82,14 +84,14 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-3 mb-3">
-                        <label>Select User</label>
+                         <label>Select User</label>
                          <select class="form-select" @bind="newTrans.UserId">
                             <option value="">-- Select User --</option>
                             @foreach (var user in allUsers)
                             {
                                 <option value="@user.Id">@user.UserName</option>
                             }
-                        </select>
+                         </select>
                     </div>
 
                     <div class="col-md-2 mb-3">
@@ -139,7 +141,7 @@
                     <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
                     <td>@t.UserName</td>
                     <td>
-                        <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
+                         <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
                             @t.Type
                         </span>
                     </td>
@@ -164,6 +166,7 @@
     
     private string? successMessage;
     private string? errorMessage;
+    
     private string? currentAdminName;
     private HubConnection? hubConnection;
 
@@ -217,21 +220,18 @@
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
-
         hubConnection.On<string>("ReceiveUpdate", async (message) =>
         {
             using var context = DbFactory.CreateDbContext();
             await LoadTransactions(context);
             await InvokeAsync(StateHasChanged);
         });
-
         hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
         {
             using var context = DbFactory.CreateDbContext();
             await LoadTransactions(context);
             await InvokeAsync(StateHasChanged);
         });
-
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinAdminGroup");
     }
@@ -242,7 +242,6 @@
             .OrderByDescending(t => t.UpdatedAt)
             .AsNoTracking()
             .ToListAsync();
-            
         pendingWithdrawals = await context.Transactions
             .Where(t => t.Type == "Withdrawal" && t.Status == "Pending")
             .OrderBy(t => t.Date)
@@ -285,6 +284,13 @@
             await context.SaveChangesAsync();
             await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal confirmed");
             
+            // --- NEW: Notify User via Discord ---
+            var targetUser = await context.Users.FindAsync(t.UserId);
+            if (targetUser != null && !string.IsNullOrEmpty(targetUser.DiscordUserId))
+            {
+                await DiscordService.NotifyUserWithdrawalAsync(targetUser.DiscordUserId, t, "Completed");
+            }
+
             successMessage = "Withdrawal confirmed.";
             await LoadTransactions(context);
         }
@@ -312,6 +318,13 @@
 
             await context.SaveChangesAsync();
             await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal rejected");
+
+            // --- NEW: Notify User via Discord ---
+            var targetUser = await context.Users.FindAsync(t.UserId);
+            if (targetUser != null && !string.IsNullOrEmpty(targetUser.DiscordUserId))
+            {
+                await DiscordService.NotifyUserWithdrawalAsync(targetUser.DiscordUserId, t, "Rejected");
+            }
             
             successMessage = "Withdrawal rejected.";
             await LoadTransactions(context);

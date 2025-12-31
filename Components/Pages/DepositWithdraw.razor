@@ -1,6 +1,7 @@
 @page "/deposit-withdraw"
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 @using BettingApp.Data
+@using BettingApp.Services
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.SignalR.Client
@@ -11,6 +12,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JSRuntime
 @inject IHubContext<BetHub> HubContext
+@inject DiscordNotificationService DiscordService
 @attribute [Authorize]
 
 <PageTitle>Deposit / Withdrawal</PageTitle>
@@ -202,11 +204,9 @@
             .Where(b => b.UserId == userId && 
                        (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-        
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
 
         totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
-        
         myTransactions = await context.Transactions
             .Where(t => t.UserId == userId)
             .OrderByDescending(t => t.UpdatedAt)
@@ -242,7 +242,6 @@
             using var context = DbFactory.CreateDbContext();
             var auth = await AuthState.GetAuthenticationStateAsync();
             var userName = auth.User.Identity?.Name ?? "Unknown";
-            
             var transaction = new Transaction
             {
                 UserId = userId,
@@ -254,9 +253,11 @@
                 UpdatedAt = DateTime.UtcNow,
                 Status = "Pending"
             };
-
             context.Transactions.Add(transaction);
             await context.SaveChangesAsync();
+
+            // Notify Admin via Discord
+            await DiscordService.NotifyAdminWithdrawalAsync(transaction);
 
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveUpdate", "New withdrawal request");
             

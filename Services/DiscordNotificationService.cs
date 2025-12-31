@@ -67,6 +67,38 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
+    public async Task NotifyUserWithdrawalAsync(string? discordUserId, Transaction transaction, string status)
+    {
+        if (string.IsNullOrWhiteSpace(discordUserId)) return;
+
+        string header = "";
+        string icon = "";
+        string messageBody = "";
+
+        if (status == "Completed")
+        {
+            header = "**Withdrawal Confirmed!**";
+            icon = "✅";
+            messageBody = $"Your withdrawal of **{transaction.AmountNOK:N0} NOK** to **{transaction.Platform}** has been processed.";
+        }
+        else if (status == "Rejected")
+        {
+            header = "**Withdrawal Rejected**";
+            icon = "❌";
+            messageBody = $"Your withdrawal request of **{transaction.AmountNOK:N0} NOK** has been rejected.\nFunds have been returned to your balance.";
+        }
+        else
+        {
+            return; 
+        }
+
+        string message = $"{icon} {header}\n" +
+                         $"{messageBody}\n" +
+                         $"------------------------------\n";
+
+        await SendDmAsync(discordUserId, message);
+    }
+
     // --- Centralized Admin Webhook Logic ---
     public async Task NotifyAdminNewPickAsync(Bet bet)
     {
@@ -91,6 +123,32 @@ public class DiscordNotificationService : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send Discord Webhook.");
+        }
+    }
+
+    public async Task NotifyAdminWithdrawalAsync(Transaction transaction)
+    {
+        var webhookUrl = _config["Discord:WebhookUrl"];
+        if (string.IsNullOrEmpty(webhookUrl)) return;
+
+        string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143";
+        string adminUrl = $"{baseUrl}/admin/transactions";
+
+        string content = $"**💸 New Withdrawal Request!**\n" +
+                         $"**User:** {transaction.UserName}\n" +
+                         $"**Amount:** {transaction.AmountNOK:N0} NOK\n" +
+                         $"**Platform:** {transaction.Platform}\n" +
+                         $"[Manage Transactions]({adminUrl})\n" +
+                         $"------------------------------\n";
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            await client.PostAsJsonAsync(webhookUrl, new { content });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send Discord Webhook for withdrawal.");
         }
     }
 
