@@ -2,9 +2,11 @@
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.AspNetCore.Components.Web
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -67,7 +69,7 @@
                             <span>All Users</span>
                             @if (userTasks > 0)
                             {
-                                <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
+                                 <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
                             }
                         </NavLink>
                     </div>
@@ -124,7 +126,6 @@
     private string? currentUrl;
     private bool isAdmin;
     private HubConnection? hubConnection;
-    
     // Task Counters
     private int adminHomeTasks = 0;
     private int transactionTasks = 0;
@@ -137,21 +138,18 @@
 
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-
         if (user.Identity?.IsAuthenticated == true)
         {
             using var context = DbFactory.CreateDbContext();
             var dbUser = await context.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
-            
             isAdmin = dbUser?.IsAdmin ?? false;
 
             if (isAdmin)
             {
                 // Initial Load
                 await LoadAdminTasks(context);
-
                 // Setup SignalR for Real-time Updates
                 try 
                 {
@@ -178,7 +176,6 @@
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        
         // Also refresh on navigation to be safe
         if (isAdmin)
         {
@@ -210,10 +207,8 @@
         var pendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
         var activeBets = await context.Bets.CountAsync(b => b.Status == "Approved" && string.IsNullOrEmpty(b.Outcome));
         adminHomeTasks = pendingBets + activeBets;
-
         // Transactions: Pending withdrawals
         transactionTasks = await context.Transactions.CountAsync(t => t.Type == "Withdrawal" && t.Status == "Pending");
-
         // Users: Accounts waiting for approval (EmailConfirmed is false)
         userTasks = await context.Users.CountAsync(u => !u.EmailConfirmed);
     }
@@ -221,7 +216,6 @@
     public async ValueTask DisposeAsync()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
-        
         if (hubConnection is not null)
         {
             try 
