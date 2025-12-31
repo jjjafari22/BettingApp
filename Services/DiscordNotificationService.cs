@@ -139,7 +139,8 @@ public class DiscordNotificationService : IHostedService
                $"Odds: {bet.Odds}\n" +
                $"Potential Payout: {bet.PotentialPayout:N0} NOK" +
                $"{outcomeLine}" +
-               $"{screenshotLink}";
+               $"{screenshotLink}" +
+               $"------------------------------\n";
     }
 
     public async Task SendDmAsync(string? discordUserId, string message)
