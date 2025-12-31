@@ -5,25 +5,24 @@ namespace BettingApp.Data
     public class Bet
     {
         public int Id { get; set; }
-        // Initialize with default values to prevent CS8618
         public string UserId { get; set; } = string.Empty;
         public string UserName { get; set; } = string.Empty;
         
-        // Removed Required and Range to allow submission without amount
         public int? AmountNOK { get; set; }
-
-        // Removed Required and Range to allow submission without specifying odds
         public decimal Odds { get; set; }
 
-        // Round down to the nearest whole number
         public decimal PotentialPayout => Math.Floor((decimal)(AmountNOK ?? 0) * Odds);
         
         public string? ScreenshotUrl { get; set; }
-        public string Status { get; set; } = "Pending";
-        public string? Outcome { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         
-        // NEW FIELD: Tracks when the bet was last modified (settled, cancelled, etc.)
+        // Single Source of Truth
+        // Lifecycle: Pending -> Approved -> (Won / Lost / Void)
+        // Or: Pending -> Rejected / Cancelled
+        public string Status { get; set; } = "Pending";
+        
+        // REMOVED: public string? Outcome { get; set; }
+        
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
@@ -37,36 +36,31 @@ namespace BettingApp.Data
         public string Type { get; set; } = string.Empty;
         
         [Required]
-        // Enforce whole numbers for transactions
         public int AmountNOK { get; set; }
         
         [Required]
         public string Platform { get; set; } = string.Empty;
         
         public DateTime Date { get; set; } = DateTime.UtcNow;
-
-        // NEW FIELD: Tracks when the transaction status changed
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-        public string Status { get; set; } = "Completed"; // Default to Completed
+        public string Status { get; set; } = "Completed"; 
     }
 
-    // NEW CLASS
     public class SystemSetting
     {
         public int Id { get; set; }
-        public decimal MinBetAmount { get; set; } = 100m; // Replaced MaxOdds
-        public decimal MaxPayout { get; set; } = 50000m; // Default value
+        public decimal MinBetAmount { get; set; } = 100m; 
+        public decimal MaxPayout { get; set; } = 50000m; 
     }
 
-    // NEW CLASS: Audit Log
     public class AuditLog
     {
         public int Id { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-        public string AdminUserName { get; set; } = string.Empty; // Who performed the action
-        public string Action { get; set; } = string.Empty; // e.g., "Approved Bet", "Deposit"
-        public string TargetUserName { get; set; } = string.Empty; // Who was affected
-        public string Details { get; set; } = string.Empty; // Specifics (Amounts, IDs, etc.)
+        public string AdminUserName { get; set; } = string.Empty; 
+        public string Action { get; set; } = string.Empty; 
+        public string TargetUserName { get; set; } = string.Empty; 
+        public string Details { get; set; } = string.Empty; 
     }
 }

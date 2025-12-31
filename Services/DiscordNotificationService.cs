@@ -21,7 +21,6 @@ public class DiscordNotificationService : IHostedService
         _config = config;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
-        // Ensure you add "Discord": { "BotToken": "..." } to your appsettings.json
         _botToken = _config["Discord:BotToken"] ?? "";
 
         var socketConfig = new DiscordSocketConfig
@@ -57,13 +56,13 @@ public class DiscordNotificationService : IHostedService
         await _client.StopAsync();
     }
 
-    // --- Centralized User DM Logic ---
-    public async Task NotifyUserBetAsync(string? discordUserId, Bet bet, string eventType, bool isUpdate)
+    // --- User DM Logic ---
+    public async Task NotifyUserBetAsync(string? discordUserId, Bet bet, string status, bool isUpdate)
     {
         if (string.IsNullOrWhiteSpace(discordUserId)) return;
 
-        // eventType examples: "Approved", "Rejected", "Won", "Lost", "Void"
-        string message = BuildBetMessage(bet, eventType, isUpdate);
+        // Use the new Status to build the message
+        string message = BuildBetMessage(bet, status, isUpdate);
         await SendDmAsync(discordUserId, message);
     }
 
@@ -99,13 +98,12 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
-    // --- Centralized Admin Webhook Logic ---
+    // --- Admin Webhook Logic ---
     public async Task NotifyAdminNewPickAsync(Bet bet)
     {
         var webhookUrl = _config["Discord:WebhookUrl"];
         if (string.IsNullOrEmpty(webhookUrl)) return;
 
-        // --- UPDATED: Dynamic URL based on environment ---
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
         string adminUrl = $"{baseUrl}/admin?ReviewBetId={bet.Id}";
 
@@ -152,14 +150,14 @@ public class DiscordNotificationService : IHostedService
         }
     }
 
-    // --- Single Source of Truth for Message Formatting ---
-    private string BuildBetMessage(Bet bet, string eventType, bool isUpdate)
+    // --- Message Builder (Restored Design) ---
+    private string BuildBetMessage(Bet bet, string status, bool isUpdate)
     {
         string updateTag = isUpdate ? " (Updated)" : "";
         string header = "";
         string icon = "";
 
-        switch (eventType)
+        switch (status)
         {
             case "Approved":
                 header = $"**Bet Approved!{updateTag}**";
@@ -174,9 +172,16 @@ public class DiscordNotificationService : IHostedService
                 icon = "🎉";
                 break;
             case "Lost":
-            case "Void":
-                header = $"**Bet Result{updateTag}**";
+                header = $"**Bet Lost{updateTag}**";
                 icon = "📉";
+                break;
+            case "Void":
+                header = $"**Bet Voided{updateTag}**";
+                icon = "↩️";
+                break;
+            case "Cancelled":
+                header = $"**Bet Cancelled{updateTag}**";
+                icon = "🚫";
                 break;
             default:
                 header = $"**Bet Update{updateTag}**";
@@ -185,12 +190,16 @@ public class DiscordNotificationService : IHostedService
         }
 
         string fullScreenshotUrl = bet.ScreenshotUrl ?? "";
-        // Ensure we don't break if ScreenshotUrl is null
         string screenshotLink = string.IsNullOrEmpty(fullScreenshotUrl) 
             ? "" 
             : $"\n[View Screenshot]({fullScreenshotUrl})";
 
-        string outcomeLine = string.IsNullOrEmpty(bet.Outcome) ? "" : $"\nOutcome: {bet.Outcome}";
+        // Only show Outcome text if the bet is completed (Won/Lost/Void)
+        string outcomeLine = "";
+        if (status == "Won" || status == "Lost" || status == "Void")
+        {
+             outcomeLine = $"\nResult: {status}";
+        }
 
         return $"{icon} {header}\n" +
                $"Bet Amount: {bet.AmountNOK} NOK\n" +

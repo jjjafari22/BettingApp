@@ -45,11 +45,11 @@
             <div class="card h-100">
                 <div class="card-header bg-success text-white">Deposit</div>
                 <div class="card-body">
-                    <p class="card-text">
+                     <p class="card-text">
                         To deposit money, please deposit your desired amount via PayPal to:
                     </p>
                     <h5 class="text-center my-4">abc@gmail.com</h5>
-                    <p class="text-muted small">
+                     <p class="text-muted small">
                         Please include your Username in the transaction note.
                         Your balance will be updated once the admin confirms the receipt.
                     </p>
@@ -61,15 +61,15 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-warning text-dark">Withdrawal Request</div>
-                <div class="card-body">
+                 <div class="card-body">
                     <p>Current Balance: <strong>@Balance.ToString("N0") kr</strong></p>
                     
                     <EditForm Model="@withdrawRequest" OnValidSubmit="RequestWithdrawal" FormName="WithdrawForm">
                         <DataAnnotationsValidator />
-                        
+                         
                         <div class="mb-3">
                             <label class="form-label">Platform</label>
-                            <InputSelect @bind-Value="withdrawRequest.Platform" class="form-select">
+                             <InputSelect @bind-Value="withdrawRequest.Platform" class="form-select">
                                 <option value="PayPal">PayPal</option>
                             </InputSelect>
                         </div>
@@ -77,12 +77,12 @@
                         <div class="mb-3">
                             <label class="form-label">Amount (NOK)</label>
                             <InputNumber @bind-Value="withdrawRequest.AmountNOK" class="form-control" />
-                        </div>
+                         </div>
 
                         <button type="submit" class="btn btn-primary w-100" disabled="@IsSubmitting">
                             @if (IsSubmitting) { <span class="spinner-border spinner-border-sm"></span> }
                             else { <span>Request Withdraw</span> }
-                        </button>
+                         </button>
                     </EditForm>
                 </div>
             </div>
@@ -120,7 +120,7 @@
                         <td>@t.AmountNOK.ToString("N0") kr</td>
                          <td>
                             <span class="badge @GetStatusBadge(t.Status)">@t.Status</span>
-                        </td>
+                         </td>
                     </tr>
                 }
             </tbody>
@@ -129,7 +129,7 @@
     
     @* Pagination for Transactions *@
     <div class="d-flex justify-content-between align-items-center mt-2 mb-5">
-        <button class="btn btn-outline-secondary btn-sm" @onclick="PrevTransPage" disabled="@(transPage <= 1)">
+         <button class="btn btn-outline-secondary btn-sm" @onclick="PrevTransPage" disabled="@(transPage <= 1)">
             <i class="bi bi-arrow-left"></i> Previous
         </button>
         <span class="text-muted">Page @transPage</span>
@@ -155,7 +155,6 @@
 
     private int TimezoneOffset { get; set; }
 
-    // --- FIX: Safely handle default dates to prevent crash ---
     private DateTime ToUserLocal(DateTime utcDate)
     {
         if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
@@ -195,15 +194,20 @@
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
+            
+        // FIXED: Use Status == Won
         var winningBets = await context.Bets
-            .Where(b => b.UserId == userId && b.Outcome == "Won")
+            .Where(b => b.UserId == userId && b.Status == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
             .ToListAsync();
         var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+        
+        // FIXED: Liability calculation for Pending or Approved
         var liability = await context.Bets
             .Where(b => b.UserId == userId && 
-                       (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
+                       (b.Status == "Pending" || b.Status == "Approved"))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
+            
         Balance = totalDeposits - totalWithdrawals - liability + winnings;
 
         totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
@@ -256,9 +260,7 @@
             context.Transactions.Add(transaction);
             await context.SaveChangesAsync();
 
-            // Notify Admin via Discord
             await DiscordService.NotifyAdminWithdrawalAsync(transaction);
-
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveUpdate", "New withdrawal request");
             
             SuccessMessage = "Withdrawal request submitted successfully. Waiting for admin approval.";

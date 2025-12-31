@@ -29,7 +29,7 @@
 {
     <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
         <i class="bi bi-exclamation-triangle-fill me-2"></i> @errorMessage
-        <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+         <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
     </div>
 }
 
@@ -41,11 +41,11 @@
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
-                    <tr>
+                     <tr>
                         <th>Date</th>
                         <th>User</th>
                         <th>Platform</th>
-                        <th>Amount</th>
+                         <th>Amount</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -55,25 +55,25 @@
                         <tr><td colspan="5" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
                     }
                     @foreach (var w in pendingWithdrawals)
-                    {
+                     {
                         <tr>
                             <td>@ToUserLocal(w.Date).ToString("g")</td>
                             <td>@w.UserName</td>
-                            <td>@w.Platform</td>
+                             <td>@w.Platform</td>
                             <td><strong>@w.AmountNOK.ToString("N0") kr</strong></td>
                             <td>
-                                <button class="btn btn-success btn-sm me-2" @onclick="() => ConfirmWithdraw(w)">
+                                 <button class="btn btn-success btn-sm me-2" @onclick="() => ConfirmWithdraw(w)">
                                     Confirm Payout
                                 </button>
-                                <button class="btn btn-danger btn-sm" @onclick="() => RejectWithdraw(w)">
+                                 <button class="btn btn-danger btn-sm" @onclick="() => RejectWithdraw(w)">
                                     Reject
                                 </button>
-                            </td>
+                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
-        </div>
+         </div>
     </div>
 </div>
 
@@ -84,23 +84,23 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-3 mb-3">
-                         <label>Select User</label>
+                          <label>Select User</label>
                          <select class="form-select" @bind="newTrans.UserId">
                             <option value="">-- Select User --</option>
-                            @foreach (var user in allUsers)
+                             @foreach (var user in allUsers)
                             {
                                 <option value="@user.Id">@user.UserName</option>
                             }
-                         </select>
+                          </select>
                     </div>
 
                     <div class="col-md-2 mb-3">
                         <label>Type</label>
-                        <select class="form-select" @bind="newTrans.Type">
+                         <select class="form-select" @bind="newTrans.Type">
                             <option value="Deposit">Deposit</option>
                             <option value="Withdrawal">Withdrawal</option>
                         </select>
-                    </div>
+                     </div>
 
                     <div class="col-md-3 mb-3">
                         <label>Platform</label>
@@ -110,12 +110,12 @@
                     <div class="col-md-2 mb-3">
                         <label>Amount (NOK)</label>
                         <input type="number" class="form-control" @bind="newTrans.AmountNOK" />
-                    </div>
+                   </div>
 
                     <div class="col-md-2 mb-3 d-flex align-items-end">
                         <button class="btn btn-primary w-100" @onclick="AddTransaction">Add</button>
                     </div>
-                </div>
+                 </div>
             </div>
         </div>
     </div>
@@ -128,31 +128,31 @@
             <tr>
                 <th>Last Updated</th>
                 <th>User</th>
-                <th>Type</th>
+                 <th>Type</th>
                 <th>Platform</th>
                 <th>Amount</th>
                 <th>Status</th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var t in allTransactions)
+             @foreach (var t in allTransactions)
             {
                 <tr>
                     <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
                     <td>@t.UserName</td>
                     <td>
-                         <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
+                          <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
                             @t.Type
                         </span>
                     </td>
                     <td>@t.Platform</td>
-                    <td>@t.AmountNOK.ToString("N0") kr</td>
+                     <td>@t.AmountNOK.ToString("N0") kr</td>
                     <td>@t.Status</td>
                 </tr>
             }
             @if (allTransactions.Count == 0)
             {
-                <tr><td colspan="6" class="text-muted text-center">No transactions found.</td></tr>
+                 <tr><td colspan="6" class="text-muted text-center">No transactions found.</td></tr>
              }
         </tbody>
     </table>
@@ -172,7 +172,6 @@
 
     private int TimezoneOffset { get; set; }
 
-    // --- FIX: Safely handle default dates to prevent crash ---
     private DateTime ToUserLocal(DateTime utcDate)
     {
         if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
@@ -279,12 +278,11 @@
                 Action = "Confirmed Withdrawal",
                 TargetUserName = t.UserName,
                 Details = $"Amount: {t.AmountNOK}, Platform: {t.Platform}"
-            });
+             });
             
             await context.SaveChangesAsync();
             await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal confirmed");
             
-            // --- NEW: Notify User via Discord ---
             var targetUser = await context.Users.FindAsync(t.UserId);
             if (targetUser != null && !string.IsNullOrEmpty(targetUser.DiscordUserId))
             {
@@ -314,12 +312,11 @@
                 Action = "Rejected Withdrawal",
                 TargetUserName = t.UserName,
                 Details = $"Amount: {t.AmountNOK}, ID: {t.Id}"
-            });
+             });
 
             await context.SaveChangesAsync();
             await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal rejected");
-
-            // --- NEW: Notify User via Discord ---
+            
             var targetUser = await context.Users.FindAsync(t.UserId);
             if (targetUser != null && !string.IsNullOrEmpty(targetUser.DiscordUserId))
             {
@@ -374,14 +371,18 @@
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
+        
+        // FIXED: Count winnings based on Status == "Won"
         var winningBets = await context.Bets
-            .Where(b => b.UserId == userId && b.Outcome == "Won")
+            .Where(b => b.UserId == userId && b.Status == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
             .ToListAsync();
         var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+        
+        // FIXED: Liability is Pending or Approved
         var liability = await context.Bets
             .Where(b => b.UserId == userId && 
-                       (b.Status == "Pending" || (b.Status == "Approved" && b.Outcome != "Void")))
+                       (b.Status == "Pending" || b.Status == "Approved"))
             .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
         return totalDeposits - totalWithdrawals - liability + winnings;
     }
