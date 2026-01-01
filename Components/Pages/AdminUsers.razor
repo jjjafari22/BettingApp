@@ -2,6 +2,7 @@
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.SignalR
 @using Microsoft.AspNetCore.SignalR.Client
 @using BettingApp.Hubs
 @attribute [Authorize]
@@ -9,6 +10,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
 @inject IJSRuntime JSRuntime
+@inject IHubContext<BetHub> HubContext
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -42,7 +44,6 @@ else
                     <thead class="table-dark">
                         <tr>
                             <th>Date Joined</th>
-                            @* --- CHANGE: Added First and Last Name columns --- *@
                             <th>First Name</th>
                             <th>Last Name</th>
                             <th>User</th>
@@ -55,7 +56,6 @@ else
                         {
                             <tr>
                                 <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToShortDateString())</td>
-                                @* --- CHANGE: Display First and Last Name --- *@
                                 <td>@user.FirstName</td>
                                 <td>@user.LastName</td>
                                 <td>@user.UserName</td>
@@ -63,7 +63,7 @@ else
                                 <td class="text-end">
                                     <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
                                         <i class="bi bi-check-lg"></i> Approve
-                                    </button>
+                                     </button>
                                     <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
                                         <i class="bi bi-x-lg"></i> Reject
                                     </button>
@@ -73,7 +73,6 @@ else
                         @if (!pendingUsersVM.Any())
                         {
                             <tr>
-                                @* Updated colspan to 6 to match new column count *@
                                 <td colspan="6" class="text-center text-muted py-3">No pending approvals.</td>
                             </tr>
                         }
@@ -123,10 +122,7 @@ else
                     <th style="cursor: pointer;" @onclick='() => Sort("LifetimeProfit")'>
                         Lifetime Profit @GetSortIcon("LifetimeProfit")
                     </th>
-                    
-                    @* --- CHANGE: Added Discord Column before Admin --- *@
                     <th class="text-center">Discord</th>
-
                     <th style="cursor: pointer;" @onclick='() => Sort("IsAdmin")'>
                         Admin @GetSortIcon("IsAdmin")
                     </th>
@@ -145,13 +141,11 @@ else
                         </td>
                         <td>@user.AvailableCredit.ToString("N0") kr</td>
                         <td class="fw-bold">
-                            @user.Handle.ToString("N0") kr
+                             @user.Handle.ToString("N0") kr
                         </td>
                         <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold">
                             @user.LifetimeProfit.ToString("N0") kr
                         </td>
-
-                        @* --- CHANGE: Added Discord Status Cell --- *@
                         <td class="text-center">
                             @if (!string.IsNullOrEmpty(user.DiscordUserId))
                             {
@@ -162,7 +156,6 @@ else
                                 <span class="text-muted">-</span>
                             }
                         </td>
-
                         <td>
                             @if (user.IsAdmin)
                             {
@@ -178,7 +171,6 @@ else
                 @if (!FilteredAndSortedUsers.Any())
                 {
                     <tr>
-                        @* Updated colspan to 10 to match new column count *@
                         <td colspan="10" class="text-center text-muted">No active users found.</td>
                     </tr>
                 }
@@ -274,8 +266,11 @@ else
             var userBets = bets.Where(b => b.UserId == u.Id).ToList();
             var userTrans = transactions.Where(t => t.UserId == u.Id).ToList();
 
-            var totalDeposits = userTrans.Where(t => t.Type == "Deposit").Sum(t => t.AmountNOK);
-            var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal").Sum(t => t.AmountNOK);
+            // --- CRITICAL FIX: Exclude Rejected transactions ---
+            var totalDeposits = userTrans.Where(t => t.Type == "Deposit" && t.Status != "Rejected").Sum(t => t.AmountNOK);
+            var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal" && t.Status != "Rejected").Sum(t => t.AmountNOK);
+            // ---------------------------------------------------
+
             var winnings = userBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
             var settledStakes = userBets
                 .Where(b => b.Status == "Won" || b.Status == "Lost")
@@ -363,6 +358,10 @@ else
                 Timestamp = DateTime.UtcNow
             });
             await context.SaveChangesAsync();
+            
+            // --- NEW: Notify Admins to refresh list ---
+            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+            
             await LoadData(context); 
             
             successMessage = $"User {user.UserName} has been approved.";
@@ -391,6 +390,10 @@ else
                 Timestamp = DateTime.UtcNow
             });
             await context.SaveChangesAsync();
+            
+            // --- NEW: Notify Admins to refresh list ---
+            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+            
             await LoadData(context); 
             
             successMessage = $"User {name} has been rejected and deleted.";
@@ -477,6 +480,6 @@ else
         public decimal LifetimeProfit { get; set; }
         public DateTime DateJoined { get; set; }
         public DateTime LastActive { get; set; }
-        public string? DiscordUserId { get; set; } // --- ADDED ---
+        public string? DiscordUserId { get; set; }
     }
 }

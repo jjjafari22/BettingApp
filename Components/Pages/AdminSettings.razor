@@ -2,9 +2,15 @@
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.SignalR
+@using Microsoft.AspNetCore.SignalR.Client
+@using BettingApp.Hubs
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+@inject IHubContext<BetHub> HubContext
+@implements IAsyncDisposable
 @rendermode InteractiveServer
 
 <h3>Admin Settings</h3>
@@ -64,12 +70,13 @@ else
     private bool isLoading = true;
     private bool showSuccess = false;
     private string? currentAdminName;
+    private HubConnection? hubConnection;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-        currentAdminName = user.Identity?.Name; // Capture Admin Name
+        currentAdminName = user.Identity?.Name;
 
         using var context = DbFactory.CreateDbContext();
         if (user.Identity?.IsAuthenticated == true)
@@ -81,20 +88,43 @@ else
 
         if (hasAccess)
         {
-            // Load settings or create default if none exist
-            var existingSettings = await context.Settings.FirstOrDefaultAsync();
-            if (existingSettings == null)
+            await LoadSettings(context);
+            
+            // --- SignalR Listener ---
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Nav.ToAbsoluteUri("/bethub"))
+                .Build();
+
+            hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
             {
-                settings = new SystemSetting { MinBetAmount = 100m, MaxPayout = 10000m };
-                context.Settings.Add(settings);
-                await context.SaveChangesAsync();
-            }
-            else
-            {
-                settings = existingSettings;
-            }
+                // If notification contains "Settings", reload
+                if (message.Contains("Settings"))
+                {
+                    using var ctx = DbFactory.CreateDbContext();
+                    await LoadSettings(ctx);
+                    await InvokeAsync(StateHasChanged);
+                }
+            });
+
+            await hubConnection.StartAsync();
+            await hubConnection.InvokeAsync("JoinAdminGroup");
         }
         isLoading = false;
+    }
+
+    private async Task LoadSettings(ApplicationDbContext context)
+    {
+        var existingSettings = await context.Settings.FirstOrDefaultAsync();
+        if (existingSettings == null)
+        {
+            settings = new SystemSetting { MinBetAmount = 100m, MaxPayout = 10000m };
+            context.Settings.Add(settings);
+            await context.SaveChangesAsync();
+        }
+        else
+        {
+            settings = existingSettings;
+        }
     }
 
     private async Task SaveSettings()
@@ -102,17 +132,15 @@ else
         showSuccess = false;
         using var context = DbFactory.CreateDbContext();
         
-        // Fetch fresh entity to update
         var dbSettings = await context.Settings.FirstOrDefaultAsync();
         if (dbSettings != null)
         {
-            // Capture old values for log
             var oldMinBet = dbSettings.MinBetAmount;
             var oldPayout = dbSettings.MaxPayout;
 
             dbSettings.MinBetAmount = settings.MinBetAmount;
             dbSettings.MaxPayout = settings.MaxPayout;
-            // NEW: Add Audit Log
+
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -121,7 +149,19 @@ else
                 Details = $"MinBet: {oldMinBet}->{settings.MinBetAmount}, MaxPayout: {oldPayout}->{settings.MaxPayout}"
             });
             await context.SaveChangesAsync();
+            
+            // Notify other admins
+            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "System Settings Updated");
+            
             showSuccess = true;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
         }
     }
 }

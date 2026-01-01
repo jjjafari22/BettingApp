@@ -2,11 +2,17 @@
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.AspNetCore.SignalR
+@using BettingApp.Hubs
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Nav
+@inject IHubContext<BetHub> HubContext
 @rendermode InteractiveServer
+@implements IAsyncDisposable
 
 <h3>User Credit Limits</h3>
 
@@ -59,7 +65,7 @@ else
                         <td>@user.Email</td>
                         <td>
                             <input type="number" class="form-control form-control-sm" style="width: 150px;"
-                                   @bind="user.CreditLimit" step="100" />
+                                @bind="user.CreditLimit" step="100" />
                         </td>
                         <td>
                             <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
@@ -80,6 +86,7 @@ else
     private string? successMessage; 
     private string? currentAdminName;
     private int TimezoneOffset { get; set; }
+    private HubConnection? hubConnection;
 
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
@@ -115,11 +122,28 @@ else
         {
             try {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                await SetupSignalR();
                 StateHasChanged();
             } catch { }
         }
     }
     
+    private async Task SetupSignalR()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/bethub"))
+            .Build();
+
+        hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
+        {
+            await LoadUsers();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+        await hubConnection.InvokeAsync("JoinAdminGroup");
+    }
+
     private DateTime ToUserLocal(DateTime utcDate)
     {
         if (utcDate == DateTime.MinValue) return utcDate;
@@ -155,13 +179,23 @@ else
                 Details = $"Old: {oldLimit}, New: {userToUpdate.CreditLimit}"
             });
             await context.SaveChangesAsync();
+            
+            // Notify other admins
+            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", 
+                $"Credit limit updated for {userToUpdate.UserName}");
 
             successMessage = $"Credit limit updated for {userToUpdate.UserName}!";
             
-            // Reload list to reflect new sort order if needed, or just update local
-            // To keep UI stable, we might not want to re-sort immediately, but let's update the timestamp locally for display
-            userToUpdate.UpdatedAt = DateTime.UtcNow;
-            StateHasChanged();
+            // Reload to ensure list is fresh
+            await LoadUsers();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
         }
     }
 }

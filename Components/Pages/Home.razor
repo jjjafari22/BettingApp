@@ -24,7 +24,7 @@
 <style>
     /* Prevent background scrolling */
     .modal { 
-        overscroll-behavior: contain; 
+        overscroll-behavior: contain;
         outline: none; 
     }
     .review-modal-content {
@@ -42,7 +42,8 @@
     .review-image-container {
         flex-grow: 1; min-height: 0; display: flex;
         align-items: center; justify-content: center; padding: 1rem; overflow: hidden;
-        position: relative; /* Needed for absolute arrows */
+        position: relative;
+        /* Needed for absolute arrows */
     }
     .review-image {
         max-height: 100%;
@@ -136,22 +137,22 @@
             <div class="modal-content review-modal-content"
                  @ontouchstart="HandleTouchStart" 
                  @ontouchend="HandleTouchEnd">
-                 
+                  
                 <div class="modal-header py-2 flex-shrink-0">
                     <div class="d-flex align-items-center w-100 overflow-hidden">
                         <h5 class="modal-title fs-6 me-2 flex-grow-1 text-truncate">
-                            Bet #@viewBetModel.Id 
+                             Bet #@viewBetModel.Id 
                             @{ var (statusText, statusClass) = GetDisplayStatus(viewBetModel); }
                             <span class="badge ms-2 @statusClass">@statusText</span>
                         </h5>
                         <button type="button" class="btn-close flex-shrink-0" @onclick="CloseViewModal"></button>
-                    </div>
+                     </div>
                 </div>
 
                 @* --- ADDED: Swipe Hint for Mobile --- *@
                 <div class="d-block d-md-none bg-dark text-white-50 text-center py-1 small border-bottom border-secondary">
                     <i class="bi bi-arrows-move"></i> Swipe left/right to navigate
-                </div>
+                 </div>
                   
                 <div class="modal-body review-modal-body">
                     <div class="review-image-container">
@@ -159,7 +160,7 @@
                         <button class="nav-arrow nav-arrow-left shadow-lg" 
                                @onclick="() => NavigateView(-1)" 
                                disabled="@(currentViewIndex <= 0)">
-                           <i class="bi bi-chevron-left"></i>
+                            <i class="bi bi-chevron-left"></i>
                         </button>
                     
                         @if (!string.IsNullOrEmpty(viewBetModel.ScreenshotUrl))
@@ -188,13 +189,13 @@
                                 <label class="text-muted small d-block">Amount</label>
                                 <span class="fw-bold fs-5">
                                     @GetAmountDisplay(viewBetModel)
-                                </span>
+                                 </span>
                              </div>
                             <div class="col-4">
                                 <label class="text-muted small d-block">Odds</label>
                                  <span class="fw-bold fs-5">
                                     @GetOddsDisplay(viewBetModel)
-                                </span>
+                                 </span>
                              </div>
                             <div class="col-4">
                                 <label class="text-muted small d-block">@GetPayoutLabel(viewBetModel)</label>
@@ -209,11 +210,11 @@
                             <div class="d-grid">
                                 <button class="btn btn-outline-danger btn-lg fw-bold" @onclick="() => CancelBet(viewBetModel)">
                                     <i class="bi bi-trash3-fill me-2"></i>Cancel Pick
-                                 </button>
+                                </button>
                             </div>
                         }
                     </div>
-                 </div>
+                </div>
             </div>
         </div>
     </div>
@@ -225,7 +226,7 @@
             <h3>Balance</h3>
             <h1 class="display-4 @GetBalanceClass(Balance)">@Balance.ToString("N0") kr</h1>
             <small class="text-muted">
-                Available Credit: <strong>@AvailableCredit.ToString("N0") kr</strong> 
+                 Available Credit: <strong>@AvailableCredit.ToString("N0") kr</strong> 
                 (Limit: @CreditLimit.ToString("N0") kr)
             </small>
         </div>
@@ -235,7 +236,7 @@
         <div class="card-header">New Pick</div>
         <div class="card-body">
             <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
-                 <DataAnnotationsValidator />
+                <DataAnnotationsValidator />
                  
                 <div class="mb-3">
                     <label>Screenshot *</label>
@@ -279,14 +280,14 @@
                         <td>
                             <button class="btn btn-primary btn-sm action-btn" @onclick="() => OpenViewModal(bet)">
                                  <i class="bi bi-eye me-1"></i> View Bet
-                            </button>
+                             </button>
                         </td>
                         <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                         <td>
-                            @GetAmountDisplay(bet)
+                             @GetAmountDisplay(bet)
                         </td>
                         <td>
-                            @GetOddsDisplay(bet)
+                             @GetOddsDisplay(bet)
                         </td>
                         <td>
                              @GetPayoutDisplay(bet)
@@ -334,7 +335,6 @@
     private bool hasMoreBets = false;
     private int totalBets = 0; 
     private const int PageSize = 20;
-
     // --- NAVIGATION STATE ---
     private int currentViewIndex = -1;
     private double touchStartX = 0;
@@ -513,7 +513,6 @@
     private void NavigateView(int direction)
     {
         if (myBets.Count == 0) return;
-
         int newIndex = currentViewIndex + direction;
 
         if (newIndex >= 0 && newIndex < myBets.Count)
@@ -550,8 +549,10 @@
         var diff = touchStartX - touchEndX;
         if (Math.Abs(diff) > 50)
         {
-            if (diff > 0) NavigateView(1); // Next
-            else NavigateView(-1); // Prev
+            if (diff > 0) NavigateView(1);
+            // Next
+            else NavigateView(-1);
+            // Prev
         }
     }
 
@@ -569,6 +570,19 @@
                 IsSubmitting = false;
                 return;
             }
+
+            // --- ADDED: Strict check for AvailableCredit ---
+            // Recalculate locally to ensure data is fresh
+            await LoadData();
+            
+            // If credit is 0 (or somehow negative), block the upload entirely.
+            if (AvailableCredit <= 0) 
+            {
+                ErrorMessage = "Your available credit is zero. To send a pick, you need to deposit more money.";
+                IsSubmitting = false;
+                return;
+            }
+            // --------------------------------------------------------
 
             if (uploadedFile != null)
             {

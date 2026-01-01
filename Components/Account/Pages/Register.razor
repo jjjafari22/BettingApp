@@ -6,17 +6,16 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
 @using BettingApp.Data
-@using Microsoft.AspNetCore.SignalR
+@using Microsoft.AspNetCore.SignalR 
 @using BettingApp.Hubs
 
 @inject UserManager<ApplicationUser> UserManager
 @inject IUserStore<ApplicationUser> UserStore
 @inject SignInManager<ApplicationUser> SignInManager
+@inject IEmailSender<ApplicationUser> EmailSender
 @inject ILogger<Register> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
-@inject IConfiguration Config
-@inject IHttpClientFactory HttpClientFactory
 @inject IHubContext<BetHub> HubContext
 
 <PageTitle>Register</PageTitle>
@@ -24,39 +23,44 @@
 <h1>Register</h1>
 
 <div class="row">
-    <div class="col-lg-6">
+    <div class="col-md-4">
         <StatusMessage Message="@Message" />
         <EditForm Model="Input" asp-route-returnUrl="@ReturnUrl" method="post" OnValidSubmit="RegisterUser" FormName="register">
             <DataAnnotationsValidator />
             <h2>Create a new account.</h2>
             <hr />
             <ValidationSummary class="text-danger" role="alert" />
-
+            
             <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.FirstName" id="Input.FirstName" class="form-control" autocomplete="given-name" aria-required="true" placeholder="" />
-                <label for="Input.FirstName">First Name</label>
-                <ValidationMessage For="() => Input.FirstName" class="text-danger" />
+                <InputText id="username" @bind-Value="Input.UserName" class="form-control" placeholder="johndoe" />
+                <label for="username">Username</label>
+                <ValidationMessage For="() => Input.UserName" class="text-danger" />
             </div>
 
             <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.LastName" id="Input.LastName" class="form-control" autocomplete="family-name" aria-required="true" placeholder="" />
-                <label for="Input.LastName">Last Name</label>
-                <ValidationMessage For="() => Input.LastName" class="text-danger" />
+                <InputText id="firstname" @bind-Value="Input.FirstName" class="form-control" placeholder="John" />
+                <label for="firstname">First Name</label>
             </div>
 
             <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="" />
-                <label for="Input.Email">Email</label>
+                <InputText id="lastname" @bind-Value="Input.LastName" class="form-control" placeholder="Doe" />
+                <label for="lastname">Last Name</label>
+            </div>
+
+            <div class="form-floating mb-3">
+                <InputText id="email" @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
+                <label for="email">Email</label>
                 <ValidationMessage For="() => Input.Email" class="text-danger" />
             </div>
+            
             <div class="form-floating mb-3">
-                <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="" />
-                <label for="Input.Password">Password</label>
+                <InputText id="password" type="password" @bind-Value="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+                <label for="password">Password</label>
                 <ValidationMessage For="() => Input.Password" class="text-danger" />
             </div>
             <div class="form-floating mb-3">
-                <InputText type="password" @bind-Value="Input.ConfirmPassword" id="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="" />
-                <label for="Input.ConfirmPassword">Confirm Password</label>
+                <InputText id="confirm-password" type="password" @bind-Value="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+                <label for="confirm-password">Confirm Password</label>
                 <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
             </div>
             <button type="submit" class="w-100 btn btn-lg btn-primary">Register</button>
@@ -71,64 +75,59 @@
     private InputModel Input { get; set; } = new();
 
     [SupplyParameterFromQuery]
-    private string? ReturnUrl { get; set; }
+    public string? ReturnUrl { get; set; }
 
-    private string? Message => identityErrors is null ? null : $"Error: {string.Join(", ", identityErrors.Select(error => error.Description))}";
+    public string? Message { get; set; }
 
     public async Task RegisterUser(EditContext editContext)
     {
         var user = CreateUser();
-        // --- NEW: Set Name Properties ---
-        user.FirstName = Input.FirstName;
-        user.LastName = Input.LastName;
-        // --------------------------------
 
-        await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
+        await UserStore.SetUserNameAsync(user, Input.UserName, CancellationToken.None);
         var emailStore = GetEmailStore();
         await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
         
-        // Create user.
-        // Default EmailConfirmed is false, so they require approval.
+        // Custom Fields
+        user.FirstName = Input.FirstName;
+        user.LastName = Input.LastName;
+        user.CreatedAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTime.UtcNow;
+
         var result = await UserManager.CreateAsync(user, Input.Password);
 
-        if (!result.Succeeded)
+        if (result.Succeeded)
         {
-            identityErrors = result.Errors;
-            return;
-        }
+            Logger.LogInformation("User created a new account with password.");
+            
+            // --- NEW: Notify Admins of new registration ---
+            await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
+            // ----------------------------------------------
 
-        Logger.LogInformation("User created a new account with password.");
-        // Notify Discord admins about the new registration
-        await NotifyDiscordNewUser(Input.Email);
-        // Notify Admin Dashboard via SignalR
-        await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
-        // Redirect to Login with a query flag to show the success message
-        RedirectManager.RedirectTo("Account/Login?registered=true");
-    }
+            var userId = await UserManager.GetUserIdAsync(user);
+            var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+            code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+            var callbackUrl = NavigationManager.GetUriWithQueryParameters(
+                NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+                new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
 
-    private async Task NotifyDiscordNewUser(string userEmail)
-    {
-        try 
-        {
-            var webhookUrl = Config["Discord:WebhookUrl"];
-            if (!string.IsNullOrEmpty(webhookUrl))
+            await EmailSender.SendConfirmationLinkAsync(user, Input.Email, HtmlEncoder.Default.Encode(callbackUrl));
+
+            if (UserManager.Options.SignIn.RequireConfirmedAccount)
             {
-                var client = HttpClientFactory.CreateClient();
-                var messageContent = new 
-                { 
-                    content = $"🚨 **New User Registered** 🚨\n" +
-                              $"**Email:** {userEmail}\n" +
-                              $"**Name:** {Input.FirstName} {Input.LastName}\n" +
-                              $"**Action Required:** Admin approval needed.\n" +
-                              $"[Approve Here](https://castle-of-happiness-gmcwb5eeafacfphc.canadacentral-01.azurewebsites.net/admin/users)\n"
-                };
-                await client.PostAsJsonAsync(webhookUrl, messageContent);
+                RedirectManager.RedirectTo(
+                    "Account/RegisterConfirmation",
+                    new() { ["email"] = Input.Email, ["returnUrl"] = ReturnUrl });
+            }
+            else
+            {
+                await SignInManager.SignInAsync(user, isPersistent: false);
+                RedirectManager.RedirectTo(ReturnUrl);
             }
         }
-        catch (Exception ex)
+        else
         {
-            // Log the error but don't stop the registration flow
-            Logger.LogError($"Discord Notification Failed: {ex.Message}");
+            identityErrors = result.Errors;
+            Message = $"Error: {string.Join(", ", result.Errors.Select(error => error.Description))}";
         }
     }
 
@@ -157,12 +156,15 @@
     private sealed class InputModel
     {
         [Required]
-        [Display(Name = "First Name")]
-        public string FirstName { get; set; } = "";
+        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 3)]
+        [Display(Name = "Username")]
+        public string UserName { get; set; } = "";
 
-        [Required]
+        [Display(Name = "First Name")]
+        public string? FirstName { get; set; }
+
         [Display(Name = "Last Name")]
-        public string LastName { get; set; } = "";
+        public string? LastName { get; set; }
 
         [Required]
         [EmailAddress]

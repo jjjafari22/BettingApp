@@ -2,10 +2,13 @@
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.SignalR.Client
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
 @inject IJSRuntime JS
+@implements IAsyncDisposable
 @rendermode InteractiveServer
 
 <h3>Audit Logs</h3>
@@ -112,6 +115,8 @@ else
     private bool hasNextPage => currentPage < totalPages;
     // Timezone Logic
     private int TimezoneOffset { get; set; }
+    
+    private HubConnection? hubConnection;
 
     protected override async Task OnInitializedAsync()
     {
@@ -128,6 +133,21 @@ else
         if (isAdmin)
         {
             await LoadLogs();
+            
+            // --- SignalR Setup ---
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Nav.ToAbsoluteUri("/bethub"))
+                .Build();
+
+            // When ANY admin notification happens (bet change, withdraw, settings), we refresh logs
+            hubConnection.On<string>("ReceiveAdminNotification", async (msg) => 
+            { 
+                await LoadLogs();
+                await InvokeAsync(StateHasChanged);
+            });
+
+            await hubConnection.StartAsync();
+            await hubConnection.InvokeAsync("JoinAdminGroup");
         }
     }
 
@@ -138,7 +158,6 @@ else
             try
             {
                 TimezoneOffset = await JS.InvokeAsync<int>("getBrowserTimeZoneOffset");
-                // Reload logs if dates were involved, or just refresh UI
                 StateHasChanged();
             }
             catch { }
@@ -187,7 +206,6 @@ else
 
         if (startDate.HasValue)
         {
-            // Convert user's 00:00 local to UTC
             var startLocal = startDate.Value.Date;
             var startUtc = startLocal.AddMinutes(TimezoneOffset);
             query = query.Where(l => l.Timestamp >= startUtc);
@@ -223,6 +241,14 @@ else
         {
             currentPage--;
             await LoadLogs();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
         }
     }
 }
