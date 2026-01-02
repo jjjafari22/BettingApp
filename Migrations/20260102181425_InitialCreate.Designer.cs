@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BettingApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260102172856_InitialCreate")]
+    [Migration("20260102181425_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -164,6 +164,7 @@ namespace BettingApp.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<decimal>("Odds")
+                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("ScreenshotUrl")
@@ -198,10 +199,12 @@ namespace BettingApp.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("MaxPayout")
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
 
                     b.Property<decimal>("MinBetAmount")
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
 
                     b.HasKey("Id");
 
