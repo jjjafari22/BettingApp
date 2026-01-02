@@ -50,8 +50,9 @@ else
             <thead class="table-dark">
                 <tr>
                     <th>Last Updated</th>
+                    <th>First Name</th>
+                    <th>Last Name</th>
                     <th>User</th>
-                    <th>Email</th>
                     <th>Current Credit Limit (NOK)</th>
                     <th>Action</th>
                 </tr>
@@ -61,11 +62,15 @@ else
                 {
                     <tr>
                         <td>@ToUserLocal(user.UpdatedAt).ToString("g")</td>
+                        <td>@user.FirstName</td>
+                        <td>@user.LastName</td>
                         <td>@user.UserName</td>
-                        <td>@user.Email</td>
                         <td>
+                            @* Since CreditLimit is now an INT, we can use simple binding.
+                               step="100" suggests increments, but user can type any integer.
+                            *@
                             <input type="number" class="form-control form-control-sm" style="width: 150px;"
-                                @bind="user.CreditLimit" step="100" />
+                                   @bind="user.CreditLimit" step="100" />
                         </td>
                         <td>
                             <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
@@ -169,24 +174,23 @@ else
         {
             var oldLimit = dbUser.CreditLimit;
             dbUser.CreditLimit = userToUpdate.CreditLimit;
-            dbUser.UpdatedAt = DateTime.UtcNow; // Update timestamp
+            dbUser.UpdatedAt = DateTime.UtcNow; 
 
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
                 Action = "Changed Credit Limit",
                 TargetUserName = userToUpdate.UserName ?? "Unknown",
-                Details = $"Old: {oldLimit}, New: {userToUpdate.CreditLimit}"
+                Details = $"Old: {oldLimit:N0}, New: {userToUpdate.CreditLimit:N0}"
             });
+
             await context.SaveChangesAsync();
             
-            // Notify other admins
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", 
                 $"Credit limit updated for {userToUpdate.UserName}");
 
             successMessage = $"Credit limit updated for {userToUpdate.UserName}!";
             
-            // Reload to ensure list is fresh
             await LoadUsers();
         }
     }
