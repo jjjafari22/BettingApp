@@ -5,22 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>aspnet-BettingApp-4a8a64cd-f902-4d72-a4a3-d311110b2a5b</UserSecretsId>
-    <EnableDefaultItems>false</EnableDefaultItems>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <Compile Include="Program.cs" />
-    <Compile Include="Data/**/*.cs" />
-    <Compile Include="Hubs/**/*.cs" />
-    <Compile Include="Components/**/*.cs" />
-    <Compile Include="Services/**/*.cs" />
-    
-    <Content Include="Components/**/*.razor" />
-    <Content Include="Components/**/*.css" />
-    <Content Include="wwwroot/**" />
-    <Content Include="appsettings.json" />
-    <Content Include="appsettings.Development.json" />
-  </ItemGroup>
+    </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" Version="12.23.0" />
