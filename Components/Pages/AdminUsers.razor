@@ -41,30 +41,28 @@ else
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-sm table-striped table-hover mb-0 align-middle text-nowrap">
-                    <thead class="table-dark">
+                     <thead class="table-dark">
                         <tr>
                             <th>Date Joined</th>
                             <th>First Name</th>
                             <th>Last Name</th>
                             <th>User</th>
-                            <th>Email</th>
-                            <th class="text-end">Actions</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var user in pendingUsersVM)
                         {
                             <tr>
-                                <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToShortDateString())</td>
+                                <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToString("g"))</td>
                                 <td>@user.FirstName</td>
                                 <td>@user.LastName</td>
                                 <td>@user.UserName</td>
-                                <td>@user.Email</td>
-                                <td class="text-end">
+                                <td>
                                     <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
                                         <i class="bi bi-check-lg"></i> Approve
                                      </button>
-                                    <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
+                                     <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
                                         <i class="bi bi-x-lg"></i> Reject
                                     </button>
                                 </td>
@@ -73,7 +71,7 @@ else
                         @if (!pendingUsersVM.Any())
                         {
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-3">No pending approvals.</td>
+                                <td colspan="5" class="text-center text-muted py-3">No pending approvals.</td>
                             </tr>
                         }
                     </tbody>
@@ -88,7 +86,7 @@ else
         <div class="col-md-6">
             <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
-                <input type="text" class="form-control" placeholder="Search by name, username or email..." 
+                <input type="text" class="form-control" placeholder="Search by name or email..." 
                        @bind="searchTerm" @bind:event="oninput" />
             </div>
         </div>
@@ -97,7 +95,7 @@ else
     <div class="table-responsive">
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
-                <tr>
+                 <tr>
                     <th style="cursor: pointer;" @onclick='() => Sort("LastActive")'>
                         Last Active @GetSortIcon("LastActive")
                     </th>
@@ -129,7 +127,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var user in FilteredAndSortedUsers)
+                 @foreach (var user in FilteredAndSortedUsers)
                 {
                     <tr>
                         <td>@ToUserLocal(user.LastActive).ToString("g")</td>
@@ -141,15 +139,15 @@ else
                         </td>
                         <td>@user.AvailableCredit.ToString("N0") kr</td>
                         <td class="fw-bold">
-                             @user.Handle.ToString("N0") kr
+                              @user.Handle.ToString("N0") kr
                         </td>
                         <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold">
                             @user.LifetimeProfit.ToString("N0") kr
-                        </td>
+                         </td>
                         <td class="text-center">
                             @if (!string.IsNullOrEmpty(user.DiscordUserId))
                             {
-                                <i class="bi bi-discord text-primary" title="Connected"></i>
+                                 <i class="bi bi-discord text-primary" title="Connected"></i>
                             }
                             else
                             {
@@ -159,14 +157,14 @@ else
                         <td>
                             @if (user.IsAdmin)
                             {
-                                <span class="badge bg-primary">Admin</span>
+                                 <span class="badge bg-primary">Admin</span>
                             }
                             else
                             {
-                                <span class="badge bg-secondary">User</span>
+                                 <span class="badge bg-secondary">User</span>
                             }
                         </td>
-                    </tr>
+                     </tr>
                 }
                 @if (!FilteredAndSortedUsers.Any())
                 {
@@ -266,11 +264,10 @@ else
             var userBets = bets.Where(b => b.UserId == u.Id).ToList();
             var userTrans = transactions.Where(t => t.UserId == u.Id).ToList();
 
-            // --- CRITICAL FIX: Exclude Rejected transactions ---
+            // --- Exclude Rejected transactions ---
             var totalDeposits = userTrans.Where(t => t.Type == "Deposit" && t.Status != "Rejected").Sum(t => t.AmountNOK);
             var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal" && t.Status != "Rejected").Sum(t => t.AmountNOK);
-            // ---------------------------------------------------
-
+            
             var winnings = userBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
             var settledStakes = userBets
                 .Where(b => b.Status == "Won" || b.Status == "Lost")
@@ -294,7 +291,8 @@ else
                 var firstTrans = userTrans.OrderBy(t => t.Date).FirstOrDefault()?.Date;
                 
                 if (firstBet.HasValue && firstTrans.HasValue)
-                    dateJoined = firstBet.Value < firstTrans.Value ? firstBet.Value : firstTrans.Value;
+                    dateJoined = firstBet.Value < firstTrans.Value ?
+                    firstBet.Value : firstTrans.Value;
                 else if (firstBet.HasValue)
                     dateJoined = firstBet.Value;
                 else if (firstTrans.HasValue)
@@ -304,7 +302,8 @@ else
             }
 
             // --- CALCULATE LAST ACTIVE DATE ---
-            var lastBetDate = userBets.Any() ? userBets.Max(b => b.UpdatedAt) : DateTime.MinValue;
+            var lastBetDate = userBets.Any() ?
+            userBets.Max(b => b.UpdatedAt) : DateTime.MinValue;
             var lastTransDate = userTrans.Any() ? userTrans.Max(t => t.UpdatedAt) : DateTime.MinValue;
             var userUpdateDate = u.UpdatedAt == DateTime.MinValue ? u.CreatedAt : u.UpdatedAt;
             
@@ -324,7 +323,7 @@ else
                 LifetimeProfit = lifetimeProfit,
                 DateJoined = dateJoined,
                 LastActive = lastActive,
-                DiscordUserId = u.DiscordUserId // --- MAP DISCORD ID ---
+                DiscordUserId = u.DiscordUserId
             };
             if (u.EmailConfirmed)
             {
@@ -335,6 +334,9 @@ else
                 pendingUsersVM.Add(vm);
             }
         }
+        
+        // Sort Pending Users by Date Joined (Most Recent First)
+        pendingUsersVM = pendingUsersVM.OrderByDescending(u => u.DateJoined).ToList();
     }
 
     private async Task ApproveUser(string userId)
@@ -359,9 +361,7 @@ else
             });
             await context.SaveChangesAsync();
             
-            // --- NEW: Notify Admins to refresh list ---
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-            
             await LoadData(context); 
             
             successMessage = $"User {user.UserName} has been approved.";
@@ -391,9 +391,7 @@ else
             });
             await context.SaveChangesAsync();
             
-            // --- NEW: Notify Admins to refresh list ---
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-            
             await LoadData(context); 
             
             successMessage = $"User {name} has been rejected and deleted.";
@@ -410,7 +408,6 @@ else
         else
         {
             sortColumn = column;
-            // Default sort direction logic: Dates/Numbers desc, Text asc
             sortAscending = column switch 
             {
                 "LastActive" or "DateJoined" or "Balance" or "Handle" or "LifetimeProfit" or "AvailableCredit" => false,
@@ -449,16 +446,26 @@ else
 
             query = sortColumn switch
             {
-                "LastActive" => sortAscending ? query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
-                "DateJoined" => sortAscending ? query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
-                "UserName" => sortAscending ? query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
-                "FirstName" => sortAscending ? query.OrderBy(u => u.FirstName) : query.OrderByDescending(u => u.FirstName),
-                "LastName" => sortAscending ? query.OrderBy(u => u.LastName) : query.OrderByDescending(u => u.LastName),
-                "Balance" => sortAscending ? query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
-                "Handle" => sortAscending ? query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
-                "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
-                "AvailableCredit" => sortAscending ? query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
-                "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
+                "LastActive" => sortAscending ?
+                query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
+                "DateJoined" => sortAscending ?
+                query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
+                "UserName" => sortAscending ?
+                query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
+                "FirstName" => sortAscending ?
+                query.OrderBy(u => u.FirstName) : query.OrderByDescending(u => u.FirstName),
+                "LastName" => sortAscending ?
+                query.OrderBy(u => u.LastName) : query.OrderByDescending(u => u.LastName),
+                "Balance" => sortAscending ?
+                query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
+                "Handle" => sortAscending ?
+                query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
+                "LifetimeProfit" => sortAscending ?
+                query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
+                "AvailableCredit" => sortAscending ?
+                query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
+                "IsAdmin" => sortAscending ?
+                query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
                 _ => query
             };
             return query;

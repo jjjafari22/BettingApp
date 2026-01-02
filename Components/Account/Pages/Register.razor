@@ -8,6 +8,7 @@
 @using BettingApp.Data
 @using Microsoft.AspNetCore.SignalR 
 @using BettingApp.Hubs
+@using BettingApp.Services
 
 @inject UserManager<ApplicationUser> UserManager
 @inject IUserStore<ApplicationUser> UserStore
@@ -17,6 +18,7 @@
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 @inject IHubContext<BetHub> HubContext
+@inject DiscordNotificationService DiscordService
 
 <PageTitle>Register</PageTitle>
 
@@ -32,19 +34,15 @@
             <ValidationSummary class="text-danger" role="alert" />
             
             <div class="form-floating mb-3">
-                <InputText id="username" @bind-Value="Input.UserName" class="form-control" placeholder="johndoe" />
-                <label for="username">Username</label>
-                <ValidationMessage For="() => Input.UserName" class="text-danger" />
-            </div>
-
-            <div class="form-floating mb-3">
                 <InputText id="firstname" @bind-Value="Input.FirstName" class="form-control" placeholder="John" />
                 <label for="firstname">First Name</label>
+                <ValidationMessage For="() => Input.FirstName" class="text-danger" />
             </div>
 
             <div class="form-floating mb-3">
                 <InputText id="lastname" @bind-Value="Input.LastName" class="form-control" placeholder="Doe" />
                 <label for="lastname">Last Name</label>
+                <ValidationMessage For="() => Input.LastName" class="text-danger" />
             </div>
 
             <div class="form-floating mb-3">
@@ -83,10 +81,12 @@
     {
         var user = CreateUser();
 
-        await UserStore.SetUserNameAsync(user, Input.UserName, CancellationToken.None);
+        // Use Email as the Username
+        await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
+        
         var emailStore = GetEmailStore();
         await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
-        
+
         // Custom Fields
         user.FirstName = Input.FirstName;
         user.LastName = Input.LastName;
@@ -98,20 +98,32 @@
         if (result.Succeeded)
         {
             Logger.LogInformation("User created a new account with password.");
-            
-            // --- NEW: Notify Admins of new registration ---
+
+            // --- NOTIFICATIONS ---
+            // 1. Notify Admin Page (SignalR)
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
-            // ----------------------------------------------
+            
+            // 2. Notify Discord
+            try
+            {
+                await DiscordService.SendNotificationAsync("New User Registered", $"**Name:** {Input.FirstName} {Input.LastName}\n**Email:** {Input.Email}\n**Status:** Pending Approval");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to send Discord notification");
+            }
+            // ---------------------
 
             var userId = await UserManager.GetUserIdAsync(user);
             var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
             code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+            
+            // We still generate the callback URL internally if needed, but we don't display it to the user.
             var callbackUrl = NavigationManager.GetUriWithQueryParameters(
                 NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
                 new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
 
-            await EmailSender.SendConfirmationLinkAsync(user, Input.Email, HtmlEncoder.Default.Encode(callbackUrl));
-
+            // Note: Since we don't have a real email sender, we just redirect to the "Pending" page.
             if (UserManager.Options.SignIn.RequireConfirmedAccount)
             {
                 RedirectManager.RedirectTo(
@@ -156,13 +168,10 @@
     private sealed class InputModel
     {
         [Required]
-        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 3)]
-        [Display(Name = "Username")]
-        public string UserName { get; set; } = "";
-
         [Display(Name = "First Name")]
         public string? FirstName { get; set; }
 
+        [Required]
         [Display(Name = "Last Name")]
         public string? LastName { get; set; }
 

@@ -56,6 +56,28 @@ public class DiscordNotificationService : IHostedService
         await _client.StopAsync();
     }
 
+    // --- NEW: Generic Notification (Used by Register.razor) ---
+    public async Task SendNotificationAsync(string title, string message)
+    {
+        var webhookUrl = _config["Discord:WebhookUrl"];
+        if (string.IsNullOrEmpty(webhookUrl)) return;
+
+        // Format the message content
+        string content = $"**{title}**\n" +
+                         $"{message}\n" +
+                         $"------------------------------\n";
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            await client.PostAsJsonAsync(webhookUrl, new { content });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send generic Discord Webhook notification.");
+        }
+    }
+
     // --- User DM Logic ---
     public async Task NotifyUserBetAsync(string? discordUserId, Bet bet, string status, bool isUpdate)
     {
