@@ -20,7 +20,7 @@
     /* Clickable Rows */
     .cursor-pointer { cursor: pointer; }
     
-    /* --- MODAL STYLES (Copied from Admin.razor) --- */
+    /* --- MODAL STYLES --- */
     .modal { overscroll-behavior: contain; outline: none; }
     .review-modal-content { max-height: 90vh; height: 90vh; display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain; }
     .review-modal-body { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; background-color: #212529; overflow-y: auto; overscroll-behavior: contain; position: relative; }
@@ -65,7 +65,7 @@
                        </div>
                    }
                    @if (reviewErrorMessage != null) {
-                       <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
+                        <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
                            <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
                                <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
                                <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
@@ -73,10 +73,10 @@
                        </div>
                    }
                    
-                    <div class="review-image-container">
+                   <div class="review-image-container">
                        <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(currentReviewIndex <= 0)"><i class="bi bi-chevron-left"></i></button>
                        @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
-                            <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
+                           <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
                        } else {
                            <div class="text-white-50 fst-italic text-center">
                                <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
@@ -91,21 +91,32 @@
                                 <div class="col-4">
                                     <label class="form-label fw-bold text-muted small mb-1">Amount</label>
                                     <div class="input-group input-group-sm">
-                                       <input type="number" class="form-control fw-bold" @bind="reviewingBetModel.AmountNOK" placeholder="0" />
+                                       @* CHANGED: Manual value binding + @oninput to prevent crash and enable instant updates *@
+                                       <input type="number" 
+                                              class="form-control fw-bold" 
+                                              value="@reviewingBetModel.AmountNOK" 
+                                              @oninput="(e) => UpdateAmount(e.Value)"
+                                              placeholder="0" />
                                        <span class="input-group-text">kr</span>
-                                    </div>
+                                   </div>
                                 </div>
                                <div class="col-3">
                                    <label class="form-label fw-bold text-muted small mb-1">Odds</label>
-                                   <input type="number" step="0.01" class="form-control form-control-sm fw-bold" @bind="reviewingBetModel.Odds" placeholder="1.00" />
-                                </div>
+                                   @* CHANGED: Manual value binding + @oninput to prevent crash and enable instant updates *@
+                                   <input type="number" 
+                                          step="0.01" 
+                                          class="form-control form-control-sm fw-bold" 
+                                          value="@reviewingBetModel.Odds" 
+                                          @oninput="(e) => UpdateOdds(e.Value)"
+                                          placeholder="1.00" />
+                               </div>
                                <div class="col-5">
                                     <label class="form-label fw-bold text-muted small mb-1">Payout</label>
                                     <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
                                 </div>
                             </div>
 
-                            @* ACTIONS *@
+                           @* ACTIONS *@
                            @if (reviewingBetModel.Status == "Pending") {
                                <div class="row g-3">
                                    <div class="col-6"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-check-lg me-1"></i> Approve</button></div>
@@ -178,10 +189,10 @@ else
                                 <td>
                                     <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
                                         <i class="bi bi-check-lg"></i> Approve
-                                     </button>
-                                      <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
                                          <i class="bi bi-x-lg"></i> Reject
-                                     </button>
+                                    </button>
                                 </td>
                             </tr>
                         }
@@ -211,8 +222,7 @@ else
         <div class="col-md-6">
             <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
-                 <input type="text" class="form-control" placeholder="Search by name or email..." 
-                       @bind="searchTerm" @bind:event="oninput" />
+                 <input type="text" class="form-control" placeholder="Search by name or email..." @bind="searchTerm" @bind:event="oninput" />
             </div>
         </div>
     </div>
@@ -238,8 +248,7 @@ else
             <tbody>
                  @foreach (var user in FilteredAndSortedUsers)
                 {
-                    <tr class="cursor-pointer @(selectedUserId == user.Id ? "table-primary border border-primary" : "")" 
-                        @onclick="() => SelectUser(user.Id, user.UserName)">
+                    <tr class="cursor-pointer @(selectedUserId == user.Id ? "table-primary border border-primary" : "")" @onclick="() => SelectUser(user.Id, user.UserName)">
                         <td>@ToUserLocal(user.LastActive).ToString("g")</td>
                         
                         <td @onclick:stopPropagation="true">
@@ -262,7 +271,15 @@ else
                             @if (!string.IsNullOrEmpty(user.DiscordUserId)) { <i class="bi bi-discord text-primary" title="Connected"></i> }
                             else { <span class="text-muted">-</span> }
                         </td>
-                        <td>@(string.IsNullOrEmpty(user.ReferredBy) ? "-" : user.ReferredBy)</td>
+                        
+                        @* Editable Referral Field *@
+                        <td @onclick:stopPropagation="true">
+                            <input class="form-control form-control-sm" 
+                                   style="min-width: 100px;"
+                                   value="@user.ReferredBy" 
+                                   @onchange="@(e => UpdateUserReferral(user.Id, e.Value?.ToString()))"
+                                   placeholder="-" />
+                        </td>
                         
                         <td>
                             @if (user.IsAdmin) { <span class="badge bg-primary">Admin</span> }
@@ -286,7 +303,7 @@ else
                 <h3 class="mb-0 text-primary">
                     <i class="bi bi-person-lines-fill me-2"></i>History: @selectedUserName
                 </h3>
-                
+            
                 <div class="d-flex gap-2">
                      @* STATUS FILTER *@
                     <select class="form-select w-auto" @onchange="OnStatusFilterChanged" value="@statusFilter">
@@ -334,7 +351,7 @@ else
             <div class="table-responsive">
                 <table class="table table-sm table-striped table-hover text-nowrap align-middle">
                      <thead class="table-dark">
-                        <tr>
+                         <tr>
                              <th>Action</th>
                              <th>ID</th>
                              <th>Last Updated</th>
@@ -351,7 +368,7 @@ else
                              <tr class="@rowClass">
                                     <td>
                                           <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
-                                              <i class="bi bi-pencil-square"></i> View/Edit
+                                                <i class="bi bi-pencil-square"></i> View/Edit
                                           </button>
                                     </td>
                                     <td>@bet.Id</td>
@@ -372,9 +389,9 @@ else
                                     }
                                     else
                                      {
-                                        <span class="text-muted">-</span>
+                                         <span class="text-muted">-</span>
                                     }
-                                     </td>
+                                    </td>
                                 </tr>
                         }
                         @if (!displayedUserBets.Any())
@@ -402,7 +419,6 @@ else
     private string sortColumn = "LastActive";
     private bool sortAscending = false; // Descending by default for dates
     private string? currentAdminName;
-
     // --- SELECTED USER STATE ---
     private string? selectedUserId;
     private string selectedUserName = "";
@@ -416,7 +432,6 @@ else
     
     private decimal selectedUserHandle;
     private decimal selectedUserProfit;
-
     // --- MODAL STATE ---
     private Bet? reviewingBetModel;
     private string? reviewErrorMessage;
@@ -435,6 +450,29 @@ else
         if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
         return utcDate.AddMinutes(-TimezoneOffset);
     }
+    
+    // --- MANUAL BINDING HELPERS ---
+    private void UpdateAmount(object? value)
+    {
+        if (reviewingBetModel == null) return;
+        if (int.TryParse(value?.ToString(), out int result))
+        {
+            reviewingBetModel.AmountNOK = result;
+        }
+        else
+        {
+            reviewingBetModel.AmountNOK = null;
+        }
+    }
+
+    private void UpdateOdds(object? value)
+    {
+        if (reviewingBetModel == null) return;
+        if (decimal.TryParse(value?.ToString(), out decimal result))
+        {
+            reviewingBetModel.Odds = result;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -443,7 +481,6 @@ else
         currentAdminName = user.Identity?.Name;
 
         using var context = DbFactory.CreateDbContext();
-        
         if (user.Identity?.IsAuthenticated == true)
         {
             var currentUser = await context.Users.AsNoTracking()
@@ -494,7 +531,7 @@ else
         
         // Refetch selected user bets if active
         if (selectedUserId != null) {
-            await SelectUser(selectedUserId, selectedUserName); 
+            await SelectUser(selectedUserId, selectedUserName);
         } else {
              await InvokeAsync(StateHasChanged);
         }
@@ -563,10 +600,7 @@ else
                 LastName = u.LastName ?? "",
                 Handle = handle,
                 IsAdmin = u.IsAdmin,
-                
-                // CHANGED: now maps from INT, implicit conversion ok, but property in VM changed too
                 CreditLimit = u.CreditLimit, 
-                
                 Balance = balance,
                 AvailableCredit = balance + u.CreditLimit, // decimal + int = decimal
                 LifetimeProfit = lifetimeProfit,
@@ -603,7 +637,6 @@ else
             .Where(b => b.UserId == userId)
             .OrderByDescending(b => b.UpdatedAt)
             .ToListAsync();
-            
         ApplyFilters();
     }
 
@@ -622,7 +655,6 @@ else
     private void ApplyFilters()
     {
         if (selectedUserId == null) return;
-
         DateTime cutoff = DateTime.MinValue;
         dateFilterText = "All Time";
 
@@ -633,7 +665,6 @@ else
 
         // 1. Filter by DATE (for stats calculation)
         var betsInDateRange = allSelectedUserBets.Where(b => b.UpdatedAt >= cutoff).ToList();
-        
         // 2. Filter by STATUS (for table display only)
         if (statusFilter == "All")
         {
@@ -649,16 +680,13 @@ else
         selectedUserHandle = betsInDateRange
             .Where(b => b.Status != "Rejected" && b.Status != "Cancelled")
             .Sum(b => (decimal)(b.AmountNOK ?? 0));
-
         // Profit: Winnings - Settled Stakes
         var periodWinnings = betsInDateRange
             .Where(b => b.Status == "Won")
             .Sum(b => b.PotentialPayout);
-            
         var periodStakes = betsInDateRange
             .Where(b => b.Status == "Won" || b.Status == "Lost")
             .Sum(b => (decimal)(b.AmountNOK ?? 0));
-            
         selectedUserProfit = periodWinnings - periodStakes;
 
         StateHasChanged();
@@ -752,12 +780,32 @@ else
         }
     }
 
+    // --- UPDATE REFERRAL ---
+    private async Task UpdateUserReferral(string userId, string? newReferral)
+    {
+        using var context = DbFactory.CreateDbContext();
+        var user = await context.Users.FindAsync(userId);
+        if (user != null)
+        {
+            user.ReferredBy = newReferral;
+            user.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+            
+            // Update local VM to reflect change without full reload
+            var vm = allUsersVM.FirstOrDefault(u => u.Id == userId);
+            if (vm != null) vm.ReferredBy = newReferral;
+            
+            // Also update pending list if user is there
+            var pvm = pendingUsersVM.FirstOrDefault(u => u.Id == userId);
+            if (pvm != null) pvm.ReferredBy = newReferral;
+        }
+    }
+
     // --- MODAL LOGIC (Copied from Admin.razor for Consistency) ---
     private void StartReview(Bet bet)
     {
         currentReviewList = displayedUserBets; // Use the filtered list
         currentReviewIndex = displayedUserBets.FindIndex(b => b.Id == bet.Id);
-
         reviewingBetModel = new Bet 
         { 
             Id = bet.Id, UserId = bet.UserId, UserName = bet.UserName, 
@@ -892,7 +940,6 @@ else
         }
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet status is now: {newStatus}");
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        
         modalSuccessMessage = $"Bet #{bet.Id} updated.";
         
         // Auto-refresh main data and selected user bets
@@ -963,10 +1010,7 @@ else
         public string FirstName { get; set; } = "";
         public string LastName { get; set; } = "";
         public bool IsAdmin { get; set; }
-        
-        // CHANGED: Decimal -> int
         public int CreditLimit { get; set; }
-        
         public decimal Balance { get; set; }
         public decimal Handle { get; set; }
         public decimal AvailableCredit { get; set; }
