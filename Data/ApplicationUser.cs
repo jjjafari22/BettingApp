@@ -17,6 +17,12 @@ public class ApplicationUser : IdentityUser
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
 
+    // --- NEW: Referral System ---
+    public string? ReferredBy { get; set; }
+
+    // --- NEW: Manual Verification ---
+    public bool IsManuallyVerified { get; set; }
+
     // --- NEW: Track when the user profile was last updated ---
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

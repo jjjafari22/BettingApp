@@ -61,6 +61,17 @@
                 <label for="confirm-password">Confirm Password</label>
                 <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
             </div>
+
+            @* --- UPDATED: Referred By Field --- *@
+            <div class="form-floating mb-3">
+                <InputText id="referredby" @bind-Value="Input.ReferredBy" class="form-control" placeholder="Friend's Name" />
+                <label for="referredby">Referred By</label>
+                <div class="form-text text-muted">
+                    Optional: Who referred you to our web app?
+                </div>
+                <ValidationMessage For="() => Input.ReferredBy" class="text-danger" />
+            </div>
+
             <button type="submit" class="w-100 btn btn-lg btn-primary">Register</button>
         </EditForm>
     </div>
@@ -80,16 +91,15 @@
     public async Task RegisterUser(EditContext editContext)
     {
         var user = CreateUser();
-
         // Use Email as the Username
         await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
-        
         var emailStore = GetEmailStore();
         await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
 
         // Custom Fields
         user.FirstName = Input.FirstName;
         user.LastName = Input.LastName;
+        user.ReferredBy = Input.ReferredBy; // <--- Save Referral
         user.CreatedAt = DateTime.UtcNow;
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -102,11 +112,11 @@
             // --- NOTIFICATIONS ---
             // 1. Notify Admin Page (SignalR)
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
-            
+
             // 2. Notify Discord
             try
             {
-                await DiscordService.SendNotificationAsync("New User Registered", $"**Name:** {Input.FirstName} {Input.LastName}\n**Email:** {Input.Email}\n**Status:** Pending Approval");
+                await DiscordService.SendNotificationAsync("New User Registered", $"**Name:** {Input.FirstName} {Input.LastName}\n**Email:** {Input.Email}\n**Referred By:** {Input.ReferredBy ?? "None"}\n**Status:** Pending Approval");
             }
             catch (Exception ex)
             {
@@ -174,6 +184,9 @@
         [Required]
         [Display(Name = "Last Name")]
         public string? LastName { get; set; }
+
+        [Display(Name = "Referred by")]
+        public string? ReferredBy { get; set; }
 
         [Required]
         [EmailAddress]

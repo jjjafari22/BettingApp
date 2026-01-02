@@ -19,7 +19,7 @@
         <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
             <DataAnnotationsValidator />
             
-            @* --- CHANGED: Display Email instead of Username --- *@
+            @* --- Display Email --- *@
             <div class="form-floating mb-3">
                 <input type="text" value="@email" id="email" class="form-control" placeholder="" disabled />
                 <label for="email" class="form-label">Email</label>
@@ -41,6 +41,16 @@
                 <InputText @bind-Value="Input.DiscordUserId" id="Input.DiscordUserId" class="form-control" placeholder="" />
                 <label for="Input.DiscordUserId" class="form-label">Discord User ID</label>
                 <ValidationMessage For="() => Input.DiscordUserId" class="text-danger" />
+            </div>
+
+            @* --- Referred By Field --- *@
+            <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.ReferredBy" id="Input.ReferredBy" class="form-control" placeholder="" />
+                <label for="Input.ReferredBy" class="form-label">Referred By</label>
+                <div class="form-text text-muted">
+                    Optional: Who referred you to our web app?
+                </div>
+                <ValidationMessage For="() => Input.ReferredBy" class="text-danger" />
             </div>
 
             <button type="submit" class="w-100 btn btn-lg btn-primary">Save</button>
@@ -76,7 +86,6 @@
                         </li>
                     </ul>
                 </li>
- 
                 <li class="mb-2">
                     <strong>Save:</strong> 
                     Paste the Discord User ID into the box above and click <strong>Save</strong>.
@@ -105,11 +114,13 @@
         Input.DiscordUserId ??= user.DiscordUserId;
         Input.FirstName ??= user.FirstName;
         Input.LastName ??= user.LastName;
+        Input.ReferredBy ??= user.ReferredBy; 
     }
 
     private async Task OnValidSubmitAsync()
     {
         bool hasChanges = false;
+        
         // --- Save Changes ---
         if (Input.DiscordUserId != user.DiscordUserId)
         {
@@ -129,6 +140,12 @@
             hasChanges = true;
         }
 
+        if (Input.ReferredBy != user.ReferredBy)
+        {
+            user.ReferredBy = Input.ReferredBy;
+            hasChanges = true;
+        }
+
         if (hasChanges)
         {
             await UserManager.UpdateAsync(user);
@@ -143,11 +160,16 @@
 
     private sealed class InputModel
     {
+        [Required]
         [Display(Name = "First Name")]
         public string? FirstName { get; set; }
 
+        [Required]
         [Display(Name = "Last Name")]
         public string? LastName { get; set; }
+
+        [Display(Name = "Referred By")]
+        public string? ReferredBy { get; set; }
 
         [Display(Name = "Discord User ID")]
         [RegularExpression(@"^\d{17,19}$", ErrorMessage = "Discord User ID must be 17, 18, or 19 digits.")]

@@ -41,12 +41,13 @@ else
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-sm table-striped table-hover mb-0 align-middle text-nowrap">
-                     <thead class="table-dark">
+                    <thead class="table-dark">
                         <tr>
                             <th>Date Joined</th>
                             <th>First Name</th>
                             <th>Last Name</th>
                             <th>User</th>
+                            <th>Referred By</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -58,12 +59,13 @@ else
                                 <td>@user.FirstName</td>
                                 <td>@user.LastName</td>
                                 <td>@user.UserName</td>
+                                <td>@(string.IsNullOrEmpty(user.ReferredBy) ? "-" : user.ReferredBy)</td>
                                 <td>
                                     <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
                                         <i class="bi bi-check-lg"></i> Approve
                                      </button>
                                      <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
-                                        <i class="bi bi-x-lg"></i> Reject
+                                         <i class="bi bi-x-lg"></i> Reject
                                     </button>
                                 </td>
                             </tr>
@@ -71,7 +73,7 @@ else
                         @if (!pendingUsersVM.Any())
                         {
                             <tr>
-                                <td colspan="5" class="text-center text-muted py-3">No pending approvals.</td>
+                                <td colspan="6" class="text-center text-muted py-3">No pending approvals.</td>
                             </tr>
                         }
                     </tbody>
@@ -121,13 +123,20 @@ else
                         Lifetime Profit @GetSortIcon("LifetimeProfit")
                     </th>
                     <th class="text-center">Discord</th>
+                    
+                    @* --- NEW COLUMNS --- *@
+                    <th>Referred By</th>
+                    <th style="cursor: pointer;" @onclick='() => Sort("IsManuallyVerified")'>
+                        Verified @GetSortIcon("IsManuallyVerified")
+                    </th>
+
                     <th style="cursor: pointer;" @onclick='() => Sort("IsAdmin")'>
                         Admin @GetSortIcon("IsAdmin")
                     </th>
                 </tr>
             </thead>
             <tbody>
-                 @foreach (var user in FilteredAndSortedUsers)
+                @foreach (var user in FilteredAndSortedUsers)
                 {
                     <tr>
                         <td>@ToUserLocal(user.LastActive).ToString("g")</td>
@@ -139,37 +148,53 @@ else
                         </td>
                         <td>@user.AvailableCredit.ToString("N0") kr</td>
                         <td class="fw-bold">
-                              @user.Handle.ToString("N0") kr
+                            @user.Handle.ToString("N0") kr
                         </td>
                         <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold">
                             @user.LifetimeProfit.ToString("N0") kr
-                         </td>
+                        </td>
                         <td class="text-center">
                             @if (!string.IsNullOrEmpty(user.DiscordUserId))
                             {
-                                 <i class="bi bi-discord text-primary" title="Connected"></i>
+                                <i class="bi bi-discord text-primary" title="Connected"></i>
                             }
                             else
                             {
                                 <span class="text-muted">-</span>
                             }
                         </td>
+                        
+                        @* --- NEW: Referred By --- *@
+                        <td>
+                             @(string.IsNullOrEmpty(user.ReferredBy) ? "-" : user.ReferredBy)
+                        </td>
+
+                        @* --- NEW: Manually Verified Toggle --- *@
+                        <td>
+                            <button class="btn btn-sm @(user.IsManuallyVerified ? "btn-success" : "btn-outline-secondary")" 
+                                    @onclick="() => ToggleVerification(user.Id)"
+                                    title="Click to toggle verification status">
+                                <i class="bi @(user.IsManuallyVerified ? "bi-check-circle-fill" : "bi-circle")"></i>
+                                @(user.IsManuallyVerified ? "Verified" : "Unverified")
+                            </button>
+                        </td>
+
                         <td>
                             @if (user.IsAdmin)
                             {
-                                 <span class="badge bg-primary">Admin</span>
+                                <span class="badge bg-primary">Admin</span>
                             }
                             else
                             {
                                  <span class="badge bg-secondary">User</span>
                             }
                         </td>
-                     </tr>
+                    </tr>
                 }
                 @if (!FilteredAndSortedUsers.Any())
                 {
                     <tr>
-                        <td colspan="10" class="text-center text-muted">No active users found.</td>
+                        <td colspan="12" class="text-center text-muted">No active users found.</td>
                     </tr>
                 }
             </tbody>
@@ -214,16 +239,20 @@ else
         }
 
         if (!hasAccess) return;
+
         // --- SignalR Setup ---
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
+        
         hubConnection.On("ReceiveUserRegistration", async () =>
         {
             await RefreshData();
         });
+        
         // Also listen for general updates (bets/transactions) to refresh sorting
         hubConnection.On<string>("ReceiveAdminNotification", async (msg) => { await RefreshData(); });
+
         await hubConnection.StartAsync();
         await hubConnection.SendAsync("JoinAdminGroup");
         // ---------------------
@@ -259,6 +288,7 @@ else
 
         allUsersVM = new List<UserViewModel>();
         pendingUsersVM = new List<UserViewModel>();
+
         foreach (var u in users)
         {
             var userBets = bets.Where(b => b.UserId == u.Id).ToList();
@@ -267,7 +297,6 @@ else
             // --- Exclude Rejected transactions ---
             var totalDeposits = userTrans.Where(t => t.Type == "Deposit" && t.Status != "Rejected").Sum(t => t.AmountNOK);
             var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal" && t.Status != "Rejected").Sum(t => t.AmountNOK);
-            
             var winnings = userBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
             var settledStakes = userBets
                 .Where(b => b.Status == "Won" || b.Status == "Lost")
@@ -278,11 +307,14 @@ else
             var liability = userBets.Where(b => 
                 b.Status == "Pending" || b.Status == "Approved"
             ).Sum(b => (decimal)(b.AmountNOK ?? 0));
+
             var balance = totalDeposits - totalWithdrawals - liability + winnings;
+            
             // --- CALCULATE HANDLE (Total Amount Betted) ---
             var handle = userBets
                 .Where(b => b.Status != "Rejected" && b.Status != "Cancelled")
                 .Sum(b => (decimal)(b.AmountNOK ?? 0));
+
             DateTime dateJoined = u.CreatedAt;
             if (dateJoined == DateTime.MinValue)
             {
@@ -291,8 +323,7 @@ else
                 var firstTrans = userTrans.OrderBy(t => t.Date).FirstOrDefault()?.Date;
                 
                 if (firstBet.HasValue && firstTrans.HasValue)
-                    dateJoined = firstBet.Value < firstTrans.Value ?
-                    firstBet.Value : firstTrans.Value;
+                    dateJoined = firstBet.Value < firstTrans.Value ? firstBet.Value : firstTrans.Value;
                 else if (firstBet.HasValue)
                     dateJoined = firstBet.Value;
                 else if (firstTrans.HasValue)
@@ -302,12 +333,12 @@ else
             }
 
             // --- CALCULATE LAST ACTIVE DATE ---
-            var lastBetDate = userBets.Any() ?
-            userBets.Max(b => b.UpdatedAt) : DateTime.MinValue;
+            var lastBetDate = userBets.Any() ? userBets.Max(b => b.UpdatedAt) : DateTime.MinValue;
             var lastTransDate = userTrans.Any() ? userTrans.Max(t => t.UpdatedAt) : DateTime.MinValue;
             var userUpdateDate = u.UpdatedAt == DateTime.MinValue ? u.CreatedAt : u.UpdatedAt;
             
             var lastActive = new[] { userUpdateDate, lastBetDate, lastTransDate }.Max();
+
             var vm = new UserViewModel
             {
                 Id = u.Id,
@@ -323,8 +354,11 @@ else
                 LifetimeProfit = lifetimeProfit,
                 DateJoined = dateJoined,
                 LastActive = lastActive,
-                DiscordUserId = u.DiscordUserId
+                DiscordUserId = u.DiscordUserId,
+                ReferredBy = u.ReferredBy,             // <--- Map Referral
+                IsManuallyVerified = u.IsManuallyVerified // <--- Map Verification
             };
+
             if (u.EmailConfirmed)
             {
                 allUsersVM.Add(vm);
@@ -359,6 +393,7 @@ else
                 Details = "User approved by admin.",
                 Timestamp = DateTime.UtcNow
             });
+
             await context.SaveChangesAsync();
             
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
@@ -389,12 +424,44 @@ else
                 Details = "User rejected and deleted by admin.",
                 Timestamp = DateTime.UtcNow
             });
+
             await context.SaveChangesAsync();
             
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
             await LoadData(context); 
             
             successMessage = $"User {name} has been rejected and deleted.";
+            StateHasChanged();
+        }
+    }
+
+    // --- NEW: Toggle Verification Logic ---
+    private async Task ToggleVerification(string userId)
+    {
+        using var context = DbFactory.CreateDbContext();
+        var user = await context.Users.FindAsync(userId);
+        
+        if (user != null)
+        {
+            user.IsManuallyVerified = !user.IsManuallyVerified;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var adminName = authState.User.Identity?.Name ?? "System";
+            
+            context.AuditLogs.Add(new AuditLog 
+            {
+                Action = "Toggle Verification",
+                AdminUserName = adminName,
+                TargetUserName = user.UserName ?? "Unknown",
+                Details = $"Manual verification set to {user.IsManuallyVerified}",
+                Timestamp = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
+            await LoadData(context); // Refresh data
+            
+            successMessage = $"User {user.UserName} is now {(user.IsManuallyVerified ? "Verified" : "Unverified")}.";
             StateHasChanged();
         }
     }
@@ -411,6 +478,7 @@ else
             sortAscending = column switch 
             {
                 "LastActive" or "DateJoined" or "Balance" or "Handle" or "LifetimeProfit" or "AvailableCredit" => false,
+                "IsManuallyVerified" => false, // New default descending
                 _ => true
             };
         }
@@ -435,6 +503,7 @@ else
         get
         {
             var query = allUsersVM.AsEnumerable();
+
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query = query.Where(u => 
@@ -446,28 +515,21 @@ else
 
             query = sortColumn switch
             {
-                "LastActive" => sortAscending ?
-                query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
-                "DateJoined" => sortAscending ?
-                query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
-                "UserName" => sortAscending ?
-                query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
-                "FirstName" => sortAscending ?
-                query.OrderBy(u => u.FirstName) : query.OrderByDescending(u => u.FirstName),
-                "LastName" => sortAscending ?
-                query.OrderBy(u => u.LastName) : query.OrderByDescending(u => u.LastName),
-                "Balance" => sortAscending ?
-                query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
-                "Handle" => sortAscending ?
-                query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
-                "LifetimeProfit" => sortAscending ?
-                query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
-                "AvailableCredit" => sortAscending ?
-                query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
-                "IsAdmin" => sortAscending ?
-                query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
+                "LastActive" => sortAscending ? query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
+                "DateJoined" => sortAscending ? query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
+                "UserName" => sortAscending ? query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
+                "FirstName" => sortAscending ? query.OrderBy(u => u.FirstName) : query.OrderByDescending(u => u.FirstName),
+                "LastName" => sortAscending ? query.OrderBy(u => u.LastName) : query.OrderByDescending(u => u.LastName),
+                "Balance" => sortAscending ? query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
+                "Handle" => sortAscending ? query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
+                "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
+                "AvailableCredit" => sortAscending ? query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
+                "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
+                // --- NEW Sort ---
+                "IsManuallyVerified" => sortAscending ? query.OrderBy(u => u.IsManuallyVerified) : query.OrderByDescending(u => u.IsManuallyVerified),
                 _ => query
             };
+
             return query;
         }
     }
@@ -488,5 +550,8 @@ else
         public DateTime DateJoined { get; set; }
         public DateTime LastActive { get; set; }
         public string? DiscordUserId { get; set; }
+        // --- NEW Properties ---
+        public string? ReferredBy { get; set; }
+        public bool IsManuallyVerified { get; set; }
     }
 }
