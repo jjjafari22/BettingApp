@@ -108,15 +108,22 @@
         if (result.Succeeded)
         {
             Logger.LogInformation("User created a new account with password.");
-
             // --- NOTIFICATIONS ---
             // 1. Notify Admin Page (SignalR)
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
-
+            
             // 2. Notify Discord
             try
             {
-                await DiscordService.SendNotificationAsync("New User Registered", $"**Name:** {Input.FirstName} {Input.LastName}\n**Email:** {Input.Email}\n**Referred By:** {Input.ReferredBy ?? "None"}\n**Status:** Pending Approval");
+                // Construct the Admin Users URL dynamically
+                string adminUsersUrl = $"{NavigationManager.BaseUri}admin/users";
+
+                await DiscordService.SendNotificationAsync("New User Registered", 
+                    $"**Name:** {Input.FirstName} {Input.LastName}\n" +
+                    $"**Email:** {Input.Email}\n" +
+                    $"**Referred By:** {Input.ReferredBy ?? "None"}\n" +
+                    $"**Status:** Pending Approval\n" +
+                    $"[Approve User Now]({adminUsersUrl})"); // Added Link Here
             }
             catch (Exception ex)
             {
