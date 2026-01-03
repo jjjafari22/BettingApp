@@ -117,7 +117,7 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
-    // --- ADMIN WEBHOOK LOGIC (FIXED: Reverted to Standard Content) ---
+    // --- ADMIN WEBHOOK LOGIC (FIXED: Uses Embeds + Explicit Image Property) ---
     public async Task NotifyAdminNewPickAsync(Bet bet)
     {
         var webhookUrl = _config["Discord:WebhookUrl"];
@@ -126,17 +126,33 @@ public class DiscordNotificationService : IHostedService
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
         string adminUrl = $"{baseUrl}/admin?ReviewBetId={bet.Id}";
 
-        // Using standard 'content' string to allow Discord to auto-preview the screenshot link
-        string content = $"**New Pick Placed!**\n" +
-                         $"**User:** {bet.UserName}\n" +
-                         $"Approve: {adminUrl}\n" +
-                         (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"{bet.ScreenshotUrl}\n") +
-                         $"------------------------------\n";
+        // We use an Embed to support masked links [Text](URL).
+        // We explicitly add the 'image' property so Discord shows the screenshot at the bottom.
+        string description = $"**New Pick Placed!**\n" +
+                             $"**User:** {bet.UserName}\n" +
+                             $"[Approve Pick Here]({adminUrl})\n" +
+                             (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({bet.ScreenshotUrl})\n") +
+                             $"------------------------------\n";
 
         try
         {
             var client = _httpClientFactory.CreateClient();
-            await client.PostAsJsonAsync(webhookUrl, new { content });
+
+            // Construct the Embed object
+            var embed = new
+            {
+                description = description,
+                color = 3066993, // Green
+                // This 'image' property ensures the screenshot is displayed big at the bottom
+                image = string.IsNullOrEmpty(bet.ScreenshotUrl) ? null : new { url = bet.ScreenshotUrl }
+            };
+
+            var payload = new 
+            { 
+                embeds = new[] { embed } 
+            };
+
+            await client.PostAsJsonAsync(webhookUrl, payload);
         }
         catch (Exception ex)
         {
