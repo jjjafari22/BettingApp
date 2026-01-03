@@ -56,13 +56,12 @@ public class DiscordNotificationService : IHostedService
         await _client.StopAsync();
     }
 
-    // --- NEW: Generic Notification (Used by Register.razor) ---
+    // --- GENERIC NOTIFICATION (Unchanged) ---
     public async Task SendNotificationAsync(string title, string message)
     {
         var webhookUrl = _config["Discord:WebhookUrl"];
         if (string.IsNullOrEmpty(webhookUrl)) return;
 
-        // Format the message content
         string content = $"**{title}**\n" +
                          $"{message}\n" +
                          $"------------------------------\n";
@@ -78,12 +77,10 @@ public class DiscordNotificationService : IHostedService
         }
     }
 
-    // --- User DM Logic ---
+    // --- USER DM LOGIC (Unchanged) ---
     public async Task NotifyUserBetAsync(string? discordUserId, Bet bet, string status, bool isUpdate)
     {
         if (string.IsNullOrWhiteSpace(discordUserId)) return;
-
-        // Use the new Status to build the message
         string message = BuildBetMessage(bet, status, isUpdate);
         await SendDmAsync(discordUserId, message);
     }
@@ -120,7 +117,7 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
-    // --- Admin Webhook Logic ---
+    // --- ADMIN WEBHOOK LOGIC (UPDATED: Uses Embeds for Links) ---
     public async Task NotifyAdminNewPickAsync(Bet bet)
     {
         var webhookUrl = _config["Discord:WebhookUrl"];
@@ -129,16 +126,29 @@ public class DiscordNotificationService : IHostedService
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
         string adminUrl = $"{baseUrl}/admin?ReviewBetId={bet.Id}";
 
-        string content = $"**New Pick Placed!**\n" +
-                         $"**User:** {bet.UserName}\n" +
-                         $"[Approve Here]({adminUrl})\n" +
-                         (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({bet.ScreenshotUrl})\n") +
-                         $"------------------------------\n";
+        // Markdown links [Text](Link) only work in Description fields of Embeds
+        string description = $"**New Pick Placed!**\n" +
+                             $"**User:** {bet.UserName}\n" +
+                             $"[Approve Here]({adminUrl})\n" +
+                             (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({bet.ScreenshotUrl})\n") +
+                             $"------------------------------\n";
 
         try
         {
             var client = _httpClientFactory.CreateClient();
-            await client.PostAsJsonAsync(webhookUrl, new { content });
+            // We use 'embeds' array instead of 'content' to support links
+            var payload = new 
+            { 
+                embeds = new[] 
+                { 
+                    new 
+                    { 
+                        description = description,
+                        color = 3066993 // Optional: Nice Green Color
+                    } 
+                } 
+            };
+            await client.PostAsJsonAsync(webhookUrl, payload);
         }
         catch (Exception ex)
         {
@@ -154,17 +164,29 @@ public class DiscordNotificationService : IHostedService
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143";
         string adminUrl = $"{baseUrl}/admin/transactions";
 
-        string content = $"**💸 New Withdrawal Request!**\n" +
-                         $"**User:** {transaction.UserName}\n" +
-                         $"**Amount:** {transaction.AmountNOK:N0} NOK\n" +
-                         $"**Platform:** {transaction.Platform}\n" +
-                         $"[Manage Transactions]({adminUrl})\n" +
-                         $"------------------------------\n";
+        string description = $"**💸 New Withdrawal Request!**\n" +
+                             $"**User:** {transaction.UserName}\n" +
+                             $"**Amount:** {transaction.AmountNOK:N0} NOK\n" +
+                             $"**Platform:** {transaction.Platform}\n" +
+                             $"[Manage Transactions]({adminUrl})\n" +
+                             $"------------------------------\n";
 
         try
         {
             var client = _httpClientFactory.CreateClient();
-            await client.PostAsJsonAsync(webhookUrl, new { content });
+            // Updated to use Embeds here as well for consistency
+            var payload = new 
+            { 
+                embeds = new[] 
+                { 
+                    new 
+                    { 
+                        description = description,
+                        color = 15158332 // Optional: Red/Warning Color
+                    } 
+                } 
+            };
+            await client.PostAsJsonAsync(webhookUrl, payload);
         }
         catch (Exception ex)
         {
@@ -172,7 +194,7 @@ public class DiscordNotificationService : IHostedService
         }
     }
 
-    // --- Message Builder (Restored Design) ---
+    // --- MESSAGE BUILDER (Unchanged) ---
     private string BuildBetMessage(Bet bet, string status, bool isUpdate)
     {
         string updateTag = isUpdate ? " (Updated)" : "";
@@ -216,7 +238,6 @@ public class DiscordNotificationService : IHostedService
             ? "" 
             : $"\n[View Screenshot]({fullScreenshotUrl})";
 
-        // Only show Outcome text if the bet is completed (Won/Lost/Void)
         string outcomeLine = "";
         if (status == "Won" || status == "Lost" || status == "Void")
         {

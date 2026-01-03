@@ -78,7 +78,8 @@
         pointer-events: none;
     }
     .nav-arrow-left { left: 10px; }
-    .nav-arrow-right { right: 10px; }
+    .nav-arrow-right { right: 10px;
+    }
 
     .review-controls-container {
         flex-shrink: 0;
@@ -96,9 +97,12 @@
     }
 
     @@media (min-width: 992px) { 
-        .action-btn { width: 80%; }
-        .review-modal-content { max-height: 95vh; height: 95vh; margin: 0.5rem; }
-        .review-controls-container { padding: 0.75rem; }
+        .action-btn { width: 80%;
+        }
+        .review-modal-content { max-height: 95vh; height: 95vh; margin: 0.5rem;
+        }
+        .review-controls-container { padding: 0.75rem;
+        }
     }
 </style>
 
@@ -141,18 +145,19 @@
                 <div class="modal-header py-2 flex-shrink-0">
                     <div class="d-flex align-items-center w-100 overflow-hidden">
                         <h5 class="modal-title fs-6 me-2 flex-grow-1 text-truncate">
-                             Bet #@viewBetModel.Id 
-                            @{ var (statusText, statusClass) = GetDisplayStatus(viewBetModel); }
+                              Bet #@viewBetModel.Id 
+                            @{ var (statusText, statusClass) = GetDisplayStatus(viewBetModel);
+                            }
                             <span class="badge ms-2 @statusClass">@statusText</span>
                         </h5>
                         <button type="button" class="btn-close flex-shrink-0" @onclick="CloseViewModal"></button>
-                     </div>
+                    </div>
                 </div>
 
                 @* --- ADDED: Swipe Hint for Mobile --- *@
                 <div class="d-block d-md-none bg-dark text-white-50 text-center py-1 small border-bottom border-secondary">
                     <i class="bi bi-arrows-move"></i> Swipe left/right to navigate
-                 </div>
+                </div>
                   
                 <div class="modal-body review-modal-body">
                     <div class="review-image-container">
@@ -160,7 +165,7 @@
                         <button class="nav-arrow nav-arrow-left shadow-lg" 
                                @onclick="() => NavigateView(-1)" 
                                disabled="@(currentViewIndex <= 0)">
-                            <i class="bi bi-chevron-left"></i>
+                             <i class="bi bi-chevron-left"></i>
                         </button>
                     
                         @if (!string.IsNullOrEmpty(viewBetModel.ScreenshotUrl))
@@ -171,14 +176,14 @@
                         {
                              <div class="text-white-50 fst-italic text-center">
                                 <i class="bi bi-image-fill display-1 d-block mb-3"></i>
-                                <span>No Image Available</span>
+                                 <span>No Image Available</span>
                              </div>
                         }
                         
                         @* --- Right Arrow --- *@
                         <button class="nav-arrow nav-arrow-right shadow-lg" 
                                @onclick="() => NavigateView(1)" 
-                               disabled="@(currentViewIndex >= myBets.Count - 1)">
+                                  disabled="@(currentViewIndex >= myBets.Count - 1)">
                            <i class="bi bi-chevron-right"></i>
                         </button>
                     </div>
@@ -189,17 +194,18 @@
                                 <label class="text-muted small d-block">Amount</label>
                                 <span class="fw-bold fs-5">
                                     @GetAmountDisplay(viewBetModel)
-                                 </span>
+                                  </span>
                              </div>
                             <div class="col-4">
-                                <label class="text-muted small d-block">Odds</label>
+                                 <label class="text-muted small d-block">Odds</label>
                                  <span class="fw-bold fs-5">
                                     @GetOddsDisplay(viewBetModel)
-                                 </span>
+                                  </span>
                              </div>
                             <div class="col-4">
                                 <label class="text-muted small d-block">@GetPayoutLabel(viewBetModel)</label>
-                                <span class="fw-bold fs-5 @(viewBetModel.Status == "Lost" ? "text-danger" : "text-success")">
+                                <span class="fw-bold fs-5 @(viewBetModel.Status == "Lost" ?
+ "text-danger" : "text-success")">
                                     @GetPayoutDisplay(viewBetModel)
                                 </span>
                             </div>
@@ -226,7 +232,7 @@
             <h3>Balance</h3>
             <h1 class="display-4 @GetBalanceClass(Balance)">@Balance.ToString("N0") kr</h1>
             <small class="text-muted">
-                 Available Credit: <strong>@AvailableCredit.ToString("N0") kr</strong> 
+                Available Credit: <strong>@AvailableCredit.ToString("N0") kr</strong> 
                 (Credit Limit: @CreditLimit.ToString("N0") kr)
             </small>
         </div>
@@ -236,22 +242,29 @@
         <div class="card-header">New Pick</div>
         <div class="card-body">
             <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
-                <DataAnnotationsValidator />
+                 <DataAnnotationsValidator />
                  
                 <div class="mb-3">
-                    <label>Screenshot *</label>
-                    <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" />
+                    <label class="form-label">Screenshots *</label>
+                    <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" multiple />
+                    <div class="form-text text-muted">You can select multiple screenshots to upload multiple picks at once.</div>
+                    @if (uploadedFiles.Any())
+                    {
+                        <div class="mt-2 text-success small">
+                            <i class="bi bi-check-circle me-1"></i> @uploadedFiles.Count file(s) selected
+                        </div>
+                    }
                 </div>
 
                  <button type="submit" class="btn btn-primary w-100" disabled="@IsSubmitting">
                    @if (IsSubmitting)
                     {
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        <span class="ms-2">Sending Pick...</span>
+                        <span class="ms-2">Sending @(uploadedFiles.Count > 1 ? "Picks" : "Pick")...</span>
                     }
                     else
                     {
-                       <span>Send Pick</span>
+                       <span>Send Pick(s)</span>
                      }
                 </button>
             </EditForm>
@@ -273,14 +286,14 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach (var bet in myBets)
+                 @foreach (var bet in myBets)
                 {
                     var (statusText, statusClass) = GetDisplayStatus(bet);
                     <tr class="@GetRowClass(bet)">
                         <td>
                             <button class="btn btn-primary btn-sm action-btn" @onclick="() => OpenViewModal(bet)">
                                  <i class="bi bi-eye me-1"></i> View Bet
-                             </button>
+                            </button>
                         </td>
                         <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                         <td>
@@ -318,9 +331,13 @@
     private decimal CreditLimit = 0;
     private decimal Balance = 0;
     private decimal AvailableCredit = 1000;
-    private IBrowserFile? uploadedFile;
+    
+    // Changed from single file to list
+    private IReadOnlyList<IBrowserFile> uploadedFiles = new List<IBrowserFile>();
+    
     private HubConnection? hubConnection;
     private string userId = string.Empty;
+    private string userName = string.Empty; // Store username explicitly
     
     private bool IsLoading = true;
     private bool IsSubmitting = false;
@@ -357,6 +374,8 @@
             if (!string.IsNullOrEmpty(uid))
             {
                 userId = uid;
+                userName = auth.User.Identity?.Name ?? "Unknown";
+                
                 using var context = DbFactory.CreateDbContext();
                 var user = await context.Users.AsNoTracking()
                     .Select(u => new { u.Id, u.IsAdmin }) 
@@ -368,7 +387,7 @@
                 }
                 
                 newBet.UserId = userId;
-                newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
+                newBet.UserName = userName;
             }
         }
         catch (Microsoft.AspNetCore.Components.NavigationException)
@@ -491,9 +510,11 @@
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
 
+    // UPDATED: Handle multiple files
     private void HandleFileSelected(InputFileChangeEventArgs e)
     {
-        uploadedFile = e.File;
+        // Allow up to 20 files at once
+        uploadedFiles = e.GetMultipleFiles(20);
     }
 
     // --- OPEN VIEW MODAL ---
@@ -549,13 +570,12 @@
         var diff = touchStartX - touchEndX;
         if (Math.Abs(diff) > 50)
         {
-            if (diff > 0) NavigateView(1);
-            // Next
-            else NavigateView(-1);
-            // Prev
+            if (diff > 0) NavigateView(1); // Next
+            else NavigateView(-1); // Prev
         }
     }
 
+    // UPDATED: Process multiple files
     private async Task PlaceBet()
     {
         ErrorMessage = null;
@@ -564,58 +584,81 @@
 
         try
         {
-            if (uploadedFile == null)
+            if (!uploadedFiles.Any())
             {
-                ErrorMessage = "You must upload a screenshot for your pick.";
+                ErrorMessage = "You must upload at least one screenshot.";
                 IsSubmitting = false;
                 return;
             }
 
-            // --- ADDED: Strict check for AvailableCredit ---
-            // Recalculate locally to ensure data is fresh
+            // --- Check Credit ---
             await LoadData();
-            
-            // If credit is 0 (or somehow negative), block the upload entirely.
             if (AvailableCredit <= 0) 
             {
                 ErrorMessage = "Your available credit is zero. To send a pick, you need to deposit more money.";
                 IsSubmitting = false;
                 return;
             }
-            // --------------------------------------------------------
+            
+            using var context = DbFactory.CreateDbContext(); 
+            var containerClient = BlobService.GetBlobContainerClient("uploads");
+            await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
+            await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob);
 
-            if (uploadedFile != null)
+            var betsToNotify = new List<Bet>();
+
+            foreach (var file in uploadedFiles)
             {
-                var resizedFile = await uploadedFile.RequestImageFileAsync("image/jpeg", 1200, 1200);
-                var containerClient = BlobService.GetBlobContainerClient("uploads");
-                await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
-                await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob);
-
+                // 1. Process Image
+                var resizedFile = await file.RequestImageFileAsync("image/jpeg", 1200, 1200);
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var blobClient = containerClient.GetBlobClient(fileName);
-                await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 2000000);
+                
+                await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 3000000); // 3MB limit
                 var headers = new BlobHttpHeaders { ContentType = "image/jpeg" };
                 await blobClient.UploadAsync(stream, new BlobUploadOptions { HttpHeaders = headers });
 
-                newBet.ScreenshotUrl = blobClient.Uri.ToString();
+                // 2. Create NEW Bet object per file
+                var bet = new Bet
+                {
+                    UserId = userId,
+                    UserName = userName,
+                    ScreenshotUrl = blobClient.Uri.ToString(),
+                    Status = "Pending",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    Odds = 1.0m,
+                    AmountNOK = null // Wait for admin
+                };
+
+                context.Bets.Add(bet);
+                betsToNotify.Add(bet);
             }
 
-            var auth = await AuthState.GetAuthenticationStateAsync();
-            newBet.UserId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value ?? string.Empty;
-            newBet.UserName = auth.User.Identity?.Name ?? "Unknown";
-            newBet.Status = "Pending";
-            newBet.CreatedAt = DateTime.UtcNow;
-            newBet.UpdatedAt = DateTime.UtcNow;
-
-            using var context = DbFactory.CreateDbContext(); 
-            context.Bets.Add(newBet);
+            // 3. Save all to DB
             await context.SaveChangesAsync();
 
-            await DiscordService.NotifyAdminNewPickAsync(newBet);
-            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {newBet.UserName}");
-            SuccessMessage = "Pick successfully sent for approval.";
-            newBet = new Bet { Odds = 1.0m }; 
-            uploadedFile = null;
+            // 4. Notifications
+            foreach (var bet in betsToNotify)
+            {
+                // Notify Discord for each specific bet (so admin sees all images)
+                await DiscordService.NotifyAdminNewPickAsync(bet);
+            }
+
+            // Send single summary notification to Admin Dashboard via SignalR
+            var msg = betsToNotify.Count == 1 
+                ? $"New pick submitted by {userName}" 
+                : $"{betsToNotify.Count} new picks submitted by {userName}";
+                
+            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", msg);
+
+            SuccessMessage = betsToNotify.Count == 1 
+                ? "Pick successfully sent for approval." 
+                : $"{betsToNotify.Count} picks successfully sent for approval.";
+
+            // Reset
+            newBet = new Bet { Odds = 1.0m, UserId = userId, UserName = userName }; 
+            uploadedFiles = new List<IBrowserFile>();
             betsPage = 1;
             await LoadData();
         }
