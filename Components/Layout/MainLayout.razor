@@ -4,7 +4,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject UserManager<ApplicationUser> UserManager
+@inject IServiceScopeFactory ScopeFactory 
 
 <div class="page">
     <div class="sidebar">
@@ -37,7 +37,7 @@
 
 @code {
     private bool showDiscordWarning = false;
-    
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -45,10 +45,17 @@
 
         if (userPrincipal.Identity is not null && userPrincipal.Identity.IsAuthenticated)
         {
-            var user = await UserManager.GetUserAsync(userPrincipal);
-            if (user is not null && string.IsNullOrEmpty(user.DiscordUserId))
+            // Create a new scope to get a fresh UserManager/DbContext
+            // This prevents conflict with the page's DbContext usage
+            using (var scope = ScopeFactory.CreateScope())
             {
-                showDiscordWarning = true;
+                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+                var user = await userManager.GetUserAsync(userPrincipal);
+
+                if (user is not null && string.IsNullOrEmpty(user.DiscordUserId))
+                {
+                    showDiscordWarning = true;
+                }
             }
         }
     }
