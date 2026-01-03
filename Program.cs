@@ -10,8 +10,17 @@ using Microsoft.AspNetCore.DataProtection;
 using System.IO;
 using System.Runtime.InteropServices;
 using Azure.Storage.Blobs;
+using Microsoft.AspNetCore.HttpOverrides; // NEW: Required for Azure
 
 var builder = WebApplication.CreateBuilder(args);
+
+// --- FIX 1: Force App to listen on Port 8080 (Azure Default) ---
+// This ensures the app matches the port Azure expects.
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(8080);
+});
+// -------------------------------------------------------------
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -20,16 +29,22 @@ builder.Services.AddRazorComponents()
 builder.Services.AddHttpClient();
 builder.Services.AddSignalR();
 
-// --- NEW: Register Discord Service ---
+// Register Discord Service
 builder.Services.AddSingleton<DiscordNotificationService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<DiscordNotificationService>());
 
-// --- NEW: Register Azure Blob Storage ---
-// This reads the connection string we set in the Portal or appsettings
+// Register Azure Blob Storage
 builder.Services.AddSingleton(x => new BlobServiceClient(builder.Configuration["AzureStorage:ConnectionString"]));
-// ----------------------------------------
 
-// --- UNIVERSAL DATA PROTECTION (Works on Azure, Linux, Mac, & Windows) ---
+// --- FIX 2: Configure Forwarded Headers ---
+// This tells the app "Trust the Azure Load Balancer when it says we are on HTTPS"
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
+// ----------------------------------------------------------------
+
+// --- UNIVERSAL DATA PROTECTION ---
 var dataProtectionPath = Path.Combine(Environment.GetEnvironmentVariable("HOME") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".aspnet", "DataProtection-Keys");
 
 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HOME")))
@@ -46,7 +61,6 @@ if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 {
     dataProtectionBuilder.ProtectKeysWithDpapi();
 }
-// -------------------------------------------------------------------------
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();
@@ -86,14 +100,14 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 
 var app = builder.Build();
 
-// --- GLOBAL DATE/TIME FORMATTING (Added) ---
-// This sets the default culture to use dd.MMM for dates and HH:mm for time.
-// This affects all .ToString("g"), ToShortDateString(), etc. across the app.
-var customCulture = new System.Globalization.CultureInfo("en-GB");
-customCulture.DateTimeFormat.ShortDatePattern = "dd.MMM"; // e.g. 28.Dec
-customCulture.DateTimeFormat.ShortTimePattern = "HH:mm";  // e.g. 14:30
-// Note: The "g" format (General) automatically combines ShortDate + ShortTime.
+// --- NEW: Apply Forwarded Headers immediately ---
+app.UseForwardedHeaders(); 
+// ------------------------------------------------
 
+// --- GLOBAL DATE/TIME FORMATTING ---
+var customCulture = new System.Globalization.CultureInfo("en-GB");
+customCulture.DateTimeFormat.ShortDatePattern = "dd.MMM";
+customCulture.DateTimeFormat.ShortTimePattern = "HH:mm";
 var supportedCultures = new[] { customCulture };
 
 app.UseRequestLocalization(new RequestLocalizationOptions
@@ -102,7 +116,6 @@ app.UseRequestLocalization(new RequestLocalizationOptions
     SupportedCultures = supportedCultures,
     SupportedUICultures = supportedCultures
 });
-// -------------------------------------------
 
 if (app.Environment.IsDevelopment())
 {
@@ -114,7 +127,9 @@ else
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// --- FIX 3: REMOVE HTTPS REDIRECT ---
+// We removed app.UseHttpsRedirection() because Azure Linux Containers
+// handle SSL termination externally. This prevents the "Failed to determine port" warning.
 
 app.UseStaticFiles();
 app.MapStaticAssets();
@@ -135,6 +150,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
+        // Migrations run here. If the app "hangs" on startup, it is likely waiting for the DB.
         context.Database.Migrate(); 
     }
     catch (Exception ex)
