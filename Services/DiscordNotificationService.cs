@@ -117,7 +117,7 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
-    // --- ADMIN WEBHOOK LOGIC (UPDATED: Uses Embeds for Links) ---
+    // --- ADMIN WEBHOOK LOGIC (FIXED: Reverted to Standard Content) ---
     public async Task NotifyAdminNewPickAsync(Bet bet)
     {
         var webhookUrl = _config["Discord:WebhookUrl"];
@@ -126,29 +126,17 @@ public class DiscordNotificationService : IHostedService
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
         string adminUrl = $"{baseUrl}/admin?ReviewBetId={bet.Id}";
 
-        // Markdown links [Text](Link) only work in Description fields of Embeds
-        string description = $"**New Pick Placed!**\n" +
-                             $"**User:** {bet.UserName}\n" +
-                             $"[Approve Here]({adminUrl})\n" +
-                             (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({bet.ScreenshotUrl})\n") +
-                             $"------------------------------\n";
+        // Using standard 'content' string to allow Discord to auto-preview the screenshot link
+        string content = $"**New Pick Placed!**\n" +
+                         $"**User:** {bet.UserName}\n" +
+                         $"Approve: {adminUrl}\n" +
+                         (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"{bet.ScreenshotUrl}\n") +
+                         $"------------------------------\n";
 
         try
         {
             var client = _httpClientFactory.CreateClient();
-            // We use 'embeds' array instead of 'content' to support links
-            var payload = new 
-            { 
-                embeds = new[] 
-                { 
-                    new 
-                    { 
-                        description = description,
-                        color = 3066993 // Optional: Nice Green Color
-                    } 
-                } 
-            };
-            await client.PostAsJsonAsync(webhookUrl, payload);
+            await client.PostAsJsonAsync(webhookUrl, new { content });
         }
         catch (Exception ex)
         {
@@ -174,7 +162,6 @@ public class DiscordNotificationService : IHostedService
         try
         {
             var client = _httpClientFactory.CreateClient();
-            // Updated to use Embeds here as well for consistency
             var payload = new 
             { 
                 embeds = new[] 
@@ -182,7 +169,7 @@ public class DiscordNotificationService : IHostedService
                     new 
                     { 
                         description = description,
-                        color = 15158332 // Optional: Red/Warning Color
+                        color = 15158332 // Red/Warning Color
                     } 
                 } 
             };
