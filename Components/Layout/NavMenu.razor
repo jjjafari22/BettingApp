@@ -8,9 +8,10 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Castle of Happiness</a>
+<div class="top-row ps-3 navbar navbar-dark" style="height: auto; min-height: 3.5rem; padding-top: 1rem; padding-bottom: 1rem;">
+    <div class="container-fluid d-flex flex-column align-items-center justify-content-center">
+        <a class="navbar-brand mx-0" href="">Castle of Happiness</a>
+        <img src="images/logo.png" alt="Logo" class="mt-2" style="width: 80px; height: auto;" />
     </div>
 </div>
 
@@ -25,14 +26,13 @@
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
-        
         <div class="nav-item px-3">
             @if (isAdmin)
             {
                 <NavLink class="nav-link d-flex align-items-center" href="admin" Match="NavLinkMatch.All">
                     <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> 
                     <span>Admin Home</span>
-                     @if (adminHomeTasks > 0)
+                    @if (adminHomeTasks > 0)
                     {
                         <span class="badge rounded-pill bg-danger ms-2">@adminHomeTasks</span>
                     }
@@ -43,7 +43,7 @@
                 <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
                     <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
                 </NavLink>
-                 
+                
                 <NavLink class="nav-link d-flex align-items-center" href="deposit-withdraw">
                     <span class="bi bi-wallet2" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
                     <span>Deposit/Withdrawal</span>
@@ -60,7 +60,7 @@
                             <span>Transactions</span>
                             @if (transactionTasks > 0)
                             {
-                                 <span class="badge rounded-pill bg-danger ms-2">@transactionTasks</span>
+                                <span class="badge rounded-pill bg-danger ms-2">@transactionTasks</span>
                             }
                         </NavLink>
                     </div>
@@ -76,7 +76,7 @@
                             <span>All Users</span>
                             @if (userTasks > 0)
                             {
-                                   <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
+                                <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
                             }
                         </NavLink>
                     </div>
@@ -105,22 +105,22 @@
                 </div>
                 <div class="nav-item px-3">
                     <form action="Account/Logout" method="post">
-                         <AntiforgeryToken />
+                        <AntiforgeryToken />
                         <input type="hidden" name="ReturnUrl" value="@currentUrl" />
                         <button type="submit" class="nav-link">
                             <span class="bi bi-arrow-bar-left-nav-menu" aria-hidden="true"></span> Logout
-                         </button>
+                        </button>
                     </form>
                 </div>
             </Authorized>
             <NotAuthorized>
                 <div class="nav-item px-3">
-                     <NavLink class="nav-link" href="Account/Register">
+                    <NavLink class="nav-link" href="Account/Register">
                         <span class="bi bi-person-nav-menu" aria-hidden="true"></span> Register
                     </NavLink>
                 </div>
                 <div class="nav-item px-3">
-                     <NavLink class="nav-link" href="Account/Login">
+                    <NavLink class="nav-link" href="Account/Login">
                         <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Login
                     </NavLink>
                 </div>
@@ -162,7 +162,8 @@
                 {
                     hubConnection = new HubConnectionBuilder()
                         .WithUrl(NavigationManager.ToAbsoluteUri("/bethub"))
-                         .Build();
+                        .Build();
+
                     // Listen for various admin events to refresh counters
                     hubConnection.On<string>("ReceiveAdminNotification", async (message) => await RefreshTasks());
                     hubConnection.On("ReceiveUserRegistration", async () => await RefreshTasks());
@@ -211,10 +212,8 @@
     {
         // Admin Home: Pending bets (review) + Active bets (process outcome)
         var pendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
-        
         // FIXED: Count Active bets by Status = Approved
         var activeBets = await context.Bets.CountAsync(b => b.Status == "Approved");
-        
         adminHomeTasks = pendingBets + activeBets;
         
         // Transactions: Pending withdrawals
