@@ -41,7 +41,7 @@
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
-                    <tr>
+                     <tr>
                         <th>Date</th>
                         <th>First Name</th>
                         <th>Last Name</th>
@@ -88,7 +88,7 @@
              <div class="card-header bg-primary text-white">Add Transaction (Manual)</div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-3 mb-3">
+                     <div class="col-md-3 mb-3">
                         <label>Select User</label>
                         <select class="form-select" value="@newTrans.UserId" @onchange="OnUserSelectChanged">
                             <option value="">-- Select User --</option>
@@ -298,7 +298,8 @@
 
     private async Task ConfirmWithdraw(Transaction t)
     {
-        successMessage = null; errorMessage = null;
+        successMessage = null;
+        errorMessage = null;
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
             $"Are you sure that you have actually completed the actual withdraw and sent {t.AmountNOK} kr to {t.UserName}?");
         if (!confirmed) return;
@@ -357,7 +358,8 @@
 
     private async Task AddTransaction()
     {
-        successMessage = null; errorMessage = null;
+        successMessage = null;
+        errorMessage = null;
         if (string.IsNullOrEmpty(newTrans.UserId) || newTrans.AmountNOK <= 0 || string.IsNullOrEmpty(newTrans.Platform))
         {
             errorMessage = "Please fill in all fields (User, Platform, and a valid Amount).";
@@ -387,9 +389,8 @@
         
         await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", $"New transaction: {newTrans.Type}");
         
-        // --- NEW: Notify Other Admins ---
+        // --- Notify Other Admins ---
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        
         if (selectedUser != null && !string.IsNullOrEmpty(selectedUser.DiscordUserId))
         {
             if (newTrans.Type == "Withdrawal")
@@ -407,13 +408,28 @@
     
     private async Task<decimal> GetUserBalance(string userId, ApplicationDbContext context)
     {
+        // FIX: Re-write logic to balance = D - W - (All Valid Stakes) + (Won Payouts)
         var user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
         var totalDeposits = await context.Transactions.Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected").SumAsync(t => t.AmountNOK);
         var totalWithdrawals = await context.Transactions.Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected").SumAsync(t => t.AmountNOK);
-        var winningBets = await context.Bets.Where(b => b.UserId == userId && b.Status == "Won").Select(b => new { b.AmountNOK, b.Odds }).ToListAsync();
-        var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-        var liability = await context.Bets.Where(b => b.UserId == userId && (b.Status == "Pending" || b.Status == "Approved")).SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-        return totalDeposits - totalWithdrawals - liability + winnings;
+        
+        // 1. All Valid Stakes (Pending + Approved + Won + Lost). Exclude Rejected, Cancelled, Void
+        var totalValidStakes = await context.Bets
+            .Where(b => b.UserId == userId && 
+                        b.Status != "Rejected" && 
+                        b.Status != "Cancelled" && 
+                        b.Status != "Void")
+            .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
+
+        // 2. Won Payouts (Only for Won bets)
+        var winningBets = await context.Bets
+            .Where(b => b.UserId == userId && b.Status == "Won")
+            .Select(b => new { b.AmountNOK, b.Odds })
+            .ToListAsync();
+        
+        var totalWonPayouts = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+
+        return totalDeposits - totalWithdrawals - totalValidStakes + totalWonPayouts;
     }
 
     public async ValueTask DisposeAsync()
