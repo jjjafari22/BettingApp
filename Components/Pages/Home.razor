@@ -141,11 +141,11 @@
             <div class="modal-content review-modal-content"
                  @ontouchstart="HandleTouchStart" 
                  @ontouchend="HandleTouchEnd">
-                  
+                 
                 <div class="modal-header py-2 flex-shrink-0">
                     <div class="d-flex align-items-center w-100 overflow-hidden">
                         <h5 class="modal-title fs-6 me-2 flex-grow-1 text-truncate">
-                              Bet #@viewBetModel.Id 
+                            Bet #@viewBetModel.Id 
                             @{ var (statusText, statusClass) = GetDisplayStatus(viewBetModel);
                             }
                             <span class="badge ms-2 @statusClass">@statusText</span>
@@ -179,11 +179,11 @@
                                  <span>No Image Available</span>
                              </div>
                         }
-                        
+                         
                         @* --- Right Arrow --- *@
                         <button class="nav-arrow nav-arrow-right shadow-lg" 
                                @onclick="() => NavigateView(1)" 
-                                  disabled="@(currentViewIndex >= myBets.Count - 1)">
+                               disabled="@(currentViewIndex >= myBets.Count - 1)">
                            <i class="bi bi-chevron-right"></i>
                         </button>
                     </div>
@@ -194,18 +194,17 @@
                                 <label class="text-muted small d-block">Amount</label>
                                 <span class="fw-bold fs-5">
                                     @GetAmountDisplay(viewBetModel)
-                                  </span>
+                                </span>
                              </div>
                             <div class="col-4">
-                                 <label class="text-muted small d-block">Odds</label>
+                                <label class="text-muted small d-block">Odds</label>
                                  <span class="fw-bold fs-5">
                                     @GetOddsDisplay(viewBetModel)
-                                  </span>
+                                </span>
                              </div>
                             <div class="col-4">
                                 <label class="text-muted small d-block">@GetPayoutLabel(viewBetModel)</label>
-                                <span class="fw-bold fs-5 @(viewBetModel.Status == "Lost" ?
- "text-danger" : "text-success")">
+                                <span class="fw-bold fs-5 @(viewBetModel.Status == "Lost" ? "text-danger" : "text-success")">
                                     @GetPayoutDisplay(viewBetModel)
                                 </span>
                             </div>
@@ -213,7 +212,7 @@
 
                         @if (viewBetModel.Status == "Pending")
                         {
-                            <div class="d-grid">
+                           <div class="d-grid">
                                 <button class="btn btn-outline-danger btn-lg fw-bold" @onclick="() => CancelBet(viewBetModel)">
                                     <i class="bi bi-trash3-fill me-2"></i>Cancel Pick
                                 </button>
@@ -251,7 +250,7 @@
                     @if (uploadedFiles.Any())
                     {
                         <div class="mt-2 text-success small">
-                            <i class="bi bi-check-circle me-1"></i> @uploadedFiles.Count file(s) selected
+                             <i class="bi bi-check-circle me-1"></i> @uploadedFiles.Count file(s) selected
                         </div>
                     }
                 </div>
@@ -265,7 +264,7 @@
                     else
                     {
                        <span>Send Pick(s)</span>
-                     }
+                    }
                 </button>
             </EditForm>
         </div>
@@ -276,7 +275,7 @@
     <div class="table-responsive">
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
-                <tr>
+                 <tr>
                     <th style="width: 150px;">Action</th>
                     <th>Last Updated</th>
                     <th>Bet Amount</th>
@@ -287,17 +286,17 @@
             </thead>
             <tbody>
                  @foreach (var bet in myBets)
-                {
+                 {
                     var (statusText, statusClass) = GetDisplayStatus(bet);
                     <tr class="@GetRowClass(bet)">
                         <td>
                             <button class="btn btn-primary btn-sm action-btn" @onclick="() => OpenViewModal(bet)">
                                  <i class="bi bi-eye me-1"></i> View Bet
-                            </button>
+                             </button>
                         </td>
                         <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                         <td>
-                             @GetAmountDisplay(bet)
+                            @GetAmountDisplay(bet)
                         </td>
                         <td>
                              @GetOddsDisplay(bet)
@@ -316,7 +315,7 @@
         <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
             <button class="btn btn-outline-secondary btn-sm" @onclick="PrevBetsPage" disabled="@(betsPage <= 1)">
                 <i class="bi bi-arrow-left"></i> Previous
-            </button>
+             </button>
             <span class="text-muted">Page @betsPage</span>
             <button class="btn btn-outline-secondary btn-sm" @onclick="NextBetsPage" disabled="@(!hasMoreBets)">
                 Next <i class="bi bi-arrow-right"></i>
@@ -331,13 +330,13 @@
     private decimal CreditLimit = 0;
     private decimal Balance = 0;
     private decimal AvailableCredit = 1000;
-    
     // Changed from single file to list
     private IReadOnlyList<IBrowserFile> uploadedFiles = new List<IBrowserFile>();
     
     private HubConnection? hubConnection;
     private string userId = string.Empty;
-    private string userName = string.Empty; // Store username explicitly
+    private string userName = string.Empty;
+    // Store username explicitly
     
     private bool IsLoading = true;
     private bool IsSubmitting = false;
@@ -350,7 +349,7 @@
 
     private int betsPage = 1;
     private bool hasMoreBets = false;
-    private int totalBets = 0; 
+    private int totalBets = 0;
     private const int PageSize = 20;
     // --- NAVIGATION STATE ---
     private int currentViewIndex = -1;
@@ -449,18 +448,27 @@
         var totalDeposits = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
+            
         var totalWithdrawals = await context.Transactions
             .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
             .SumAsync(t => t.AmountNOK);
+
+        // FIX: Subtract stakes for ALL valid bets (Pending, Approved, Won, Lost)
+        var totalValidStakes = await context.Bets
+            .Where(b => b.UserId == userId && 
+                        b.Status != "Rejected" && 
+                        b.Status != "Cancelled" && 
+                        b.Status != "Void")
+            .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
+
         var winningBets = await context.Bets
             .Where(b => b.UserId == userId && b.Status == "Won")
             .Select(b => new { b.AmountNOK, b.Odds })
             .ToListAsync();
-        var winnings = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-        var liability = await context.Bets
-            .Where(b => b.UserId == userId && (b.Status == "Pending" || b.Status == "Approved"))
-            .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-        Balance = totalDeposits - totalWithdrawals - liability + winnings;
+            
+        var totalWonPayouts = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+
+        Balance = totalDeposits - totalWithdrawals - totalValidStakes + totalWonPayouts;
         AvailableCredit = Balance + CreditLimit;
 
         await LoadBetsList();
@@ -570,8 +578,10 @@
         var diff = touchStartX - touchEndX;
         if (Math.Abs(diff) > 50)
         {
-            if (diff > 0) NavigateView(1); // Next
-            else NavigateView(-1); // Prev
+            if (diff > 0) NavigateView(1);
+            // Next
+            else NavigateView(-1);
+            // Prev
         }
     }
 
@@ -600,13 +610,12 @@
                 return;
             }
             
-            using var context = DbFactory.CreateDbContext(); 
+            using var context = DbFactory.CreateDbContext();
             var containerClient = BlobService.GetBlobContainerClient("uploads");
             await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
             await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob);
 
             var betsToNotify = new List<Bet>();
-
             foreach (var file in uploadedFiles)
             {
                 // 1. Process Image
@@ -614,7 +623,8 @@
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var blobClient = containerClient.GetBlobClient(fileName);
                 
-                await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 3000000); // 3MB limit
+                await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 3000000);
+                // 3MB limit
                 var headers = new BlobHttpHeaders { ContentType = "image/jpeg" };
                 await blobClient.UploadAsync(stream, new BlobUploadOptions { HttpHeaders = headers });
 
@@ -630,14 +640,12 @@
                     Odds = 1.0m,
                     AmountNOK = null // Wait for admin
                 };
-
                 context.Bets.Add(bet);
                 betsToNotify.Add(bet);
             }
 
             // 3. Save all to DB
             await context.SaveChangesAsync();
-
             // 4. Notifications
             foreach (var bet in betsToNotify)
             {
@@ -649,15 +657,13 @@
             var msg = betsToNotify.Count == 1 
                 ? $"New pick submitted by {userName}" 
                 : $"{betsToNotify.Count} new picks submitted by {userName}";
-                
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", msg);
 
             SuccessMessage = betsToNotify.Count == 1 
                 ? "Pick successfully sent for approval." 
                 : $"{betsToNotify.Count} picks successfully sent for approval.";
-
             // Reset
-            newBet = new Bet { Odds = 1.0m, UserId = userId, UserName = userName }; 
+            newBet = new Bet { Odds = 1.0m, UserId = userId, UserName = userName };
             uploadedFiles = new List<IBrowserFile>();
             betsPage = 1;
             await LoadData();
