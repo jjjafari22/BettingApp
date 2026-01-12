@@ -65,10 +65,10 @@
                        </div>
                    }
                    @if (reviewErrorMessage != null) {
-                        <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
+                       <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
                            <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
                                <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
-                                <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
+                               <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
                            </div>
                        </div>
                    }
@@ -116,15 +116,15 @@
                                 </div>
                             </div>
 
-                            @* ACTIONS *@
+                           @* ACTIONS *@
                            @if (reviewingBetModel.Status == "Pending") {
                                <div class="row g-3">
-                                    <div class="col-6"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-check-lg me-1"></i> Approve</button></div>
+                                   <div class="col-6"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-check-lg me-1"></i> Approve</button></div>
                                    <div class="col-6"><button class="btn btn-outline-danger w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Rejected")'><i class="bi bi-x-lg me-1"></i> Reject</button></div>
-                                </div>
+                               </div>
                            } else {
                                <div class="row g-2">
-                                    <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
+                                   <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
                                    <div class="col-3"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Won")'>Won</button></div>
                                    <div class="col-3"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'>Lost</button></div>
                                    <div class="col-3"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
@@ -181,18 +181,18 @@ else
                         @foreach (var user in pendingUsersVM)
                         {
                             <tr>
-                                 <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToString("g"))</td>
+                                <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToString("g"))</td>
                                 <td>@user.FirstName</td>
                                 <td>@user.LastName</td>
                                 <td>@user.UserName</td>
-                                 <td>@(string.IsNullOrEmpty(user.ReferredBy) ? "-" : user.ReferredBy)</td>
+                                <td>@(string.IsNullOrEmpty(user.ReferredBy) ? "-" : user.ReferredBy)</td>
                                 <td>
                                     <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
                                         <i class="bi bi-check-lg"></i> Approve
                                     </button>
-                                     <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
+                                    <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
                                          <i class="bi bi-x-lg"></i> Reject
-                                     </button>
+                                    </button>
                                 </td>
                             </tr>
                         }
@@ -256,7 +256,7 @@ else
                         <td>@ToUserLocal(user.LastActive).ToString("g")</td>
                         
                         <td @onclick:stopPropagation="true">
-                                   <button class="btn btn-sm @(user.IsManuallyVerified ? "btn-success" : "btn-outline-secondary")" 
+                                    <button class="btn btn-sm @(user.IsManuallyVerified ? "btn-success" : "btn-outline-secondary")" 
                                     @onclick="() => ToggleVerification(user.Id)"
                                     title="Click to toggle verification status">
                                 <i class="bi @(user.IsManuallyVerified ? "bi-check-circle-fill" : "bi-circle")"></i>
@@ -290,7 +290,7 @@ else
                         
                         @* Editable Referral Field *@
                         <td @onclick:stopPropagation="true">
-                            <input class="form-control form-control-sm" 
+                             <input class="form-control form-control-sm" 
                                    style="min-width: 100px;"
                                    value="@user.ReferredBy" 
                                    @onchange="@(e => UpdateUserReferral(user.Id, e.Value?.ToString()))"
@@ -299,12 +299,12 @@ else
                         
                         <td>
                             @if (user.IsAdmin) { <span class="badge bg-primary">Admin</span> }
-                             else { <span class="badge bg-secondary">User</span> }
+                              else { <span class="badge bg-secondary">User</span> }
                         </td>
                     </tr>
                 }
                 @if (!FilteredAndSortedUsers.Any())
-                 {
+                  {
                      <tr><td colspan="13" class="text-center text-muted">No active users found.</td></tr>
                 }
             </tbody>
@@ -333,7 +333,7 @@ else
                         <option value="Cancelled">Cancelled</option>
                     </select>
 
-                     <div class="btn-group" role="group">
+                    <div class="btn-group" role="group">
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "7D" ? "active" : "")" @onclick='() => SetDateFilter("7D")'>Last 7 Days</button>
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "30D" ? "active" : "")" @onclick='() => SetDateFilter("30D")'>Last 30 Days</button>
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "6M" ? "active" : "")" @onclick='() => SetDateFilter("6M")'>6 Months</button>
@@ -341,7 +341,8 @@ else
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "All" ? "active" : "")" @onclick='() => SetDateFilter("All")'>All Time</button>
                     </div>
                 </div>
-        </div>
+    
+         </div>
 
             <div class="row mb-4">
                 <div class="col-md-3">
@@ -357,17 +358,17 @@ else
                         <div class="card-body text-center">
                             <h6 class="card-subtitle mb-2 text-muted">Profit (@dateFilterText)</h6>
                             <h2 class="card-title @(selectedUserProfit >= 0 ? "text-success" : "text-danger")">
-                                 @selectedUserProfit.ToString("N0") kr
+                                  @selectedUserProfit.ToString("N0") kr
                             </h2>
                         </div>
-                   </div>
+                    </div>
                 </div>
             </div>
 
             <div class="table-responsive">
                 <table class="table table-sm table-striped table-hover text-nowrap align-middle">
                      <thead class="table-dark">
-                          <tr>
+                           <tr>
                              <th>Action</th>
                              <th>ID</th>
                              <th>Last Updated</th>
@@ -386,10 +387,10 @@ else
                                           <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
                                                   <i class="bi bi-pencil-square"></i> View/Edit
                                           </button>
-                                     </td>
+                                    </td>
                                     <td>@bet.Id</td>
                                     <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                                     <td>@bet.AmountNOK?.ToString("N0") kr</td>
+                                    <td>@bet.AmountNOK?.ToString("N0") kr</td>
                                     <td>@bet.Odds.ToString("N2")</td>
                                     <td>
                                         <span class="badge @GetStatusBadgeClass(bet.Status)">@bet.Status</span>
@@ -397,24 +398,24 @@ else
                                     <td>
                                      @if(bet.Status == "Won")
                                     {
-                                         @bet.PotentialPayout.ToString("N0") <span>kr</span>
+                                          @bet.PotentialPayout.ToString("N0") <span>kr</span>
                                     }
-                                     else if (bet.Status == "Lost")
+                                    else if (bet.Status == "Lost")
                                     {
                                         <span>0 kr</span>
-                                     }
+                                    }
                                     else
-                                     {
+                                    {
                                          <span class="text-muted">-</span>
                                     }
-                                  </td>
+                                   </td>
                                 </tr>
                         }
                         @if (!displayedUserBets.Any())
                          {
                            <tr><td colspan="7" class="text-muted text-center py-3">No bets found for this period/status.</td></tr>
                          }
-                    </tbody>
+                     </tbody>
                  </table>
             </div>
         </div>
@@ -810,6 +811,27 @@ else
     // --- UPDATE REFERRAL ---
     private async Task UpdateUserReferral(string userId, string? newReferral)
     {
+        var vm = allUsersVM.FirstOrDefault(u => u.Id == userId);
+        string? originalValue = vm?.ReferredBy; // Keep the exact original (null or string)
+        string oldValueDisplay = originalValue ?? "-";
+        string newValueDisplay = string.IsNullOrEmpty(newReferral) ? "-" : newReferral;
+
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to change Referred By from '{oldValueDisplay}' to '{newValueDisplay}'?");
+        if (!confirmed) 
+        { 
+            // Revert UI change
+            if (vm != null)
+            {
+                // Temporarily set to new value to sync with DOM, then revert
+                vm.ReferredBy = newReferral;
+                StateHasChanged();
+                await Task.Delay(1); // Yield to let render happen
+                vm.ReferredBy = originalValue;
+                StateHasChanged();
+            }
+            return; 
+        }
+
         using var context = DbFactory.CreateDbContext();
         var user = await context.Users.FindAsync(userId);
         if (user != null)
@@ -819,7 +841,6 @@ else
             await context.SaveChangesAsync();
             
             // Update local VM to reflect change without full reload
-            var vm = allUsersVM.FirstOrDefault(u => u.Id == userId);
             if (vm != null) vm.ReferredBy = newReferral;
             
             // Also update pending list if user is there
@@ -831,6 +852,26 @@ else
     // --- CHANGED: UPDATE DISCORD INFO METHODS ---
     private async Task UpdateDiscordId(string userId, string? newId)
     {
+        var vm = allUsersVM.FirstOrDefault(u => u.Id == userId);
+        string? originalValue = vm?.DiscordUserId; // Keep exact original
+        string oldValueDisplay = originalValue ?? "-";
+        string newValueDisplay = string.IsNullOrEmpty(newId) ? "-" : newId;
+
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to change Discord ID from '{oldValueDisplay}' to '{newValueDisplay}'?");
+        if (!confirmed) 
+        { 
+            // Revert UI change
+            if (vm != null)
+            {
+                vm.DiscordUserId = newId;
+                StateHasChanged();
+                await Task.Delay(1);
+                vm.DiscordUserId = originalValue;
+                StateHasChanged();
+            }
+            return; 
+        }
+
         using var context = DbFactory.CreateDbContext();
         var user = await context.Users.FindAsync(userId);
         if (user != null)
@@ -840,13 +881,32 @@ else
             await context.SaveChangesAsync();
             
             // Update local VM
-            var vm = allUsersVM.FirstOrDefault(u => u.Id == userId);
             if (vm != null) vm.DiscordUserId = newId;
         }
     }
 
     private async Task UpdateDiscordUsername(string userId, string? newUsername)
     {
+        var vm = allUsersVM.FirstOrDefault(u => u.Id == userId);
+        string? originalValue = vm?.DiscordUsername; // Keep exact original
+        string oldValueDisplay = originalValue ?? "-";
+        string newValueDisplay = string.IsNullOrEmpty(newUsername) ? "-" : newUsername;
+
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to change Discord Username from '{oldValueDisplay}' to '{newValueDisplay}'?");
+        if (!confirmed) 
+        { 
+             // Revert UI change
+            if (vm != null)
+            {
+                vm.DiscordUsername = newUsername;
+                StateHasChanged();
+                await Task.Delay(1);
+                vm.DiscordUsername = originalValue;
+                StateHasChanged();
+            }
+            return; 
+        }
+
         using var context = DbFactory.CreateDbContext();
         var user = await context.Users.FindAsync(userId);
         if (user != null)
@@ -856,7 +916,6 @@ else
             await context.SaveChangesAsync();
 
             // Update local VM
-            var vm = allUsersVM.FirstOrDefault(u => u.Id == userId);
             if (vm != null) vm.DiscordUsername = newUsername;
         }
     }
@@ -966,12 +1025,9 @@ else
 
         if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
-            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount";
-            return; }
-            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds";
-            return; }
-            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals";
-            return; }
+            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount"; return; }
+            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds"; return; }
+            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals"; return; }
         }
 
         if (new[] { "Won", "Lost", "Void", "Completed", "Cancelled" }.Contains(originalStatus))
@@ -1035,8 +1091,7 @@ else
         }
     }
 
-    private string GetSortIcon(string column) { if (sortColumn != column) return "";
-    return sortAscending ? "▲" : "▼"; }
+    private string GetSortIcon(string column) { if (sortColumn != column) return ""; return sortAscending ? "▲" : "▼"; }
 
     public async ValueTask DisposeAsync()
     {
