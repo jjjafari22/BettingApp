@@ -48,6 +48,11 @@
                     <span class="bi bi-wallet2" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
                     <span>Deposit/Withdrawal</span>
                 </NavLink>
+
+                <NavLink class="nav-link d-flex align-items-center" href="contact-us">
+                    <span class="bi bi-chat-text-fill" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
+                    <span>Contact Us</span>
+                </NavLink>
             }
         </div>
         <AuthorizeView>
@@ -163,7 +168,6 @@
                     hubConnection = new HubConnectionBuilder()
                         .WithUrl(NavigationManager.ToAbsoluteUri("/bethub"))
                         .Build();
-
                     // Listen for various admin events to refresh counters
                     hubConnection.On<string>("ReceiveAdminNotification", async (message) => await RefreshTasks());
                     hubConnection.On("ReceiveUserRegistration", async () => await RefreshTasks());
