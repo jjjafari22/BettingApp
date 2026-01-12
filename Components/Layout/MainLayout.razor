@@ -20,8 +20,9 @@
             @if (showDiscordWarning)
             {
                 <div class="alert alert-warning">
-                    For you to get notified when your bet is Approved/Rejected and notified when a bet is Won or Lost, you need to save your Discord client ID to your profile.
-                    <a href="Account/Manage">Click here to learn how to do this</a>.
+                    To place bets, you must first join our Discord server. 
+                    <a href="https://discord.gg/rNnsQWENMs" target="_blank" class="alert-link">Get started here</a>. 
+                    We require a verified channel to communicate with all active users.
                 </div>
             }
             @Body
@@ -51,8 +52,9 @@
             {
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
                 var user = await userManager.GetUserAsync(userPrincipal);
-
-                if (user is not null && string.IsNullOrEmpty(user.DiscordUserId))
+                
+                // CHANGED: Now checks if 'DiscordUsername' is missing (instead of Client ID)
+                if (user is not null && string.IsNullOrEmpty(user.DiscordUsername))
                 {
                     showDiscordWarning = true;
                 }
