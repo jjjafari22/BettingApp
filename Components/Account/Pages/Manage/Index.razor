@@ -36,12 +36,6 @@
                 <label for="Input.LastName" class="form-label">Last Name</label>
                 <ValidationMessage For="() => Input.LastName" class="text-danger" />
             </div>
-             
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.DiscordUserId" id="Input.DiscordUserId" class="form-control" placeholder="" />
-                <label for="Input.DiscordUserId" class="form-label">Discord User ID</label>
-                <ValidationMessage For="() => Input.DiscordUserId" class="text-danger" />
-            </div>
 
             @* --- Referred By Field --- *@
             <div class="form-floating mb-3">
@@ -55,43 +49,6 @@
 
             <button type="submit" class="w-100 btn btn-lg btn-primary">Save</button>
         </EditForm>
-
-        <div class="mt-4 pt-3 border-top">
-            <h5>How to connect Discord</h5>
-            <ol class="ps-3 text-muted small">
-                <li class="mb-2">
-                    <strong>Join the Server:</strong> 
-                    <a href="https://discord.gg/nXTXdpXw7r" target="_blank" class="text-decoration-none">Click here to join our Discord Server</a>.
-                </li>
-                <li class="mb-2">
-                    <strong>Enable Developer Mode on Discord:</strong> 
-                    You need this to get notification on Approved Bets and if you Won or Lost the bet.
-                    Go to <a href="https://discord.com/settings/advanced" target="_blank" class="text-decoration-none">Advanced Settings</a> and toggle "Developer Mode" on.
-                </li>
-                <li class="mb-2">
-                    <strong>Find your User ID on Discord:</strong> 
-                    Go to <a href="https://discord.com/settings/account" target="_blank" class="text-decoration-none">My Account</a>.
-                    <ul class="mt-1">
-                        <li class="mb-3">
-                            Click the three dots <span class="badge bg-secondary">...</span> next to your profile button and select "Copy User ID".
-                        </li>
-                        <li class="mb-3">
-                            <strong>Save:</strong> 
-                            Paste the Discord User ID into the box above and click <strong>Save</strong>.
-                            <div class="mt-2">
-                                <a href="images/CopyUserIDDiscord.png" target="_blank" title="Click to view full size">
-                                    <img src="images/CopyUserIDDiscord.png" 
-                                         class="img-fluid border rounded shadow-sm" 
-                                         alt="How to copy Discord User ID" 
-                                         style="max-width: 100%; height: auto; cursor: pointer;" />
-                                </a>
-                                <div class="small text-muted fst-italic mt-1">Click the image to enlarge</div>
-                            </div>
-                        </li>
-                    </ul>
-                </li>
-            </ol>
-        </div>
     </div>
 </div>
 
@@ -111,7 +68,6 @@
         email = await UserManager.GetEmailAsync(user);
 
         // Load existing data
-        Input.DiscordUserId ??= user.DiscordUserId;
         Input.FirstName ??= user.FirstName;
         Input.LastName ??= user.LastName;
         Input.ReferredBy ??= user.ReferredBy; 
@@ -120,14 +76,8 @@
     private async Task OnValidSubmitAsync()
     {
         bool hasChanges = false;
-        
-        // --- Save Changes ---
-        if (Input.DiscordUserId != user.DiscordUserId)
-        {
-            user.DiscordUserId = Input.DiscordUserId;
-            hasChanges = true;
-        }
 
+        // --- Save Changes ---
         if (Input.FirstName != user.FirstName)
         {
             user.FirstName = Input.FirstName;
@@ -170,9 +120,5 @@
 
         [Display(Name = "Referred By")]
         public string? ReferredBy { get; set; }
-
-        [Display(Name = "Discord User ID")]
-        [RegularExpression(@"^\d{17,19}$", ErrorMessage = "Discord User ID must be 17, 18, or 19 digits.")]
-        public string? DiscordUserId { get; set; }
     }
 }
