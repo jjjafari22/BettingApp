@@ -41,10 +41,8 @@
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
-                     <tr>
+                    <tr>
                         <th>Date</th>
-                        <th>First Name</th>
-                        <th>Last Name</th>
                         <th>User</th>
                         <th>Platform</th>
                         <th>Amount</th>
@@ -54,15 +52,12 @@
                 <tbody>
                     @if (pendingWithdrawals.Count == 0)
                     {
-                        <tr><td colspan="7" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
+                        <tr><td colspan="5" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
                     }
                     @foreach (var w in pendingWithdrawals)
                     {
-                        var u = allUsers.FirstOrDefault(x => x.Id == w.UserId);
                         <tr>
                             <td>@ToUserLocal(w.Date).ToString("g")</td>
-                            <td>@(u?.FirstName ?? "-")</td>
-                            <td>@(u?.LastName ?? "-")</td>
                             <td>@w.UserName</td>
                             <td>@w.Platform</td>
                             <td><strong>@w.AmountNOK.ToString("N0") kr</strong></td>
@@ -88,31 +83,26 @@
              <div class="card-header bg-primary text-white">Add Transaction (Manual)</div>
             <div class="card-body">
                 <div class="row">
-                     <div class="col-md-3 mb-3">
-                        <label>Select User</label>
-                        <select class="form-select" value="@newTrans.UserId" @onchange="OnUserSelectChanged">
-                            <option value="">-- Select User --</option>
-                            @foreach (var user in allUsers)
-                            {
-                                <option value="@user.Id">@user.UserName</option>
-                            }
-                        </select>
-                          
-                        @* --- Always Visible Stats Block --- *@
-                        <div class="mt-2 p-2 bg-light border rounded small">
-                            <div class="d-flex justify-content-between">
-                                <span>Balance:</span>
-                                <span class="@(selectedUserBalance >= 0 ? "text-success" : "text-danger") fw-bold">
-                                    @(selectedUserBalance.HasValue ? $"{selectedUserBalance.Value:N0} kr" : "-")
-                                </span>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span>Avail. Credit:</span>
-                                <span class="text-primary fw-bold">
-                                    @(selectedUserAvail.HasValue ? $"{selectedUserAvail.Value:N0} kr" : "-")
-                                </span>
-                            </div>
+                    @* NEW: Search User instead of crashing the page with a dropdown *@
+                    <div class="col-md-3 mb-3">
+                        <label>Target User (Username)</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" @bind="targetUsername" placeholder="Enter username" />
+                            <button class="btn btn-outline-secondary" @onclick="FindUser">Check</button>
                         </div>
+                        
+                        @if (selectedUser != null)
+                        {
+                            <div class="mt-2 p-2 bg-light border rounded small">
+                                <div class="d-flex justify-content-between">
+                                    <span>Balance:</span>
+                                    <span class="@(selectedUser.Balance >= 0 ? "text-success" : "text-danger") fw-bold">
+                                        @selectedUser.Balance.ToString("N0") kr
+                                    </span>
+                                </div>
+                                <div class="text-success"><small>User found: @selectedUser.UserName</small></div>
+                            </div>
+                        }
                     </div>
 
                     <div class="col-md-2 mb-3">
@@ -134,12 +124,29 @@
                     </div>
 
                     <div class="col-md-2 mb-3 d-flex align-items-end">
-                        <button class="btn btn-primary w-100" @onclick="AddTransaction">Add</button>
+                        <button class="btn btn-primary w-100" @onclick="AddTransaction" disabled="@(selectedUser == null)">Add</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
+@* UTILITY FOR MIGRATION - Run this ONCE *@
+<div class="accordion mb-4" id="adminTools">
+  <div class="accordion-item">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed text-danger" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTools">
+        ⚠️ Admin Database Tools
+      </button>
+    </h2>
+    <div id="collapseTools" class="accordion-collapse collapse" data-bs-parent="#adminTools">
+      <div class="accordion-body">
+          <p>Use this button ONCE after updating the code to fix the Balance column for all users.</p>
+          <button class="btn btn-danger" @onclick="RecalculateAllBalances">Recalculate ALL User Balances</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <h4 class="mb-3">Transaction History</h4>
@@ -194,20 +201,36 @@
              }
         </tbody>
     </table>
+    
+    @* Pagination *@
+    <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(currentPage <= 1)">
+            <i class="bi bi-arrow-left"></i> Previous
+        </button>
+        <span class="text-muted">Page @currentPage</span>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasMoreTransactions)">
+            Next <i class="bi bi-arrow-right"></i>
+        </button>
+    </div>
 </div>
 
 @code {
-    private List<ApplicationUser> allUsers = new();
     private List<Transaction> allTransactions = new();
     private List<Transaction> pendingWithdrawals = new();
     private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow, Status = "Completed" };
     
+    private string targetUsername = "";
+    private ApplicationUser? selectedUser;
+    
     private string? successMessage;
     private string? errorMessage;
-    private decimal? selectedUserBalance;
-    private decimal? selectedUserAvail;
     private string? currentAdminName;
     private HubConnection? hubConnection;
+    
+    // Pagination
+    private int currentPage = 1;
+    private const int PageSize = 20;
+    private bool hasMoreTransactions = false;
 
     private int TimezoneOffset { get; set; }
 
@@ -237,7 +260,6 @@
             return;
         }
 
-        allUsers = await context.Users.ToListAsync();
         await LoadTransactions(context);
     }
     
@@ -253,21 +275,16 @@
         }
     }
 
-    private async Task OnUserSelectChanged(ChangeEventArgs e)
+    private async Task FindUser()
     {
-        newTrans.UserId = e.Value?.ToString() ?? "";
-        selectedUserBalance = null;
-        selectedUserAvail = null;
-
-        if (!string.IsNullOrEmpty(newTrans.UserId))
-        {
-            using var context = DbFactory.CreateDbContext();
-            selectedUserBalance = await GetUserBalance(newTrans.UserId, context);
-            var user = allUsers.FirstOrDefault(u => u.Id == newTrans.UserId);
-            if (user != null)
-            {
-                selectedUserAvail = selectedUserBalance + user.CreditLimit;
-            }
+        if(string.IsNullOrWhiteSpace(targetUsername)) return;
+        using var context = DbFactory.CreateDbContext();
+        selectedUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == targetUsername);
+        if (selectedUser == null) errorMessage = "User not found.";
+        else {
+             errorMessage = null; 
+             newTrans.UserId = selectedUser.Id;
+             newTrans.UserName = selectedUser.UserName ?? "Unknown";
         }
     }
 
@@ -292,26 +309,36 @@
 
     private async Task LoadTransactions(ApplicationDbContext context)
     {
-        allTransactions = await context.Transactions.OrderByDescending(t => t.UpdatedAt).AsNoTracking().ToListAsync();
+        // Performance Fix: Pagination
+        allTransactions = await context.Transactions
+            .OrderByDescending(t => t.UpdatedAt)
+            .Skip((currentPage - 1) * PageSize)
+            .Take(PageSize)
+            .AsNoTracking()
+            .ToListAsync();
+            
+        var total = await context.Transactions.CountAsync();
+        hasMoreTransactions = total > (currentPage * PageSize);
+            
         pendingWithdrawals = await context.Transactions.Where(t => t.Type == "Withdrawal" && t.Status == "Pending").OrderBy(t => t.Date).AsNoTracking().ToListAsync();
     }
+    
+    private async Task NextPage() { currentPage++; using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); }
+    private async Task PrevPage() { if(currentPage > 1) { currentPage--; using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); } }
 
     private async Task ConfirmWithdraw(Transaction t)
     {
         successMessage = null;
         errorMessage = null;
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
-            $"Are you sure that you have actually completed the actual withdraw and sent {t.AmountNOK} kr to {t.UserName}?");
+            $"Confirm payout of {t.AmountNOK} kr to {t.UserName}?");
         if (!confirmed) return;
 
         using var context = DbFactory.CreateDbContext();
-        var userBalance = await GetUserBalance(t.UserId, context);
-        if (userBalance < 0)
-        {
-            errorMessage = "WARNING: User balance is negative! This withdrawal may exceed available funds.";
-            return;
-        }
-
+        
+        // Check balance (user should have already had amount deducted when they requested)
+        var user = await context.Users.FindAsync(t.UserId);
+        
         var dbTrans = await context.Transactions.FindAsync(t.Id);
         if (dbTrans != null)
         {
@@ -321,10 +348,9 @@
             await context.SaveChangesAsync();
             await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal confirmed");
             
-            var targetUser = await context.Users.FindAsync(t.UserId);
-            if (targetUser != null && !string.IsNullOrEmpty(targetUser.DiscordUserId))
+            if (user != null && !string.IsNullOrEmpty(user.DiscordUserId))
             {
-                await DiscordService.NotifyUserWithdrawalAsync(targetUser.DiscordUserId, t, "Completed");
+                await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, t, "Completed");
             }
 
             successMessage = "Withdrawal confirmed.";
@@ -339,17 +365,23 @@
 
         using var context = DbFactory.CreateDbContext();
         var dbTrans = await context.Transactions.FindAsync(t.Id);
-        if (dbTrans != null)
+        var user = await context.Users.FindAsync(t.UserId);
+        
+        if (dbTrans != null && user != null)
         {
             dbTrans.Status = "Rejected";
             dbTrans.UpdatedAt = DateTime.UtcNow;
+            
+            // Refund the money to balance
+            user.Balance += t.AmountNOK;
+            
             context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Rejected Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {t.AmountNOK}, ID: {t.Id}" });
             await context.SaveChangesAsync();
+            
             await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal rejected");
-            var targetUser = await context.Users.FindAsync(t.UserId);
-            if (targetUser != null && !string.IsNullOrEmpty(targetUser.DiscordUserId))
+            if (!string.IsNullOrEmpty(user.DiscordUserId))
             {
-                await DiscordService.NotifyUserWithdrawalAsync(targetUser.DiscordUserId, t, "Rejected");
+                await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, t, "Rejected");
             }
             successMessage = "Withdrawal rejected.";
             await LoadTransactions(context);
@@ -362,23 +394,30 @@
         errorMessage = null;
         if (string.IsNullOrEmpty(newTrans.UserId) || newTrans.AmountNOK <= 0 || string.IsNullOrEmpty(newTrans.Platform))
         {
-            errorMessage = "Please fill in all fields (User, Platform, and a valid Amount).";
+            errorMessage = "Please fill in all fields.";
             return;
         }
 
         using var context = DbFactory.CreateDbContext();
+        var user = await context.Users.FindAsync(newTrans.UserId);
+        if (user == null) { errorMessage = "User not found"; return; }
+
         if (newTrans.Type == "Withdrawal")
         {
-            var currentBalance = await GetUserBalance(newTrans.UserId, context);
-            if (currentBalance < newTrans.AmountNOK)
+            if (user.Balance < newTrans.AmountNOK)
             {
-                errorMessage = $"Cannot add withdrawal. Amount ({newTrans.AmountNOK:N0}) exceeds user balance ({currentBalance:N0}).";
+                errorMessage = $"Insufficient funds. Balance: {user.Balance:N0}";
                 return;
             }
+            // Deduct
+            user.Balance -= newTrans.AmountNOK;
+        }
+        else // Deposit
+        {
+            user.Balance += newTrans.AmountNOK;
         }
 
-        var selectedUser = allUsers.FirstOrDefault(u => u.Id == newTrans.UserId);
-        newTrans.UserName = selectedUser?.UserName ?? "Unknown";
+        newTrans.UserName = user.UserName ?? "Unknown";
         newTrans.Date = DateTime.UtcNow;
         newTrans.UpdatedAt = DateTime.UtcNow;
         newTrans.Status = "Completed"; 
@@ -388,48 +427,53 @@
         await context.SaveChangesAsync();
         
         await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", $"New transaction: {newTrans.Type}");
-        
-        // --- Notify Other Admins ---
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        if (selectedUser != null && !string.IsNullOrEmpty(selectedUser.DiscordUserId))
+
+        if (!string.IsNullOrEmpty(user.DiscordUserId) && newTrans.Type == "Withdrawal")
         {
-            if (newTrans.Type == "Withdrawal")
-            {
-                await DiscordService.NotifyUserWithdrawalAsync(selectedUser.DiscordUserId, newTrans, "Completed");
-            }
+             await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, newTrans, "Completed");
         }
         
         successMessage = "Transaction added successfully!";
         var type = newTrans.Type;
         newTrans = new Transaction { Type = type, Date = DateTime.UtcNow, Status = "Completed" };
-        selectedUserBalance = null; selectedUserAvail = null;
+        selectedUser = null; targetUsername = "";
         await LoadTransactions(context);
     }
     
-    private async Task<decimal> GetUserBalance(string userId, ApplicationDbContext context)
+    // --- TOOL TO FIX ALL BALANCES ---
+    private async Task RecalculateAllBalances()
     {
-        // FIX: Re-write logic to balance = D - W - (All Valid Stakes) + (Won Payouts)
-        var user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
-        var totalDeposits = await context.Transactions.Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected").SumAsync(t => t.AmountNOK);
-        var totalWithdrawals = await context.Transactions.Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected").SumAsync(t => t.AmountNOK);
-        
-        // 1. All Valid Stakes (Pending + Approved + Won + Lost). Exclude Rejected, Cancelled, Void
-        var totalValidStakes = await context.Bets
-            .Where(b => b.UserId == userId && 
-                        b.Status != "Rejected" && 
-                        b.Status != "Cancelled" && 
-                        b.Status != "Void")
-            .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure? This will overwrite the 'Balance' column for ALL users based on their history. This might take a moment.");
+        if (!confirmed) return;
 
-        // 2. Won Payouts (Only for Won bets)
-        var winningBets = await context.Bets
-            .Where(b => b.UserId == userId && b.Status == "Won")
-            .Select(b => new { b.AmountNOK, b.Odds })
-            .ToListAsync();
-        
-        var totalWonPayouts = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
+        try 
+        {
+            using var context = DbFactory.CreateDbContext();
+            var allUsers = await context.Users.ToListAsync();
+            
+            foreach(var user in allUsers)
+            {
+                var totalDeposits = await context.Transactions.Where(t => t.UserId == user.Id && t.Type == "Deposit" && t.Status != "Rejected").SumAsync(t => t.AmountNOK);
+                var totalWithdrawals = await context.Transactions.Where(t => t.UserId == user.Id && t.Type == "Withdrawal" && t.Status != "Rejected").SumAsync(t => t.AmountNOK);
+                var totalValidStakes = await context.Bets
+                    .Where(b => b.UserId == user.Id && b.Status != "Rejected" && b.Status != "Cancelled" && b.Status != "Void")
+                    .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
+                var winningBets = await context.Bets
+                    .Where(b => b.UserId == user.Id && b.Status == "Won")
+                    .ToListAsync();
+                var totalWonPayouts = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
 
-        return totalDeposits - totalWithdrawals - totalValidStakes + totalWonPayouts;
+                user.Balance = totalDeposits - totalWithdrawals - totalValidStakes + totalWonPayouts;
+            }
+            
+            await context.SaveChangesAsync();
+            successMessage = $"Successfully recalculated balances for {allUsers.Count} users.";
+        }
+        catch(Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
     }
 
     public async ValueTask DisposeAsync()

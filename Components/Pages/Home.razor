@@ -22,87 +22,22 @@
 <PageTitle>Dashboard</PageTitle>
 
 <style>
-    /* Prevent background scrolling */
-    .modal { 
-        overscroll-behavior: contain;
-        outline: none; 
-    }
-    .review-modal-content {
-        max-height: 90vh; height: 90vh;
-        display: flex; flex-direction: column; overflow: hidden;
-        overscroll-behavior: contain;
-    }
-    .review-modal-body {
-        display: flex;
-        flex-direction: column; flex: 1;
-        min-height: 0; padding: 0; background-color: #212529; overflow-y: auto;
-        overscroll-behavior: contain;
-        position: relative;
-    }
-    .review-image-container {
-        flex-grow: 1; min-height: 0; display: flex;
-        align-items: center; justify-content: center; padding: 1rem; overflow: hidden;
-        position: relative;
-        /* Needed for absolute arrows */
-    }
-    .review-image {
-        max-height: 100%;
-        max-width: 100%; object-fit: contain;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    }
-    
-    /* Navigation Arrows Styles */
-    .nav-arrow {
-        position: absolute;
-        top: 50%;
-        transform: translateY(-50%);
-        z-index: 20;
-        background-color: rgba(0, 0, 0, 0.4);
-        color: white;
-        border: none;
-        border-radius: 50%;
-        width: 50px;
-        height: 50px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.5rem;
-        cursor: pointer;
-        transition: background-color 0.2s;
-    }
-    .nav-arrow:hover:not(:disabled) {
-        background-color: rgba(0, 0, 0, 0.7);
-    }
-    .nav-arrow:disabled {
-        opacity: 0; 
-        pointer-events: none;
-    }
+    .modal { overscroll-behavior: contain; outline: none; }
+    .review-modal-content { max-height: 90vh; height: 90vh; display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain; }
+    .review-modal-body { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; background-color: #212529; overflow-y: auto; overscroll-behavior: contain; position: relative; }
+    .review-image-container { flex-grow: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 1rem; overflow: hidden; position: relative; }
+    .review-image { max-height: 100%; max-width: 100%; object-fit: contain; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 20; background-color: rgba(0, 0, 0, 0.4); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; cursor: pointer; transition: background-color 0.2s; }
+    .nav-arrow:hover:not(:disabled) { background-color: rgba(0, 0, 0, 0.7); }
+    .nav-arrow:disabled { opacity: 0; pointer-events: none; }
     .nav-arrow-left { left: 10px; }
-    .nav-arrow-right { right: 10px;
-    }
-
-    .review-controls-container {
-        flex-shrink: 0;
-        background-color: #f8f9fa;
-        border-top: 1px solid #dee2e6; padding: 1rem;
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index: 10;
-    }
-    .action-btn {
-        width: 100%;
-        display: block;
-        margin: 0 auto;
-        font-weight: bold;
-        font-size: inherit; 
-        white-space: nowrap;
-    }
-
+    .nav-arrow-right { right: 10px; }
+    .review-controls-container { flex-shrink: 0; background-color: #f8f9fa; border-top: 1px solid #dee2e6; padding: 1rem; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index: 10; }
+    .action-btn { width: 100%; display: block; margin: 0 auto; font-weight: bold; font-size: inherit; white-space: nowrap; }
     @@media (min-width: 992px) { 
-        .action-btn { width: 80%;
-        }
-        .review-modal-content { max-height: 95vh; height: 95vh; margin: 0.5rem;
-        }
-        .review-controls-container { padding: 0.75rem;
-        }
+        .action-btn { width: 80%; }
+        .review-modal-content { max-height: 95vh; height: 95vh; margin: 0.5rem; }
+        .review-controls-container { padding: 0.75rem; }
     }
 </style>
 
@@ -113,10 +48,7 @@
 
 @if (!string.IsNullOrEmpty(ErrorMessage))
 {
-    <div class="alert alert-danger">
-        <strong>Error:</strong> 
-        <pre>@ErrorMessage</pre>
-    </div>
+    <div class="alert alert-danger"><strong>Error:</strong> <pre>@ErrorMessage</pre></div>
 }
 
 @if (!string.IsNullOrEmpty(SuccessMessage))
@@ -127,47 +59,29 @@
     </div>
 }
 
-@* --- View Bet Modal (UPDATED) --- *@
 @if (viewBetModel != null)
 {
-    <div class="modal fade show d-block" 
-         style="background-color: rgba(0,0,0,0.85);"
-         tabindex="-1" 
-         role="dialog"
-         @ref="viewModalRef"
-         @onkeydown="OnModalKeyDown">
-         
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.85);" tabindex="-1" role="dialog" @ref="viewModalRef" @onkeydown="OnModalKeyDown">
         <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
-            <div class="modal-content review-modal-content"
-                 @ontouchstart="HandleTouchStart" 
-                 @ontouchend="HandleTouchEnd">
-                 
+            <div class="modal-content review-modal-content" @ontouchstart="HandleTouchStart" @ontouchend="HandleTouchEnd">
                 <div class="modal-header py-2 flex-shrink-0">
                     <div class="d-flex align-items-center w-100 overflow-hidden">
                         <h5 class="modal-title fs-6 me-2 flex-grow-1 text-truncate">
                             Bet #@viewBetModel.Id 
-                            @{ var (statusText, statusClass) = GetDisplayStatus(viewBetModel);
-                            }
+                            @{ var (statusText, statusClass) = GetDisplayStatus(viewBetModel); }
                             <span class="badge ms-2 @statusClass">@statusText</span>
                         </h5>
                         <button type="button" class="btn-close flex-shrink-0" @onclick="CloseViewModal"></button>
                     </div>
                 </div>
-
-                @* --- ADDED: Swipe Hint for Mobile --- *@
                 <div class="d-block d-md-none bg-dark text-white-50 text-center py-1 small border-bottom border-secondary">
                     <i class="bi bi-arrows-move"></i> Swipe left/right to navigate
                 </div>
-                  
                 <div class="modal-body review-modal-body">
                     <div class="review-image-container">
-                        @* --- Left Arrow --- *@
-                        <button class="nav-arrow nav-arrow-left shadow-lg" 
-                               @onclick="() => NavigateView(-1)" 
-                               disabled="@(currentViewIndex <= 0)">
-                             <i class="bi bi-chevron-left"></i>
+                        <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateView(-1)" disabled="@(currentViewIndex <= 0)">
+                            <i class="bi bi-chevron-left"></i>
                         </button>
-                    
                         @if (!string.IsNullOrEmpty(viewBetModel.ScreenshotUrl))
                         {
                              <img src="@viewBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
@@ -176,31 +90,22 @@
                         {
                              <div class="text-white-50 fst-italic text-center">
                                 <i class="bi bi-image-fill display-1 d-block mb-3"></i>
-                                 <span>No Image Available</span>
+                                <span>No Image Available</span>
                              </div>
                         }
-                         
-                        @* --- Right Arrow --- *@
-                        <button class="nav-arrow nav-arrow-right shadow-lg" 
-                               @onclick="() => NavigateView(1)" 
-                               disabled="@(currentViewIndex >= myBets.Count - 1)">
+                        <button class="nav-arrow nav-arrow-right shadow-lg" @onclick="() => NavigateView(1)" disabled="@(currentViewIndex >= myBets.Count - 1)">
                            <i class="bi bi-chevron-right"></i>
                         </button>
                     </div>
-
                     <div class="review-controls-container">
                         <div class="row g-3 text-center mb-3">
                             <div class="col-4">
                                 <label class="text-muted small d-block">Amount</label>
-                                <span class="fw-bold fs-5">
-                                    @GetAmountDisplay(viewBetModel)
-                                </span>
+                                <span class="fw-bold fs-5">@GetAmountDisplay(viewBetModel)</span>
                              </div>
                             <div class="col-4">
-                                <label class="text-muted small d-block">Odds</label>
-                                 <span class="fw-bold fs-5">
-                                    @GetOddsDisplay(viewBetModel)
-                                </span>
+                                 <label class="text-muted small d-block">Odds</label>
+                                 <span class="fw-bold fs-5">@GetOddsDisplay(viewBetModel)</span>
                              </div>
                             <div class="col-4">
                                 <label class="text-muted small d-block">@GetPayoutLabel(viewBetModel)</label>
@@ -209,10 +114,9 @@
                                 </span>
                             </div>
                         </div>
-
                         @if (viewBetModel.Status == "Pending")
                         {
-                           <div class="d-grid">
+                            <div class="d-grid">
                                 <button class="btn btn-outline-danger btn-lg fw-bold" @onclick="() => CancelBet(viewBetModel)">
                                     <i class="bi bi-trash3-fill me-2"></i>Cancel Pick
                                 </button>
@@ -241,8 +145,7 @@
         <div class="card-header">New Pick</div>
         <div class="card-body">
             <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
-                 <DataAnnotationsValidator />
-                 
+                <DataAnnotationsValidator />
                 <div class="mb-3">
                     <label class="form-label">Screenshots *</label>
                     <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" multiple />
@@ -250,11 +153,10 @@
                     @if (uploadedFiles.Any())
                     {
                         <div class="mt-2 text-success small">
-                             <i class="bi bi-check-circle me-1"></i> @uploadedFiles.Count file(s) selected
+                              <i class="bi bi-check-circle me-1"></i> @uploadedFiles.Count file(s) selected
                         </div>
                     }
                 </div>
-
                  <button type="submit" class="btn btn-primary w-100" disabled="@IsSubmitting">
                    @if (IsSubmitting)
                     {
@@ -271,11 +173,10 @@
     </div>
 
     <h4>My Bets History (@totalBets)</h4>
-    
     <div class="table-responsive">
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
-                 <tr>
+                <tr>
                     <th style="width: 150px;">Action</th>
                     <th>Last Updated</th>
                     <th>Bet Amount</th>
@@ -292,21 +193,13 @@
                         <td>
                             <button class="btn btn-primary btn-sm action-btn" @onclick="() => OpenViewModal(bet)">
                                  <i class="bi bi-eye me-1"></i> View Bet
-                             </button>
+                            </button>
                         </td>
                         <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                        <td>
-                            @GetAmountDisplay(bet)
-                        </td>
-                        <td>
-                             @GetOddsDisplay(bet)
-                        </td>
-                        <td>
-                             @GetPayoutDisplay(bet)
-                        </td>
-                        <td>
-                            <span class="badge @statusClass">@statusText</span>
-                        </td>
+                        <td>@GetAmountDisplay(bet)</td>
+                        <td>@GetOddsDisplay(bet)</td>
+                        <td>@GetPayoutDisplay(bet)</td>
+                        <td><span class="badge @statusClass">@statusText</span></td>
                     </tr>
                 }
             </tbody>
@@ -315,7 +208,7 @@
         <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
             <button class="btn btn-outline-secondary btn-sm" @onclick="PrevBetsPage" disabled="@(betsPage <= 1)">
                 <i class="bi bi-arrow-left"></i> Previous
-             </button>
+            </button>
             <span class="text-muted">Page @betsPage</span>
             <button class="btn btn-outline-secondary btn-sm" @onclick="NextBetsPage" disabled="@(!hasMoreBets)">
                 Next <i class="bi bi-arrow-right"></i>
@@ -330,13 +223,11 @@
     private decimal CreditLimit = 0;
     private decimal Balance = 0;
     private decimal AvailableCredit = 1000;
-    // Changed from single file to list
     private IReadOnlyList<IBrowserFile> uploadedFiles = new List<IBrowserFile>();
     
     private HubConnection? hubConnection;
     private string userId = string.Empty;
     private string userName = string.Empty;
-    // Store username explicitly
     
     private bool IsLoading = true;
     private bool IsSubmitting = false;
@@ -351,7 +242,7 @@
     private bool hasMoreBets = false;
     private int totalBets = 0;
     private const int PageSize = 20;
-    // --- NAVIGATION STATE ---
+    
     private int currentViewIndex = -1;
     private double touchStartX = 0;
     private double touchEndX = 0;
@@ -379,19 +270,15 @@
                 var user = await context.Users.AsNoTracking()
                     .Select(u => new { u.Id, u.IsAdmin }) 
                     .FirstOrDefaultAsync(u => u.Id == userId);
+
                 if (user != null && user.IsAdmin)
                 {
                     Nav.NavigateTo("/admin");
                     return; 
                 }
-                
                 newBet.UserId = userId;
                 newBet.UserName = userName;
             }
-        }
-        catch (Microsoft.AspNetCore.Components.NavigationException)
-        {
-            throw;
         }
         catch (Exception ex)
         {
@@ -428,11 +315,7 @@
         if (shouldFocusModal)
         {
             shouldFocusModal = false;
-            try
-            {
-                await viewModalRef.FocusAsync();
-            }
-            catch { }
+            try { await viewModalRef.FocusAsync(); } catch { }
         }
     }
 
@@ -443,34 +326,11 @@
         if (user != null)
         {
             CreditLimit = user.CreditLimit;
+            // PERFORMANCE FIX: Use stored balance instead of calculating from history
+            Balance = user.Balance;
         }
 
-        var totalDeposits = await context.Transactions
-            .Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected")
-            .SumAsync(t => t.AmountNOK);
-            
-        var totalWithdrawals = await context.Transactions
-            .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
-            .SumAsync(t => t.AmountNOK);
-
-        // FIX: Subtract stakes for ALL valid bets (Pending, Approved, Won, Lost)
-        var totalValidStakes = await context.Bets
-            .Where(b => b.UserId == userId && 
-                        b.Status != "Rejected" && 
-                        b.Status != "Cancelled" && 
-                        b.Status != "Void")
-            .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-
-        var winningBets = await context.Bets
-            .Where(b => b.UserId == userId && b.Status == "Won")
-            .Select(b => new { b.AmountNOK, b.Odds })
-            .ToListAsync();
-            
-        var totalWonPayouts = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-
-        Balance = totalDeposits - totalWithdrawals - totalValidStakes + totalWonPayouts;
         AvailableCredit = Balance + CreditLimit;
-
         await LoadBetsList();
     }
     
@@ -518,14 +378,11 @@
         await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
 
-    // UPDATED: Handle multiple files
     private void HandleFileSelected(InputFileChangeEventArgs e)
     {
-        // Allow up to 20 files at once
         uploadedFiles = e.GetMultipleFiles(20);
     }
 
-    // --- OPEN VIEW MODAL ---
     private void OpenViewModal(Bet bet)
     {
         currentViewIndex = myBets.FindIndex(b => b.Id == bet.Id);
@@ -538,7 +395,6 @@
         viewBetModel = null;
     }
 
-    // --- NAVIGATION HELPERS ---
     private void NavigateView(int direction)
     {
         if (myBets.Count == 0) return;
@@ -553,18 +409,9 @@
 
     private void OnModalKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Escape")
-        {
-            CloseViewModal();
-        }
-        else if (e.Key == "ArrowRight")
-        {
-            NavigateView(1);
-        }
-        else if (e.Key == "ArrowLeft")
-        {
-            NavigateView(-1);
-        }
+        if (e.Key == "Escape") CloseViewModal();
+        else if (e.Key == "ArrowRight") NavigateView(1);
+        else if (e.Key == "ArrowLeft") NavigateView(-1);
     }
 
     private void HandleTouchStart(TouchEventArgs e)
@@ -579,13 +426,10 @@
         if (Math.Abs(diff) > 50)
         {
             if (diff > 0) NavigateView(1);
-            // Next
             else NavigateView(-1);
-            // Prev
         }
     }
 
-    // UPDATED: Process multiple files
     private async Task PlaceBet()
     {
         ErrorMessage = null;
@@ -601,8 +445,7 @@
                 return;
             }
 
-            // --- Check Credit ---
-            await LoadData();
+            await LoadData(); // Refresh Balance
             if (AvailableCredit <= 0) 
             {
                 ErrorMessage = "Your available credit is zero. To send a pick, you need to deposit more money.";
@@ -611,6 +454,14 @@
             }
             
             using var context = DbFactory.CreateDbContext();
+            
+            // --- BALANCE UPDATE LOGIC ---
+            // We need to fetch the tracked user to update balance (if needed)
+            var dbUser = await context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            
+            // Note: Since AmountNOK is null here (Admin sets it later), we do NOT deduct balance yet.
+            // Balance is deducted when Admin approves the bet in Admin.razor.
+            
             var containerClient = BlobService.GetBlobContainerClient("uploads");
             await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
             await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob);
@@ -618,17 +469,14 @@
             var betsToNotify = new List<Bet>();
             foreach (var file in uploadedFiles)
             {
-                // 1. Process Image
                 var resizedFile = await file.RequestImageFileAsync("image/jpeg", 1200, 1200);
                 var fileName = $"{Guid.NewGuid()}.jpg";
                 var blobClient = containerClient.GetBlobClient(fileName);
                 
                 await using var stream = resizedFile.OpenReadStream(maxAllowedSize: 3000000);
-                // 3MB limit
                 var headers = new BlobHttpHeaders { ContentType = "image/jpeg" };
                 await blobClient.UploadAsync(stream, new BlobUploadOptions { HttpHeaders = headers });
 
-                // 2. Create NEW Bet object per file
                 var bet = new Bet
                 {
                     UserId = userId,
@@ -638,22 +486,19 @@
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
                     Odds = 1.0m,
-                    AmountNOK = null // Wait for admin
+                    AmountNOK = null 
                 };
                 context.Bets.Add(bet);
                 betsToNotify.Add(bet);
             }
 
-            // 3. Save all to DB
             await context.SaveChangesAsync();
-            // 4. Notifications
+            
             foreach (var bet in betsToNotify)
             {
-                // Notify Discord for each specific bet (so admin sees all images)
                 await DiscordService.NotifyAdminNewPickAsync(bet);
             }
 
-            // Send single summary notification to Admin Dashboard via SignalR
             var msg = betsToNotify.Count == 1 
                 ? $"New pick submitted by {userName}" 
                 : $"{betsToNotify.Count} new picks submitted by {userName}";
@@ -662,7 +507,7 @@
             SuccessMessage = betsToNotify.Count == 1 
                 ? "Pick successfully sent for approval." 
                 : $"{betsToNotify.Count} picks successfully sent for approval.";
-            // Reset
+            
             newBet = new Bet { Odds = 1.0m, UserId = userId, UserName = userName };
             uploadedFiles = new List<IBrowserFile>();
             betsPage = 1;
@@ -689,23 +534,26 @@
             try
             {
                 using var context = DbFactory.CreateDbContext();
+                // Load user and bet to update balance
                 var dbBet = await context.Bets.FindAsync(bet.Id);
+                var dbUser = await context.Users.FindAsync(userId);
                 
                 if (dbBet != null && dbBet.UserId == userId && dbBet.Status == "Pending")
                 {
+                    // If the bet had an amount set (rare for Pending, but possible if Admin edited it), refund it
+                    if (dbBet.AmountNOK.HasValue && dbBet.AmountNOK > 0 && dbUser != null)
+                    {
+                        dbUser.Balance += dbBet.AmountNOK.Value;
+                    }
+
                     dbBet.Status = "Cancelled";
                     dbBet.UpdatedAt = DateTime.UtcNow;
                     
                     await context.SaveChangesAsync();
-
                     await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"Pick cancelled by {dbBet.UserName}");
 
                     SuccessMessage = "Bet cancelled successfully.";
-                    if (viewBetModel?.Id == bet.Id)
-                    {
-                        CloseViewModal();
-                    }
-                    
+                    if (viewBetModel?.Id == bet.Id) CloseViewModal();
                     await LoadData();
                 }
                 else
@@ -754,7 +602,6 @@
     {
         if (bet.Status == "Pending" || bet.Status == "Cancelled") return "-";
         if (bet.Status == "Lost") return "0 kr";
-        // Void returns the stake amount
         if (bet.Status == "Void") return (bet.AmountNOK?.ToString("N0") ?? "0") + " kr";
         return bet.PotentialPayout.ToString("N0") + " kr";
     }
@@ -762,9 +609,7 @@
     private string GetPayoutLabel(Bet bet)
     {
         if (bet.Status == "Approved" || bet.Status == "Rejected" || bet.Status == "Pending")
-        {
             return "Potential Payout";
-        }
         return "Payout";
     }
 

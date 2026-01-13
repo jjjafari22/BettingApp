@@ -84,10 +84,10 @@
                        </div>
                    }
                    @if (reviewErrorMessage != null) {
-                        <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
+                       <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
                            <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
                                <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
-                                <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
+                               <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
                            </div>
                        </div>
                    }
@@ -95,7 +95,7 @@
                    <div class="review-image-container">
                        <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(currentReviewIndex <= 0)"><i class="bi bi-chevron-left"></i></button>
                        @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
-                            <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
+                           <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
                        } else {
                            <div class="text-white-50 fst-italic text-center">
                                <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
@@ -109,33 +109,21 @@
                            <div class="row g-2 mb-3">
                                 <div class="col-4">
                                     <label class="form-label fw-bold text-muted small mb-1">Amount</label>
-                                    <div class="input-group input-group-sm">
-                                       @* CHANGED: Manual @oninput to fix crash and ensure instant payout updates *@
-                                       <input type="number" 
-                                              class="form-control fw-bold" 
-                                              value="@reviewingBetModel.AmountNOK" 
-                                              @oninput="(e) => UpdateAmount(e.Value)"
-                                              placeholder="0" />
+                                   <div class="input-group input-group-sm">
+                                       <input type="number" class="form-control fw-bold" value="@reviewingBetModel.AmountNOK" @oninput="(e) => UpdateAmount(e.Value)" placeholder="0" />
                                        <span class="input-group-text">kr</span>
                                    </div>
-                                </div>
+                               </div>
                                <div class="col-3">
                                    <label class="form-label fw-bold text-muted small mb-1">Odds</label>
-                                   @* CHANGED: Manual @oninput to fix crash and ensure instant payout updates *@
-                                   <input type="number" 
-                                          step="0.01" 
-                                          class="form-control form-control-sm fw-bold" 
-                                          value="@reviewingBetModel.Odds" 
-                                          @oninput="(e) => UpdateOdds(e.Value)"
-                                          placeholder="1.00" />
-                                </div>
+                                   <input type="number" step="0.01" class="form-control form-control-sm fw-bold" value="@reviewingBetModel.Odds" @oninput="(e) => UpdateOdds(e.Value)" placeholder="1.00" />
+                               </div>
                                <div class="col-5">
                                     <label class="form-label fw-bold text-muted small mb-1">Payout</label>
                                     <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
                                 </div>
                             </div>
 
-                            @* ACTIONS *@
                            @if (reviewingBetModel.Status == "Pending") {
                                <div class="row g-3">
                                    <div class="col-6"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-check-lg me-1"></i> Approve</button></div>
@@ -148,30 +136,29 @@
                                     <div class="col-2"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
                                 </div>
                            } else {
-                               <div class="row g-2">
+                                  <div class="row g-2">
                                    <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
                                    <div class="col-3"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Won")'>Won</button></div>
                                    <div class="col-3"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'>Lost</button></div>
                                    <div class="col-3"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
-                                   @* CHANGED: Replaced 'Cancel Bet' with 'Undo' (reverts to Approved) *@
                                    <div class="col-3"><button class="btn btn-primary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-arrow-counterclockwise me-1"></i> Undo</button></div>
                                </div>
                            }
                        </div>
-                   </div>
+                  </div>
                </div>
             </div>
         </div>
     </div>
 }
 
-@* ... [Tables] ... *@
 <div class="row">
   <div class="col-md-12">
+        @* PENDING BETS QUEUE (Limited to top 100 to avoid overload) *@
         <h4 class="mb-3">Pending Bets Queue</h4>
         <div class="table-responsive">
              <table class="table table-sm table-striped table-hover mb-5 text-nowrap align-middle">
-                <thead class="table-dark">
+                 <thead class="table-dark">
                      <tr>
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
@@ -198,6 +185,7 @@
             </table>
         </div>
 
+        @* ACTIVE BETS (PAGINATED) *@
         <h4 class="mb-3">Active Bets (Approved)</h4>
         <div class="table-responsive mb-5">
             <table class="table table-sm table-striped table-hover text-nowrap align-middle">
@@ -226,12 +214,18 @@
                             <td>@bet.UserName</td>
                             <td>@bet.AmountNOK?.ToString("N0") kr</td>
                              <td>@bet.Odds.ToString("N2")</td>
-                            <td>@bet.PotentialPayout.ToString("N0") kr</td>
+                             <td>@bet.PotentialPayout.ToString("N0") kr</td>
                         </tr>
                     }
                     @if (approvedBets.Count == 0) { <tr><td colspan="7" class="text-muted">No active bets.</td></tr> }
                 </tbody>
             </table>
+            @* Pagination for Approved Bets *@
+            <div class="d-flex justify-content-between align-items-center mt-2">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="PrevApprovedPage" disabled="@(approvedPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
+                <span class="text-muted">Page @approvedPage</span>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="NextApprovedPage" disabled="@(!hasMoreApprovedBets)">Next <i class="bi bi-arrow-right"></i></button>
+            </div>
         </div>
 
         <h4 class="mb-3">Completed Bets History (@totalCompletedBets)</h4>
@@ -247,16 +241,16 @@
                          <th>Odds</th>
                          <th>Status</th>
                          <th>Payout</th>
-                     </tr>
+                    </tr>
                 </thead>
                 <tbody>
                     @foreach (var bet in completedBets)
                     {
-                        var rowClass = bet.Status == "Won" ? "table-success" : (bet.Status == "Lost" ? "table-danger" : "table-secondary");
-                     <tr class="@rowClass">
+                         var rowClass = bet.Status == "Won" ? "table-success" : (bet.Status == "Lost" ? "table-danger" : "table-secondary");
+                         <tr class="@rowClass">
                             <td>
                                   <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
-                                        <i class="bi bi-pencil-square"></i> View/Edit
+                                     <i class="bi bi-pencil-square"></i> View/Edit
                                   </button>
                             </td>
                             <td>@bet.Id</td>
@@ -291,9 +285,13 @@
     private List<Bet> pendingBets = new();
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
+    
+    // Pagination State
     private int completedPage = 1;
+    private int approvedPage = 1;
     private const int pageSize = 20;
     private bool hasMoreCompletedBets = false;
+    private bool hasMoreApprovedBets = false;
     private int totalCompletedBets = 0;
 
     private string? successMessage;
@@ -307,13 +305,13 @@
     private ElementReference reviewModalRef;
     private bool shouldFocusReviewModal = false;
     
-    // --- NAVIGATION STATE ---
     private List<Bet> currentReviewList = new();
     private int currentReviewIndex = -1;
     private string reviewContext = "";
     
     private double touchStartX = 0;
     private double touchEndX = 0;
+    
     [SupplyParameterFromQuery]
     public int? ReviewBetId { get; set; }
 
@@ -357,6 +355,7 @@
         await LoadPendingBets();
         await LoadApprovedBets();
         await LoadCompletedBets();
+        
         if (ReviewBetId.HasValue)
         {
             var targetBet = pendingBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
@@ -372,48 +371,52 @@
         }
     }
     
-    // --- Manual Input Handlers to Avoid NRE and Ensure Instant Payout Calculation ---
     private void UpdateAmount(object? value)
     {
         if (reviewingBetModel == null) return;
-        if (int.TryParse(value?.ToString(), out int result))
-        {
-            reviewingBetModel.AmountNOK = result;
-        }
-        else
-        {
-            reviewingBetModel.AmountNOK = null;
-        }
+        if (int.TryParse(value?.ToString(), out int result)) { reviewingBetModel.AmountNOK = result; }
+        else { reviewingBetModel.AmountNOK = null; }
     }
 
     private void UpdateOdds(object? value)
     {
         if (reviewingBetModel == null) return;
-        if (decimal.TryParse(value?.ToString(), out decimal result))
-        {
-            reviewingBetModel.Odds = result;
-        }
+        if (decimal.TryParse(value?.ToString(), out decimal result)) { reviewingBetModel.Odds = result; }
     }
-    // --------------------------------------------------------------------------------
 
     private async Task LoadPendingBets()
     {
         using var context = DbFactory.CreateDbContext();
-        pendingBets = await context.Bets.Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        // Pending list is usually short, but we limit to 100 just in case to prevent crashes
+        pendingBets = await context.Bets.Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).Take(100).ToListAsync();
     }
     
     private async Task LoadApprovedBets()
     {
         using var context = DbFactory.CreateDbContext();
-        approvedBets = await context.Bets.Where(b => b.Status == "Approved").OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        // PERFORMANCE FIX: Added Pagination to speed up page load
+        var totalApproved = await context.Bets.CountAsync(b => b.Status == "Approved");
+        approvedBets = await context.Bets.Where(b => b.Status == "Approved")
+            .OrderByDescending(b => b.UpdatedAt)
+            .Skip((approvedPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+        hasMoreApprovedBets = totalApproved > (approvedPage * pageSize);
     }
     
+    private async Task NextApprovedPage() { approvedPage++; await LoadApprovedBets(); }
+    private async Task PrevApprovedPage() { if (approvedPage > 1) { approvedPage--; await LoadApprovedBets(); } }
+
     private async Task LoadCompletedBets()
     {
         using var context = DbFactory.CreateDbContext();
         var completedStatuses = new[] { "Won", "Lost", "Void", "Rejected", "Cancelled" };
         totalCompletedBets = await context.Bets.CountAsync(b => completedStatuses.Contains(b.Status));
-        completedBets = await context.Bets.Where(b => completedStatuses.Contains(b.Status)).OrderByDescending(b => b.UpdatedAt).Skip((completedPage - 1) * pageSize).Take(pageSize).ToListAsync();
+        completedBets = await context.Bets.Where(b => completedStatuses.Contains(b.Status))
+            .OrderByDescending(b => b.UpdatedAt)
+            .Skip((completedPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
         hasMoreCompletedBets = totalCompletedBets > (completedPage * pageSize);
     }
 
@@ -429,10 +432,7 @@
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
                 StateHasChanged(); 
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Timezone error: {ex.Message}");
-            }
+            catch (Exception ex) { Console.WriteLine($"Timezone error: {ex.Message}"); }
 
             hubConnection = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/bethub")).Build();
             hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
@@ -446,11 +446,7 @@
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         }
-        if (shouldFocusReviewModal)
-        {
-            shouldFocusReviewModal = false;
-            try { await reviewModalRef.FocusAsync(); } catch { }
-        }
+        if (shouldFocusReviewModal) { shouldFocusReviewModal = false; try { await reviewModalRef.FocusAsync(); } catch { } }
     }
 
     public async ValueTask DisposeAsync()
@@ -463,29 +459,10 @@
         using var context = DbFactory.CreateDbContext();
         var targetUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
         
-        // CreditLimit is int in model
+        // PERFORMANCE FIX: Read from stored Balance column
+        var currentBal = targetUser?.Balance ?? 0;
         var creditLimit = targetUser?.CreditLimit ?? 0;
-        var userTrans = await context.Transactions.Where(t => t.UserId == userId).AsNoTracking().ToListAsync();
-        var userBets = await context.Bets.Where(b => b.UserId == userId).AsNoTracking().ToListAsync();
-        var totalDeposits = userTrans.Where(t => t.Type == "Deposit" && t.Status != "Rejected").Sum(t => t.AmountNOK);
-        var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal" && t.Status != "Rejected").Sum(t => t.AmountNOK);
-        // CORRECTION: Calculate balance based on Deposits - Withdrawals - ValidStakes + WonPayouts
         
-        int? excludeBetId = reviewingBetModel?.Id;
-
-        // 1. Total Stakes for all valid bets (Pending, Approved, Won, Lost)
-        // We exclude the current bet we are editing/checking to avoid double counting it against the limit
-        var totalValidStakes = userBets
-            .Where(b => (excludeBetId == null || b.Id != excludeBetId) && 
-                        b.Status != "Rejected" && 
-                        b.Status != "Cancelled" && 
-                        b.Status != "Void")
-            .Sum(b => (decimal)(b.AmountNOK ?? 0));
-        // 2. Total Payouts for Won bets
-        var totalWonPayouts = userBets
-            .Where(b => (excludeBetId == null || b.Id != excludeBetId) && b.Status == "Won")
-            .Sum(b => b.PotentialPayout);
-        var currentBal = totalDeposits - totalWithdrawals - totalValidStakes + totalWonPayouts;
         var availableCredit = currentBal + creditLimit - newBetAmount;
         if (availableCredit < 0)
         {
@@ -565,6 +542,7 @@
         var diff = touchStartX - touchEndX;
         if (Math.Abs(diff) > 50)
         {
+            // FIX: Changed NavigateView -> NavigateReview
             if (diff > 0) NavigateReview(1);
             else NavigateReview(-1);
         }
@@ -577,24 +555,20 @@
         modalSuccessMessage = null; 
         string originalStatus = bet.Status;
         int originalBetId = bet.Id;
+        
         if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
-            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount";
-            return; }
-            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds";
-            return; }
-            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals";
-            return; }
+            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount"; return; }
+            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds"; return; }
+            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals"; return; }
 
             using var settingsContext = DbFactory.CreateDbContext();
             var settings = await settingsContext.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
             if (settings != null)
             {
-                 if ((decimal)(bet.AmountNOK ?? 0) < settings.MinBetAmount) { reviewErrorMessage = $"Amount below limit ({settings.MinBetAmount:N0})";
-                 return; }
+                 if ((decimal)(bet.AmountNOK ?? 0) < settings.MinBetAmount) { reviewErrorMessage = $"Amount below limit ({settings.MinBetAmount:N0})"; return; }
                  decimal potentialPayout = Math.Floor((decimal)(bet.AmountNOK ?? 0) * bet.Odds);
-                 if (potentialPayout > settings.MaxPayout) { reviewErrorMessage = $"Payout exceeds limit ({settings.MaxPayout:N0})"; return;
-                 }
+                 if (potentialPayout > settings.MaxPayout) { reviewErrorMessage = $"Payout exceeds limit ({settings.MaxPayout:N0})"; return; }
             }
         }
 
@@ -602,30 +576,77 @@
         {
              bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
                 $"Update Bet #{bet.Id}?\n\n{originalStatus} -> {newStatus}\nAmount: {bet.AmountNOK} kr\nOdds: {bet.Odds}");
-            if (!confirmed) return;
+             if (!confirmed) return;
         }
 
         if (newStatus == "Approved")
         {
-            var (allowed, error) = await CheckUserBalance(bet.UserId, (decimal)bet.AmountNOK!);
-            if (!allowed)
+            // Only check balance if we are moving from Pending -> Approved (Initial processing)
+            if (originalStatus == "Pending")
             {
-                reviewErrorMessage = error;
-                StateHasChanged();
-                return;
+                var (allowed, error) = await CheckUserBalance(bet.UserId, (decimal)bet.AmountNOK!);
+                if (!allowed)
+                {
+                    reviewErrorMessage = error;
+                    StateHasChanged();
+                    return;
+                }
             }
         }
         
         using var context = DbFactory.CreateDbContext();
         var dbBet = await context.Bets.FindAsync(bet.Id);
         var dbUser = await context.Users.FindAsync(bet.UserId);
-        if (dbBet != null)
+        
+        if (dbBet != null && dbUser != null)
         {
+            // --- CRITICAL PERFORMANCE FIX: Update Balance Column ---
+            // Because we no longer calculate balance from history (for speed),
+            // we MUST maintain the balance here.
+
+            // 1. Revert changes from original status
+            if (originalStatus == "Pending") { 
+                // No deduction happened yet in Pending
+            } 
+            else if (originalStatus == "Approved") {
+                // Stake was already deducted. No revert needed.
+            }
+            else if (originalStatus == "Won") {
+                // Revert winnings so we can apply new status cleanly
+                dbUser.Balance -= dbBet.PotentialPayout;
+            }
+            else if (originalStatus == "Void" || originalStatus == "Rejected" || originalStatus == "Cancelled") {
+                // Revert the refund (deduct stake again)
+                if (originalStatus != "Pending") {
+                     dbUser.Balance -= (dbBet.AmountNOK ?? 0);
+                }
+            }
+
+            // 2. Apply changes for new status
+            if (newStatus == "Pending") {
+                // No deduction
+            }
+            else if (newStatus == "Approved") {
+                // Deduct Stake (if not already deducted)
+                if (originalStatus == "Pending") dbUser.Balance -= (bet.AmountNOK ?? 0);
+            }
+            else if (newStatus == "Won") {
+                // Add winnings
+                dbUser.Balance += bet.PotentialPayout;
+            }
+            else if (newStatus == "Lost") {
+                // Stake lost. No change.
+            }
+            else if (newStatus == "Void" || newStatus == "Rejected" || newStatus == "Cancelled") {
+                // Refund stake
+                if (originalStatus != "Pending") dbUser.Balance += (bet.AmountNOK ?? 0);
+            }
+
             dbBet.Status = newStatus;
             dbBet.AmountNOK = bet.AmountNOK;
             dbBet.Odds = bet.Odds; 
-
             dbBet.UpdatedAt = DateTime.UtcNow;
+
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -656,10 +677,7 @@
         if (currentReviewList.Count > 0)
         {
             bool betStillInList = currentReviewList.Any(b => b.Id == originalBetId);
-            if (betStillInList)
-            {
-                currentReviewIndex++;
-            }
+            if (betStillInList) currentReviewIndex++;
             
             if (currentReviewIndex >= currentReviewList.Count) 
             {
@@ -672,8 +690,7 @@
                 reviewingBetModel = new Bet 
                 { 
                     Id = nextBet.Id, UserId = nextBet.UserId, UserName = nextBet.UserName, 
-                    AmountNOK = nextBet.AmountNOK, 
-                    Odds = nextBet.Odds, Status = nextBet.Status, 
+                    AmountNOK = nextBet.AmountNOK, Odds = nextBet.Odds, Status = nextBet.Status, 
                     ScreenshotUrl = nextBet.ScreenshotUrl, CreatedAt = nextBet.CreatedAt
                 };
                 modalSuccessMessage = null;
@@ -685,7 +702,6 @@
             modalSuccessMessage = null; 
             successMessage = $"Bet #{bet.Id} processed. Queue empty.";
         }
-
         StateHasChanged();
     }
 }

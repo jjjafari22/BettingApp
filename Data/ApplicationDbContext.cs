@@ -26,5 +26,23 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<SystemSetting>()
             .Property(s => s.MaxPayout)
             .HasPrecision(18, 0);
+
+        // --- NEW: Configure Balance Precision (No Decimals) ---
+        builder.Entity<ApplicationUser>()
+            .Property(u => u.Balance)
+            .HasPrecision(18, 0); // Changed to 0 to enforce whole numbers
+
+        // --- NEW: Performance Indexes ---
+        // 1. Speeds up finding "Pending" bets for Admin
+        builder.Entity<Bet>().HasIndex(b => b.Status); 
+        
+        // 2. Speeds up sorting bets by date (My History / Admin Logs)
+        builder.Entity<Bet>().HasIndex(b => b.UpdatedAt);
+        
+        // 3. Speeds up "My Bets" queries for users
+        builder.Entity<Bet>().HasIndex(b => b.UserId);
+        
+        // 4. Speeds up Transaction history
+        builder.Entity<Transaction>().HasIndex(t => t.UserId);
     }
 }

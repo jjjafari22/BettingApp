@@ -6,28 +6,19 @@ public class ApplicationUser : IdentityUser
 {
     public bool IsAdmin { get; set; }
     
-    // CHANGED: Decimal -> int
     public int CreditLimit { get; set; } = 1000;
 
-    // --- NEW: Discord Integration ---
-    public string? DiscordUserId { get; set; }
+    // --- PERFORMANCE FIX: Store Balance directly ---
+    // This allows instant reads without summing history.
+    public decimal Balance { get; set; } = 0m;
 
-    // --- NEW: Discord Username Field ---
+    public string? DiscordUserId { get; set; }
     public string? DiscordUsername { get; set; }
 
-    // Fix: Add creation date for new users
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    // --- NEW: Personal Info ---
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
-
-    // --- NEW: Referral System ---
     public string? ReferredBy { get; set; }
-
-    // --- NEW: Manual Verification ---
     public bool IsManuallyVerified { get; set; }
-
-    // --- NEW: Track when the user profile was last updated ---
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -155,7 +155,6 @@
     private const int PageSize = 20;
 
     private HubConnection? hubConnection;
-
     private int TimezoneOffset { get; set; }
 
     private DateTime ToUserLocal(DateTime utcDate)
@@ -187,10 +186,8 @@
                     await SetupSignalR();
                 }
             }
-            catch (Exception ex) { Console.WriteLine(ex);
-            }
-            finally { IsLoading = false; StateHasChanged();
-            }
+            catch (Exception ex) { Console.WriteLine(ex); }
+            finally { IsLoading = false; StateHasChanged(); }
         }
     }
 
@@ -211,31 +208,13 @@
     private async Task LoadData()
     {
         using var context = DbFactory.CreateDbContext();
+        var user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
         
-        var totalDeposits = await context.Transactions
-            .Where(t => t.UserId == userId && t.Type == "Deposit" && t.Status != "Rejected")
-            .SumAsync(t => t.AmountNOK);
-            
-        var totalWithdrawals = await context.Transactions
-            .Where(t => t.UserId == userId && t.Type == "Withdrawal" && t.Status != "Rejected")
-            .SumAsync(t => t.AmountNOK);
-
-        // FIX: Subtract stakes for ALL valid bets (Pending, Approved, Won, Lost)
-        var totalValidStakes = await context.Bets
-            .Where(b => b.UserId == userId && 
-                       b.Status != "Rejected" && 
-                       b.Status != "Cancelled" && 
-                       b.Status != "Void")
-            .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-
-        var winningBets = await context.Bets
-            .Where(b => b.UserId == userId && b.Status == "Won")
-            .Select(b => new { b.AmountNOK, b.Odds })
-            .ToListAsync();
-            
-        var totalWonPayouts = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-
-        Balance = totalDeposits - totalWithdrawals - totalValidStakes + totalWonPayouts;
+        if (user != null)
+        {
+            // PERFORMANCE FIX: Use stored Balance
+            Balance = user.Balance;
+        }
 
         totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
         myTransactions = await context.Transactions
@@ -253,7 +232,7 @@
         ErrorMessage = null;
         SuccessMessage = null;
         
-        await LoadData();
+        await LoadData(); // Re-fetch to ensure fresh balance
 
         if (withdrawRequest.AmountNOK <= 0)
         {
@@ -273,6 +252,16 @@
             using var context = DbFactory.CreateDbContext();
             var auth = await AuthState.GetAuthenticationStateAsync();
             var userName = auth.User.Identity?.Name ?? "Unknown";
+            
+            // --- BALANCE DEDUCTION ---
+            var user = await context.Users.FindAsync(userId);
+            if (user != null)
+            {
+                // We deduct balance immediately when they REQUEST it.
+                // If Admin rejects later, we add it back.
+                user.Balance -= withdrawRequest.AmountNOK;
+            }
+            
             var transaction = new Transaction
             {
                 UserId = userId,
@@ -304,20 +293,8 @@
         }
     }
 
-    private async Task NextTransPage()
-    {
-        transPage++;
-        await LoadData();
-    }
-
-    private async Task PrevTransPage()
-    {
-        if (transPage > 1)
-        {
-            transPage--;
-            await LoadData();
-        }
-    }
+    private async Task NextTransPage() { transPage++; await LoadData(); }
+    private async Task PrevTransPage() { if (transPage > 1) { transPage--; await LoadData(); } }
 
     private string GetStatusBadge(string status) => status switch
     {
@@ -326,11 +303,9 @@
         "Rejected" => "bg-danger",
         _ => "bg-secondary"
     };
+
     public async ValueTask DisposeAsync()
     {
-        if (hubConnection is not null)
-        {
-            await hubConnection.DisposeAsync();
-        }
+        if (hubConnection is not null) await hubConnection.DisposeAsync();
     }
 }
