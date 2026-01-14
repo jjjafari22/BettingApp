@@ -4,16 +4,27 @@
 @using System.Text.Json
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject SettlementService SettlementService
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
 
 <PageTitle>Buddy Settlement</PageTitle>
 
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Buddy Settlement Snapshots</h2>
+        <div>
+            <h2>Buddy Settlement Snapshots</h2>
+            <p class="text-muted small mb-0">
+                <span class="bi bi-info-circle me-1"></span>
+                Hint: Click on a row to view full settlement details for that snapshot.
+            </p>
+        </div>
         
         <button class="btn btn-warning" @onclick="ConfirmSnapshot">
             <span class="bi bi-camera-fill me-2"></span> Trigger Snapshot Now
@@ -25,7 +36,7 @@
         <div class="alert alert-warning border-warning shadow-sm">
             <h4><span class="bi bi-exclamation-triangle-fill text-danger me-2"></span>Confirm Snapshot</h4>
             <p>
-                Are you sure you want to trigger a settlement snapshot right now? 
+                Are you sure you want to trigger a settlement snapshot right now?
                 This will calculate who owes whom based on current balances.
             </p>
             <div class="d-flex gap-2">
@@ -44,29 +55,117 @@
     else
     {
         <div class="table-responsive">
-            <table class="table table-striped table-hover">
+            <table class="table table-hover">
                 <thead class="table-dark">
                     <tr>
-                        <th>Date (UTC)</th>
-                        <th>Transactions</th>
-                        <th>Users Involved</th>
-                        <th>Total Volume</th>
+                        <th>Local Time</th>
+                        <th>Norway Time</th>
+                        <th>Trans.</th>
+                        <th>Users</th>
+                        <th>Volume</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var snap in snapshots)
+                    @if (snapshots != null && snapshots.Any())
+                    {
+                        @foreach (var snap in snapshots)
+                        {
+                            var isExpanded = expandedRows.Contains(snap.Id);
+                            // Main Row
+                            <tr @onclick="() => ToggleRow(snap.Id)" style="cursor: pointer;" class="@(isExpanded ? "table-active" : "")">
+                                <td>
+                                    @* Populated via JS *@
+                                    <span class="local-time" data-utc="@snap.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")">
+                                        @snap.CreatedAt.ToString("yyyy-MM-dd HH:mm") UTC
+                                    </span>
+                                </td>
+                                <td>@GetNorwayTime(snap.CreatedAt).ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@snap.TransactionCount</td>
+                                <td>@snap.UserCount</td>
+                                <td>@snap.TotalVolume.ToString("N0") kr</td>
+                                <td @onclick:stopPropagation="true">
+                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => DownloadCsv(snap)">
+                                        <span class="bi bi-download me-1"></span> CSV
+                                    </button>
+                                </td>
+                            </tr>
+
+                            // Details Row (Expanded)
+                            @if (isExpanded)
+                            {
+                                var details = GetSettlementDetails(snap);
+                                <tr>
+                                    <td colspan="6" class="bg-light p-3">
+                                        <div class="card shadow-sm">
+                                            <div class="card-header text-primary fw-bold">
+                                                Snapshot Details
+                                            </div>
+                                            <div class="card-body p-0">
+                                                @if (details != null)
+                                                {
+                                                    <div class="row g-0">
+                                                        <div class="col-md-6 p-3 border-end">
+                                                            <h6 class="text-secondary">Instructions (Who pays who)</h6>
+                                                            @if (details.Instructions.Any())
+                                                            {
+                                                                <ul class="list-group list-group-flush small">
+                                                                    @foreach (var ins in details.Instructions)
+                                                                    {
+                                                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                                            <span>
+                                                                                <strong>@ins.FromUser</strong> 
+                                                                                <span class="text-muted mx-1">&rarr;</span> 
+                                                                                <strong>@ins.ToUser</strong>
+                                                                            </span>
+                                                                            <span class="badge bg-success rounded-pill">@ins.Amount.ToString("N0") kr</span>
+                                                                        </li>
+                                                                    }
+                                                                </ul>
+                                                            }
+                                                            else
+                                                            {
+                                                                <p class="text-muted small">No payments required.</p>
+                                                            }
+                                                        </div>
+                                                        <div class="col-md-6 p-3">
+                                                            <h6 class="text-secondary">Adjustments</h6>
+                                                            @if (details.Adjustments.Any())
+                                                            {
+                                                                <ul class="list-group list-group-flush small">
+                                                                    @foreach (var adj in details.Adjustments)
+                                                                    {
+                                                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                                            <span>
+                                                                                <strong>@adj.UserName</strong>: @adj.Reason
+                                                                            </span>
+                                                                            <span class="badge bg-warning text-dark rounded-pill">@adj.Amount.ToString("N0") kr</span>
+                                                                        </li>
+                                                                    }
+                                                                </ul>
+                                                            }
+                                                            else
+                                                            {
+                                                                <p class="text-muted small">No manual adjustments.</p>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="p-3 text-danger">Error loading details JSON.</div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    }
+                    else
                     {
                         <tr>
-                            <td>@snap.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                            <td>@snap.TransactionCount</td>
-                            <td>@snap.UserCount</td>
-                            <td>@snap.TotalVolume.ToString("N0") kr</td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-primary" @onclick="() => DownloadCsv(snap)">
-                                    <span class="bi bi-download me-1"></span> CSV
-                                </button>
-                            </td>
+                            <td colspan="6" class="text-center">No snapshots found. Trigger one to start!</td>
                         </tr>
                     }
                 </tbody>
@@ -76,6 +175,7 @@
 </div>
 
 <script>
+    // Downloads file
     window.downloadFileFromStream = async (fileName, contentStreamReference) => {
         const arrayBuffer = await contentStreamReference.arrayBuffer();
         const blob = new Blob([arrayBuffer]);
@@ -87,16 +187,54 @@
         anchorElement.remove();
         URL.revokeObjectURL(url);
     }
+
+    // Formats dates to browser local time
+    window.updateLocalTimes = () => {
+        document.querySelectorAll('.local-time').forEach(el => {
+            const utc = el.getAttribute('data-utc');
+            if (utc) {
+                const date = new Date(utc);
+                // Customize format as needed
+                el.innerText = date.toLocaleString(undefined, { 
+                    year: 'numeric', month: 'numeric', day: 'numeric', 
+                    hour: '2-digit', minute: '2-digit' 
+                });
+            }
+        });
+    }
 </script>
 
 @code {
     private List<SettlementSnapshot> snapshots = new();
+    private HashSet<int> expandedRows = new();
     private bool isLoading = true;
     private bool showConfirmation = false;
 
     protected override async Task OnInitializedAsync()
     {
+        // Security Check: Verify IsAdmin flag
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        using var context = DbFactory.CreateDbContext();
+        var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+
+        if (dbUser?.IsAdmin != true)
+        {
+            NavigationManager.NavigateTo("Account/Login");
+            return;
+        }
+
         await LoadSnapshots();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Always refresh local times on render updates (to handle new rows or navigation)
+        try 
+        {
+            await JS.InvokeVoidAsync("updateLocalTimes");
+        }
+        catch { /* Ignore JS errors during rendering */ }
     }
 
     private async Task LoadSnapshots()
@@ -106,6 +244,7 @@
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
         isLoading = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     private void ConfirmSnapshot()
@@ -117,13 +256,65 @@
     {
         showConfirmation = false;
         isLoading = true;
+        // Small delay to ensure UI updates to "Loading..."
+        await Task.Delay(50); 
+        
         await SettlementService.CreateSnapshotAsync();
         await LoadSnapshots();
     }
 
+    private void ToggleRow(int id)
+    {
+        if (expandedRows.Contains(id))
+            expandedRows.Remove(id);
+        else
+            expandedRows.Add(id);
+    }
+
+    private SettlementResult? GetSettlementDetails(SettlementSnapshot snap)
+    {
+        try
+        {
+            // Null-safe access and default empty JSON if null
+            var json = snap.SettlementJson ?? "{}";
+            return JsonSerializer.Deserialize<SettlementResult>(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private DateTime GetNorwayTime(DateTime utcTime)
+    {
+        try
+        {
+            // Try standard IANA ID first (Linux/macOS/Azure App Service often)
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Oslo");
+            return TimeZoneInfo.ConvertTimeFromUtc(utcTime, tz);
+        }
+        catch
+        {
+            try
+            {
+                // Fallback to Windows ID
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time");
+                return TimeZoneInfo.ConvertTimeFromUtc(utcTime, tz);
+            }
+            catch
+            {
+                // Last resort fallback (approximate CET)
+                return utcTime.AddHours(1);
+            }
+        }
+    }
+
     private async Task DownloadCsv(SettlementSnapshot snap)
     {
-        var result = JsonSerializer.Deserialize<SettlementResult>(snap.SettlementJson);
+        // Warning Fix: Ensure json string is not null
+        var json = snap.SettlementJson ?? "{}";
+        var result = JsonSerializer.Deserialize<SettlementResult>(json);
+        
         if (result == null) return;
 
         var csvContent = SettlementService.GenerateCsv(result);

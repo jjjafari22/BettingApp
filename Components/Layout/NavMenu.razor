@@ -85,16 +85,6 @@
                             }
                         </NavLink>
                     </div>
-                    <div class="nav-item px-3">
-                        <NavLink class="nav-link d-flex align-items-center" href="admin/users">
-                            <span class="bi bi-people-fill" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
-                            <span>All Users</span>
-                            @if (userTasks > 0)
-                            {
-                                <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
-                            }
-                        </NavLink>
-                    </div>
 
                     <div class="nav-item px-3">
                         <NavLink class="nav-link d-flex align-items-center" href="admin/buddysettlement">
@@ -185,6 +175,7 @@
                     hubConnection = new HubConnectionBuilder()
                         .WithUrl(NavigationManager.ToAbsoluteUri("/bethub"))
                         .Build();
+
                     // Listen for various admin events to refresh counters
                     hubConnection.On<string>("ReceiveAdminNotification", async (message) => await RefreshTasks());
                     hubConnection.On("ReceiveUserRegistration", async () => await RefreshTasks());

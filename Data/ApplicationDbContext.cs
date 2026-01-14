@@ -34,6 +34,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .Property(u => u.Balance)
             .HasPrecision(18, 0); // Changed to 0 to enforce whole numbers
 
+        // --- Fix for Warning [30000] ---
+        builder.Entity<SettlementSnapshot>()
+            .Property(s => s.TotalVolume)
+            .HasPrecision(18, 0);
+
         // --- NEW: Performance Indexes ---
         // 1. Speeds up finding "Pending" bets for Admin
         builder.Entity<Bet>().HasIndex(b => b.Status); 
