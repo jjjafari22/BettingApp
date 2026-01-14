@@ -132,23 +132,6 @@
     </div>
 </div>
 
-@* UTILITY FOR MIGRATION - Run this ONCE *@
-<div class="accordion mb-4" id="adminTools">
-  <div class="accordion-item">
-    <h2 class="accordion-header">
-      <button class="accordion-button collapsed text-danger" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTools">
-        ⚠️ Admin Database Tools
-      </button>
-    </h2>
-    <div id="collapseTools" class="accordion-collapse collapse" data-bs-parent="#adminTools">
-      <div class="accordion-body">
-          <p>Use this button ONCE after updating the code to fix the Balance column for all users.</p>
-          <button class="btn btn-danger" @onclick="RecalculateAllBalances">Recalculate ALL User Balances</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <h4 class="mb-3">Transaction History</h4>
 <div class="table-responsive">
     <table class="table table-sm table-striped table-hover align-middle text-nowrap">
@@ -439,41 +422,6 @@
         newTrans = new Transaction { Type = type, Date = DateTime.UtcNow, Status = "Completed" };
         selectedUser = null; targetUsername = "";
         await LoadTransactions(context);
-    }
-    
-    // --- TOOL TO FIX ALL BALANCES ---
-    private async Task RecalculateAllBalances()
-    {
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure? This will overwrite the 'Balance' column for ALL users based on their history. This might take a moment.");
-        if (!confirmed) return;
-
-        try 
-        {
-            using var context = DbFactory.CreateDbContext();
-            var allUsers = await context.Users.ToListAsync();
-            
-            foreach(var user in allUsers)
-            {
-                var totalDeposits = await context.Transactions.Where(t => t.UserId == user.Id && t.Type == "Deposit" && t.Status != "Rejected").SumAsync(t => t.AmountNOK);
-                var totalWithdrawals = await context.Transactions.Where(t => t.UserId == user.Id && t.Type == "Withdrawal" && t.Status != "Rejected").SumAsync(t => t.AmountNOK);
-                var totalValidStakes = await context.Bets
-                    .Where(b => b.UserId == user.Id && b.Status != "Rejected" && b.Status != "Cancelled" && b.Status != "Void")
-                    .SumAsync(b => (decimal)(b.AmountNOK ?? 0));
-                var winningBets = await context.Bets
-                    .Where(b => b.UserId == user.Id && b.Status == "Won")
-                    .ToListAsync();
-                var totalWonPayouts = winningBets.Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds));
-
-                user.Balance = totalDeposits - totalWithdrawals - totalValidStakes + totalWonPayouts;
-            }
-            
-            await context.SaveChangesAsync();
-            successMessage = $"Successfully recalculated balances for {allUsers.Count} users.";
-        }
-        catch(Exception ex)
-        {
-            errorMessage = $"Error: {ex.Message}";
-        }
     }
 
     public async ValueTask DisposeAsync()
