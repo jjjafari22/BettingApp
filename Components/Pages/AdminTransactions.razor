@@ -68,12 +68,12 @@
                                 <button class="btn btn-danger btn-sm" @onclick="() => RejectWithdraw(w)">
                                     Reject
                                 </button>
-                             </td>
+                            </td>
                         </tr>
                     }
                 </tbody>
             </table>
-         </div>
+        </div>
     </div>
 </div>
 
@@ -83,14 +83,30 @@
              <div class="card-header bg-primary text-white">Add Transaction (Manual)</div>
             <div class="card-body">
                 <div class="row">
-                    @* NEW: Search User instead of crashing the page with a dropdown *@
-                    <div class="col-md-3 mb-3">
-                        <label>Target User (Username)</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" @bind="targetUsername" placeholder="Enter username" />
-                            <button class="btn btn-outline-secondary" @onclick="FindUser">Check</button>
-                        </div>
+                    @* Autocomplete Search *@
+                    <div class="col-md-3 mb-3 position-relative">
+                        <label>Target User (Search)</label>
+                        <input type="text" class="form-control" 
+                               placeholder="Start typing username..." 
+                               @bind="searchTerm" 
+                               @oninput="SearchUsers" />
                         
+                        @* Dropdown Suggestions *@
+                        @if (searchResults.Any())
+                        {
+                            <ul class="list-group position-absolute w-100 shadow" style="z-index: 1000; max-height: 200px; overflow-y: auto;">
+                                @foreach (var user in searchResults)
+                                {
+                                    <li class="list-group-item list-group-item-action" 
+                                        style="cursor: pointer;" 
+                                        @onclick="() => SelectUser(user)">
+                                        <strong>@user.UserName</strong> 
+                                        <small class="text-muted ms-1">(@user.Balance.ToString("N0") kr)</small>
+                                    </li>
+                                }
+                            </ul>
+                        }
+
                         @if (selectedUser != null)
                         {
                             <div class="mt-2 p-2 bg-light border rounded small">
@@ -100,7 +116,10 @@
                                         @selectedUser.Balance.ToString("N0") kr
                                     </span>
                                 </div>
-                                <div class="text-success"><small>User found: @selectedUser.UserName</small></div>
+                                <div class="text-success">
+                                    <small>Selected: <strong>@selectedUser.UserName</strong></small>
+                                    <button class="btn btn-link btn-sm p-0 ms-2 text-danger" @onclick="ClearSelection">(x)</button>
+                                </div>
                             </div>
                         }
                     </div>
@@ -184,7 +203,7 @@
              }
         </tbody>
     </table>
-    
+     
     @* Pagination *@
     <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
         <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(currentPage <= 1)">
@@ -202,7 +221,9 @@
     private List<Transaction> pendingWithdrawals = new();
     private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow, Status = "Completed" };
     
-    private string targetUsername = "";
+    // Auto-search logic
+    private string searchTerm = "";
+    private List<ApplicationUser> searchResults = new();
     private ApplicationUser? selectedUser;
     
     private string? successMessage;
@@ -258,17 +279,46 @@
         }
     }
 
-    private async Task FindUser()
+    // UPDATED: Autocomplete Search with Fixes
+    private async Task SearchUsers(ChangeEventArgs e)
     {
-        if(string.IsNullOrWhiteSpace(targetUsername)) return;
-        using var context = DbFactory.CreateDbContext();
-        selectedUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == targetUsername);
-        if (selectedUser == null) errorMessage = "User not found.";
-        else {
-             errorMessage = null; 
-             newTrans.UserId = selectedUser.Id;
-             newTrans.UserName = selectedUser.UserName ?? "Unknown";
+        searchTerm = e.Value?.ToString() ?? "";
+        
+        if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Length < 2)
+        {
+            searchResults.Clear();
+            return;
         }
+
+        using var context = DbFactory.CreateDbContext();
+        
+        searchResults = await context.Users
+            // Fix CS8602: Check for null UserName
+            .Where(u => u.UserName != null && u.UserName.Contains(searchTerm))
+            // Fix EF Warning: Add OrderBy before Take
+            .OrderBy(u => u.UserName) 
+            .Take(5)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+
+    private void SelectUser(ApplicationUser user)
+    {
+        selectedUser = user;
+        searchTerm = user.UserName ?? "";
+        searchResults.Clear();
+        
+        newTrans.UserId = selectedUser.Id;
+        newTrans.UserName = selectedUser.UserName ?? "Unknown";
+        errorMessage = null;
+    }
+
+    private void ClearSelection()
+    {
+        selectedUser = null;
+        searchTerm = "";
+        searchResults.Clear();
+        newTrans.UserId = "";
     }
 
     private async Task SetupSignalR()
@@ -292,7 +342,6 @@
 
     private async Task LoadTransactions(ApplicationDbContext context)
     {
-        // Performance Fix: Pagination
         allTransactions = await context.Transactions
             .OrderByDescending(t => t.UpdatedAt)
             .Skip((currentPage - 1) * PageSize)
@@ -302,7 +351,6 @@
             
         var total = await context.Transactions.CountAsync();
         hasMoreTransactions = total > (currentPage * PageSize);
-            
         pendingWithdrawals = await context.Transactions.Where(t => t.Type == "Withdrawal" && t.Status == "Pending").OrderBy(t => t.Date).AsNoTracking().ToListAsync();
     }
     
@@ -319,9 +367,7 @@
 
         using var context = DbFactory.CreateDbContext();
         
-        // Check balance (user should have already had amount deducted when they requested)
         var user = await context.Users.FindAsync(t.UserId);
-        
         var dbTrans = await context.Transactions.FindAsync(t.Id);
         if (dbTrans != null)
         {
@@ -349,7 +395,6 @@
         using var context = DbFactory.CreateDbContext();
         var dbTrans = await context.Transactions.FindAsync(t.Id);
         var user = await context.Users.FindAsync(t.UserId);
-        
         if (dbTrans != null && user != null)
         {
             dbTrans.Status = "Rejected";
@@ -357,7 +402,6 @@
             
             // Refund the money to balance
             user.Balance += t.AmountNOK;
-            
             context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Rejected Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {t.AmountNOK}, ID: {t.Id}" });
             await context.SaveChangesAsync();
             
@@ -411,7 +455,6 @@
         
         await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", $"New transaction: {newTrans.Type}");
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-
         if (!string.IsNullOrEmpty(user.DiscordUserId) && newTrans.Type == "Withdrawal")
         {
              await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, newTrans, "Completed");
@@ -420,7 +463,10 @@
         successMessage = "Transaction added successfully!";
         var type = newTrans.Type;
         newTrans = new Transaction { Type = type, Date = DateTime.UtcNow, Status = "Completed" };
-        selectedUser = null; targetUsername = "";
+        
+        // Reset Search
+        ClearSelection();
+        
         await LoadTransactions(context);
     }
 
