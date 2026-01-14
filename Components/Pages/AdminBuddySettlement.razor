@@ -216,8 +216,11 @@
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         using var context = DbFactory.CreateDbContext();
-        var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
-
+        
+        // FIX: Extract the username to a local variable to avoid CS8072 in Expression Tree
+        var currentUserName = user.Identity?.Name;
+        
+        var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == currentUserName);
         if (dbUser?.IsAdmin != true)
         {
             NavigationManager.NavigateTo("Account/Login");
@@ -257,8 +260,7 @@
         showConfirmation = false;
         isLoading = true;
         // Small delay to ensure UI updates to "Loading..."
-        await Task.Delay(50); 
-        
+        await Task.Delay(50);
         await SettlementService.CreateSnapshotAsync();
         await LoadSnapshots();
     }
@@ -317,12 +319,15 @@
         
         if (result == null) return;
 
-        var csvContent = SettlementService.GenerateCsv(result);
+        // FIXED: Passing two arguments (result, snap.CreatedAt) to match the updated method signature
+        var csvContent = SettlementService.GenerateCsv(result, snap.CreatedAt);
         var fileBytes = System.Text.Encoding.UTF8.GetBytes(csvContent);
-        
         using var stream = new MemoryStream(fileBytes);
         using var streamRef = new DotNetStreamReference(stream);
 
-        await JS.InvokeVoidAsync("downloadFileFromStream", $"Settlement_{snap.CreatedAt:yyyyMMdd}.csv", streamRef);
+        var norwayTime = GetNorwayTime(snap.CreatedAt);
+        var fileName = $"Settlement_{norwayTime:yyyyMMdd_HHmm}.csv";
+
+        await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
     }
 }

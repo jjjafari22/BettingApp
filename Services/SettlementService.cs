@@ -32,17 +32,8 @@ namespace BettingApp.Services
             // 2. Filter & Sort
             foreach (var user in users)
             {
-                // TOLERANCE LOGIC: If balance is within +/- 100kr, skip and log as adjustment
-                if (Math.Abs(user.Balance) <= 100)
-                {
-                    result.Adjustments.Add(new SettlementAdjustment 
-                    { 
-                        UserName = user.UserName ?? "Unknown", 
-                        Amount = user.Balance, 
-                        Reason = "Small balance (within +/- 100kr)" 
-                    });
-                    continue;
-                }
+                // Removed tolerance logic to keep settlement precise.
+                // All non-zero balances are now processed.
 
                 if (user.Balance < 0)
                     debtors.Add((user.UserName!, Math.Abs(user.Balance)));
@@ -114,9 +105,34 @@ namespace BettingApp.Services
             return snapshot;
         }
 
-        public string GenerateCsv(SettlementResult result)
+        // Updated signature to accept createdAtUtc
+        public string GenerateCsv(SettlementResult result, DateTime createdAtUtc)
         {
             var sb = new StringBuilder();
+
+            // Helper to get Norway time (same logic as UI)
+            DateTime GetNorwayTime(DateTime utc)
+            {
+                try
+                {
+                    var tz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Oslo");
+                    return TimeZoneInfo.ConvertTimeFromUtc(utc, tz);
+                }
+                catch
+                {
+                    try { return TimeZoneInfo.ConvertTimeFromUtc(utc, TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time")); }
+                    catch { return utc.AddHours(1); }
+                }
+            }
+
+            var norwayTime = GetNorwayTime(createdAtUtc);
+
+            // Add Header Info
+            sb.AppendLine($"Snapshot Time (UTC),{createdAtUtc:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"Snapshot Time (Norway),{norwayTime:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine(); // Empty line separator
+
+            // CSV Columns
             sb.AppendLine("Type,From,To,Amount,Details");
 
             foreach (var instr in result.Instructions)
