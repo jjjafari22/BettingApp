@@ -1,0 +1,137 @@
+@page "/admin/buddysettlement"
+@using BettingApp.Data
+@using BettingApp.Services
+@using System.Text.Json
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin")]
+@inject SettlementService SettlementService
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<PageTitle>Buddy Settlement</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Buddy Settlement Snapshots</h2>
+        
+        <button class="btn btn-warning" @onclick="ConfirmSnapshot">
+            <span class="bi bi-camera-fill me-2"></span> Trigger Snapshot Now
+        </button>
+    </div>
+
+    @if (showConfirmation)
+    {
+        <div class="alert alert-warning border-warning shadow-sm">
+            <h4><span class="bi bi-exclamation-triangle-fill text-danger me-2"></span>Confirm Snapshot</h4>
+            <p>
+                Are you sure you want to trigger a settlement snapshot right now? 
+                This will calculate who owes whom based on current balances.
+            </p>
+            <div class="d-flex gap-2">
+                <button class="btn btn-danger" @onclick="ExecuteSnapshot">Yes, Execute</button>
+                <button class="btn btn-secondary" @onclick="() => showConfirmation = false">Cancel</button>
+            </div>
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Date (UTC)</th>
+                        <th>Transactions</th>
+                        <th>Users Involved</th>
+                        <th>Total Volume</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var snap in snapshots)
+                    {
+                        <tr>
+                            <td>@snap.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@snap.TransactionCount</td>
+                            <td>@snap.UserCount</td>
+                            <td>@snap.TotalVolume.ToString("N0") kr</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => DownloadCsv(snap)">
+                                    <span class="bi bi-download me-1"></span> CSV
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<script>
+    window.downloadFileFromStream = async (fileName, contentStreamReference) => {
+        const arrayBuffer = await contentStreamReference.arrayBuffer();
+        const blob = new Blob([arrayBuffer]);
+        const url = URL.createObjectURL(blob);
+        const anchorElement = document.createElement('a');
+        anchorElement.href = url;
+        anchorElement.download = fileName ?? '';
+        anchorElement.click();
+        anchorElement.remove();
+        URL.revokeObjectURL(url);
+    }
+</script>
+
+@code {
+    private List<SettlementSnapshot> snapshots = new();
+    private bool isLoading = true;
+    private bool showConfirmation = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSnapshots();
+    }
+
+    private async Task LoadSnapshots()
+    {
+        using var context = DbFactory.CreateDbContext();
+        snapshots = await context.SettlementSnapshots
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync();
+        isLoading = false;
+    }
+
+    private void ConfirmSnapshot()
+    {
+        showConfirmation = true;
+    }
+
+    private async Task ExecuteSnapshot()
+    {
+        showConfirmation = false;
+        isLoading = true;
+        await SettlementService.CreateSnapshotAsync();
+        await LoadSnapshots();
+    }
+
+    private async Task DownloadCsv(SettlementSnapshot snap)
+    {
+        var result = JsonSerializer.Deserialize<SettlementResult>(snap.SettlementJson);
+        if (result == null) return;
+
+        var csvContent = SettlementService.GenerateCsv(result);
+        var fileBytes = System.Text.Encoding.UTF8.GetBytes(csvContent);
+        
+        using var stream = new MemoryStream(fileBytes);
+        using var streamRef = new DotNetStreamReference(stream);
+
+        await JS.InvokeVoidAsync("downloadFileFromStream", $"Settlement_{snap.CreatedAt:yyyyMMdd}.csv", streamRef);
+    }
+}

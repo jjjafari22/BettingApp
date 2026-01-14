@@ -86,6 +86,23 @@
                         </NavLink>
                     </div>
                     <div class="nav-item px-3">
+                        <NavLink class="nav-link d-flex align-items-center" href="admin/users">
+                            <span class="bi bi-people-fill" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
+                            <span>All Users</span>
+                            @if (userTasks > 0)
+                            {
+                                <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
+                            }
+                        </NavLink>
+                    </div>
+
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link d-flex align-items-center" href="admin/buddysettlement">
+                            <span class="bi bi-calculator" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
+                            <span>Buddy Settlement</span>
+                        </NavLink>
+                    </div>
+                    <div class="nav-item px-3">
                         <NavLink class="nav-link d-flex align-items-center" href="admin/settings">
                             <span class="bi bi-gear-fill" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
                             <span>Admin Settings</span>

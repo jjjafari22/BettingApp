@@ -10,6 +10,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SystemSetting> Settings { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
 
+    public DbSet<SettlementSnapshot> SettlementSnapshots { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder); // IMPORTANT: This configures Identity tables!

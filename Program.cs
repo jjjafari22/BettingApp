@@ -28,6 +28,8 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddHttpClient();
 builder.Services.AddSignalR();
+builder.Services.AddScoped<SettlementService>();
+builder.Services.AddHostedService<SettlementBackgroundService>();
 
 // Register Discord Service
 builder.Services.AddSingleton<DiscordNotificationService>();
@@ -126,10 +128,6 @@ else
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
-
-// --- FIX 3: REMOVE HTTPS REDIRECT ---
-// We removed app.UseHttpsRedirection() because Azure Linux Containers
-// handle SSL termination externally. This prevents the "Failed to determine port" warning.
 
 app.UseStaticFiles();
 app.MapStaticAssets();
