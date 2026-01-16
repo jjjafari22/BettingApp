@@ -130,7 +130,7 @@
                             <option value="Deposit">Deposit</option>
                             <option value="Withdrawal">Withdraw</option>
                         </select>
-                     </div>
+                    </div>
 
                     <div class="col-md-3 mb-3">
                         <label>Platform</label>
@@ -162,6 +162,7 @@
                 <th>Platform</th>
                 <th>Amount</th>
                 <th>Status</th>
+                <th>Actions</th> @* ADDED: Action column *@
             </tr>
         </thead>
         <tbody>
@@ -195,15 +196,24 @@
                             <span class="badge bg-secondary">@t.Status</span>
                         }
                     </td>
+                    <td>
+                         @* ADDED: Cancel Button *@
+                         @if (t.Status != "Cancelled" && t.Status != "Rejected" && t.Status != "Lost")
+                         {
+                             <button class="btn btn-danger btn-sm py-0" @onclick="() => CancelTransaction(t)" title="Cancel Transaction">
+                                 <i class="bi bi-x-circle"></i> Cancel
+                             </button>
+                         }
+                    </td>
                 </tr>
             }
             @if (allTransactions.Count == 0)
             {
-                <tr><td colspan="6" class="text-muted text-center">No transactions found.</td></tr>
+                <tr><td colspan="7" class="text-muted text-center">No transactions found.</td></tr>
              }
         </tbody>
     </table>
-     
+    
     @* Pagination *@
     <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
         <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(currentPage <= 1)">
@@ -220,17 +230,14 @@
     private List<Transaction> allTransactions = new();
     private List<Transaction> pendingWithdrawals = new();
     private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow, Status = "Completed" };
-    
     // Auto-search logic
     private string searchTerm = "";
     private List<ApplicationUser> searchResults = new();
     private ApplicationUser? selectedUser;
-    
     private string? successMessage;
     private string? errorMessage;
     private string? currentAdminName;
     private HubConnection? hubConnection;
-    
     // Pagination
     private int currentPage = 1;
     private const int PageSize = 20;
@@ -291,7 +298,6 @@
         }
 
         using var context = DbFactory.CreateDbContext();
-        
         searchResults = await context.Users
             // Fix CS8602: Check for null UserName
             .Where(u => u.UserName != null && u.UserName.Contains(searchTerm))
@@ -348,14 +354,15 @@
             .Take(PageSize)
             .AsNoTracking()
             .ToListAsync();
-            
         var total = await context.Transactions.CountAsync();
         hasMoreTransactions = total > (currentPage * PageSize);
         pendingWithdrawals = await context.Transactions.Where(t => t.Type == "Withdrawal" && t.Status == "Pending").OrderBy(t => t.Date).AsNoTracking().ToListAsync();
     }
     
-    private async Task NextPage() { currentPage++; using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); }
-    private async Task PrevPage() { if(currentPage > 1) { currentPage--; using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); } }
+    private async Task NextPage() { currentPage++; using var c = DbFactory.CreateDbContext();
+        await LoadTransactions(c); }
+    private async Task PrevPage() { if(currentPage > 1) { currentPage--;
+        using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); } }
 
     private async Task ConfirmWithdraw(Transaction t)
     {
@@ -415,6 +422,65 @@
         }
     }
 
+    // ADDED: Cancel Transaction Logic
+    private async Task CancelTransaction(Transaction t)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"Are you sure you want to CANCEL this transaction?\nType: {t.Type}\nAmount: {t.AmountNOK} kr\nUser: {t.UserName}\n\nThis will reverse the balance.");
+        if (!confirmed) return;
+
+        using var context = DbFactory.CreateDbContext();
+        var dbTrans = await context.Transactions.FindAsync(t.Id);
+        var user = await context.Users.FindAsync(t.UserId);
+
+        if (dbTrans != null && user != null)
+        {
+            if (dbTrans.Status == "Cancelled" || dbTrans.Status == "Rejected")
+            {
+                errorMessage = "Transaction is already cancelled or rejected.";
+                return;
+            }
+
+            // Reverse the balance impact
+            if (dbTrans.Type == "Deposit")
+            {
+                // Deposit means balance increased -> Reverse by subtracting
+                user.Balance -= dbTrans.AmountNOK;
+            }
+            else if (dbTrans.Type == "Withdrawal")
+            {
+                // Withdrawal means balance decreased -> Reverse by adding back (Refund)
+                user.Balance += dbTrans.AmountNOK;
+            }
+
+            // Update Status
+            dbTrans.Status = "Cancelled";
+            dbTrans.UpdatedAt = DateTime.UtcNow;
+
+            // Audit Log
+            context.AuditLogs.Add(new AuditLog 
+            { 
+                AdminUserName = currentAdminName ?? "Unknown", 
+                Action = "Cancelled Transaction", 
+                TargetUserName = user.UserName ?? "Unknown", 
+                Details = $"Cancelled {dbTrans.Type} of {dbTrans.AmountNOK}. ID: {dbTrans.Id}" 
+            });
+
+            await context.SaveChangesAsync();
+
+            // Real-time updates
+            await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", $"Transaction #{t.Id} was cancelled.");
+            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Transaction Cancelled");
+
+            successMessage = "Transaction cancelled and balance reversed successfully.";
+            await LoadTransactions(context);
+        }
+        else
+        {
+            errorMessage = "Transaction or User not found.";
+        }
+    }
+
     private async Task AddTransaction()
     {
         successMessage = null;
@@ -427,7 +493,8 @@
 
         using var context = DbFactory.CreateDbContext();
         var user = await context.Users.FindAsync(newTrans.UserId);
-        if (user == null) { errorMessage = "User not found"; return; }
+        if (user == null) { errorMessage = "User not found"; return;
+        }
 
         if (newTrans.Type == "Withdrawal")
         {
@@ -463,7 +530,6 @@
         successMessage = "Transaction added successfully!";
         var type = newTrans.Type;
         newTrans = new Transaction { Type = type, Date = DateTime.UtcNow, Status = "Completed" };
-        
         // Reset Search
         ClearSelection();
         
@@ -472,6 +538,7 @@
 
     public async ValueTask DisposeAsync()
     {
-        if (hubConnection is not null) { await hubConnection.DisposeAsync(); }
+        if (hubConnection is not null) { await hubConnection.DisposeAsync();
+        }
     }
 }

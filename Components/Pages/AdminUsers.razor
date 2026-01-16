@@ -76,7 +76,7 @@
                    <div class="review-image-container">
                        <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(currentReviewIndex <= 0)"><i class="bi bi-chevron-left"></i></button>
                        @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
-                            <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
+                             <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
                        } else {
                            <div class="text-white-50 fst-italic text-center">
                                <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
@@ -97,7 +97,7 @@
                                               value="@reviewingBetModel.AmountNOK" 
                                               @oninput="(e) => UpdateAmount(e.Value)"
                                               placeholder="0" />
-                                       <span class="input-group-text">kr</span>
+                                        <span class="input-group-text">kr</span>
                                    </div>
                                 </div>
                                <div class="col-3">
@@ -112,11 +112,11 @@
                                 </div>
                                <div class="col-5">
                                     <label class="form-label fw-bold text-muted small mb-1">Payout</label>
-                                    <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
+                                     <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
                                 </div>
                             </div>
 
-                           @* ACTIONS *@
+                            @* ACTIONS *@
                            @if (reviewingBetModel.Status == "Pending") {
                                <div class="row g-3">
                                    <div class="col-6"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-check-lg me-1"></i> Approve</button></div>
@@ -124,7 +124,7 @@
                                </div>
                            } else {
                                <div class="row g-2">
-                                   <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
+                                    <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
                                    <div class="col-3"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Won")'>Won</button></div>
                                    <div class="col-3"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'>Lost</button></div>
                                    <div class="col-3"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
@@ -190,21 +190,21 @@ else
                                     <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
                                         <i class="bi bi-check-lg"></i> Approve
                                     </button>
-                                    <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
+                                     <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
                                          <i class="bi bi-x-lg"></i> Reject
-                                    </button>
+                                     </button>
                                 </td>
                             </tr>
                         }
                         @if (!pendingUsersVM.Any())
                         {
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-3">No pending approvals.</td>
+                                 <td colspan="6" class="text-center text-muted py-3">No pending approvals.</td>
                             </tr>
                         }
                     </tbody>
                 </table>
-             </div>
+            </div>
         </div>
     </div>
 
@@ -256,9 +256,9 @@ else
                         <td>@ToUserLocal(user.LastActive).ToString("g")</td>
                         
                         <td @onclick:stopPropagation="true">
-                                    <button class="btn btn-sm @(user.IsManuallyVerified ? "btn-success" : "btn-outline-secondary")" 
+                                     <button class="btn btn-sm @(user.IsManuallyVerified ? "btn-success" : "btn-outline-secondary")" 
                                     @onclick="() => ToggleVerification(user.Id)"
-                                    title="Click to toggle verification status">
+                                     title="Click to toggle verification status">
                                 <i class="bi @(user.IsManuallyVerified ? "bi-check-circle-fill" : "bi-circle")"></i>
                                 @(user.IsManuallyVerified ? "Verified" : "Unverified")
                              </button>
@@ -290,7 +290,7 @@ else
                         
                         @* Editable Referral Field *@
                         <td @onclick:stopPropagation="true">
-                             <input class="form-control form-control-sm" 
+                              <input class="form-control form-control-sm" 
                                    style="min-width: 100px;"
                                    value="@user.ReferredBy" 
                                    @onchange="@(e => UpdateUserReferral(user.Id, e.Value?.ToString()))"
@@ -299,12 +299,12 @@ else
                         
                         <td>
                             @if (user.IsAdmin) { <span class="badge bg-primary">Admin</span> }
-                              else { <span class="badge bg-secondary">User</span> }
+                            else { <span class="badge bg-secondary">User</span> }
                         </td>
                     </tr>
                 }
                 @if (!FilteredAndSortedUsers.Any())
-                  {
+                {
                      <tr><td colspan="13" class="text-center text-muted">No active users found.</td></tr>
                 }
             </tbody>
@@ -319,7 +319,7 @@ else
                 <h3 class="mb-0 text-primary">
                     <i class="bi bi-person-lines-fill me-2"></i>History: @selectedUserName
                 </h3>
-            
+             
                 <div class="d-flex gap-2">
                      @* STATUS FILTER *@
                     <select class="form-select w-auto" @onchange="OnStatusFilterChanged" value="@statusFilter">
@@ -358,7 +358,7 @@ else
                         <div class="card-body text-center">
                             <h6 class="card-subtitle mb-2 text-muted">Profit (@dateFilterText)</h6>
                             <h2 class="card-title @(selectedUserProfit >= 0 ? "text-success" : "text-danger")">
-                                  @selectedUserProfit.ToString("N0") kr
+                                @selectedUserProfit.ToString("N0") kr
                             </h2>
                         </div>
                     </div>
@@ -368,7 +368,7 @@ else
             <div class="table-responsive">
                 <table class="table table-sm table-striped table-hover text-nowrap align-middle">
                      <thead class="table-dark">
-                           <tr>
+                            <tr>
                              <th>Action</th>
                              <th>ID</th>
                              <th>Last Updated</th>
@@ -379,7 +379,7 @@ else
                          </tr>
                     </thead>
                     <tbody>
-                        @foreach (var bet in displayedUserBets)
+                         @foreach (var bet in displayedUserBets)
                         {
                             var rowClass = bet.Status == "Won" ? "table-success" : (bet.Status == "Lost" ? "table-danger" : "table-secondary");
                              <tr class="@rowClass">
@@ -387,32 +387,32 @@ else
                                           <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
                                                   <i class="bi bi-pencil-square"></i> View/Edit
                                           </button>
-                                    </td>
+                                     </td>
                                     <td>@bet.Id</td>
                                     <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                                     <td>@bet.AmountNOK?.ToString("N0") kr</td>
                                     <td>@bet.Odds.ToString("N2")</td>
-                                    <td>
+                                     <td>
                                         <span class="badge @GetStatusBadgeClass(bet.Status)">@bet.Status</span>
                                     </td>
-                                    <td>
+                                     <td>
                                      @if(bet.Status == "Won")
                                     {
                                           @bet.PotentialPayout.ToString("N0") <span>kr</span>
                                     }
-                                    else if (bet.Status == "Lost")
+                                     else if (bet.Status == "Lost")
                                     {
                                         <span>0 kr</span>
-                                    }
+                                     }
                                     else
                                     {
                                          <span class="text-muted">-</span>
                                     }
-                                   </td>
+                                    </td>
                                 </tr>
                         }
                         @if (!displayedUserBets.Any())
-                         {
+                        {
                            <tr><td colspan="7" class="text-muted text-center py-3">No bets found for this period/status.</td></tr>
                          }
                      </tbody>
@@ -567,9 +567,9 @@ else
             var userBets = bets.Where(b => b.UserId == u.Id).ToList();
             var userTrans = transactions.Where(t => t.UserId == u.Id).ToList();
 
-            // --- Exclude Rejected transactions ---
-            var totalDeposits = userTrans.Where(t => t.Type == "Deposit" && t.Status != "Rejected").Sum(t => t.AmountNOK);
-            var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal" && t.Status != "Rejected").Sum(t => t.AmountNOK);
+            // --- Exclude Rejected AND Cancelled transactions ---
+            var totalDeposits = userTrans.Where(t => t.Type == "Deposit" && t.Status != "Rejected" && t.Status != "Cancelled").Sum(t => t.AmountNOK);
+            var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal" && t.Status != "Rejected" && t.Status != "Cancelled").Sum(t => t.AmountNOK);
             // FIX: Subtract stakes for ALL valid bets (Pending, Approved, Won, Lost)
             // We exclude Rejected, Cancelled, Void
             var totalValidStakes = userBets
@@ -829,7 +829,7 @@ else
                 vm.ReferredBy = originalValue;
                 StateHasChanged();
             }
-            return; 
+            return;
         }
 
         using var context = DbFactory.CreateDbContext();
@@ -842,7 +842,6 @@ else
             
             // Update local VM to reflect change without full reload
             if (vm != null) vm.ReferredBy = newReferral;
-            
             // Also update pending list if user is there
             var pvm = pendingUsersVM.FirstOrDefault(u => u.Id == userId);
             if (pvm != null) pvm.ReferredBy = newReferral;
@@ -869,7 +868,7 @@ else
                 vm.DiscordUserId = originalValue;
                 StateHasChanged();
             }
-            return; 
+            return;
         }
 
         using var context = DbFactory.CreateDbContext();
@@ -904,7 +903,7 @@ else
                 vm.DiscordUsername = originalValue;
                 StateHasChanged();
             }
-            return; 
+            return;
         }
 
         using var context = DbFactory.CreateDbContext();
@@ -937,7 +936,8 @@ else
         shouldFocusReviewModal = true;
     }
 
-    private void CancelReview() { reviewingBetModel = null; reviewErrorMessage = null; modalSuccessMessage = null; }
+    private void CancelReview() { reviewingBetModel = null;
+        reviewErrorMessage = null; modalSuccessMessage = null; }
 
     private void NavigateReview(int direction)
     {
@@ -962,7 +962,8 @@ else
         else if (e.Key == "ArrowLeft") NavigateReview(-1);
     }
 
-    private void HandleTouchStart(TouchEventArgs e) { touchStartX = e.Touches[0].ClientX; }
+    private void HandleTouchStart(TouchEventArgs e) { touchStartX = e.Touches[0].ClientX;
+    }
 
     private void HandleTouchEnd(TouchEventArgs e)
     {
@@ -995,8 +996,9 @@ else
         var creditLimit = targetUser?.CreditLimit ?? 0m;
         var userTrans = await context.Transactions.Where(t => t.UserId == userId).AsNoTracking().ToListAsync();
         var userBets = await context.Bets.Where(b => b.UserId == userId).AsNoTracking().ToListAsync();
-        var totalDeposits = userTrans.Where(t => t.Type == "Deposit" && t.Status != "Rejected").Sum(t => t.AmountNOK);
-        var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal" && t.Status != "Rejected").Sum(t => t.AmountNOK);
+        // --- Exclude Rejected AND Cancelled transactions ---
+        var totalDeposits = userTrans.Where(t => t.Type == "Deposit" && t.Status != "Rejected" && t.Status != "Cancelled").Sum(t => t.AmountNOK);
+        var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal" && t.Status != "Rejected" && t.Status != "Cancelled").Sum(t => t.AmountNOK);
         
         int? excludeBetId = reviewingBetModel?.Id;
         // FIX: Re-write logic to balance = D - W - (All Valid Stakes) + (Won Payouts)
@@ -1025,15 +1027,18 @@ else
 
         if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
-            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount"; return; }
-            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds"; return; }
-            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals"; return; }
+            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount";
+                return; }
+            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds";
+                return; }
+            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals";
+                return; }
         }
 
         if (new[] { "Won", "Lost", "Void", "Completed", "Cancelled" }.Contains(originalStatus))
         {
              bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Update Bet #{bet.Id}?\n\n{originalStatus} -> {newStatus}");
-             if (!confirmed) return;
+            if (!confirmed) return;
         }
 
         if (newStatus == "Approved")
@@ -1091,7 +1096,8 @@ else
         }
     }
 
-    private string GetSortIcon(string column) { if (sortColumn != column) return ""; return sortAscending ? "▲" : "▼"; }
+    private string GetSortIcon(string column) { if (sortColumn != column) return "";
+        return sortAscending ? "▲" : "▼"; }
 
     public async ValueTask DisposeAsync()
     {
@@ -1115,17 +1121,28 @@ else
 
             query = sortColumn switch
             {
-                "LastActive" => sortAscending ? query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
-                "DateJoined" => sortAscending ? query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
-                "UserName" => sortAscending ? query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
-                "FirstName" => sortAscending ? query.OrderBy(u => u.FirstName) : query.OrderByDescending(u => u.FirstName),
-                "LastName" => sortAscending ? query.OrderBy(u => u.LastName) : query.OrderByDescending(u => u.LastName),
-                "Balance" => sortAscending ? query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
-                "Handle" => sortAscending ? query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
-                "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
-                "AvailableCredit" => sortAscending ? query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
-                "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
-                "IsManuallyVerified" => sortAscending ? query.OrderBy(u => u.IsManuallyVerified) : query.OrderByDescending(u => u.IsManuallyVerified),
+                "LastActive" => sortAscending ?
+                    query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
+                "DateJoined" => sortAscending ?
+                    query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
+                "UserName" => sortAscending ?
+                    query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
+                "FirstName" => sortAscending ?
+                    query.OrderBy(u => u.FirstName) : query.OrderByDescending(u => u.FirstName),
+                "LastName" => sortAscending ?
+                    query.OrderBy(u => u.LastName) : query.OrderByDescending(u => u.LastName),
+                "Balance" => sortAscending ?
+                    query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
+                "Handle" => sortAscending ?
+                    query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
+                "LifetimeProfit" => sortAscending ?
+                    query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
+                "AvailableCredit" => sortAscending ?
+                    query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
+                "IsAdmin" => sortAscending ?
+                    query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
+                "IsManuallyVerified" => sortAscending ?
+                    query.OrderBy(u => u.IsManuallyVerified) : query.OrderByDescending(u => u.IsManuallyVerified),
                 _ => query
             };
             return query;
