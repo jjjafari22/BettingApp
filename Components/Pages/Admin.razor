@@ -84,7 +84,7 @@
                        </div>
                    }
                    @if (reviewErrorMessage != null) {
-                       <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
+                        <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
                            <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
                                <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
                                <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
@@ -95,7 +95,7 @@
                    <div class="review-image-container">
                        <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(currentReviewIndex <= 0)"><i class="bi bi-chevron-left"></i></button>
                        @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
-                           <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
+                            <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
                        } else {
                            <div class="text-white-50 fst-italic text-center">
                                <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
@@ -109,18 +109,19 @@
                            <div class="row g-2 mb-3">
                                 <div class="col-4">
                                     <label class="form-label fw-bold text-muted small mb-1">Amount</label>
-                                   <div class="input-group input-group-sm">
+                                    <div class="input-group input-group-sm">
                                        <input type="number" class="form-control fw-bold" value="@reviewingBetModel.AmountNOK" @oninput="(e) => UpdateAmount(e.Value)" placeholder="0" />
                                        <span class="input-group-text">kr</span>
                                    </div>
                                </div>
                                <div class="col-3">
                                    <label class="form-label fw-bold text-muted small mb-1">Odds</label>
-                                   <input type="number" step="0.01" class="form-control form-control-sm fw-bold" value="@reviewingBetModel.Odds" @oninput="(e) => UpdateOdds(e.Value)" placeholder="1.00" />
+                                   @* Changed: Bind to editingOdds so it can be blank *@
+                                   <input type="number" step="0.01" class="form-control form-control-sm fw-bold" value="@editingOdds" @oninput="(e) => UpdateOdds(e.Value)" placeholder="1.00" />
                                </div>
                                <div class="col-5">
                                     <label class="form-label fw-bold text-muted small mb-1">Payout</label>
-                                    <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
+                                     <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
                                 </div>
                             </div>
 
@@ -129,7 +130,7 @@
                                    <div class="col-6"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-check-lg me-1"></i> Approve</button></div>
                                    <div class="col-6"><button class="btn btn-outline-danger w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Rejected")'><i class="bi bi-x-lg me-1"></i> Reject</button></div>
                                </div>
-                           } else if (reviewingBetModel.Status == "Approved") {
+                            } else if (reviewingBetModel.Status == "Approved") {
                                 <div class="row g-2">
                                     <div class="col-5"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Won")'><i class="bi bi-trophy-fill me-1"></i> Won</button></div>
                                     <div class="col-5"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'><i class="bi bi-x-lg me-1"></i> Lost</button></div>
@@ -144,7 +145,7 @@
                                    <div class="col-3"><button class="btn btn-primary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-arrow-counterclockwise me-1"></i> Undo</button></div>
                                </div>
                            }
-                       </div>
+                        </div>
                   </div>
                </div>
             </div>
@@ -165,7 +166,7 @@
                         <th>Last Updated</th>
                         <th>User</th>
                     </tr>
-                </thead>
+                 </thead>
                 <tbody>
                     @foreach (var bet in pendingBets)
                     {
@@ -212,7 +213,7 @@
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                             <td>@bet.UserName</td>
-                            <td>@bet.AmountNOK?.ToString("N0") kr</td>
+                             <td>@bet.AmountNOK?.ToString("N0") kr</td>
                              <td>@bet.Odds.ToString("N2")</td>
                              <td>@bet.PotentialPayout.ToString("N0") kr</td>
                         </tr>
@@ -242,7 +243,7 @@
                          <th>Status</th>
                          <th>Payout</th>
                     </tr>
-                </thead>
+                 </thead>
                 <tbody>
                     @foreach (var bet in completedBets)
                     {
@@ -250,7 +251,7 @@
                          <tr class="@rowClass">
                             <td>
                                   <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
-                                     <i class="bi bi-pencil-square"></i> View/Edit
+                                      <i class="bi bi-pencil-square"></i> View/Edit
                                   </button>
                             </td>
                             <td>@bet.Id</td>
@@ -285,7 +286,6 @@
     private List<Bet> pendingBets = new();
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
-    
     // Pagination State
     private int completedPage = 1;
     private int approvedPage = 1;
@@ -301,6 +301,9 @@
     private Bet? reviewingBetModel;
     private string? reviewErrorMessage;
     
+    // NEW: Temporary nullable field for the UI input
+    private decimal? editingOdds;
+    
     private string? modalSuccessMessage;
     private ElementReference reviewModalRef;
     private bool shouldFocusReviewModal = false;
@@ -311,7 +314,6 @@
     
     private double touchStartX = 0;
     private double touchEndX = 0;
-    
     [SupplyParameterFromQuery]
     public int? ReviewBetId { get; set; }
 
@@ -355,7 +357,6 @@
         await LoadPendingBets();
         await LoadApprovedBets();
         await LoadCompletedBets();
-        
         if (ReviewBetId.HasValue)
         {
             var targetBet = pendingBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
@@ -381,7 +382,18 @@
     private void UpdateOdds(object? value)
     {
         if (reviewingBetModel == null) return;
-        if (decimal.TryParse(value?.ToString(), out decimal result)) { reviewingBetModel.Odds = result; }
+        
+        // Logic: Update the nullable UI field AND the non-nullable Model field
+        if (decimal.TryParse(value?.ToString(), out decimal result)) 
+        { 
+            editingOdds = result;
+            reviewingBetModel.Odds = result; // Keeps the Payout calculation working
+        }
+        else 
+        {
+            editingOdds = null; 
+            reviewingBetModel.Odds = 0; // Payout will show 0 while input is blank
+        }
     }
 
     private async Task LoadPendingBets()
@@ -504,6 +516,18 @@
             AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, 
             ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt
         };
+        
+        // NEW: Initialize editingOdds based on status
+        if (reviewingBetModel.Status == "Pending")
+        {
+            editingOdds = null;        // Start blank for Pending bets
+            reviewingBetModel.Odds = 0; // Ensure Payout shows 0 initially
+        }
+        else
+        {
+            editingOdds = reviewingBetModel.Odds; // Keep existing odds for other statuses
+        }
+
         modalSuccessMessage = null; 
         reviewErrorMessage = null; errorMessage = null;
         shouldFocusReviewModal = true;
@@ -555,12 +579,18 @@
         modalSuccessMessage = null; 
         string originalStatus = bet.Status;
         int originalBetId = bet.Id;
-        
         if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
             if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount"; return; }
-            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds"; return; }
-            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals"; return; }
+            
+            // VALIDATION PRESERVED: Check editingOdds (UI value) instead of just the model
+            if (editingOdds == null || editingOdds <= 1) { reviewErrorMessage = "Invalid odds"; return; }
+            
+            // Ensure strict 2 decimal places
+            if (Math.Round(editingOdds.Value, 2) != editingOdds.Value) { reviewErrorMessage = "Odds max 2 decimals"; return; }
+
+            // Apply the valid odds to the model before saving
+            bet.Odds = editingOdds.Value;
 
             using var settingsContext = DbFactory.CreateDbContext();
             var settings = await settingsContext.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
@@ -576,7 +606,7 @@
         {
              bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
                 $"Update Bet #{bet.Id}?\n\n{originalStatus} -> {newStatus}\nAmount: {bet.AmountNOK} kr\nOdds: {bet.Odds}");
-             if (!confirmed) return;
+            if (!confirmed) return;
         }
 
         if (newStatus == "Approved")
@@ -597,13 +627,11 @@
         using var context = DbFactory.CreateDbContext();
         var dbBet = await context.Bets.FindAsync(bet.Id);
         var dbUser = await context.Users.FindAsync(bet.UserId);
-        
         if (dbBet != null && dbUser != null)
         {
             // --- CRITICAL PERFORMANCE FIX: Update Balance Column ---
             // Because we no longer calculate balance from history (for speed),
             // we MUST maintain the balance here.
-
             // 1. Revert changes from original status
             if (originalStatus == "Pending") { 
                 // No deduction happened yet in Pending
@@ -693,6 +721,18 @@
                     AmountNOK = nextBet.AmountNOK, Odds = nextBet.Odds, Status = nextBet.Status, 
                     ScreenshotUrl = nextBet.ScreenshotUrl, CreatedAt = nextBet.CreatedAt
                 };
+                
+                // NEW: Apply same "start blank" logic for the next bet in queue
+                if (reviewingBetModel.Status == "Pending")
+                {
+                    editingOdds = null;
+                    reviewingBetModel.Odds = 0;
+                }
+                else
+                {
+                    editingOdds = reviewingBetModel.Odds;
+                }
+                
                 modalSuccessMessage = null;
             }
         }
