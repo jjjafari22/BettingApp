@@ -98,7 +98,9 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+// --- CHANGED: Register the Real Email Service instead of the NoOp one ---
+builder.Services.AddTransient<IEmailSender<ApplicationUser>, EmailSender>();
+// -----------------------------------------------------------------------
 
 var app = builder.Build();
 
