@@ -498,3 +498,4 @@ __queuestorage__/
 __tablestorage__/
 __azurite_db*
 *.json.swp**/DataProtection-Keys/
+AzuriteConfig

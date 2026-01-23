@@ -117,7 +117,7 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
-    // --- ADMIN WEBHOOK LOGIC (FIXED: Uses Embeds + Explicit Image Property) ---
+    // --- ADMIN WEBHOOK LOGIC (Unchanged) ---
     public async Task NotifyAdminNewPickAsync(Bet bet)
     {
         var webhookUrl = _config["Discord:WebhookUrl"];
@@ -126,8 +126,6 @@ public class DiscordNotificationService : IHostedService
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
         string adminUrl = $"{baseUrl}/admin?ReviewBetId={bet.Id}";
 
-        // We use an Embed to support masked links [Text](URL).
-        // We explicitly add the 'image' property so Discord shows the screenshot at the bottom.
         string description = $"**New Pick Placed!**\n" +
                              $"**User:** {bet.UserName}\n" +
                              $"[Approve Pick Here]({adminUrl})\n" +
@@ -138,12 +136,10 @@ public class DiscordNotificationService : IHostedService
         {
             var client = _httpClientFactory.CreateClient();
 
-            // Construct the Embed object
             var embed = new
             {
                 description = description,
                 color = 3066993, // Green
-                // This 'image' property ensures the screenshot is displayed big at the bottom
                 image = string.IsNullOrEmpty(bet.ScreenshotUrl) ? null : new { url = bet.ScreenshotUrl }
             };
 
@@ -194,6 +190,52 @@ public class DiscordNotificationService : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send Discord Webhook for withdrawal.");
+        }
+    }
+
+    // --- NEW METHOD: Pending Bets Reminder (Uses IHttpClientFactory like the rest of the class) ---
+    public async Task SendPendingBetsReminderAsync(int count, TimeSpan oldestWaitTime)
+    {
+        var webhookUrl = _config["Discord:WebhookUrl"];
+        if (string.IsNullOrEmpty(webhookUrl)) return;
+
+        // Format: "1h 45m" or just "45m"
+        string timeString = oldestWaitTime.TotalHours >= 1 
+            ? $"{(int)oldestWaitTime.TotalHours}h {oldestWaitTime.Minutes}m" 
+            : $"{oldestWaitTime.Minutes}m";
+
+        string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
+        string adminUrl = $"{baseUrl}/admin";
+
+        try 
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var embed = new
+            {
+                title = "⏳ Pending Bets Review Needed",
+                description = $"There are currently **{count}** bets waiting for approval.\n[Go to Admin Dashboard]({adminUrl})",
+                color = 16753920, // Orange
+                fields = new[]
+                {
+                    new { name = "Queue Size", value = $"{count} Bets", inline = true },
+                    new { name = "Wait Time", value = $"{timeString} (Oldest)", inline = true }
+                },
+                footer = new { text = "BettingApp Admin Bot" },
+                timestamp = DateTime.UtcNow.ToString("o")
+            };
+
+            var payload = new
+            {
+                username = "BettingApp AdminBot",
+                embeds = new[] { embed }
+            };
+
+            await client.PostAsJsonAsync(webhookUrl, payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to send Discord admin reminder: {ex.Message}");
         }
     }
 

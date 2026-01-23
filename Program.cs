@@ -31,6 +31,10 @@ builder.Services.AddSignalR();
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();
 
+// --- NEW: Register the Pending Bets Reminder Service ---
+builder.Services.AddHostedService<PendingBetsNotificationService>();
+// -----------------------------------------------------
+
 // Register Discord Service
 builder.Services.AddSingleton<DiscordNotificationService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<DiscordNotificationService>());
