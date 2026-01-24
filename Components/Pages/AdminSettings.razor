@@ -50,11 +50,7 @@ else
                             <div class="form-text">The minimum amount required for a single bet.</div>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="maxPayout" class="form-label">Max Payout per Bet (NOK)</label>
-                            <InputNumber id="maxPayout" class="form-control" @bind-Value="settings.MaxPayout" />
-                            <div class="form-text">The maximum potential payout allowed for a single bet.</div>
-                        </div>
+                        @* Max Payout removed from here (now managed per-user in Credit/Payout Limits) *@
 
                         <button type="submit" class="btn btn-primary">Save Changes</button>
                     </EditForm>
@@ -89,12 +85,10 @@ else
         if (hasAccess)
         {
             await LoadSettings(context);
-            
             // --- SignalR Listener ---
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(Nav.ToAbsoluteUri("/bethub"))
                 .Build();
-
             hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
             {
                 // If notification contains "Settings", reload
@@ -105,7 +99,6 @@ else
                     await InvokeAsync(StateHasChanged);
                 }
             });
-
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         }
@@ -117,7 +110,8 @@ else
         var existingSettings = await context.Settings.FirstOrDefaultAsync();
         if (existingSettings == null)
         {
-            settings = new SystemSetting { MinBetAmount = 100m, MaxPayout = 10000m };
+            // Default MinBet 100
+            settings = new SystemSetting { MinBetAmount = 100m };
             context.Settings.Add(settings);
             await context.SaveChangesAsync();
         }
@@ -136,23 +130,20 @@ else
         if (dbSettings != null)
         {
             var oldMinBet = dbSettings.MinBetAmount;
-            var oldPayout = dbSettings.MaxPayout;
 
             dbSettings.MinBetAmount = settings.MinBetAmount;
-            dbSettings.MaxPayout = settings.MaxPayout;
-
+            
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
                 Action = "Changed System Settings",
                 TargetUserName = "System",
-                Details = $"MinBet: {oldMinBet}->{settings.MinBetAmount}, MaxPayout: {oldPayout}->{settings.MaxPayout}"
+                Details = $"MinBet: {oldMinBet}->{settings.MinBetAmount}"
             });
             await context.SaveChangesAsync();
             
             // Notify other admins
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "System Settings Updated");
-            
             showSuccess = true;
         }
     }

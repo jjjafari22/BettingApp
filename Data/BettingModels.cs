@@ -20,8 +20,6 @@ namespace BettingApp.Data
         // Or: Pending -> Rejected / Cancelled
         public string Status { get; set; } = "Pending";
         
-        // REMOVED: public string? Outcome { get; set; }
-        
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
@@ -51,7 +49,7 @@ namespace BettingApp.Data
     {
         public int Id { get; set; }
         public decimal MinBetAmount { get; set; } = 100m; 
-        public decimal MaxPayout { get; set; } = 50000m; 
+        // MaxPayout removed (now per-user)
     }
 
     public class AuditLog

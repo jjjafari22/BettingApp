@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.SignalR.Client
 @using Microsoft.AspNetCore.SignalR
+@using System.Globalization
 @using BettingApp.Hubs
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
@@ -14,7 +15,7 @@
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 
-<h3>User Credit Limits</h3>
+<h3>Credit/Payout Limits</h3>
 
 @* --- PERSISTENT NOTIFICATION AREA --- *@
 @if (!string.IsNullOrEmpty(successMessage))
@@ -53,29 +54,30 @@ else
                     <th>First Name</th>
                     <th>Last Name</th>
                     <th>User</th>
-                    <th>Current Credit Limit (NOK)</th>
-                    <th>Action</th>
+                    <th>Credit Limit (NOK)</th>
+                    <th>Max Payout (NOK)</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var user in FilteredUsers)
                 {
-                    <tr>
+                    @* FIX: We use a custom dictionary 'rowKeys' to force the row to re-render 
+                       if the user clicks Cancel. This ensures the input box reverts visually.
+                    *@
+                    <tr @key="GetRowKey(user.Id)">
                         <td>@ToUserLocal(user.UpdatedAt).ToString("g")</td>
                         <td>@user.FirstName</td>
                         <td>@user.LastName</td>
                         <td>@user.UserName</td>
                         <td>
-                            @* Since CreditLimit is now an INT, we can use simple binding.
-                               step="100" suggests increments, but user can type any integer.
-                            *@
-                            <input type="number" class="form-control form-control-sm" style="width: 150px;"
-                                   @bind="user.CreditLimit" step="100" />
+                            <input type="text" class="form-control form-control-sm" style="width: 150px;"
+                                   value="@user.CreditLimit.ToString("N0")"
+                                   @onchange="@(async (e) => await UpdateLimit(user, e.Value?.ToString(), isCredit: true))" />
                         </td>
                         <td>
-                            <button class="btn btn-primary btn-sm" @onclick="() => SaveCreditLimit(user)">
-                                Update
-                            </button>
+                            <input type="text" class="form-control form-control-sm" style="width: 150px;"
+                                   value="@user.MaxPayout.ToString("N0")"
+                                   @onchange="@(async (e) => await UpdateLimit(user, e.Value?.ToString(), isCredit: false))" />
                         </td>
                     </tr>
                 }
@@ -93,12 +95,24 @@ else
     private int TimezoneOffset { get; set; }
     private HubConnection? hubConnection;
 
+    // FIX: Dictionary to track unique render keys for rows to handle "Cancel" revert
+    private Dictionary<string, Guid> rowKeys = new();
+
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
             ? users ?? new List<ApplicationUser>() 
             : (users ?? new List<ApplicationUser>()) 
                 .Where(u => u.UserName != null && 
                             u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+
+    private Guid GetRowKey(string userId)
+    {
+        if (!rowKeys.ContainsKey(userId))
+        {
+            rowKeys[userId] = Guid.NewGuid();
+        }
+        return rowKeys[userId];
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -138,13 +152,11 @@ else
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
-
         hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
         {
             await LoadUsers();
             await InvokeAsync(StateHasChanged);
         });
-
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinAdminGroup");
     }
@@ -158,38 +170,79 @@ else
     private async Task LoadUsers()
     {
         using var context = DbFactory.CreateDbContext();
-        // Sort by UpdatedAt descending to show most recently modified users first
         users = await context.Users
             .Where(u => !u.IsAdmin)
             .OrderByDescending(u => u.UpdatedAt)
             .ToListAsync();
     }
 
-    private async Task SaveCreditLimit(ApplicationUser userToUpdate)
+    private async Task UpdateLimit(ApplicationUser userToUpdate, string? newValueStr, bool isCredit)
     {
+        // 1. Parse the new value
+        decimal newValue = 0;
+        var cleanStr = newValueStr?.Replace(" ", "").Replace("\u00A0", ""); 
+        
+        bool isValid = decimal.TryParse(cleanStr, NumberStyles.Any, CultureInfo.InvariantCulture, out newValue);
+
+        if (!isValid)
+        {
+            // Invalid number: force revert by changing key
+            rowKeys[userToUpdate.Id] = Guid.NewGuid();
+            StateHasChanged();
+            return;
+        }
+
+        // 2. Pop-up Confirmation
+        string fieldName = isCredit ? "Credit Limit" : "Max Payout";
+        string msg = $"Are you sure you want to change {userToUpdate.UserName}'s {fieldName} to {newValue:N0} NOK?";
+        
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", msg);
+
+        if (!confirmed)
+        {
+            // FIX: Update the key to force the row to re-render with the ORIGINAL value
+            rowKeys[userToUpdate.Id] = Guid.NewGuid();
+            StateHasChanged();
+            return;
+        }
+
+        // 3. Save Changes
         using var context = DbFactory.CreateDbContext();
         var dbUser = await context.Users.FindAsync(userToUpdate.Id);
         
         if (dbUser != null)
         {
-            var oldLimit = dbUser.CreditLimit;
-            dbUser.CreditLimit = userToUpdate.CreditLimit;
+            string logDetails = "";
+
+            if (isCredit)
+            {
+                var oldVal = dbUser.CreditLimit;
+                dbUser.CreditLimit = (int)newValue;
+                logDetails = $"CreditLimit: {oldVal:N0} -> {dbUser.CreditLimit:N0}";
+            }
+            else
+            {
+                var oldVal = dbUser.MaxPayout;
+                dbUser.MaxPayout = newValue;
+                logDetails = $"MaxPayout: {oldVal:N0} -> {dbUser.MaxPayout:N0}";
+            }
+            
             dbUser.UpdatedAt = DateTime.UtcNow; 
 
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
-                Action = "Changed Credit Limit",
+                Action = isCredit ? "Changed Credit Limit" : "Changed Max Payout",
                 TargetUserName = userToUpdate.UserName ?? "Unknown",
-                Details = $"Old: {oldLimit:N0}, New: {userToUpdate.CreditLimit:N0}"
+                Details = logDetails
             });
 
             await context.SaveChangesAsync();
             
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", 
-                $"Credit limit updated for {userToUpdate.UserName}");
-
-            successMessage = $"Credit limit updated for {userToUpdate.UserName}!";
+                $"{fieldName} updated for {userToUpdate.UserName}");
+            
+            successMessage = $"{fieldName} updated for {userToUpdate.UserName}!";
             
             await LoadUsers();
         }

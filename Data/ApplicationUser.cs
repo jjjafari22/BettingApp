@@ -8,6 +8,9 @@ public class ApplicationUser : IdentityUser
     
     public int CreditLimit { get; set; } = 1000;
 
+    // New per-user Max Payout limit (Default 10,000 NOK)
+    public decimal MaxPayout { get; set; } = 10000m;
+
     // --- PERFORMANCE FIX: Store Balance directly ---
     // This allows instant reads without summing history.
     public decimal Balance { get; set; } = 0m;
