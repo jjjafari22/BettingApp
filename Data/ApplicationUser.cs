@@ -6,6 +6,10 @@ public class ApplicationUser : IdentityUser
 {
     public bool IsAdmin { get; set; }
     
+    // --- NEW: Flag to identify Test Users ---
+    public bool IsTestUser { get; set; }
+    // ----------------------------------------
+    
     public int CreditLimit { get; set; } = 1000;
 
     // New per-user Max Payout limit (Default 10,000 NOK)

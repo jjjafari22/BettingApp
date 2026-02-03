@@ -19,10 +19,12 @@ namespace BettingApp.Services
             using var context = _dbFactory.CreateDbContext();
             
             // 1. Get all users with non-zero balance
+            // --- CHANGED: Filter out Admins and Test Users ---
             var users = await context.Users
-                .Where(u => u.Balance != 0)
+                .Where(u => u.Balance != 0 && !u.IsAdmin && !u.IsTestUser)
                 .Select(u => new { u.UserName, u.Balance })
                 .ToListAsync();
+            // -------------------------------------------------
 
             var result = new SettlementResult { Date = DateTime.UtcNow };
             

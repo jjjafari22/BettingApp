@@ -65,7 +65,7 @@
                        </div>
                    }
                    @if (reviewErrorMessage != null) {
-                       <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
+                        <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
                            <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
                                <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
                                <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
@@ -76,7 +76,7 @@
                    <div class="review-image-container">
                        <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(currentReviewIndex <= 0)"><i class="bi bi-chevron-left"></i></button>
                        @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
-                           <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
+                            <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
                        } else {
                            <div class="text-white-50 fst-italic text-center">
                                <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
@@ -109,14 +109,14 @@
                                           value="@reviewingBetModel.Odds" 
                                           @oninput="(e) => UpdateOdds(e.Value)"
                                           placeholder="1.00" />
-                               </div>
+                                </div>
                                <div class="col-5">
                                     <label class="form-label fw-bold text-muted small mb-1">Payout</label>
                                     <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
                                 </div>
                             </div>
 
-                            @* ACTIONS *@
+                           @* ACTIONS *@
                            @if (reviewingBetModel.Status == "Pending") {
                                <div class="row g-3">
                                    <div class="col-6"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-check-lg me-1"></i> Approve</button></div>
@@ -124,7 +124,7 @@
                                </div>
                            } else {
                                <div class="row g-2">
-                                   <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
+                                    <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
                                    <div class="col-3"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Won")'>Won</button></div>
                                    <div class="col-3"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'>Lost</button></div>
                                    <div class="col-3"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
@@ -132,7 +132,7 @@
                                </div>
                            }
                        </div>
-                     </div>
+                    </div>
                </div>
             </div>
         </div>
@@ -165,23 +165,23 @@ else
             <h4 class="mb-0"><i class="bi bi-exclamation-circle-fill me-2"></i>Pending Approvals</h4>
         </div>
         <div class="card-body p-0">
-             <div class="table-responsive">
+            <div class="table-responsive">
                 <table class="table table-sm table-striped table-hover mb-0 align-middle text-nowrap">
                      <thead class="table-dark">
                         <tr>
-                            <th>Date Joined</th>
+                             <th>Date Joined</th>
                             <th>First Name</th>
                             <th>Last Name</th>
                             <th>User</th>
-                             <th>Referred By</th>
+                            <th>Referred By</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
-                     <tbody>
+                    <tbody>
                         @foreach (var user in pendingUsersVM)
                         {
                             <tr>
-                                <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToString("g"))</td>
+                                 <td>@(user.DateJoined == DateTime.MaxValue ? "-" : ToUserLocal(user.DateJoined).ToString("g"))</td>
                                 <td>@user.FirstName</td>
                                 <td>@user.LastName</td>
                                 <td>@user.UserName</td>
@@ -190,13 +190,13 @@ else
                                     <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
                                         <i class="bi bi-check-lg"></i> Approve
                                     </button>
-                                    <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
+                                     <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
                                          <i class="bi bi-x-lg"></i> Reject
-                                    </button>
+                                     </button>
                                 </td>
                             </tr>
                         }
-                         @if (!pendingUsersVM.Any())
+                        @if (!pendingUsersVM.Any())
                         {
                             <tr>
                                 <td colspan="6" class="text-center text-muted py-3">No pending approvals.</td>
@@ -204,7 +204,7 @@ else
                         }
                     </tbody>
                 </table>
-            </div>
+           </div>
         </div>
     </div>
 
@@ -246,7 +246,10 @@ else
                     <th>Discord Username</th>
 
                     <th>Referred By</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("IsAdmin")'>Admin @GetSortIcon("IsAdmin")</th>
+                    
+                    @* --- CHANGED: Updated Headers for Admin and Test User --- *@
+                    <th style="cursor: pointer;" @onclick='() => Sort("IsAdmin")'>Role @GetSortIcon("IsAdmin")</th>
+                    <th style="cursor: pointer;" @onclick='() => Sort("IsTestUser")'>Test User @GetSortIcon("IsTestUser")</th>
                 </tr>
             </thead>
             <tbody>
@@ -290,22 +293,33 @@ else
                         
                         @* Editable Referral Field *@
                         <td @onclick:stopPropagation="true">
-                                <input class="form-control form-control-sm" 
+                            <input class="form-control form-control-sm" 
                                    style="min-width: 100px;"
                                    value="@user.ReferredBy" 
                                    @onchange="@(e => UpdateUserReferral(user.Id, e.Value?.ToString()))"
                                    placeholder="-" />
                         </td>
                         
-                        <td>
-                            @if (user.IsAdmin) { <span class="badge bg-primary">Admin</span> }
-                            else { <span class="badge bg-secondary">User</span> }
+                        @* --- CHANGED: Admin Toggle --- *@
+                        <td @onclick:stopPropagation="true">
+                            <button class="btn btn-sm @(user.IsAdmin ? "btn-primary" : "btn-outline-secondary")" 
+                                    @onclick="() => ToggleAdmin(user.Id)">
+                                @(user.IsAdmin ? "Admin" : "User")
+                            </button>
+                        </td>
+                        
+                        @* --- CHANGED: Test User Toggle --- *@
+                        <td @onclick:stopPropagation="true">
+                            <button class="btn btn-sm @(user.IsTestUser ? "btn-warning text-dark" : "btn-outline-secondary")" 
+                                    @onclick="() => ToggleTestUser(user.Id)">
+                                @(user.IsTestUser ? "Test" : "Real")
+                            </button>
                         </td>
                     </tr>
                 }
                 @if (!FilteredAndSortedUsers.Any())
                 {
-                     <tr><td colspan="13" class="text-center text-muted">No active users found.</td></tr>
+                     <tr><td colspan="15" class="text-center text-muted">No active users found.</td></tr>
                 }
             </tbody>
         </table>
@@ -314,12 +328,12 @@ else
     @* --- INDIVIDUAL USER STATS & BET HISTORY --- *@
     @if (selectedUserId != null)
     {
-         <div class="mt-5 border-top pt-4">
+        <div class="mt-5 border-top pt-4">
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <h3 class="mb-0 text-primary">
                     <i class="bi bi-person-lines-fill me-2"></i>History: @selectedUserName
                 </h3>
-                
+                 
                  <div class="d-flex gap-2">
                      @* STATUS FILTER *@
                     <select class="form-select w-auto" @onchange="OnStatusFilterChanged" value="@statusFilter">
@@ -333,7 +347,7 @@ else
                         <option value="Cancelled">Cancelled</option>
                     </select>
 
-                    <div class="btn-group" role="group">
+                     <div class="btn-group" role="group">
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "7D" ? "active" : "")" @onclick='() => SetDateFilter("7D")'>Last 7 Days</button>
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "30D" ? "active" : "")" @onclick='() => SetDateFilter("30D")'>Last 30 Days</button>
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "6M" ? "active" : "")" @onclick='() => SetDateFilter("6M")'>6 Months</button>
@@ -341,33 +355,33 @@ else
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "All" ? "active" : "")" @onclick='() => SetDateFilter("All")'>All Time</button>
                     </div>
                 </div>
-         </div>
+            </div>
 
             <div class="row mb-4">
                 <div class="col-md-3">
                     <div class="card shadow-sm border-primary">
                         <div class="card-body text-center">
-                            <h6 class="card-subtitle mb-2 text-muted">Handle (@dateFilterText)</h6>
+                             <h6 class="card-subtitle mb-2 text-muted">Handle (@dateFilterText)</h6>
                             <h2 class="card-title text-primary">@selectedUserHandle.ToString("N0") kr</h2>
                         </div>
                     </div>
-             </div>
+                </div>
                 <div class="col-md-3">
                     <div class="card shadow-sm @(selectedUserProfit >= 0 ? "border-success" : "border-danger")">
                         <div class="card-body text-center">
                             <h6 class="card-subtitle mb-2 text-muted">Profit (@dateFilterText)</h6>
                             <h2 class="card-title @(selectedUserProfit >= 0 ? "text-success" : "text-danger")">
-                                @selectedUserProfit.ToString("N0") kr
+                                 @selectedUserProfit.ToString("N0") kr
                             </h2>
                         </div>
-                    </div>
+                   </div>
                 </div>
             </div>
 
             <div class="table-responsive">
                 <table class="table table-sm table-striped table-hover text-nowrap align-middle">
                      <thead class="table-dark">
-                        <tr>
+                         <tr>
                              <th>Action</th>
                              <th>ID</th>
                              <th>Last Updated</th>
@@ -378,13 +392,14 @@ else
                          </tr>
                     </thead>
                     <tbody>
+                    
                         @foreach (var bet in displayedUserBets)
                         {
                             var rowClass = bet.Status == "Won" ? "table-success" : (bet.Status == "Lost" ? "table-danger" : "table-secondary");
                              <tr class="@rowClass">
                                     <td>
                                           <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
-                                                <i class="bi bi-pencil-square"></i> View/Edit
+                                                 <i class="bi bi-pencil-square"></i> View/Edit
                                           </button>
                                     </td>
                                     <td>@bet.Id</td>
@@ -397,12 +412,12 @@ else
                                     <td>
                                      @if(bet.Status == "Won")
                                      {
-                                           @bet.PotentialPayout.ToString("N0") <span>kr</span>
+                                            @bet.PotentialPayout.ToString("N0") <span>kr</span>
                                     }
                                     else if (bet.Status == "Lost")
                                     {
                                         <span>0 kr</span>
-                                      }
+                                    }
                                     else
                                     {
                                          <span class="text-muted">-</span>
@@ -411,7 +426,7 @@ else
                                 </tr>
                         }
                         @if (!displayedUserBets.Any())
-                         {
+                        {
                            <tr><td colspan="7" class="text-muted text-center py-3">No bets found for this period/status.</td></tr>
                          }
                     </tbody>
@@ -561,7 +576,6 @@ else
 
         allUsersVM = new List<UserViewModel>();
         pendingUsersVM = new List<UserViewModel>();
-        
         foreach (var u in users)
         {
             var userBets = bets.Where(b => b.UserId == u.Id).ToList();
@@ -578,7 +592,6 @@ else
             var handle = userBets
                 .Where(b => b.Status != "Rejected" && b.Status != "Cancelled")
                 .Sum(b => (decimal)(b.AmountNOK ?? 0));
-                
             DateTime dateJoined = u.CreatedAt;
             if (dateJoined == DateTime.MinValue)
             {
@@ -602,7 +615,6 @@ else
             var userUpdateDate = u.UpdatedAt == DateTime.MinValue ? u.CreatedAt : u.UpdatedAt;
             
             var lastActive = new[] { userUpdateDate, lastBetDate, lastTransDate }.Max();
-
             var vm = new UserViewModel
             {
                 Id = u.Id,
@@ -611,7 +623,12 @@ else
                 FirstName = u.FirstName ?? "",
                 LastName = u.LastName ?? "",
                 Handle = handle,
+                
+                // --- CHANGED: Populate new flags ---
                 IsAdmin = u.IsAdmin,
+                IsTestUser = u.IsTestUser,
+                // -----------------------------------
+                
                 CreditLimit = u.CreditLimit, 
                 // CHANGED: Use the stored balance directly!
                 Balance = u.Balance, 
@@ -682,7 +699,6 @@ else
 
         // 1. Filter by DATE (for stats calculation)
         var betsInDateRange = allSelectedUserBets.Where(b => b.UpdatedAt >= cutoff).ToList();
-        
         // 2. Filter by STATUS (for table display only)
         if (statusFilter == "All")
         {
@@ -698,16 +714,13 @@ else
         selectedUserHandle = betsInDateRange
             .Where(b => b.Status != "Rejected" && b.Status != "Cancelled")
             .Sum(b => (decimal)(b.AmountNOK ?? 0));
-        
         // Profit: Winnings - Settled Stakes
         var periodWinnings = betsInDateRange
             .Where(b => b.Status == "Won")
             .Sum(b => b.PotentialPayout);
-            
         var periodStakes = betsInDateRange
             .Where(b => b.Status == "Won" || b.Status == "Lost")
             .Sum(b => (decimal)(b.AmountNOK ?? 0));
-            
         selectedUserProfit = periodWinnings - periodStakes;
 
         StateHasChanged();
@@ -797,6 +810,67 @@ else
             await LoadData(context); 
             
             successMessage = $"User {user.UserName} is now {(user.IsManuallyVerified ? "Verified" : "Unverified")}.";
+            StateHasChanged();
+        }
+    }
+
+    // --- NEW: Toggle Admin Role ---
+    private async Task ToggleAdmin(string userId)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var currentAdmin = authState.User.Identity?.Name;
+
+        using var context = DbFactory.CreateDbContext();
+        var user = await context.Users.FindAsync(userId);
+        
+        if (user != null)
+        {
+            // Prevent removing your own admin access
+            if (user.UserName == currentAdmin) return; 
+
+            user.IsAdmin = !user.IsAdmin;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            context.AuditLogs.Add(new AuditLog 
+            {
+                Action = "Toggle Admin Role",
+                AdminUserName = currentAdmin ?? "System",
+                TargetUserName = user.UserName ?? "Unknown",
+                Details = $"Admin status set to {user.IsAdmin}",
+                Timestamp = DateTime.UtcNow
+            });
+            
+            await context.SaveChangesAsync();
+            await LoadData(context);
+            StateHasChanged();
+        }
+    }
+
+    // --- NEW: Toggle Test User ---
+    private async Task ToggleTestUser(string userId)
+    {
+        using var context = DbFactory.CreateDbContext();
+        var user = await context.Users.FindAsync(userId);
+        
+        if (user != null)
+        {
+            user.IsTestUser = !user.IsTestUser;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var adminName = authState.User.Identity?.Name ?? "System";
+
+            context.AuditLogs.Add(new AuditLog 
+            {
+                Action = "Toggle Test User",
+                AdminUserName = adminName,
+                TargetUserName = user.UserName ?? "Unknown",
+                Details = $"TestUser status set to {user.IsTestUser}",
+                Timestamp = DateTime.UtcNow
+            });
+            
+            await context.SaveChangesAsync();
+            await LoadData(context);
             StateHasChanged();
         }
     }
@@ -999,12 +1073,10 @@ else
                         b.Status != "Cancelled" && 
                         b.Status != "Void")
             .Sum(b => (decimal)(b.AmountNOK ?? 0));
-        
         // 2. Won Payouts (Only for Won bets)
         var totalWonPayouts = userBets
             .Where(b => (excludeBetId == null || b.Id != excludeBetId) && b.Status == "Won")
             .Sum(b => b.PotentialPayout);
-            
         var currentBal = totalDeposits - totalWithdrawals - totalValidStakes + totalWonPayouts;
 
         var availableCredit = currentBal + creditLimit - newBetAmount;
@@ -1047,7 +1119,7 @@ else
             // ---------------------------------------------------------
             if (dbBet.Status == "Won")
             {
-                 // Remove winnings
+                  // Remove winnings
                 dbUser.Balance -= dbBet.PotentialPayout;
             }
             else if (dbBet.Status == "Void" || dbBet.Status == "Rejected" || dbBet.Status == "Cancelled")
@@ -1072,7 +1144,7 @@ else
             if (newStatus == "Won")
             {
                 // Add winnings
-                 dbUser.Balance += dbBet.PotentialPayout;
+                  dbUser.Balance += dbBet.PotentialPayout;
             }
             else if (newStatus == "Void" || newStatus == "Rejected" || newStatus == "Cancelled")
             {
@@ -1080,7 +1152,6 @@ else
                 dbUser.Balance += (decimal)(dbBet.AmountNOK ?? 0);
             }
             // Pending/Lost/Approved: Stake remains deducted.
-            
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -1114,7 +1185,9 @@ else
             sortAscending = column switch 
             {
                 "LastActive" or "DateJoined" or "Balance" or "Handle" or "LifetimeProfit" or "AvailableCredit" => false,
-                "IsManuallyVerified" => false, 
+                "IsManuallyVerified" => false,
+                "IsAdmin" => false,
+                "IsTestUser" => false,
                 _ => true
             };
         }
@@ -1152,8 +1225,11 @@ else
                 "Handle" => sortAscending ? query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
                 "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
                 "AvailableCredit" => sortAscending ? query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
-                "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
                 "IsManuallyVerified" => sortAscending ? query.OrderBy(u => u.IsManuallyVerified) : query.OrderByDescending(u => u.IsManuallyVerified),
+                // --- CHANGED: Add new sort cases ---
+                "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
+                "IsTestUser" => sortAscending ? query.OrderBy(u => u.IsTestUser) : query.OrderByDescending(u => u.IsTestUser),
+                // -----------------------------------
                 _ => query
             };
             return query;
@@ -1168,6 +1244,11 @@ else
         public string FirstName { get; set; } = "";
         public string LastName { get; set; } = "";
         public bool IsAdmin { get; set; }
+        
+        // --- NEW: Test User Flag in ViewModel ---
+        public bool IsTestUser { get; set; }
+        // ----------------------------------------
+        
         public int CreditLimit { get; set; }
         public decimal Balance { get; set; }
         public decimal Handle { get; set; }
