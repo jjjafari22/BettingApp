@@ -113,9 +113,19 @@
                     <tr>
                         <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
                         <td>
-                            <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
-                                @t.Type
-                            </span>
+                            @* --- UPDATED: Badge for Free Bet --- *@
+                            @if (t.Type == "Deposit")
+                            {
+                                <span class="badge bg-success">Deposit</span>
+                            }
+                            else if (t.Type == "Free Bet")
+                            {
+                                <span class="badge bg-info text-dark">Free Bet</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning text-dark">@t.Type</span>
+                            }
                         </td>
                         <td>@t.Platform</td>
                         <td>@t.AmountNOK.ToString("N0") kr</td>
@@ -186,8 +196,10 @@
                     await SetupSignalR();
                 }
             }
-            catch (Exception ex) { Console.WriteLine(ex); }
-            finally { IsLoading = false; StateHasChanged(); }
+            catch (Exception ex) { Console.WriteLine(ex);
+            }
+            finally { IsLoading = false; StateHasChanged();
+            }
         }
     }
 
@@ -252,7 +264,6 @@
             using var context = DbFactory.CreateDbContext();
             var auth = await AuthState.GetAuthenticationStateAsync();
             var userName = auth.User.Identity?.Name ?? "Unknown";
-            
             // --- BALANCE DEDUCTION ---
             var user = await context.Users.FindAsync(userId);
             if (user != null)
@@ -293,8 +304,10 @@
         }
     }
 
-    private async Task NextTransPage() { transPage++; await LoadData(); }
-    private async Task PrevTransPage() { if (transPage > 1) { transPage--; await LoadData(); } }
+    private async Task NextTransPage() { transPage++; await LoadData();
+    }
+    private async Task PrevTransPage() { if (transPage > 1) { transPage--; await LoadData();
+    } }
 
     private string GetStatusBadge(string status) => status switch
     {
@@ -303,7 +316,6 @@
         "Rejected" => "bg-danger",
         _ => "bg-secondary"
     };
-
     public async ValueTask DisposeAsync()
     {
         if (hubConnection is not null) await hubConnection.DisposeAsync();

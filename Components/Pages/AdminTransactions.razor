@@ -124,17 +124,28 @@
                         }
                     </div>
 
-                    <div class="col-md-2 mb-3">
+                    @* --- UPDATED: Button Group for Type (Visible Options) --- *@
+                    <div class="col-md-4 mb-3">
                         <label>Type</label>
-                        <select class="form-select" @bind="newTrans.Type">
-                            <option value="Deposit">Deposit</option>
-                            <option value="Withdrawal">Withdraw</option>
-                        </select>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="btnradio" id="typeDeposit" autocomplete="off" 
+                                   checked="@(newTrans.Type == "Deposit")" @onclick="@(() => newTrans.Type = "Deposit")">
+                            <label class="btn btn-outline-success" for="typeDeposit">Deposit</label>
+
+                            <input type="radio" class="btn-check" name="btnradio" id="typeWithdraw" autocomplete="off" 
+                                   checked="@(newTrans.Type == "Withdrawal")" @onclick="@(() => newTrans.Type = "Withdrawal")">
+                            <label class="btn btn-outline-warning" for="typeWithdraw">Withdraw</label>
+                            
+                            <input type="radio" class="btn-check" name="btnradio" id="typeFreeBet" autocomplete="off" 
+                                   checked="@(newTrans.Type == "Free Bet")" @onclick="@(() => newTrans.Type = "Free Bet")">
+                            <label class="btn btn-outline-info" for="typeFreeBet">Free Bet</label>
+                        </div>
                     </div>
+                    @* ----------------------------------------------------- *@
 
                     <div class="col-md-3 mb-3">
-                        <label>Platform</label>
-                        <input type="text" class="form-control" placeholder="e.g. Bank, Vipps" @bind="newTrans.Platform" />
+                        <label>Platform / Note</label>
+                        <input type="text" class="form-control" placeholder="e.g. Bank, Vipps, Promotion" @bind="newTrans.Platform" />
                     </div>
 
                     <div class="col-md-2 mb-3">
@@ -142,8 +153,8 @@
                         <input type="number" class="form-control" @bind="newTrans.AmountNOK" />
                     </div>
 
-                    <div class="col-md-2 mb-3 d-flex align-items-end">
-                        <button class="btn btn-primary w-100" @onclick="AddTransaction" disabled="@(selectedUser == null)">Add</button>
+                    <div class="col-md-12 mb-3">
+                        <button class="btn btn-primary w-100" @onclick="AddTransaction" disabled="@(selectedUser == null)">Add Transaction</button>
                     </div>
                 </div>
             </div>
@@ -162,7 +173,7 @@
                 <th>Platform</th>
                 <th>Amount</th>
                 <th>Status</th>
-                <th>Actions</th> @* ADDED: Action column *@
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -172,9 +183,19 @@
                     <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
                     <td>@t.UserName</td>
                     <td>
-                        <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-warning")">
-                            @(t.Type == "Withdrawal" ? "Withdraw" : t.Type)
-                        </span>
+                        @* --- UPDATED: Badge Logic --- *@
+                        @if (t.Type == "Deposit")
+                        {
+                            <span class="badge bg-success">Deposit</span>
+                        }
+                        else if (t.Type == "Free Bet")
+                        {
+                            <span class="badge bg-info text-dark">Free Bet</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning text-dark">@((t.Type == "Withdrawal" ? "Withdraw" : t.Type))</span>
+                        }
                     </td>
                     <td>@t.Platform</td>
                     <td>@t.AmountNOK.ToString("N0") kr</td>
@@ -197,7 +218,6 @@
                         }
                     </td>
                     <td>
-                         @* ADDED: Cancel Button *@
                          @if (t.Status != "Cancelled" && t.Status != "Rejected" && t.Status != "Lost")
                          {
                              <button class="btn btn-danger btn-sm py-0" @onclick="() => CancelTransaction(t)" title="Cancel Transaction">
@@ -286,7 +306,6 @@
         }
     }
 
-    // UPDATED: Autocomplete Search with Fixes
     private async Task SearchUsers(ChangeEventArgs e)
     {
         searchTerm = e.Value?.ToString() ?? "";
@@ -299,9 +318,7 @@
 
         using var context = DbFactory.CreateDbContext();
         searchResults = await context.Users
-            // Fix CS8602: Check for null UserName
             .Where(u => u.UserName != null && u.UserName.Contains(searchTerm))
-            // Fix EF Warning: Add OrderBy before Take
             .OrderBy(u => u.UserName) 
             .Take(5)
             .AsNoTracking()
@@ -422,7 +439,6 @@
         }
     }
 
-    // ADDED: Cancel Transaction Logic
     private async Task CancelTransaction(Transaction t)
     {
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
@@ -432,7 +448,6 @@
         using var context = DbFactory.CreateDbContext();
         var dbTrans = await context.Transactions.FindAsync(t.Id);
         var user = await context.Users.FindAsync(t.UserId);
-
         if (dbTrans != null && user != null)
         {
             if (dbTrans.Status == "Cancelled" || dbTrans.Status == "Rejected")
@@ -442,9 +457,10 @@
             }
 
             // Reverse the balance impact
-            if (dbTrans.Type == "Deposit")
+            // UPDATED: Handle Free Bet reversal (treat same as Deposit)
+            if (dbTrans.Type == "Deposit" || dbTrans.Type == "Free Bet")
             {
-                // Deposit means balance increased -> Reverse by subtracting
+                // Deposit/FreeBet means balance increased -> Reverse by subtracting
                 user.Balance -= dbTrans.AmountNOK;
             }
             else if (dbTrans.Type == "Withdrawal")
@@ -465,7 +481,6 @@
                 TargetUserName = user.UserName ?? "Unknown", 
                 Details = $"Cancelled {dbTrans.Type} of {dbTrans.AmountNOK}. ID: {dbTrans.Id}" 
             });
-
             await context.SaveChangesAsync();
 
             // Real-time updates
@@ -496,6 +511,7 @@
         if (user == null) { errorMessage = "User not found"; return;
         }
 
+        // UPDATED Logic to handle Free Bet
         if (newTrans.Type == "Withdrawal")
         {
             if (user.Balance < newTrans.AmountNOK)
@@ -506,8 +522,9 @@
             // Deduct
             user.Balance -= newTrans.AmountNOK;
         }
-        else // Deposit
+        else // Deposit OR Free Bet
         {
+            // Both Deposit and Free Bet INCREASE balance
             user.Balance += newTrans.AmountNOK;
         }
 
@@ -528,7 +545,7 @@
         }
         
         successMessage = "Transaction added successfully!";
-        var type = newTrans.Type;
+        var type = newTrans.Type; // Preserve selected type
         newTrans = new Transaction { Type = type, Date = DateTime.UtcNow, Status = "Completed" };
         // Reset Search
         ClearSelection();
