@@ -122,7 +122,7 @@
                                <div class="col-5">
                                      <label class="form-label fw-bold text-muted small mb-1">Payout</label>
                                      <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
-                               </div>
+                                </div>
                             </div>
 
                            @if (reviewingBetModel.Status == "Pending") {
@@ -136,19 +136,19 @@
                                     <div class="col-5"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'><i class="bi bi-x-lg me-1"></i> Lost</button></div>
                                     <div class="col-2"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
                                 </div>
-                            } else {
+                             } else {
                                   <div class="row g-2">
                                    <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
                                    <div class="col-3"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Won")'>Won</button></div>
                                    <div class="col-3"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'>Lost</button></div>
                                    <div class="col-3"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
                                    <div class="col-3"><button class="btn btn-primary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-arrow-counterclockwise me-1"></i> Undo</button></div>
-                               </div>
+                                  </div>
                            }
                         </div>
                   </div>
            </div>
-            </div>
+           </div>
         </div>
     </div>
 }
@@ -179,7 +179,7 @@
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                            <td>@bet.UserName</td>
-                       </tr>
+                        </tr>
                     }
                     @if (pendingBets.Count == 0) { <tr><td colspan="4" class="text-muted">No pending bets.</td></tr> }
                </tbody>
@@ -208,7 +208,7 @@
                             <td>
                                 <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
                                      <i class="bi bi-play-circle"></i> Process
-                                 </button>
+                                </button>
                             </td>
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
@@ -268,7 +268,7 @@
                              else { <span class="text-muted">-</span> }
                              </td>
                         </tr>
-                     }
+                    }
                     @if (completedBets.Count == 0) { <tr><td colspan="8" class="text-muted">No completed bets found.</td></tr> }
             </tbody>
             </table>
@@ -589,17 +589,14 @@
 
             // Apply the valid odds to the model before saving
             bet.Odds = editingOdds.Value;
-
             using var validationContext = DbFactory.CreateDbContext();
             var settings = await validationContext.Settings.FirstOrDefaultAsync();
             var betUser = await validationContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == bet.UserId);
-
             // 1. Check Global Min Bet
             if (settings != null)
             {
                  if ((decimal)(bet.AmountNOK ?? 0) < settings.MinBetAmount) { 
-                     reviewErrorMessage = $"Amount below limit ({settings.MinBetAmount:N0})";
-                     return; 
+                     reviewErrorMessage = $"Amount below limit ({settings.MinBetAmount:N0})"; return; 
                  }
             }
             
@@ -608,8 +605,7 @@
             {
                  decimal potentialPayout = Math.Floor((decimal)(bet.AmountNOK ?? 0) * bet.Odds);
                  if (potentialPayout > betUser.MaxPayout) { 
-                     reviewErrorMessage = $"Payout exceeds user limit ({betUser.MaxPayout:N0})"; 
-                     return; 
+                     reviewErrorMessage = $"Payout exceeds user limit ({betUser.MaxPayout:N0})"; return; 
                  }
             }
         }
@@ -641,6 +637,22 @@
         var dbUser = await context.Users.FindAsync(bet.UserId);
         if (dbBet != null && dbUser != null)
         {
+            // --- FIX: OPTIMISTIC CONCURRENCY CHECK ---
+            // If the status in the DB is different from what we started with, 
+            // it means another admin has already processed this bet.
+            if (dbBet.Status != originalStatus)
+            {
+                 errorMessage = $"Action aborted: Bet #{bet.Id} was already updated to '{dbBet.Status}' by another admin.";
+                 
+                 // Refresh the UI to show the new state
+                 await LoadPendingBets();
+                 await LoadApprovedBets();
+                 await LoadCompletedBets();
+                 StateHasChanged();
+                 return;
+            }
+            // -----------------------------------------
+
             // --- CRITICAL PERFORMANCE FIX: Update Balance Column ---
             // Because we no longer calculate balance from history (for speed),
             // we MUST maintain the balance here.
@@ -667,7 +679,7 @@
                 // No deduction
             }
             else if (newStatus == "Approved") {
-                  // Deduct Stake (if not already deducted)
+                   // Deduct Stake (if not already deducted)
                 if (originalStatus == "Pending") dbUser.Balance -= (bet.AmountNOK ?? 0);
             }
             else if (newStatus == "Won") {
