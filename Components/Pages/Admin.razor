@@ -140,9 +140,9 @@
                                </div>
                                <div class="col-3">
                                    <label class="form-label fw-bold text-muted small mb-1">Odds</label>
-                                   @* HYBRID FIX: Bind (onblur) + JS (oninput) *@
+                                   @* FIX: Bind to OddsProxy so 0 shows as empty *@
                                     <input type="number" step="0.01" id="betOddsInput" class="form-control form-control-sm fw-bold" 
-                                           @bind-value="reviewingBetModel.Odds" 
+                                           @bind-value="OddsProxy" 
                                            oninput="calculatePayout()" 
                                            placeholder="1.00" enterkeyhint="done" />
                                </div>
@@ -332,9 +332,19 @@
     private Bet? reviewingBetModel;
     private string? reviewErrorMessage;
     
-    // REMOVED: Buffer variables (amountInput, oddsInput) no longer needed!
-    // We bind directly to the model now, which updates OnBlur (standard behavior).
-    
+    // FIX: Proxy property to make "0" odds appear as empty in the input
+    private decimal? OddsProxy
+    {
+        get => (reviewingBetModel?.Odds == 0) ? null : reviewingBetModel?.Odds;
+        set 
+        {
+            if (reviewingBetModel != null)
+            {
+                reviewingBetModel.Odds = value ?? 0;
+            }
+        }
+    }
+
     private string? modalSuccessMessage;
     private ElementReference reviewModalRef;
     private bool shouldFocusReviewModal = false;
@@ -403,9 +413,6 @@
         }
     }
     
-    // REMOVED: UpdateAmount and UpdateOdds methods are deleted.
-    // The binding now handles this automatically when you tab away from the field.
-
     private async Task LoadPendingBets()
     {
         using var context = DbFactory.CreateDbContext();
@@ -525,7 +532,6 @@
             ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt
         };
         
-        // CLEANUP: No longer need to initialize buffers or complex logic for odds
         if (reviewingBetModel.Status == "Pending")
         {
             reviewingBetModel.Odds = 0; 
@@ -592,6 +598,7 @@
             if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals"; return; }
 
             using var validationContext = DbFactory.CreateDbContext();
+            // FIX: Add OrderBy to silence the "unpredictable results" warning
             var settings = await validationContext.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
             var betUser = await validationContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == bet.UserId);
             // 1. Check Global Min Bet
