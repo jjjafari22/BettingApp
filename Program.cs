@@ -10,30 +10,44 @@ using Microsoft.AspNetCore.DataProtection;
 using System.IO;
 using System.Runtime.InteropServices;
 using Azure.Storage.Blobs;
-using Microsoft.AspNetCore.HttpOverrides; // NEW: Required for Azure
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- FIX 1: Force App to listen on Port 8080 (Azure Default) ---
-// This ensures the app matches the port Azure expects.
+// --- Azure Port Configuration ---
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.ListenAnyIP(8080);
 });
-// -------------------------------------------------------------
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// --- FIX 1: Keep User Circuit Alive for 30 Minutes ---
+// This prevents the "Refresh" crash if the phone sleeps for >3 minutes.
+builder.Services.Configure<Microsoft.AspNetCore.Components.Server.CircuitOptions>(options =>
+{
+    options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);
+    options.DetailedErrors = true; 
+});
+// -----------------------------------------------------
+
 builder.Services.AddHttpClient();
-builder.Services.AddSignalR();
+
+// --- FIX 2: Relax SignalR Timeouts for Mobile Data ---
+builder.Services.AddSignalR(hubOptions =>
+{
+    // Wait longer before deciding the client is truly gone (helps in tunnels/elevators)
+    hubOptions.ClientTimeoutInterval = TimeSpan.FromMinutes(2);
+    // Ping slightly more often to keep the connection alive through proxies
+    hubOptions.KeepAliveInterval = TimeSpan.FromSeconds(10);
+});
+// -----------------------------------------------------
+
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();
-
-// --- NEW: Register the Pending Bets Reminder Service ---
 builder.Services.AddHostedService<PendingBetsNotificationService>();
-// -----------------------------------------------------
 
 // Register Discord Service
 builder.Services.AddSingleton<DiscordNotificationService>();
@@ -42,15 +56,13 @@ builder.Services.AddHostedService(provider => provider.GetRequiredService<Discor
 // Register Azure Blob Storage
 builder.Services.AddSingleton(x => new BlobServiceClient(builder.Configuration["AzureStorage:ConnectionString"]));
 
-// --- FIX 2: Configure Forwarded Headers ---
-// This tells the app "Trust the Azure Load Balancer when it says we are on HTTPS"
+// --- Azure Forwarded Headers ---
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
 });
-// ----------------------------------------------------------------
 
-// --- UNIVERSAL DATA PROTECTION ---
+// --- Data Protection ---
 var dataProtectionPath = Path.Combine(Environment.GetEnvironmentVariable("HOME") ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".aspnet", "DataProtection-Keys");
 
 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HOME")))
@@ -83,7 +95,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.SameSite = SameSiteMode.Lax;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // Allows Localhost/LAN login
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
     options.SlidingExpiration = true;
 });
@@ -102,17 +114,13 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-// --- CHANGED: Register the Real Email Service instead of the NoOp one ---
 builder.Services.AddTransient<IEmailSender<ApplicationUser>, EmailSender>();
-// -----------------------------------------------------------------------
 
 var app = builder.Build();
 
-// --- NEW: Apply Forwarded Headers immediately ---
 app.UseForwardedHeaders(); 
-// ------------------------------------------------
 
-// --- GLOBAL DATE/TIME FORMATTING ---
+// --- Global Date/Time Formatting ---
 var customCulture = new System.Globalization.CultureInfo("en-GB");
 customCulture.DateTimeFormat.ShortDatePattern = "dd.MMM";
 customCulture.DateTimeFormat.ShortTimePattern = "HH:mm";
@@ -154,7 +162,6 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
-        // Migrations run here. If the app "hangs" on startup, it is likely waiting for the DB.
         context.Database.Migrate(); 
     }
     catch (Exception ex)

@@ -42,7 +42,27 @@
     
     <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>
     
+    @* --- REVERTED TO STANDARD: Removes the aggressive script that caused freezing --- *@
     <script src="_framework/blazor.web.js"></script>
+    
+    @* OPTIONAL: A safe 'Watchdog' that refreshes the page ONLY if it gets stuck for too long.
+       This is much safer than the previous script because it doesn't loop. *@
+    <script>
+        // If the 'Rejoining' modal is visible for more than 5 seconds, force a reload.
+        // This prevents the "Infinite Rejoining" spinner.
+        const observer = new MutationObserver((mutations) => {
+            const modal = document.getElementById('components-reconnect-modal');
+            if (modal && modal.classList.contains('components-reconnect-show')) {
+                setTimeout(() => {
+                    if (modal.classList.contains('components-reconnect-show')) {
+                        console.log("Stuck rejoining. Reloading to recover.");
+                        window.location.reload();
+                    }
+                }, 5000); // 5 second timeout
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    </script>
 </body>
 
 </html>
