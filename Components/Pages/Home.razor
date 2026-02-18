@@ -280,7 +280,7 @@
                 newBet.UserName = userName;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not NavigationException) // <--- Add this filter
         {
             ErrorMessage = $"Startup Error: {ex.Message}";
             Console.WriteLine(ex);
