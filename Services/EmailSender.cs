@@ -40,7 +40,8 @@ public class EmailSender : IEmailSender<ApplicationUser>
         await SendEmailAsync(email, subject, message);
     }
 
-    private async Task SendEmailAsync(string toEmail, string subject, string message)
+    // CHANGED: Made this method public so it can be called from AdminUsers.razor
+    public async Task SendEmailAsync(string toEmail, string subject, string message)
     {
         var emailSettings = _configuration.GetSection("EmailSettings");
         

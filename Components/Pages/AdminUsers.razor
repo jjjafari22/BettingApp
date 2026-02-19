@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @using BettingApp.Hubs
 @using BettingApp.Services
+@using Microsoft.AspNetCore.Identity
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
@@ -13,6 +14,7 @@
 @inject IJSRuntime JSRuntime
 @inject IHubContext<BetHub> HubContext
 @inject DiscordNotificationService DiscordService
+@inject IEmailSender<ApplicationUser> EmailSenderInterface
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -65,7 +67,7 @@
                        </div>
                    }
                    @if (reviewErrorMessage != null) {
-                       <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
+                     <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
                            <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
                                <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
                                <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
@@ -112,7 +114,7 @@
                                 </div>
                                <div class="col-5">
                                     <label class="form-label fw-bold text-muted small mb-1">Payout</label>
-                                    <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
+                                     <div class="form-control form-control-sm bg-light text-success fw-bold text-end">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
                                 </div>
                             </div>
 
@@ -124,7 +126,7 @@
                                </div>
                            } else {
                                <div class="row g-2">
-                                   <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
+                                     <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
                                    <div class="col-3"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Won")'>Won</button></div>
                                    <div class="col-3"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'>Lost</button></div>
                                    <div class="col-3"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
@@ -132,7 +134,7 @@
                                </div>
                            }
                        </div>
-                   </div>
+                    </div>
                </div>
             </div>
         </div>
@@ -165,7 +167,7 @@ else
             <h4 class="mb-0"><i class="bi bi-exclamation-circle-fill me-2"></i>Pending Approvals</h4>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
+             <div class="table-responsive">
                 <table class="table table-sm table-striped table-hover mb-0 align-middle text-nowrap">
                      <thead class="table-dark">
                         <tr>
@@ -173,7 +175,7 @@ else
                             <th>First Name</th>
                             <th>Last Name</th>
                             <th>User</th>
-                            <th>Referred By</th>
+                             <th>Referred By</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -187,16 +189,16 @@ else
                                 <td>@user.UserName</td>
                                 <td>@(string.IsNullOrEmpty(user.ReferredBy) ? "-" : user.ReferredBy)</td>
                                 <td>
-                                    <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
+                                     <button class="btn btn-success btn-sm me-2" @onclick="() => ApproveUser(user.Id)">
                                         <i class="bi bi-check-lg"></i> Approve
                                     </button>
-                                    <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
+                                     <button class="btn btn-danger btn-sm" @onclick="() => RejectUser(user.Id)">
                                          <i class="bi bi-x-lg"></i> Reject
-                                    </button>
+                                     </button>
                                 </td>
                             </tr>
                         }
-                        @if (!pendingUsersVM.Any())
+                         @if (!pendingUsersVM.Any())
                         {
                             <tr>
                                 <td colspan="6" class="text-center text-muted py-3">No pending approvals.</td>
@@ -204,7 +206,7 @@ else
                         }
                     </tbody>
                 </table>
-            </div>
+             </div>
         </div>
     </div>
 
@@ -224,7 +226,7 @@ else
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
                  <input type="text" class="form-control" placeholder="Search by name or email..." @bind="searchTerm" @bind:event="oninput" />
             </div>
-        </div>
+         </div>
     </div>
 
     <div class="table-responsive">
@@ -249,7 +251,7 @@ else
                     <th>Discord Username</th>
 
                     <th>Referred By</th>
-                    
+                     
                     @* --- CHANGED: Updated Headers for Admin and Test User --- *@
                     <th style="cursor: pointer;" @onclick='() => Sort("IsAdmin")'>Role @GetSortIcon("IsAdmin")</th>
                     <th style="cursor: pointer;" @onclick='() => Sort("IsTestUser")'>Test User @GetSortIcon("IsTestUser")</th>
@@ -258,11 +260,11 @@ else
             <tbody>
                  @foreach (var user in FilteredAndSortedUsers)
                 {
-                    <tr class="cursor-pointer @(selectedUserId == user.Id ? "table-primary border border-primary" : "")" @onclick="() => SelectUser(user.Id, user.UserName)">
+                     <tr class="cursor-pointer @(selectedUserId == user.Id ? "table-primary border border-primary" : "")" @onclick="() => SelectUser(user.Id, user.UserName)">
                         <td>@ToUserLocal(user.LastActive).ToString("g")</td>
                         
                         <td @onclick:stopPropagation="true">
-                                <button class="btn btn-sm @(user.IsManuallyVerified ? "btn-success" : "btn-outline-secondary")" 
+                                 <button class="btn btn-sm @(user.IsManuallyVerified ? "btn-success" : "btn-outline-secondary")" 
                                     @onclick="() => ToggleVerification(user.Id)"
                                     title="Click to toggle verification status">
                                 <i class="bi @(user.IsManuallyVerified ? "bi-check-circle-fill" : "bi-circle")"></i>
@@ -275,21 +277,21 @@ else
                         <td>@user.UserName</td>
                         <td class="@(user.Balance >= 0 ? "text-success" : "text-danger") fw-bold">@user.Balance.ToString("N0") kr</td>
                         <td>@user.AvailableCredit.ToString("N0") kr</td>
-                        <td class="fw-bold">@user.Handle.ToString("N0") kr</td>
+                         <td class="fw-bold">@user.Handle.ToString("N0") kr</td>
                         <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold">@user.LifetimeProfit.ToString("N0") kr</td>
                         
                         @* --- CHANGED: Free Bets Cell --- *@
-                        <td class="fw-bold text-info">@user.TotalFreeBets.ToString("N0") kr</td>
+                         <td class="fw-bold text-info">@user.TotalFreeBets.ToString("N0") kr</td>
                         @* ------------------------------- *@
 
                         @* CHANGED: Editable Discord Fields *@
-                        <td @onclick:stopPropagation="true">
+                         <td @onclick:stopPropagation="true">
                             <input class="form-control form-control-sm" 
                                    style="min-width: 120px;"
                                    value="@user.DiscordUserId" 
                                    @onchange="@(e => UpdateDiscordId(user.Id, e.Value?.ToString()))"
                                    placeholder="Discord ID" />
-                        </td>
+                         </td>
                         <td @onclick:stopPropagation="true">
                             <input class="form-control form-control-sm" 
                                    style="min-width: 120px;"
@@ -297,34 +299,34 @@ else
                                    @onchange="@(e => UpdateDiscordUsername(user.Id, e.Value?.ToString()))"
                                    placeholder="Username" />
                         </td>
-                        
+                         
                         @* Editable Referral Field *@
                         <td @onclick:stopPropagation="true">
-                            <input class="form-control form-control-sm" 
+                             <input class="form-control form-control-sm" 
                                    style="min-width: 100px;"
                                    value="@user.ReferredBy" 
                                    @onchange="@(e => UpdateUserReferral(user.Id, e.Value?.ToString()))"
                                    placeholder="-" />
                         </td>
-                        
+                         
                         @* --- CHANGED: Admin Toggle --- *@
                         <td @onclick:stopPropagation="true">
-                             <button class="btn btn-sm @(user.IsAdmin ? "btn-primary" : "btn-outline-secondary")" 
+                              <button class="btn btn-sm @(user.IsAdmin ? "btn-primary" : "btn-outline-secondary")" 
                                     @onclick="() => ToggleAdmin(user.Id)">
                                 @(user.IsAdmin ? "Admin" : "User")
-                             </button>
+                              </button>
                         </td>
                         
                         @* --- CHANGED: Test User Toggle --- *@
-                        <td @onclick:stopPropagation="true">
+                         <td @onclick:stopPropagation="true">
                             <button class="btn btn-sm @(user.IsTestUser ? "btn-warning text-dark" : "btn-outline-secondary")" 
                                     @onclick="() => ToggleTestUser(user.Id)">
-                                @(user.IsTestUser ? "Test" : "Real")
+                                 @(user.IsTestUser ? "Test" : "Real")
                             </button>
                         </td>
                     </tr>
                 }
-                @if (!FilteredAndSortedUsers.Any())
+                 @if (!FilteredAndSortedUsers.Any())
                 {
                      <tr><td colspan="15" class="text-center text-muted">No active users found.</td></tr>
                 }
@@ -339,49 +341,49 @@ else
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <h3 class="mb-0 text-primary">
                     <i class="bi bi-person-lines-fill me-2"></i>History: @selectedUserName
-                </h3>
+                 </h3>
                  
                  <div class="d-flex gap-2">
                      @* STATUS FILTER *@
                     <select class="form-select w-auto" @onchange="OnStatusFilterChanged" value="@statusFilter">
-                         <option value="All">All Statuses</option>
+                          <option value="All">All Statuses</option>
                         <option value="Pending">Pending</option>
                         <option value="Approved">Approved</option>
                         <option value="Won">Won</option>
-                        <option value="Lost">Lost</option>
+                         <option value="Lost">Lost</option>
                         <option value="Void">Void</option>
                         <option value="Rejected">Rejected</option>
                         <option value="Cancelled">Cancelled</option>
-                    </select>
+                     </select>
 
                      <div class="btn-group" role="group">
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "7D" ? "active" : "")" @onclick='() => SetDateFilter("7D")'>Last 7 Days</button>
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "30D" ? "active" : "")" @onclick='() => SetDateFilter("30D")'>Last 30 Days</button>
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "6M" ? "active" : "")" @onclick='() => SetDateFilter("6M")'>6 Months</button>
-                        <button type="button" class="btn btn-outline-secondary @(dateFilter == "1Y" ? "active" : "")" @onclick='() => SetDateFilter("1Y")'>1 Year</button>
+                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "1Y" ? "active" : "")" @onclick='() => SetDateFilter("1Y")'>1 Year</button>
                         <button type="button" class="btn btn-outline-secondary @(dateFilter == "All" ? "active" : "")" @onclick='() => SetDateFilter("All")'>All Time</button>
                     </div>
                 </div>
-            </div>
+             </div>
 
             <div class="row mb-4">
                 <div class="col-md-3">
                     <div class="card shadow-sm border-primary">
                         <div class="card-body text-center">
-                            <h6 class="card-subtitle mb-2 text-muted">Handle (@dateFilterText)</h6>
+                             <h6 class="card-subtitle mb-2 text-muted">Handle (@dateFilterText)</h6>
                             <h2 class="card-title text-primary">@selectedUserHandle.ToString("N0") kr</h2>
                         </div>
                     </div>
-                </div>
+                 </div>
                 <div class="col-md-3">
                     <div class="card shadow-sm @(selectedUserProfit >= 0 ? "border-success" : "border-danger")">
                         <div class="card-body text-center">
                             <h6 class="card-subtitle mb-2 text-muted">Profit (@dateFilterText)</h6>
                             <h2 class="card-title @(selectedUserProfit >= 0 ? "text-success" : "text-danger")">
-                                @selectedUserProfit.ToString("N0") kr
+                                 @selectedUserProfit.ToString("N0") kr
                             </h2>
                         </div>
-                    </div>
+                     </div>
                 </div>
             </div>
 
@@ -395,48 +397,48 @@ else
                              <th>Bet Amount</th>
                              <th>Odds</th>
                              <th>Status</th>
-                             <th>Payout</th>
+                              <th>Payout</th>
                          </tr>
                     </thead>
                     <tbody>
-                        @foreach (var bet in displayedUserBets)
+                         @foreach (var bet in displayedUserBets)
                         {
                             var rowClass = bet.Status == "Won" ? "table-success" : (bet.Status == "Lost" ? "table-danger" : "table-secondary");
                              <tr class="@rowClass">
                                     <td>
                                           <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
-                                                  <i class="bi bi-pencil-square"></i> View/Edit
+                                                    <i class="bi bi-pencil-square"></i> View/Edit
                                           </button>
-                                    </td>
+                                     </td>
                                     <td>@bet.Id</td>
                                     <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                                    <td>@bet.AmountNOK?.ToString("N0") kr</td>
+                                     <td>@bet.AmountNOK?.ToString("N0") kr</td>
                                     <td>@bet.Odds.ToString("N2")</td>
                                     <td>
                                         <span class="badge @GetStatusBadgeClass(bet.Status)">@bet.Status</span>
                                     </td>
-                                    <td>
+                                     <td>
                                      @if(bet.Status == "Won")
                                      {
-                                            @bet.PotentialPayout.ToString("N0") <span>kr</span>
+                                         @bet.PotentialPayout.ToString("N0") <span>kr</span>
                                     }
-                                    else if (bet.Status == "Lost")
+                                     else if (bet.Status == "Lost")
                                     {
                                         <span>0 kr</span>
-                                    }
+                                     }
                                     else
-                                    {
+                                     {
                                          <span class="text-muted">-</span>
                                     }
-                               </td>
+                                </td>
                                 </tr>
                         }
                         @if (!displayedUserBets.Any())
-                        {
+                         {
                            <tr><td colspan="7" class="text-muted text-center py-3">No bets found for this period/status.</td></tr>
                          }
                     </tbody>
-                 </table>
+                  </table>
             </div>
         </div>
     }
@@ -604,7 +606,6 @@ else
             var handle = userBets
                 .Where(b => b.Status != "Rejected" && b.Status != "Cancelled")
                 .Sum(b => (decimal)(b.AmountNOK ?? 0));
-
             DateTime dateJoined = u.CreatedAt;
             if (dateJoined == DateTime.MinValue)
             {
@@ -628,7 +629,6 @@ else
             var userUpdateDate = u.UpdatedAt == DateTime.MinValue ? u.CreatedAt : u.UpdatedAt;
             
             var lastActive = new[] { userUpdateDate, lastBetDate, lastTransDate }.Max();
-
             var vm = new UserViewModel
             {
                 Id = u.Id,
@@ -759,6 +759,19 @@ else
             });
             await context.SaveChangesAsync();
             
+            // ---> SEND APPROVAL EMAIL <---
+            if (!string.IsNullOrEmpty(user.Email))
+            {
+                // We cast the interface to your concrete implementation to access the custom public method
+                if (EmailSenderInterface is EmailSender customSender)
+                {
+                    var subject = "Welcome to The Castle of Happiness! Your account is approved 🏰";
+                    var htmlMessage = EmailTemplates.AccountApprovedTemplate;
+                    await customSender.SendEmailAsync(user.Email, subject, htmlMessage);
+                }
+            }
+            // -----------------------------
+
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
             await LoadData(context); 
             
@@ -815,7 +828,7 @@ else
                 AdminUserName = adminName,
                 TargetUserName = user.UserName ?? "Unknown",
                 Details = $"Manual verification set to {user.IsManuallyVerified}",
-                Timestamp = DateTime.UtcNow
+                 Timestamp = DateTime.UtcNow
             });
             await context.SaveChangesAsync();
             await LoadData(context); 
@@ -1073,8 +1086,7 @@ else
         var totalDeposits = userTrans.Where(t => t.Type == "Deposit" && t.Status != "Rejected" && t.Status != "Cancelled").Sum(t => t.AmountNOK);
         var totalWithdrawals = userTrans.Where(t => t.Type == "Withdrawal" && t.Status != "Rejected" && t.Status != "Cancelled").Sum(t => t.AmountNOK);
         
-        int?
-        excludeBetId = reviewingBetModel?.Id;
+        int? excludeBetId = reviewingBetModel?.Id;
         // FIX: Re-write logic to balance = D - W - (All Valid Stakes) + (Won Payouts)
         var totalValidStakes = userBets
             .Where(b => (excludeBetId == null || b.Id != excludeBetId) && 
@@ -1237,34 +1249,21 @@ else
 
             query = sortColumn switch
             {
-                "LastActive" => sortAscending ?
-                    query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
-                "DateJoined" => sortAscending ?
-                    query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
-                "UserName" => sortAscending ?
-                    query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
-                "FirstName" => sortAscending ?
-                    query.OrderBy(u => u.FirstName) : query.OrderByDescending(u => u.FirstName),
-                "LastName" => sortAscending ?
-                    query.OrderBy(u => u.LastName) : query.OrderByDescending(u => u.LastName),
-                "Balance" => sortAscending ?
-                    query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
-                "Handle" => sortAscending ?
-                    query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
-                "LifetimeProfit" => sortAscending ?
-                    query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
-                "AvailableCredit" => sortAscending ?
-                    query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
-                "IsManuallyVerified" => sortAscending ?
-                    query.OrderBy(u => u.IsManuallyVerified) : query.OrderByDescending(u => u.IsManuallyVerified),
-                "IsAdmin" => sortAscending ?
-                    query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
-                "IsTestUser" => sortAscending ?
-                    query.OrderBy(u => u.IsTestUser) : query.OrderByDescending(u => u.IsTestUser),
+                "LastActive" => sortAscending ? query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
+                "DateJoined" => sortAscending ? query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
+                "UserName" => sortAscending ? query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
+                "FirstName" => sortAscending ? query.OrderBy(u => u.FirstName) : query.OrderByDescending(u => u.FirstName),
+                "LastName" => sortAscending ? query.OrderBy(u => u.LastName) : query.OrderByDescending(u => u.LastName),
+                "Balance" => sortAscending ? query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
+                "Handle" => sortAscending ? query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
+                "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
+                "AvailableCredit" => sortAscending ? query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
+                "IsManuallyVerified" => sortAscending ? query.OrderBy(u => u.IsManuallyVerified) : query.OrderByDescending(u => u.IsManuallyVerified),
+                "IsAdmin" => sortAscending ? query.OrderBy(u => u.IsAdmin) : query.OrderByDescending(u => u.IsAdmin),
+                "IsTestUser" => sortAscending ? query.OrderBy(u => u.IsTestUser) : query.OrderByDescending(u => u.IsTestUser),
                 
                 // --- CHANGED: Sort by Free Bets ---
-                "TotalFreeBets" => sortAscending ? 
-                    query.OrderBy(u => u.TotalFreeBets) : query.OrderByDescending(u => u.TotalFreeBets),
+                "TotalFreeBets" => sortAscending ? query.OrderBy(u => u.TotalFreeBets) : query.OrderByDescending(u => u.TotalFreeBets),
                 // ----------------------------------
                 
                 _ => query
