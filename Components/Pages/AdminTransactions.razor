@@ -44,7 +44,7 @@
                     <tr>
                         <th>Date</th>
                         <th>User</th>
-                        <th>Platform</th>
+                        <th>Payment Method</th>
                         <th>Amount</th>
                         <th>Actions</th>
                     </tr>
@@ -59,7 +59,12 @@
                         <tr>
                             <td>@ToUserLocal(w.Date).ToString("g")</td>
                             <td>@w.UserName</td>
-                            <td>@w.Platform</td>
+                            <td>
+                                @w.Platform
+                                @if(!string.IsNullOrEmpty(w.PaymentDetails)) {
+                                    <br/><small class="text-muted">@w.PaymentDetails</small>
+                                }
+                            </td>
                             <td><strong>@w.AmountNOK.ToString("N0") kr</strong></td>
                             <td>
                                 <button class="btn btn-success btn-sm me-2" @onclick="() => ConfirmWithdraw(w)">
@@ -124,34 +129,62 @@
                         }
                     </div>
 
-                    @* --- UPDATED: Button Group for Type (Visible Options) --- *@
+                    @* --- Button Group for Type (Visible Options) --- *@
                     <div class="col-md-4 mb-3">
                         <label>Type</label>
                         <div class="btn-group w-100" role="group">
                             <input type="radio" class="btn-check" name="btnradio" id="typeDeposit" autocomplete="off" 
-                                   checked="@(newTrans.Type == "Deposit")" @onclick="@(() => newTrans.Type = "Deposit")">
+                                   checked="@(newTrans.Type == "Deposit")" @onclick="@(() => ChangeType("Deposit"))">
                             <label class="btn btn-outline-success" for="typeDeposit">Deposit</label>
 
                             <input type="radio" class="btn-check" name="btnradio" id="typeWithdraw" autocomplete="off" 
-                                   checked="@(newTrans.Type == "Withdrawal")" @onclick="@(() => newTrans.Type = "Withdrawal")">
+                                   checked="@(newTrans.Type == "Withdrawal")" @onclick="@(() => ChangeType("Withdrawal"))">
                             <label class="btn btn-outline-warning" for="typeWithdraw">Withdraw</label>
                             
                             <input type="radio" class="btn-check" name="btnradio" id="typeFreeBet" autocomplete="off" 
-                                   checked="@(newTrans.Type == "Free Bet")" @onclick="@(() => newTrans.Type = "Free Bet")">
+                                   checked="@(newTrans.Type == "Free Bet")" @onclick="@(() => ChangeType("Free Bet"))">
                             <label class="btn btn-outline-info" for="typeFreeBet">Free Bet</label>
                         </div>
                     </div>
                     @* ----------------------------------------------------- *@
 
-                    <div class="col-md-3 mb-3">
-                        <label>Platform / Note</label>
-                        <input type="text" class="form-control" placeholder="e.g. Bank, Vipps, Promotion" @bind="newTrans.Platform" />
-                    </div>
-
-                    <div class="col-md-2 mb-3">
-                        <label>Amount (NOK)</label>
-                        <input type="number" class="form-control" @bind="newTrans.AmountNOK" />
-                    </div>
+                    @if (newTrans.Type == "Free Bet")
+                    {
+                        <div class="col-md-3 mb-3">
+                            <label>Note</label>
+                            <input type="text" class="form-control" placeholder="e.g. Promotional Free Bet" @bind="newTrans.PaymentDetails" />
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label>Amount (NOK)</label>
+                            <input type="number" class="form-control" @bind="adminAddAmount" />
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="col-md-3 mb-3">
+                            <label>Payment Method</label>
+                            <select class="form-select" @bind="newTrans.Platform">
+                                <option value="PayPal">PayPal</option>
+                                <option value="Vipps">Vipps</option>
+                                <option value="Revolut">Revolut</option>
+                                <option value="Crypto">Crypto</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label>Amount (NOK)</label>
+                            <input type="number" class="form-control" @bind="adminAddAmount" />
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <label>
+                                @if (newTrans.Platform == "PayPal") { <text>Email/Mobile</text> }
+                                else if (newTrans.Platform == "Vipps") { <text>Phone Number</text> }
+                                else if (newTrans.Platform == "Revolut") { <text>Revtag/Username</text> }
+                                else if (newTrans.Platform == "Crypto") { <text>Wallet Address</text> }
+                                else { <text>Payment Details</text> }
+                            </label>
+                            <input type="text" class="form-control" @bind="newTrans.PaymentDetails" />
+                        </div>
+                    }
 
                     <div class="col-md-12 mb-3">
                         <button class="btn btn-primary w-100" @onclick="AddTransaction" disabled="@(selectedUser == null)">Add Transaction</button>
@@ -170,7 +203,7 @@
                 <th>Last Updated</th>
                 <th>User</th>
                 <th>Type</th>
-                <th>Platform</th>
+                <th>Payment Method</th>
                 <th>Amount</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -197,7 +230,12 @@
                             <span class="badge bg-warning text-dark">@((t.Type == "Withdrawal" ? "Withdraw" : t.Type))</span>
                         }
                     </td>
-                    <td>@t.Platform</td>
+                    <td>
+                        @t.Platform
+                        @if(!string.IsNullOrEmpty(t.PaymentDetails)) {
+                            <br/><small class="text-muted">@t.PaymentDetails</small>
+                        }
+                    </td>
                     <td>@t.AmountNOK.ToString("N0") kr</td>
                     <td>
                         @if (t.Status == "Completed" || t.Status == "Won" || t.Status == "Approved")
@@ -249,15 +287,21 @@
 @code {
     private List<Transaction> allTransactions = new();
     private List<Transaction> pendingWithdrawals = new();
-    private Transaction newTrans = new() { Type = "Deposit", Date = DateTime.UtcNow, Status = "Completed" };
+    
+    // Defaulting Platform to PayPal so the select box has a valid default state
+    private Transaction newTrans = new() { Type = "Deposit", Platform = "PayPal", Date = DateTime.UtcNow, Status = "Completed" };
+    private int? adminAddAmount; // Made nullable so it starts empty
+    
     // Auto-search logic
     private string searchTerm = "";
     private List<ApplicationUser> searchResults = new();
     private ApplicationUser? selectedUser;
+    
     private string? successMessage;
     private string? errorMessage;
     private string? currentAdminName;
     private HubConnection? hubConnection;
+    
     // Pagination
     private int currentPage = 1;
     private const int PageSize = 20;
@@ -303,6 +347,21 @@
                 await SetupSignalR();
                 StateHasChanged();
             } catch { }
+        }
+    }
+
+    private void ChangeType(string type)
+    {
+        newTrans.Type = type;
+        if (type == "Free Bet")
+        {
+            newTrans.Platform = "Free Bet";
+            newTrans.PaymentDetails = string.Empty;
+        }
+        else
+        {
+            newTrans.Platform = "PayPal";
+            newTrans.PaymentDetails = string.Empty;
         }
     }
 
@@ -373,13 +432,12 @@
             .ToListAsync();
         var total = await context.Transactions.CountAsync();
         hasMoreTransactions = total > (currentPage * PageSize);
+        
         pendingWithdrawals = await context.Transactions.Where(t => t.Type == "Withdrawal" && t.Status == "Pending").OrderBy(t => t.Date).AsNoTracking().ToListAsync();
     }
     
-    private async Task NextPage() { currentPage++; using var c = DbFactory.CreateDbContext();
-        await LoadTransactions(c); }
-    private async Task PrevPage() { if(currentPage > 1) { currentPage--;
-        using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); } }
+    private async Task NextPage() { currentPage++; using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); }
+    private async Task PrevPage() { if(currentPage > 1) { currentPage--; using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); } }
 
     private async Task ConfirmWithdraw(Transaction t)
     {
@@ -426,6 +484,7 @@
             
             // Refund the money to balance
             user.Balance += t.AmountNOK;
+            
             context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Rejected Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {t.AmountNOK}, ID: {t.Id}" });
             await context.SaveChangesAsync();
             
@@ -448,6 +507,7 @@
         using var context = DbFactory.CreateDbContext();
         var dbTrans = await context.Transactions.FindAsync(t.Id);
         var user = await context.Users.FindAsync(t.UserId);
+        
         if (dbTrans != null && user != null)
         {
             if (dbTrans.Status == "Cancelled" || dbTrans.Status == "Rejected")
@@ -457,15 +517,12 @@
             }
 
             // Reverse the balance impact
-            // UPDATED: Handle Free Bet reversal (treat same as Deposit)
             if (dbTrans.Type == "Deposit" || dbTrans.Type == "Free Bet")
             {
-                // Deposit/FreeBet means balance increased -> Reverse by subtracting
                 user.Balance -= dbTrans.AmountNOK;
             }
             else if (dbTrans.Type == "Withdrawal")
             {
-                // Withdrawal means balance decreased -> Reverse by adding back (Refund)
                 user.Balance += dbTrans.AmountNOK;
             }
 
@@ -500,34 +557,40 @@
     {
         successMessage = null;
         errorMessage = null;
-        if (string.IsNullOrEmpty(newTrans.UserId) || newTrans.AmountNOK <= 0 || string.IsNullOrEmpty(newTrans.Platform))
+        
+        if (string.IsNullOrEmpty(newTrans.UserId) || !adminAddAmount.HasValue || adminAddAmount.Value <= 0 || string.IsNullOrEmpty(newTrans.Platform))
         {
-            errorMessage = "Please fill in all fields.";
+            errorMessage = "Please fill in all fields (User, valid Amount, and Platform).";
+            return;
+        }
+        
+        // Ensure payment details are provided unless it's a Free Bet
+        if (newTrans.Type != "Free Bet" && string.IsNullOrWhiteSpace(newTrans.PaymentDetails))
+        {
+            errorMessage = "Please provide payment details/address.";
             return;
         }
 
         using var context = DbFactory.CreateDbContext();
         var user = await context.Users.FindAsync(newTrans.UserId);
-        if (user == null) { errorMessage = "User not found"; return;
-        }
+        if (user == null) { errorMessage = "User not found"; return; }
 
-        // UPDATED Logic to handle Free Bet
         if (newTrans.Type == "Withdrawal")
         {
-            if (user.Balance < newTrans.AmountNOK)
+            if (user.Balance < adminAddAmount.Value)
             {
                 errorMessage = $"Insufficient funds. Balance: {user.Balance:N0}";
                 return;
             }
-            // Deduct
-            user.Balance -= newTrans.AmountNOK;
+            user.Balance -= adminAddAmount.Value;
         }
-        else // Deposit OR Free Bet
+        else 
         {
-            // Both Deposit and Free Bet INCREASE balance
-            user.Balance += newTrans.AmountNOK;
+            // Deposit and Free Bet
+            user.Balance += adminAddAmount.Value;
         }
 
+        newTrans.AmountNOK = adminAddAmount.Value;
         newTrans.UserName = user.UserName ?? "Unknown";
         newTrans.Date = DateTime.UtcNow;
         newTrans.UpdatedAt = DateTime.UtcNow;
@@ -539,23 +602,24 @@
         
         await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", $"New transaction: {newTrans.Type}");
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+        
         if (!string.IsNullOrEmpty(user.DiscordUserId) && newTrans.Type == "Withdrawal")
         {
              await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, newTrans, "Completed");
         }
         
         successMessage = "Transaction added successfully!";
-        var type = newTrans.Type; // Preserve selected type
-        newTrans = new Transaction { Type = type, Date = DateTime.UtcNow, Status = "Completed" };
-        // Reset Search
-        ClearSelection();
         
+        var type = newTrans.Type; // Preserve selected type
+        newTrans = new Transaction { Type = type, Platform = type == "Free Bet" ? "Free Bet" : "PayPal", Date = DateTime.UtcNow, Status = "Completed" };
+        adminAddAmount = null; // Reset the amount
+        
+        ClearSelection();
         await LoadTransactions(context);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (hubConnection is not null) { await hubConnection.DisposeAsync();
-        }
+        if (hubConnection is not null) { await hubConnection.DisposeAsync(); }
     }
 }

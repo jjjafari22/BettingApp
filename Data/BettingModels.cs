@@ -39,6 +39,8 @@ namespace BettingApp.Data
         [Required]
         public string Platform { get; set; } = string.Empty;
         
+        public string? PaymentDetails { get; set; }
+        
         public DateTime Date { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

@@ -45,14 +45,13 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-header bg-success text-white">Deposit</div>
-                <div class="card-body">
-                    <p class="card-text">
-                        To deposit money, please deposit your desired amount via PayPal to:
-                    </p>
-                    <h5 class="text-center my-4">TO BE ANNOUNCED SOON</h5>
-                    <p class="text-muted small">
-                        Please include your Username in the transaction note.
-                        Your balance will be updated once the admin confirms the receipt.
+                <div class="card-body d-flex flex-column justify-content-center align-items-center text-center">
+                    <p class="card-text fs-5">
+                        We accept PayPal, Vipps, Revolut and Crypto.<br/><br/>
+                        Please reach out to us on 
+                        <a href="https://discord.gg/rNnsQWENMs" target="_blank" rel="noopener noreferrer" class="fw-bold">Discord</a> or 
+                        <a href="https://m.me/61587418012797" target="_blank" rel="noopener noreferrer" class="fw-bold">Facebook Messenger</a> 
+                        to finalize deposit details.
                     </p>
                 </div>
             </div>
@@ -69,15 +68,50 @@
                         <DataAnnotationsValidator />
                         
                         <div class="mb-3">
-                            <label class="form-label">Platform</label>
+                            <label class="form-label">Payment Method</label>
                             <InputSelect @bind-Value="withdrawRequest.Platform" class="form-select">
                                 <option value="PayPal">PayPal</option>
+                                <option value="Vipps">Vipps</option>
+                                <option value="Revolut">Revolut</option>
+                                <option value="Crypto">Crypto</option>
                             </InputSelect>
                         </div>
 
                         <div class="mb-3">
+                            @if (withdrawRequest.Platform == "PayPal")
+                            {
+                                <label class="form-label">Email/Mobile</label>
+                            }
+                            else if (withdrawRequest.Platform == "Vipps")
+                            {
+                                <label class="form-label">Phone Number</label>
+                            }
+                            else if (withdrawRequest.Platform == "Revolut")
+                            {
+                                <label class="form-label">Revtag/Username</label>
+                            }
+                            else if (withdrawRequest.Platform == "Crypto")
+                            {
+                                <label class="form-label">Wallet Address</label>
+                            }
+                            else
+                            {
+                                <label class="form-label">Payment Details</label>
+                            }
+                            
+                            <InputText @bind-Value="withdrawRequest.PaymentDetails" class="form-control" />
+                            
+                            @if (withdrawRequest.Platform == "Crypto")
+                            {
+                                <div class="form-text text-muted small mt-1">
+                                    <i class="bi bi-info-circle"></i> The money will be sent over the TRON (TRC-20) Network. Please ensure your address supports this network.
+                                </div>
+                            }
+                        </div>
+
+                        <div class="mb-3">
                             <label class="form-label">Amount (NOK)</label>
-                            <InputNumber @bind-Value="withdrawRequest.AmountNOK" class="form-control" />
+                            <InputNumber @bind-Value="withdrawAmount" class="form-control" />
                         </div>
 
                         <button type="submit" class="btn btn-primary w-100" disabled="@IsSubmitting">
@@ -98,7 +132,7 @@
                 <tr>
                     <th>Last Updated</th>
                     <th>Type</th>
-                    <th>Platform</th>
+                    <th>Payment Method</th>
                     <th>Amount</th>
                     <th>Status</th>
                 </tr>
@@ -127,7 +161,12 @@
                                 <span class="badge bg-warning text-dark">@t.Type</span>
                             }
                         </td>
-                        <td>@t.Platform</td>
+                        <td>
+                            @t.Platform
+                            @if(!string.IsNullOrEmpty(t.PaymentDetails)) {
+                                <br/><small class="text-muted">@t.PaymentDetails</small>
+                            }
+                        </td>
                         <td>@t.AmountNOK.ToString("N0") kr</td>
                          <td>
                             <span class="badge @GetStatusBadge(t.Status)">@t.Status</span>
@@ -152,6 +191,7 @@
 
 @code {
     private Transaction withdrawRequest = new() { Platform = "PayPal", Type = "Withdrawal" };
+    private int? withdrawAmount; // Made nullable so it starts empty
     private List<Transaction> myTransactions = new();
     private decimal Balance = 0;
     private string userId = string.Empty;
@@ -196,10 +236,8 @@
                     await SetupSignalR();
                 }
             }
-            catch (Exception ex) { Console.WriteLine(ex);
-            }
-            finally { IsLoading = false; StateHasChanged();
-            }
+            catch (Exception ex) { Console.WriteLine(ex); }
+            finally { IsLoading = false; StateHasChanged(); }
         }
     }
 
@@ -246,15 +284,21 @@
         
         await LoadData(); // Re-fetch to ensure fresh balance
 
-        if (withdrawRequest.AmountNOK <= 0)
+        if (!withdrawAmount.HasValue || withdrawAmount.Value <= 0)
         {
             ErrorMessage = "Amount must be greater than 0.";
             return;
         }
 
-        if (withdrawRequest.AmountNOK > Balance)
+        if (withdrawAmount.Value > Balance)
         {
             ErrorMessage = "You cannot withdraw more than your current balance.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(withdrawRequest.PaymentDetails))
+        {
+            ErrorMessage = "Please provide your payment details/address.";
             return;
         }
 
@@ -264,13 +308,14 @@
             using var context = DbFactory.CreateDbContext();
             var auth = await AuthState.GetAuthenticationStateAsync();
             var userName = auth.User.Identity?.Name ?? "Unknown";
+            
             // --- BALANCE DEDUCTION ---
             var user = await context.Users.FindAsync(userId);
             if (user != null)
             {
                 // We deduct balance immediately when they REQUEST it.
                 // If Admin rejects later, we add it back.
-                user.Balance -= withdrawRequest.AmountNOK;
+                user.Balance -= withdrawAmount.Value;
             }
             
             var transaction = new Transaction
@@ -278,12 +323,14 @@
                 UserId = userId,
                 UserName = userName,
                 Type = "Withdrawal",
-                AmountNOK = withdrawRequest.AmountNOK,
+                AmountNOK = withdrawAmount.Value,
                 Platform = withdrawRequest.Platform,
+                PaymentDetails = withdrawRequest.PaymentDetails,
                 Date = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 Status = "Pending"
             };
+            
             context.Transactions.Add(transaction);
             await context.SaveChangesAsync();
 
@@ -291,7 +338,8 @@
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "New withdrawal request");
             
             SuccessMessage = "Withdrawal request submitted successfully. Waiting for admin approval.";
-            withdrawRequest.AmountNOK = 0; 
+            withdrawAmount = null; // Clear the field
+            withdrawRequest.PaymentDetails = null; // Reset for next time
             await LoadData();
         }
         catch (Exception ex)
@@ -304,10 +352,8 @@
         }
     }
 
-    private async Task NextTransPage() { transPage++; await LoadData();
-    }
-    private async Task PrevTransPage() { if (transPage > 1) { transPage--; await LoadData();
-    } }
+    private async Task NextTransPage() { transPage++; await LoadData(); }
+    private async Task PrevTransPage() { if (transPage > 1) { transPage--; await LoadData(); } }
 
     private string GetStatusBadge(string status) => status switch
     {
@@ -316,6 +362,7 @@
         "Rejected" => "bg-danger",
         _ => "bg-secondary"
     };
+    
     public async ValueTask DisposeAsync()
     {
         if (hubConnection is not null) await hubConnection.DisposeAsync();
