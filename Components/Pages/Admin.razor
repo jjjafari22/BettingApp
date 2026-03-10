@@ -86,7 +86,7 @@
                         <h5 class="modal-title fs-6 text-truncate me-2 flex-grow-1">
                             <span class="badge @GetStatusBadgeClass(reviewingBetModel.Status) me-2">@reviewingBetModel.Status</span>
                             Review Bet #@reviewingBetModel.Id 
-                            <span class="text-muted ms-2 fw-normal">@reviewingBetModel.UserName</span>
+                            <span class="text-muted ms-2 fw-normal">@(userLookup.TryGetValue(reviewingBetModel.UserId, out var u3) && !string.IsNullOrEmpty(u3.DiscordName) ? u3.DiscordName : reviewingBetModel.UserName)</span>
                         </h5>
                         <button type="button" class="btn-close flex-shrink-0" @onclick="CancelReview"></button>
                     </div>
@@ -174,7 +174,7 @@
                                    <div class="col-3"><button class="btn btn-primary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-arrow-counterclockwise me-1"></i> Undo</button></div>
                                </div>
                            }
-                         </div>
+                  </div>
                   </div>
         
             </div>
@@ -194,9 +194,10 @@
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
                         <th>Last Updated</th>
-                        <th>User</th>
+                        <th>Discord Username</th>
+                        <th>Last Name</th>
                     </tr>
-                </thead>
+                 </thead>
                 <tbody>
                    @foreach (var bet in pendingBets)
                     {
@@ -204,14 +205,15 @@
                              <td>
                                 <button class="btn btn-primary btn-sm action-btn" @onclick="() => StartReview(bet)">
                                     <i class="bi bi-eye"></i> Review
-                                 </button>
+                               </button>
                              </td>
                             <td>@bet.Id</td>
-                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                           <td>@bet.UserName</td>
+                            <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
+                            <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
+                            <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                         </tr>
                     }
-                    @if (pendingBets.Count == 0) { <tr><td colspan="4" class="text-muted">No pending bets.</td></tr> }
+                    @if (pendingBets.Count == 0) { <tr><td colspan="5" class="text-muted">No pending bets.</td></tr> }
                </tbody>
             </table>
          </div>
@@ -225,7 +227,8 @@
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
                         <th>Last Updated</th>
-                        <th>User</th>
+                        <th>Discord Username</th>
+                        <th>Last Name</th>
                         <th>Bet Amount</th>
                         <th>Odds</th>
                         <th>Potential Payout</th>
@@ -239,16 +242,17 @@
                                 <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
                                      <i class="bi bi-play-circle"></i> Process
                                  </button>
-                            </td>
+                             </td>
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                            <td>@bet.UserName</td>
-                             <td>@bet.AmountNOK?.ToString("N0") kr</td>
+                            <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
+                            <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
+                            <td>@bet.AmountNOK?.ToString("N0") kr</td>
                              <td>@bet.Odds.ToString("N2")</td>
                              <td>@bet.PotentialPayout.ToString("N0") kr</td>
                         </tr>
                     }
-                    @if (approvedBets.Count == 0) { <tr><td colspan="7" class="text-muted">No active bets.</td></tr> }
+                    @if (approvedBets.Count == 0) { <tr><td colspan="8" class="text-muted">No active bets.</td></tr> }
                 </tbody>
             </table>
             @* Pagination for Approved Bets *@
@@ -267,7 +271,8 @@
                          <th>Action</th>
                          <th>ID</th>
                          <th>Last Updated</th>
-                         <th>User</th>
+                         <th>Discord Username</th>
+                         <th>Last Name</th>
                          <th>Bet Amount</th>
                          <th>Odds</th>
                          <th>Status</th>
@@ -277,18 +282,19 @@
                 <tbody>
                     @foreach (var bet in completedBets)
                     {
-                         var rowClass = bet.Status == "Won" ? "table-success" : (bet.Status == "Lost" ? "table-danger" : "table-secondary");
+                        var rowClass = bet.Status == "Won" ? "table-success" : (bet.Status == "Lost" ? "table-danger" : "table-secondary");
                         <tr class="@rowClass">
                             <td>
                                   <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
-                                      <i class="bi bi-pencil-square"></i> View/Edit
+                                       <i class="bi bi-pencil-square"></i> View/Edit
                                   </button>
                             </td>
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                            <td>@bet.UserName</td>
+                            <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
+                            <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                             <td>@bet.AmountNOK?.ToString("N0") kr</td>
-                             <td>@bet.Odds.ToString("N2")</td>
+                            <td>@bet.Odds.ToString("N2")</td>
                             <td>
                                 <span class="badge @GetStatusBadgeClass(bet.Status)">@bet.Status</span>
                             </td>
@@ -299,12 +305,12 @@
                              </td>
                         </tr>
                     }
-                    @if (completedBets.Count == 0) { <tr><td colspan="8" class="text-muted">No completed bets found.</td></tr> }
+                    @if (completedBets.Count == 0) { <tr><td colspan="9" class="text-muted">No completed bets found.</td></tr> }
             </tbody>
             </table>
             
             <div class="d-flex justify-content-between align-items-center mt-2">
-                 <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(completedPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
+                  <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(completedPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
                 <span class="text-muted">Page @completedPage</span>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasMoreCompletedBets)">Next <i class="bi bi-arrow-right"></i></button>
             </div>
@@ -317,6 +323,9 @@
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
     
+    // Lookup for rendering names without modifying DB schema
+    private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
+
     // Pagination State
     private int completedPage = 1;
     private int approvedPage = 1;
@@ -355,7 +364,6 @@
     
     private double touchStartX = 0;
     private double touchEndX = 0;
-    
     [SupplyParameterFromQuery]
     public int? ReviewBetId { get; set; }
 
@@ -381,6 +389,19 @@
         };
     }
 
+    private async Task PopulateUserLookup(IEnumerable<string> userIds)
+    {
+        var missingIds = userIds.Except(userLookup.Keys).Distinct().ToList();
+        if (missingIds.Any())
+        {
+            using var context = DbFactory.CreateDbContext();
+            var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.LastName }).ToListAsync();
+            foreach(var u in users) {
+                userLookup[u.Id] = (u.DiscordUsername ?? "", u.LastName ?? "");
+            }
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -399,7 +420,6 @@
         await LoadPendingBets();
         await LoadApprovedBets();
         await LoadCompletedBets();
-        
         if (ReviewBetId.HasValue)
         {
             var targetBet = pendingBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
@@ -418,8 +438,8 @@
     private async Task LoadPendingBets()
     {
         using var context = DbFactory.CreateDbContext();
-        // Pending list is usually short, but we limit to 100 just in case to prevent crashes
         pendingBets = await context.Bets.Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).Take(100).ToListAsync();
+        await PopulateUserLookup(pendingBets.Select(b => b.UserId));
     }
     
     private async Task LoadApprovedBets()
@@ -432,6 +452,7 @@
             .Take(pageSize)
             .ToListAsync();
         hasMoreApprovedBets = totalApproved > (approvedPage * pageSize);
+        await PopulateUserLookup(approvedBets.Select(b => b.UserId));
     }
     
     private async Task NextApprovedPage() { approvedPage++; await LoadApprovedBets(); }
@@ -448,6 +469,7 @@
             .Take(pageSize)
             .ToListAsync();
         hasMoreCompletedBets = totalCompletedBets > (completedPage * pageSize);
+        await PopulateUserLookup(completedBets.Select(b => b.UserId));
     }
 
     private async Task NextPage() { completedPage++; await LoadCompletedBets(); }
@@ -533,7 +555,6 @@
             AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, 
             ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt
         };
-        
         if (reviewingBetModel.Status == "Pending")
         {
             reviewingBetModel.Odds = 0;
@@ -589,7 +610,6 @@
         modalSuccessMessage = null; 
         string originalStatus = bet.Status;
         int originalBetId = bet.Id;
-        
         if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
             if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount"; return; }
@@ -648,7 +668,6 @@
         using var context = DbFactory.CreateDbContext();
         var dbBet = await context.Bets.FindAsync(bet.Id);
         var dbUser = await context.Users.FindAsync(bet.UserId);
-        
         if (dbBet != null && dbUser != null)
         {
             if (dbBet.Status != originalStatus)
@@ -667,22 +686,18 @@
             decimal oldImpact = 0;
             if (originalStatus == "Approved" || originalStatus == "Lost") oldImpact = -oldWager;
             else if (originalStatus == "Won") oldImpact = -oldWager + oldPayout;
-
             // Calculate new balance impact using the incoming bet values
             decimal newWager = bet.AmountNOK ?? 0;
             decimal newPayout = bet.PotentialPayout;
             decimal newImpact = 0;
             if (newStatus == "Approved" || newStatus == "Lost") newImpact = -newWager;
             else if (newStatus == "Won") newImpact = -newWager + newPayout;
-
             // Apply the difference
             dbUser.Balance += (newImpact - oldImpact);
-
             dbBet.Status = newStatus;
             dbBet.AmountNOK = bet.AmountNOK;
             dbBet.Odds = bet.Odds; 
             dbBet.UpdatedAt = DateTime.UtcNow;
-
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -696,7 +711,6 @@
         await LoadPendingBets();
         await LoadApprovedBets();
         await LoadCompletedBets();
-        
         if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
         {
             _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet!, newStatus, isUpdate: false);
@@ -704,7 +718,6 @@
 
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet status is now: {newStatus}");
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        
         modalSuccessMessage = $"Bet #{bet.Id} updated.";
         
         if (reviewContext == "Pending") currentReviewList = pendingBets;
@@ -731,7 +744,6 @@
                     AmountNOK = nextBet.AmountNOK, Odds = nextBet.Odds, Status = nextBet.Status, 
                     ScreenshotUrl = nextBet.ScreenshotUrl, CreatedAt = nextBet.CreatedAt
                 };
-                
                 if (reviewingBetModel.Status == "Pending")
                 {
                     reviewingBetModel.Odds = 0;

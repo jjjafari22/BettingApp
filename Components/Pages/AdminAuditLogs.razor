@@ -62,6 +62,8 @@ else
                     <th>Admin</th>
                     <th>Action</th>
                     <th>Target User</th>
+                    <th>Discord Username</th>
+                    <th>Last Name</th>
                     <th>Details</th>
                 </tr>
             </thead>
@@ -73,13 +75,15 @@ else
                         <td><span class="badge bg-secondary">@log.AdminUserName</span></td>
                         <td><span class="fw-bold">@log.Action</span></td>
                         <td>@log.TargetUserName</td>
+                        <td>@(userLookup.TryGetValue(log.TargetUserName, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : "")</td>
+                        <td>@(userLookup.TryGetValue(log.TargetUserName, out var u2) ? u2.LastName : "")</td>
                         <td class="text-muted small">@log.Details</td>
                     </tr>
                 }
                 @if (logs.Count == 0)
                 {
                     <tr>
-                        <td colspan="5" class="text-center text-muted">No logs found matching criteria.</td>
+                        <td colspan="7" class="text-center text-muted">No logs found matching criteria.</td>
                     </tr>
                 }
             </tbody>
@@ -100,6 +104,10 @@ else
 
 @code {
     private List<AuditLog> logs = new();
+    
+    // Lookup dictionary where key is the UserName string
+    private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
+
     // Filters
     private string targetFilter = "";
     private string adminFilter = "";
@@ -117,6 +125,19 @@ else
     private int TimezoneOffset { get; set; }
     
     private HubConnection? hubConnection;
+    
+    private async Task PopulateUserLookup(IEnumerable<string> targetUserNames)
+    {
+        var missingNames = targetUserNames.Except(userLookup.Keys).Distinct().ToList();
+        if (missingNames.Any())
+        {
+            using var context = DbFactory.CreateDbContext();
+            var users = await context.Users.Where(u => missingNames.Contains(u.UserName!)).Select(u => new { u.UserName, u.DiscordUsername, u.LastName }).ToListAsync();
+            foreach(var u in users) {
+                userLookup[u.UserName!] = (u.DiscordUsername ?? "", u.LastName ?? "");
+            }
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -133,19 +154,16 @@ else
         if (isAdmin)
         {
             await LoadLogs();
-            
             // --- SignalR Setup ---
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(Nav.ToAbsoluteUri("/bethub"))
                 .Build();
-
             // When ANY admin notification happens (bet change, withdraw, settings), we refresh logs
             hubConnection.On<string>("ReceiveAdminNotification", async (msg) => 
             { 
                 await LoadLogs();
                 await InvokeAsync(StateHasChanged);
             });
-
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         }
@@ -224,6 +242,8 @@ else
             .Skip((currentPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
+            
+        await PopulateUserLookup(logs.Select(l => l.TargetUserName));
     }
 
     private async Task NextPage()

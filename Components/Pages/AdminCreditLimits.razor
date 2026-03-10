@@ -51,9 +51,8 @@ else
             <thead class="table-dark">
                 <tr>
                     <th>Last Updated</th>
-                    <th>First Name</th>
+                    <th>Discord Username</th>
                     <th>Last Name</th>
-                    <th>User</th>
                     <th>Credit Limit (NOK)</th>
                     <th>Max Payout (NOK)</th>
                 </tr>
@@ -61,14 +60,10 @@ else
             <tbody>
                 @foreach (var user in FilteredUsers)
                 {
-                    @* FIX: We use a custom dictionary 'rowKeys' to force the row to re-render 
-                       if the user clicks Cancel. This ensures the input box reverts visually.
-                    *@
                     <tr @key="GetRowKey(user.Id)">
                         <td>@ToUserLocal(user.UpdatedAt).ToString("g")</td>
-                        <td>@user.FirstName</td>
+                        <td>@(!string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : user.UserName)</td>
                         <td>@user.LastName</td>
-                        <td>@user.UserName</td>
                         <td>
                             <input type="text" class="form-control form-control-sm" style="width: 150px;"
                                    value="@user.CreditLimit.ToString("N0")"
@@ -94,16 +89,14 @@ else
     private string? currentAdminName;
     private int TimezoneOffset { get; set; }
     private HubConnection? hubConnection;
-
-    // FIX: Dictionary to track unique render keys for rows to handle "Cancel" revert
     private Dictionary<string, Guid> rowKeys = new();
-
+    
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
             ? users ?? new List<ApplicationUser>() 
             : (users ?? new List<ApplicationUser>()) 
-                .Where(u => u.UserName != null && 
-                            u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+                .Where(u => u.DiscordUsername != null && u.DiscordUsername.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) || 
+                            u.UserName != null && u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
 
     private Guid GetRowKey(string userId)
     {
@@ -178,42 +171,35 @@ else
 
     private async Task UpdateLimit(ApplicationUser userToUpdate, string? newValueStr, bool isCredit)
     {
-        // 1. Parse the new value
         decimal newValue = 0;
         var cleanStr = newValueStr?.Replace(" ", "").Replace("\u00A0", ""); 
         
         bool isValid = decimal.TryParse(cleanStr, NumberStyles.Any, CultureInfo.InvariantCulture, out newValue);
-
         if (!isValid)
         {
-            // Invalid number: force revert by changing key
             rowKeys[userToUpdate.Id] = Guid.NewGuid();
             StateHasChanged();
             return;
         }
 
-        // 2. Pop-up Confirmation
         string fieldName = isCredit ? "Credit Limit" : "Max Payout";
-        string msg = $"Are you sure you want to change {userToUpdate.UserName}'s {fieldName} to {newValue:N0} NOK?";
-        
+        var displayUser = !string.IsNullOrEmpty(userToUpdate.DiscordUsername) ? userToUpdate.DiscordUsername : userToUpdate.UserName;
+        string msg = $"Are you sure you want to change {displayUser}'s {fieldName} to {newValue:N0} NOK?";
         bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", msg);
 
         if (!confirmed)
         {
-            // FIX: Update the key to force the row to re-render with the ORIGINAL value
             rowKeys[userToUpdate.Id] = Guid.NewGuid();
             StateHasChanged();
             return;
         }
 
-        // 3. Save Changes
         using var context = DbFactory.CreateDbContext();
         var dbUser = await context.Users.FindAsync(userToUpdate.Id);
         
         if (dbUser != null)
         {
             string logDetails = "";
-
             if (isCredit)
             {
                 var oldVal = dbUser.CreditLimit;
@@ -227,8 +213,7 @@ else
                 logDetails = $"MaxPayout: {oldVal:N0} -> {dbUser.MaxPayout:N0}";
             }
             
-            dbUser.UpdatedAt = DateTime.UtcNow; 
-
+            dbUser.UpdatedAt = DateTime.UtcNow;
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
@@ -238,11 +223,9 @@ else
             });
 
             await context.SaveChangesAsync();
-            
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", 
-                $"{fieldName} updated for {userToUpdate.UserName}");
-            
-            successMessage = $"{fieldName} updated for {userToUpdate.UserName}!";
+                $"{fieldName} updated for {displayUser}");
+            successMessage = $"{fieldName} updated for {displayUser}!";
             
             await LoadUsers();
         }

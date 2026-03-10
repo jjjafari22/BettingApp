@@ -19,12 +19,10 @@ namespace BettingApp.Services
             using var context = _dbFactory.CreateDbContext();
             
             // 1. Get all users with non-zero balance
-            // --- CHANGED: Filter out Admins and Test Users ---
             var users = await context.Users
                 .Where(u => u.Balance != 0 && !u.IsAdmin && !u.IsTestUser)
-                .Select(u => new { u.UserName, u.Balance })
+                .Select(u => new { u.UserName, u.Balance, u.DiscordUsername, u.LastName })
                 .ToListAsync();
-            // -------------------------------------------------
 
             var result = new SettlementResult { Date = DateTime.UtcNow };
             
@@ -34,13 +32,15 @@ namespace BettingApp.Services
             // 2. Filter & Sort
             foreach (var user in users)
             {
-                // Removed tolerance logic to keep settlement precise.
-                // All non-zero balances are now processed.
+                // Format name: "DiscordUsername (LastName)" OR fallback to original email
+                string displayName = string.IsNullOrWhiteSpace(user.DiscordUsername) 
+                    ? user.UserName! 
+                    : $"{user.DiscordUsername} ({user.LastName})";
 
                 if (user.Balance < 0)
-                    debtors.Add((user.UserName!, Math.Abs(user.Balance)));
+                    debtors.Add((displayName, Math.Abs(user.Balance)));
                 else
-                    creditors.Add((user.UserName!, user.Balance));
+                    creditors.Add((displayName, user.Balance));
             }
 
             // Sort by amount descending to minimize transaction count (Greedy approach)
@@ -69,9 +69,6 @@ namespace BettingApp.Services
                 debtor.Amount -= amount;
                 creditor.Amount -= amount;
 
-                // Update list values (structs/tuples are value types, so we update the list directly or track indices)
-                // Since we modify 'amount', we need to check who is "settled"
-                
                 if (debtor.Amount < 0.01m) dIndex++; // Debtor settled
                 else debtors[dIndex] = (debtor.Name, debtor.Amount); // Update remainder
 
@@ -107,12 +104,10 @@ namespace BettingApp.Services
             return snapshot;
         }
 
-        // Updated signature to accept createdAtUtc
         public string GenerateCsv(SettlementResult result, DateTime createdAtUtc)
         {
             var sb = new StringBuilder();
 
-            // Helper to get Norway time (same logic as UI)
             DateTime GetNorwayTime(DateTime utc)
             {
                 try
@@ -132,7 +127,7 @@ namespace BettingApp.Services
             // Add Header Info
             sb.AppendLine($"Snapshot Time (UTC),{createdAtUtc:yyyy-MM-dd HH:mm:ss}");
             sb.AppendLine($"Snapshot Time (Norway),{norwayTime:yyyy-MM-dd HH:mm:ss}");
-            sb.AppendLine(); // Empty line separator
+            sb.AppendLine(); 
 
             // CSV Columns
             sb.AppendLine("Type,From,To,Amount,Details");

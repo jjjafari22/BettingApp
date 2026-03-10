@@ -41,9 +41,10 @@
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
-                    <tr>
+                     <tr>
                         <th>Date</th>
-                        <th>User</th>
+                        <th>Discord Username</th>
+                        <th>Last Name</th>
                         <th>Payment Method</th>
                         <th>Amount</th>
                         <th>Actions</th>
@@ -52,13 +53,14 @@
                 <tbody>
                     @if (pendingWithdrawals.Count == 0)
                     {
-                        <tr><td colspan="5" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
+                        <tr><td colspan="6" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
                     }
                     @foreach (var w in pendingWithdrawals)
                     {
                         <tr>
                             <td>@ToUserLocal(w.Date).ToString("g")</td>
-                            <td>@w.UserName</td>
+                            <td>@(userLookup.TryGetValue(w.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : w.UserName)</td>
+                            <td>@(userLookup.TryGetValue(w.UserId, out var u2) ? u2.LastName : "")</td>
                             <td>
                                 @w.Platform
                                 @if(!string.IsNullOrEmpty(w.PaymentDetails)) {
@@ -90,9 +92,9 @@
                 <div class="row">
                     @* Autocomplete Search *@
                     <div class="col-md-3 mb-3 position-relative">
-                        <label>Target User (Search)</label>
+                        <label>Target User (Search Discord)</label>
                         <input type="text" class="form-control" 
-                               placeholder="Start typing username..." 
+                               placeholder="Start typing Discord username..." 
                                @bind="searchTerm" 
                                @oninput="SearchUsers" />
                         
@@ -105,7 +107,7 @@
                                     <li class="list-group-item list-group-item-action" 
                                         style="cursor: pointer;" 
                                         @onclick="() => SelectUser(user)">
-                                        <strong>@user.UserName</strong> 
+                                        <strong>@(!string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : user.UserName)</strong> 
                                         <small class="text-muted ms-1">(@user.Balance.ToString("N0") kr)</small>
                                     </li>
                                 }
@@ -122,11 +124,11 @@
                                     </span>
                                 </div>
                                 <div class="text-success">
-                                    <small>Selected: <strong>@selectedUser.UserName</strong></small>
+                                    <small>Selected: <strong>@(!string.IsNullOrEmpty(selectedUser.DiscordUsername) ? selectedUser.DiscordUsername : selectedUser.UserName)</strong></small>
                                     <button class="btn btn-link btn-sm p-0 ms-2 text-danger" @onclick="ClearSelection">(x)</button>
                                 </div>
                             </div>
-                        }
+                         }
                     </div>
 
                     @* --- Button Group for Type (Visible Options) --- *@
@@ -144,24 +146,24 @@
                             <input type="radio" class="btn-check" name="btnradio" id="typeFreeBet" autocomplete="off" 
                                    checked="@(newTrans.Type == "Free Bet")" @onclick="@(() => ChangeType("Free Bet"))">
                             <label class="btn btn-outline-info" for="typeFreeBet">Free Bet</label>
-                        </div>
+                         </div>
                     </div>
                     @* ----------------------------------------------------- *@
 
                     @if (newTrans.Type == "Free Bet")
                     {
-                        <div class="col-md-3 mb-3">
+                         <div class="col-md-3 mb-3">
                             <label>Note</label>
                             <input type="text" class="form-control" placeholder="e.g. Promotional Free Bet" @bind="newTrans.PaymentDetails" />
                         </div>
                         <div class="col-md-2 mb-3">
                             <label>Amount (NOK)</label>
-                            <input type="number" class="form-control" @bind="adminAddAmount" />
+                             <input type="number" class="form-control" @bind="adminAddAmount" />
                         </div>
                     }
                     else
                     {
-                        <div class="col-md-3 mb-3">
+                         <div class="col-md-3 mb-3">
                             <label>Payment Method</label>
                             <select class="form-select" @bind="newTrans.Platform">
                                 <option value="PayPal">PayPal</option>
@@ -174,7 +176,7 @@
                             <label>Amount (NOK)</label>
                             <input type="number" class="form-control" @bind="adminAddAmount" />
                         </div>
-                        <div class="col-md-12 mb-3">
+                         <div class="col-md-12 mb-3">
                             <label>
                                 @if (newTrans.Platform == "PayPal") { <text>Email/Mobile</text> }
                                 else if (newTrans.Platform == "Vipps") { <text>Phone Number</text> }
@@ -201,7 +203,8 @@
         <thead class="table-dark">
             <tr>
                 <th>Last Updated</th>
-                <th>User</th>
+                <th>Discord Username</th>
+                <th>Last Name</th>
                 <th>Type</th>
                 <th>Payment Method</th>
                 <th>Amount</th>
@@ -214,7 +217,8 @@
             {
                 <tr>
                     <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
-                    <td>@t.UserName</td>
+                    <td>@(userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName)</td>
+                    <td>@(userLookup.TryGetValue(t.UserId, out var u2) ? u2.LastName : "")</td>
                     <td>
                         @* --- UPDATED: Badge Logic --- *@
                         @if (t.Type == "Deposit")
@@ -267,7 +271,7 @@
             }
             @if (allTransactions.Count == 0)
             {
-                <tr><td colspan="7" class="text-muted text-center">No transactions found.</td></tr>
+                <tr><td colspan="8" class="text-muted text-center">No transactions found.</td></tr>
              }
         </tbody>
     </table>
@@ -279,7 +283,7 @@
         </button>
         <span class="text-muted">Page @currentPage</span>
         <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasMoreTransactions)">
-            Next <i class="bi bi-arrow-right"></i>
+             Next <i class="bi bi-arrow-right"></i>
         </button>
     </div>
 </div>
@@ -288,6 +292,9 @@
     private List<Transaction> allTransactions = new();
     private List<Transaction> pendingWithdrawals = new();
     
+    // Lookup for rendering names
+    private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
+
     // Defaulting Platform to PayPal so the select box has a valid default state
     private Transaction newTrans = new() { Type = "Deposit", Platform = "PayPal", Date = DateTime.UtcNow, Status = "Completed" };
     private int? adminAddAmount; // Made nullable so it starts empty
@@ -301,7 +308,6 @@
     private string? errorMessage;
     private string? currentAdminName;
     private HubConnection? hubConnection;
-    
     // Pagination
     private int currentPage = 1;
     private const int PageSize = 20;
@@ -313,6 +319,19 @@
     {
         if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
         return utcDate.AddMinutes(-TimezoneOffset);
+    }
+    
+    private async Task PopulateUserLookup(IEnumerable<string> userIds)
+    {
+        var missingIds = userIds.Except(userLookup.Keys).Distinct().ToList();
+        if (missingIds.Any())
+        {
+            using var context = DbFactory.CreateDbContext();
+            var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.LastName }).ToListAsync();
+            foreach(var u in users) {
+                userLookup[u.Id] = (u.DiscordUsername ?? "", u.LastName ?? "");
+            }
+        }
     }
 
     protected override async Task OnInitializedAsync()
@@ -377,8 +396,8 @@
 
         using var context = DbFactory.CreateDbContext();
         searchResults = await context.Users
-            .Where(u => u.UserName != null && u.UserName.Contains(searchTerm))
-            .OrderBy(u => u.UserName) 
+            .Where(u => u.DiscordUsername != null && u.DiscordUsername.Contains(searchTerm) || (u.UserName != null && u.UserName.Contains(searchTerm)))
+            .OrderBy(u => u.DiscordUsername) 
             .Take(5)
             .AsNoTracking()
             .ToListAsync();
@@ -387,7 +406,7 @@
     private void SelectUser(ApplicationUser user)
     {
         selectedUser = user;
-        searchTerm = user.UserName ?? "";
+        searchTerm = !string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : (user.UserName ?? "");
         searchResults.Clear();
         
         newTrans.UserId = selectedUser.Id;
@@ -432,8 +451,10 @@
             .ToListAsync();
         var total = await context.Transactions.CountAsync();
         hasMoreTransactions = total > (currentPage * PageSize);
-        
         pendingWithdrawals = await context.Transactions.Where(t => t.Type == "Withdrawal" && t.Status == "Pending").OrderBy(t => t.Date).AsNoTracking().ToListAsync();
+        
+        var userIds = allTransactions.Select(t => t.UserId).Concat(pendingWithdrawals.Select(t => t.UserId)).Distinct();
+        await PopulateUserLookup(userIds);
     }
     
     private async Task NextPage() { currentPage++; using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); }
@@ -443,8 +464,9 @@
     {
         successMessage = null;
         errorMessage = null;
+        var displayUser = userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName;
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
-            $"Confirm payout of {t.AmountNOK} kr to {t.UserName}?");
+            $"Confirm payout of {t.AmountNOK} kr to {displayUser}?");
         if (!confirmed) return;
 
         using var context = DbFactory.CreateDbContext();
@@ -484,7 +506,6 @@
             
             // Refund the money to balance
             user.Balance += t.AmountNOK;
-            
             context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Rejected Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {t.AmountNOK}, ID: {t.Id}" });
             await context.SaveChangesAsync();
             
@@ -500,14 +521,14 @@
 
     private async Task CancelTransaction(Transaction t)
     {
+        var displayUser = userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName;
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
-            $"Are you sure you want to CANCEL this transaction?\nType: {t.Type}\nAmount: {t.AmountNOK} kr\nUser: {t.UserName}\n\nThis will reverse the balance.");
+            $"Are you sure you want to CANCEL this transaction?\nType: {t.Type}\nAmount: {t.AmountNOK} kr\nUser: {displayUser}\n\nThis will reverse the balance.");
         if (!confirmed) return;
 
         using var context = DbFactory.CreateDbContext();
         var dbTrans = await context.Transactions.FindAsync(t.Id);
         var user = await context.Users.FindAsync(t.UserId);
-        
         if (dbTrans != null && user != null)
         {
             if (dbTrans.Status == "Cancelled" || dbTrans.Status == "Rejected")
@@ -602,14 +623,12 @@
         
         await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", $"New transaction: {newTrans.Type}");
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        
         if (!string.IsNullOrEmpty(user.DiscordUserId) && newTrans.Type == "Withdrawal")
         {
              await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, newTrans, "Completed");
         }
         
         successMessage = "Transaction added successfully!";
-        
         var type = newTrans.Type; // Preserve selected type
         newTrans = new Transaction { Type = type, Platform = type == "Free Bet" ? "Free Bet" : "PayPal", Date = DateTime.UtcNow, Status = "Completed" };
         adminAddAmount = null; // Reset the amount
