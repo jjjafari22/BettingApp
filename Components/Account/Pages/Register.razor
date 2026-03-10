@@ -31,6 +31,7 @@
             <DataAnnotationsValidator />
             <h2>Create a new account.</h2>
             <hr />
+ 
             <ValidationSummary class="text-danger" role="alert" />
             
             <div class="form-floating mb-3">
@@ -56,6 +57,7 @@
                 <label for="password">Password</label>
                 <ValidationMessage For="() => Input.Password" class="text-danger" />
             </div>
+            
             <div class="form-floating mb-3">
                 <InputText id="confirm-password" type="password" @bind-Value="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
                 <label for="confirm-password">Confirm Password</label>
@@ -72,13 +74,26 @@
                 <ValidationMessage For="() => Input.ReferredBy" class="text-danger" />
             </div>
 
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Register</button>
+            <button type="submit" class="w-100 btn btn-lg btn-primary" disabled="@_isSubmitting">
+                @if (_isSubmitting)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span> Registering...</span>
+                }
+                else
+                {
+                    <span>Register</span>
+                }
+            </button>
         </EditForm>
     </div>
 </div>
 
 @code {
     private IEnumerable<IdentityError>? identityErrors;
+    
+    // --- ADDED: Flag to prevent double submission race conditions ---
+    private bool _isSubmitting = false;
 
     [SupplyParameterFromForm]
     private InputModel Input { get; set; } = new();
@@ -90,73 +105,83 @@
 
     public async Task RegisterUser(EditContext editContext)
     {
-        var user = CreateUser();
-        // Use Email as the Username
-        await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
-        var emailStore = GetEmailStore();
-        await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
+        // Block double clicks instantly
+        if (_isSubmitting) return;
+        _isSubmitting = true;
 
-        // Custom Fields
-        user.FirstName = Input.FirstName;
-        user.LastName = Input.LastName;
-        user.ReferredBy = Input.ReferredBy; // <--- Save Referral
-        user.CreatedAt = DateTime.UtcNow;
-        user.UpdatedAt = DateTime.UtcNow;
-
-        var result = await UserManager.CreateAsync(user, Input.Password);
-
-        if (result.Succeeded)
+        try
         {
-            Logger.LogInformation("User created a new account with password.");
-            // --- NOTIFICATIONS ---
-            // 1. Notify Admin Page (SignalR)
-            await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
-            
-            // 2. Notify Discord
-            try
-            {
-                // Construct the Admin Users URL dynamically
-                string adminUsersUrl = $"{NavigationManager.BaseUri}admin/users";
+            var user = CreateUser();
+            // Use Email as the Username
+            await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
+            var emailStore = GetEmailStore();
+            await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
 
-                await DiscordService.SendNotificationAsync("New User Registered", 
-                    $"**Name:** {Input.FirstName} {Input.LastName}\n" +
-                    $"**Email:** {Input.Email}\n" +
-                    $"**Referred By:** {Input.ReferredBy ?? "None"}\n" +
-                    $"**Status:** Pending Approval\n" +
-                    $"[Approve User Now]({adminUsersUrl})"); // Added Link Here
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to send Discord notification");
-            }
-            // ---------------------
+            // Custom Fields
+            user.FirstName = Input.FirstName;
+            user.LastName = Input.LastName;
+            user.ReferredBy = Input.ReferredBy; // <--- Save Referral
+            user.CreatedAt = DateTime.UtcNow;
+            user.UpdatedAt = DateTime.UtcNow;
 
-            var userId = await UserManager.GetUserIdAsync(user);
-            var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
-            code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
-            
-            // We still generate the callback URL internally if needed, but we don't display it to the user.
-            var callbackUrl = NavigationManager.GetUriWithQueryParameters(
-                NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
-                new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
+            var result = await UserManager.CreateAsync(user, Input.Password);
 
-            // Note: Since we don't have a real email sender, we just redirect to the "Pending" page.
-            if (UserManager.Options.SignIn.RequireConfirmedAccount)
+            if (result.Succeeded)
             {
-                RedirectManager.RedirectTo(
-                    "Account/RegisterConfirmation",
-                    new() { ["email"] = Input.Email, ["returnUrl"] = ReturnUrl });
+                Logger.LogInformation("User created a new account with password.");
+                // --- NOTIFICATIONS ---
+                // 1. Notify Admin Page (SignalR)
+                await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
+                // 2. Notify Discord
+                try
+                {
+                    // Construct the Admin Users URL dynamically
+                    string adminUsersUrl = $"{NavigationManager.BaseUri}admin/users";
+                    await DiscordService.SendNotificationAsync("New User Registered", 
+                        $"**Name:** {Input.FirstName} {Input.LastName}\n" +
+                        $"**Email:** {Input.Email}\n" +
+                        $"**Referred By:** {Input.ReferredBy ?? "None"}\n" +
+                        $"**Status:** Pending Approval\n" +
+                        $"[Approve User Now]({adminUsersUrl})");
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to send Discord notification");
+                }
+                // ---------------------
+
+                var userId = await UserManager.GetUserIdAsync(user);
+                var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+                code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+                
+                // We still generate the callback URL internally if needed, but we don't display it to the user.
+                var callbackUrl = NavigationManager.GetUriWithQueryParameters(
+                    NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+                    new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
+
+                // Note: Since we don't have a real email sender, we just redirect to the "Pending" page.
+                if (UserManager.Options.SignIn.RequireConfirmedAccount)
+                {
+                    RedirectManager.RedirectTo(
+                        "Account/RegisterConfirmation",
+                        new() { ["email"] = Input.Email, ["returnUrl"] = ReturnUrl });
+                }
+                else
+                {
+                    await SignInManager.SignInAsync(user, isPersistent: false);
+                    RedirectManager.RedirectTo(ReturnUrl);
+                }
             }
             else
             {
-                await SignInManager.SignInAsync(user, isPersistent: false);
-                RedirectManager.RedirectTo(ReturnUrl);
+                identityErrors = result.Errors;
+                Message = $"Error: {string.Join(", ", result.Errors.Select(error => error.Description))}";
             }
         }
-        else
+        finally
         {
-            identityErrors = result.Errors;
-            Message = $"Error: {string.Join(", ", result.Errors.Select(error => error.Description))}";
+            // Reset the flag just in case the execution yields an error and the user needs to try again
+            _isSubmitting = false;
         }
     }
 
