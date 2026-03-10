@@ -41,7 +41,7 @@
         <div class="table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
-                     <tr>
+                    <tr>
                         <th>Date</th>
                         <th>Discord Username</th>
                         <th>Last Name</th>
@@ -128,7 +128,7 @@
                                     <button class="btn btn-link btn-sm p-0 ms-2 text-danger" @onclick="ClearSelection">(x)</button>
                                 </div>
                             </div>
-                         }
+                        }
                     </div>
 
                     @* --- Button Group for Type (Visible Options) --- *@
@@ -146,19 +146,19 @@
                             <input type="radio" class="btn-check" name="btnradio" id="typeFreeBet" autocomplete="off" 
                                    checked="@(newTrans.Type == "Free Bet")" @onclick="@(() => ChangeType("Free Bet"))">
                             <label class="btn btn-outline-info" for="typeFreeBet">Free Bet</label>
-                         </div>
+                        </div>
                     </div>
                     @* ----------------------------------------------------- *@
 
                     @if (newTrans.Type == "Free Bet")
                     {
-                         <div class="col-md-3 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label>Note</label>
                             <input type="text" class="form-control" placeholder="e.g. Promotional Free Bet" @bind="newTrans.PaymentDetails" />
                         </div>
                         <div class="col-md-2 mb-3">
                             <label>Amount (NOK)</label>
-                             <input type="number" class="form-control" @bind="adminAddAmount" />
+                            <input type="number" class="form-control" @bind="adminAddAmount" />
                         </div>
                     }
                     else
@@ -176,7 +176,7 @@
                             <label>Amount (NOK)</label>
                             <input type="number" class="form-control" @bind="adminAddAmount" />
                         </div>
-                         <div class="col-md-12 mb-3">
+                        <div class="col-md-12 mb-3">
                             <label>
                                 @if (newTrans.Platform == "PayPal") { <text>Email/Mobile</text> }
                                 else if (newTrans.Platform == "Vipps") { <text>Phone Number</text> }
@@ -197,7 +197,42 @@
     </div>
 </div>
 
-<h4 class="mb-3">Transaction History</h4>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
+    <h4 class="mb-0">Transaction History</h4>
+    
+    @* --- History Filter --- *@
+    <div class="position-relative" style="min-width: 250px;">
+        <div class="input-group input-group-sm">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" 
+                   placeholder="Filter by user..." 
+                   @bind="filterSearchTerm" 
+                   @oninput="SearchFilterUsers" />
+        </div>
+        
+        @if (filterSearchResults.Any())
+        {
+            <ul class="list-group position-absolute w-100 shadow mt-1" style="z-index: 1000; max-height: 200px; overflow-y: auto;">
+                @foreach (var user in filterSearchResults)
+                {
+                    <li class="list-group-item list-group-item-action py-1" 
+                        style="cursor: pointer;" 
+                        @onclick="() => SelectFilterUser(user)">
+                        <strong>@(!string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : user.UserName)</strong>
+                    </li>
+                }
+            </ul>
+        }
+        @if (filterSelectedUser != null)
+        {
+            <div class="mt-1 small text-success d-flex justify-content-between align-items-center bg-light border rounded px-2 py-1">
+                <span class="text-truncate">Filtering: <strong>@(!string.IsNullOrEmpty(filterSelectedUser.DiscordUsername) ? filterSelectedUser.DiscordUsername : filterSelectedUser.UserName)</strong></span>
+                <button class="btn btn-link btn-sm p-0 text-danger text-decoration-none" @onclick="ClearFilterSelection"><i class="bi bi-x-circle-fill"></i> clear</button>
+            </div>
+        }
+    </div>
+</div>
+
 <div class="table-responsive">
     <table class="table table-sm table-striped table-hover align-middle text-nowrap">
         <thead class="table-dark">
@@ -271,8 +306,8 @@
             }
             @if (allTransactions.Count == 0)
             {
-                <tr><td colspan="8" class="text-muted text-center">No transactions found.</td></tr>
-             }
+                <tr><td colspan="8" class="text-muted text-center py-3">No transactions found for this period/user.</td></tr>
+            }
         </tbody>
     </table>
     
@@ -294,20 +329,27 @@
     
     // Lookup for rendering names
     private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
-
+    
     // Defaulting Platform to PayPal so the select box has a valid default state
     private Transaction newTrans = new() { Type = "Deposit", Platform = "PayPal", Date = DateTime.UtcNow, Status = "Completed" };
     private int? adminAddAmount; // Made nullable so it starts empty
     
-    // Auto-search logic
+    // Auto-search logic (For Adding Transactions)
     private string searchTerm = "";
     private List<ApplicationUser> searchResults = new();
     private ApplicationUser? selectedUser;
+
+    // --- NEW: History Filter Logic ---
+    private string filterSearchTerm = "";
+    private List<ApplicationUser> filterSearchResults = new();
+    private ApplicationUser? filterSelectedUser;
+    // ---------------------------------
     
     private string? successMessage;
     private string? errorMessage;
     private string? currentAdminName;
     private HubConnection? hubConnection;
+    
     // Pagination
     private int currentPage = 1;
     private const int PageSize = 20;
@@ -384,6 +426,7 @@
         }
     }
 
+    // Search specifically for Add Transaction box
     private async Task SearchUsers(ChangeEventArgs e)
     {
         searchTerm = e.Value?.ToString() ?? "";
@@ -422,6 +465,49 @@
         newTrans.UserId = "";
     }
 
+    // --- NEW: Search Methods for History Filter ---
+    private async Task SearchFilterUsers(ChangeEventArgs e)
+    {
+        filterSearchTerm = e.Value?.ToString() ?? "";
+        
+        if (string.IsNullOrWhiteSpace(filterSearchTerm) || filterSearchTerm.Length < 2)
+        {
+            filterSearchResults.Clear();
+            return;
+        }
+
+        using var context = DbFactory.CreateDbContext();
+        filterSearchResults = await context.Users
+            .Where(u => u.DiscordUsername != null && u.DiscordUsername.Contains(filterSearchTerm) || (u.UserName != null && u.UserName.Contains(filterSearchTerm)))
+            .OrderBy(u => u.DiscordUsername) 
+            .Take(5)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+
+    private async Task SelectFilterUser(ApplicationUser user)
+    {
+        filterSelectedUser = user;
+        filterSearchTerm = "";
+        filterSearchResults.Clear();
+        currentPage = 1; // Reset to page 1 when filtering
+        
+        using var context = DbFactory.CreateDbContext();
+        await LoadTransactions(context);
+    }
+
+    private async Task ClearFilterSelection()
+    {
+        filterSelectedUser = null;
+        filterSearchTerm = "";
+        filterSearchResults.Clear();
+        currentPage = 1; // Reset to page 1 when clearing filter
+        
+        using var context = DbFactory.CreateDbContext();
+        await LoadTransactions(context);
+    }
+    // ----------------------------------------------
+
     private async Task SetupSignalR()
     {
         hubConnection = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/bethub")).Build();
@@ -443,16 +529,33 @@
 
     private async Task LoadTransactions(ApplicationDbContext context)
     {
-        allTransactions = await context.Transactions
+        // 1. Base Query
+        var query = context.Transactions.AsQueryable();
+
+        // 2. Apply Filter if a user is selected
+        if (filterSelectedUser != null)
+        {
+            query = query.Where(t => t.UserId == filterSelectedUser.Id);
+        }
+
+        // 3. Get Paginated Transactions
+        allTransactions = await query
             .OrderByDescending(t => t.UpdatedAt)
             .Skip((currentPage - 1) * PageSize)
             .Take(PageSize)
             .AsNoTracking()
             .ToListAsync();
-        var total = await context.Transactions.CountAsync();
+
+        var total = await query.CountAsync();
         hasMoreTransactions = total > (currentPage * PageSize);
-        pendingWithdrawals = await context.Transactions.Where(t => t.Type == "Withdrawal" && t.Status == "Pending").OrderBy(t => t.Date).AsNoTracking().ToListAsync();
         
+        // 4. Load Pending Withdrawals (Keeping this unaffected by filter so admins don't miss pending payouts)
+        pendingWithdrawals = await context.Transactions
+            .Where(t => t.Type == "Withdrawal" && t.Status == "Pending")
+            .OrderBy(t => t.Date)
+            .AsNoTracking()
+            .ToListAsync();
+            
         var userIds = allTransactions.Select(t => t.UserId).Concat(pendingWithdrawals.Select(t => t.UserId)).Distinct();
         await PopulateUserLookup(userIds);
     }
