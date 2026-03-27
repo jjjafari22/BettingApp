@@ -11,8 +11,14 @@ public class PendingBetsNotificationService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DiscordNotificationService _discordService;
     private readonly ILogger<PendingBetsNotificationService> _logger;
-    // Check every 15 minutes
-    private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(15);
+    
+    // Check every 1 minute to catch the 15-minute mark accurately
+    private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1);
+
+    // --- TRACKING STATE ---
+    private int? _lastSeenNewestBetId = null;
+    private DateTime _nextNotificationTime = DateTime.MinValue;
+    private int _currentWaitMinutes = 15;
 
     public PendingBetsNotificationService(
         IServiceScopeFactory scopeFactory,
@@ -28,10 +34,8 @@ public class PendingBetsNotificationService : BackgroundService
     {
         _logger.LogInformation("Pending Bets Notification Service starting...");
 
-        // Use PeriodicTimer for a non-blocking delay loop
         using var timer = new PeriodicTimer(_checkInterval);
 
-        // Wait for the next tick to prevent immediate spam on restart
         while (await timer.WaitForNextTickAsync(stoppingToken) && !stoppingToken.IsCancellationRequested)
         {
             try
@@ -47,29 +51,54 @@ public class PendingBetsNotificationService : BackgroundService
 
     private async Task CheckAndNotifyAsync()
     {
-        // We must create a scope to access the Database (Scoped) from a Background Service (Singleton)
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        // Efficiently aggregate data in the database
-        var pendingStats = await context.Bets
+        // Find the most recently created pending bet
+        var newestPendingBet = await context.Bets
             .Where(b => b.Status == "Pending")
-            .GroupBy(b => 1) // Dummy group to aggregate all
-            .Select(g => new
-            {
-                Count = g.Count(),
-                OldestSubmission = g.Min(b => b.CreatedAt)
-            })
+            .OrderByDescending(b => b.Id) // Use ID or CreatedAt for "newest"
             .FirstOrDefaultAsync();
 
-        // Only notify if there are pending bets
-        if (pendingStats != null && pendingStats.Count > 0)
+        if (newestPendingBet == null)
         {
-            var duration = DateTime.UtcNow - pendingStats.OldestSubmission;
+            _lastSeenNewestBetId = null;
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+
+        // LOGIC: If a brand new bet has appeared at the top of the queue
+        if (_lastSeenNewestBetId != newestPendingBet.Id)
+        {
+            _lastSeenNewestBetId = newestPendingBet.Id;
+            _currentWaitMinutes = 15; // Reset backoff
             
-            await _discordService.SendPendingBetsReminderAsync(pendingStats.Count, duration);
+            // Schedule the notification for 15 minutes after THIS new bet was created
+            _nextNotificationTime = newestPendingBet.CreatedAt.AddMinutes(_currentWaitMinutes);
             
-            _logger.LogInformation($"Sent reminder: {pendingStats.Count} bets pending. Oldest: {duration.TotalMinutes:N0} mins.");
+            _logger.LogInformation($"Newest bet detected (ID: {newestPendingBet.Id}). Next notification at: {_nextNotificationTime:HH:mm:ss} UTC");
+        }
+
+        // Check if it's time to notify
+        if (now >= _nextNotificationTime)
+        {
+            // Gather aggregate data for the message
+            var pendingBets = await context.Bets.Where(b => b.Status == "Pending").ToListAsync();
+            var count = pendingBets.Count;
+            var oldestTime = pendingBets.Min(b => b.CreatedAt);
+            var durationSinceOldest = now - oldestTime;
+            
+            // Send the reminder
+            await _discordService.SendPendingBetsReminderAsync(count, durationSinceOldest);
+            
+            // Calculate backoff for the NEXT notification
+            _currentWaitMinutes *= 2;
+            if (_currentWaitMinutes > 1440) _currentWaitMinutes = 1440; // Cap at 24h
+
+            _nextNotificationTime = now.AddMinutes(_currentWaitMinutes);
+            
+            _logger.LogInformation($"Sent reminder. Backing off: next notify in {_currentWaitMinutes} mins.");
         }
     }
 }
