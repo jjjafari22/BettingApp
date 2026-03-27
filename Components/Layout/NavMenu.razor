@@ -45,7 +45,7 @@
                 </NavLink>
                 
                 <NavLink class="nav-link d-flex align-items-center" href="deposit-withdraw">
-                    <span class="bi bi-wallet2" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
+                     <span class="bi bi-wallet2" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
                     <span>Deposit/Withdrawal</span>
                 </NavLink>
 
@@ -81,7 +81,7 @@
                             <span>All Users</span>
                             @if (userTasks > 0)
                             {
-                                 <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
+                                <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
                             }
                         </NavLink>
                     </div>
@@ -145,7 +145,6 @@
     private string? currentUrl;
     private bool isAdmin;
     private HubConnection? hubConnection;
-    // Task Counters
     private int adminHomeTasks = 0;
     private int transactionTasks = 0;
     private int userTasks = 0;
@@ -167,15 +166,12 @@
 
             if (isAdmin)
             {
-                // Initial Load
                 await LoadAdminTasks(context);
-                // Setup SignalR for Real-time Updates
                 try 
                 {
                     hubConnection = new HubConnectionBuilder()
                         .WithUrl(NavigationManager.ToAbsoluteUri("/bethub"))
                         .Build();
-                    // Listen for various admin events to refresh counters
                     hubConnection.On<string>("ReceiveAdminNotification", async (message) => await RefreshTasks());
                     hubConnection.On("ReceiveUserRegistration", async () => await RefreshTasks());
                     hubConnection.On<string>("ReceiveUpdate", async (message) => await RefreshTasks());
@@ -194,7 +190,6 @@
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        // Also refresh on navigation to be safe
         if (isAdmin)
         {
             _ = InvokeAsync(RefreshTasks);
@@ -221,15 +216,11 @@
 
     private async Task LoadAdminTasks(ApplicationDbContext context)
     {
-        // Admin Home: Pending bets (review) + Active bets (process outcome)
         var pendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
-        // FIXED: Count Active bets by Status = Approved
         var activeBets = await context.Bets.CountAsync(b => b.Status == "Approved");
         adminHomeTasks = pendingBets + activeBets;
         
-        // Transactions: Pending withdrawals
         transactionTasks = await context.Transactions.CountAsync(t => t.Type == "Withdrawal" && t.Status == "Pending");
-        // Users: Accounts waiting for approval (EmailConfirmed is false)
         userTasks = await context.Users.CountAsync(u => !u.EmailConfirmed);
     }
 
