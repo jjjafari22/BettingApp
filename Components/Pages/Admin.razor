@@ -31,6 +31,21 @@
             payoutDisplay.innerText = payout.toLocaleString('no-NO', { maximumFractionDigits: 0 }) + ' kr';
         }
     }
+
+    function downloadCsv(filename, content) {
+        const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+    }
 </script>
 
 <style>
@@ -98,7 +113,7 @@
                        </div>
                    }
                    @if (reviewErrorMessage != null) {
-                      <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
+                       <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
                            <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
                                <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
                                <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
@@ -143,7 +158,7 @@
                                      <div id="payoutDisplay" class="form-control form-control-sm bg-light text-success fw-bold text-end">
                                          @reviewingBetModel.PotentialPayout.ToString("N0") kr
                                      </div>
-                                 </div>
+                               </div>
                             </div>
 
                            @if (reviewingBetModel.Status == "Pending") {
@@ -157,30 +172,35 @@
                                     <div class="col-5"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'><i class="bi bi-x-lg me-1"></i> Lost</button></div>
                                     <div class="col-2"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
                                  </div>
-                            } else {
+                             } else {
                                   <div class="row g-2">
                                    <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
                                    <div class="col-3"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Won")'>Won</button></div>
                                    <div class="col-3"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'>Lost</button></div>
-                                    <div class="col-3"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
+                                   <div class="col-3"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
                                    <div class="col-3"><button class="btn btn-primary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-arrow-counterclockwise me-1"></i> Undo</button></div>
-                               </div>
+                                </div>
                            }
-                  </div>
-                  </div>
+                        </div>
+                   </div>
+                </div>
             </div>
-           </div>
         </div>
     </div>
 }
 
 <div class="row">
   <div class="col-md-12">
-        <h4 class="mb-3">Pending Bets Queue</h4>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Pending Bets Queue</h4>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="ExportPendingBetsCsv">
+                <i class="bi bi-download"></i> Export CSV
+            </button>
+        </div>
          <div class="table-responsive">
              <table class="table table-sm table-striped table-hover mb-5 text-nowrap align-middle">
                  <thead class="table-dark">
-                     <tr>
+                      <tr>
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
                         <th>Last Updated (Local)</th>
@@ -189,14 +209,14 @@
                         <th>Last Name</th>
                     </tr>
                  </thead>
-                <tbody>
+                 <tbody>
                    @foreach (var bet in pendingBets)
                     {
                         <tr>
-                             <td>
+                              <td>
                                 <button class="btn btn-primary btn-sm action-btn" @onclick="() => StartReview(bet)">
                                     <i class="bi bi-eye"></i> Review
-                               </button>
+                                </button>
                              </td>
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
@@ -205,15 +225,20 @@
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                         </tr>
                     }
-                   @if (pendingBets.Count == 0) { <tr><td colspan="6" class="text-muted">No pending bets.</td></tr> }
+                    @if (pendingBets.Count == 0) { <tr><td colspan="6" class="text-muted">No pending bets.</td></tr> }
                </tbody>
             </table>
          </div>
 
-        <h4 class="mb-3">Active Bets (Approved)</h4>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Active Bets (Approved)</h4>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="ExportActiveBetsCsv">
+                <i class="bi bi-download"></i> Export CSV
+            </button>
+        </div>
         <div class="table-responsive mb-5">
             <table class="table table-sm table-striped table-hover text-nowrap align-middle">
-                 <thead class="table-dark">
+                  <thead class="table-dark">
                    <tr>
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
@@ -226,14 +251,14 @@
                         <th>Potential Payout</th>
                     </tr>
                  </thead>
-                <tbody>
+                 <tbody>
                     @foreach (var bet in approvedBets)
                     {
                         <tr>
                              <td>
-                                 <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
+                                <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
                                      <i class="bi bi-play-circle"></i> Process
-                                 </button>
+                                </button>
                               </td>
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
@@ -255,7 +280,12 @@
             </div>
         </div>
 
-        <h4 class="mb-3">Completed Bets History (@totalCompletedBets)</h4>
+        <div class="d-flex justify-content-between align-items-center mb-3 mt-4">
+            <h4 class="mb-0">Completed Bets History (@totalCompletedBets)</h4>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="ExportCompletedBetsCsv">
+                <i class="bi bi-download"></i> Export CSV
+            </button>
+        </div>
         <div class="table-responsive">
             <table class="table table-sm table-striped table-hover text-nowrap align-middle">
                 <thead class="table-dark">
@@ -271,7 +301,7 @@
                          <th>Status</th>
                          <th>Payout</th>
                     </tr>
-                 </thead>
+                  </thead>
                 <tbody>
                     @foreach (var bet in completedBets)
                     {
@@ -279,7 +309,7 @@
                         <tr class="@rowClass">
                             <td>
                                   <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
-                                        <i class="bi bi-pencil-square"></i> View/Edit
+                                     <i class="bi bi-pencil-square"></i> View/Edit
                                   </button>
                             </td>
                             <td>@bet.Id</td>
@@ -289,13 +319,13 @@
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                             <td>@bet.AmountNOK?.ToString("N0") kr</td>
                             <td>@bet.Odds.ToString("N2")</td>
-                            <td>
+                             <td>
                                  <span class="badge @GetStatusBadgeClass(bet.Status)">@bet.Status</span>
                             </td>
                             <td>
                               @if(bet.Status == "Won") { @bet.PotentialPayout.ToString("N0") <span>kr</span> }
                              else if (bet.Status == "Lost") { <span>0 kr</span> }
-                             else { <span class="text-muted">-</span> }
+                              else { <span class="text-muted">-</span> }
                               </td>
                         </tr>
                     }
@@ -303,7 +333,7 @@
             </tbody>
             </table>
             
-            <div class="d-flex justify-content-between align-items-center mt-2">
+            <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
                   <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(completedPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
                 <span class="text-muted">Page @completedPage</span>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasMoreCompletedBets)">Next <i class="bi bi-arrow-right"></i></button>
@@ -482,13 +512,14 @@
                 await LoadApprovedBets(); 
                 await LoadCompletedBets();
                 if (!string.IsNullOrEmpty(message) && message != "Update") successMessage = message;
+         
                 await InvokeAsync(StateHasChanged);
             });
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         }
         if (shouldFocusReviewModal) { shouldFocusReviewModal = false;
-        try { await reviewModalRef.FocusAsync(); } catch { } }
+            try { await reviewModalRef.FocusAsync(); } catch { } }
     }
 
     public async ValueTask DisposeAsync()
@@ -740,5 +771,65 @@
             successMessage = $"Bet #{bet.Id} processed. Queue empty.";
         }
         StateHasChanged();
+    }
+
+    // --- CSV EXPORT FUNCTIONALITY ---
+    private async Task ExportPendingBetsCsv()
+    {
+        using var context = DbFactory.CreateDbContext();
+        var bets = await context.Bets.Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        await GenerateAndDownloadCsv(bets, "PendingBets.csv");
+    }
+
+    private async Task ExportActiveBetsCsv()
+    {
+        using var context = DbFactory.CreateDbContext();
+        var bets = await context.Bets.Where(b => b.Status == "Approved").OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        await GenerateAndDownloadCsv(bets, "ActiveBets.csv");
+    }
+
+    private async Task ExportCompletedBetsCsv()
+    {
+        using var context = DbFactory.CreateDbContext();
+        var completedStatuses = new[] { "Won", "Lost", "Void", "Rejected", "Cancelled" };
+        var bets = await context.Bets.Where(b => completedStatuses.Contains(b.Status)).OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        await GenerateAndDownloadCsv(bets, "CompletedBets.csv");
+    }
+
+    private async Task GenerateAndDownloadCsv(List<Bet> bets, string filename)
+    {
+        await PopulateUserLookup(bets.Select(b => b.UserId));
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("ID,LastUpdatedLocal,LastUpdatedNorway,DiscordUsername,LastName,BetAmount,Odds,PotentialPayout,Status");
+
+        foreach (var bet in bets)
+        {
+            var localTime = ToUserLocal(bet.UpdatedAt).ToString("g");
+            var norwayTime = TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g");
+            var discordName = userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName;
+            var lastName = userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "";
+
+            var line = $"{bet.Id},{EscapeCsv(localTime)},{EscapeCsv(norwayTime)},{EscapeCsv(discordName)},{EscapeCsv(lastName)},{bet.AmountNOK?.ToString()},{bet.Odds},{bet.PotentialPayout},{bet.Status}";
+            sb.AppendLine(line);
+        }
+
+        await JSRuntime.InvokeVoidAsync("downloadCsv", filename, sb.ToString());
+    }
+
+    private string EscapeCsv(string field)
+    {
+        if (string.IsNullOrEmpty(field)) return "";
+        
+        // Escape existing quotes
+        field = field.Replace("\"", "\"\"");
+        
+        // Wrap in quotes if it contains commas, quotes, or newlines
+        if (field.Contains(",") || field.Contains("\"") || field.Contains("\n") || field.Contains("\r"))
+        {
+            return $"\"{field}\"";
+        }
+        
+        return field;
     }
 }
