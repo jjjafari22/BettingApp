@@ -100,8 +100,8 @@
                                             @TimeHelpers.GetNorwayTime(snap.CreatedAt).ToString("HH:mm")
                                         </td>
                                         <td>
-                                            <span class="local-time text-muted small" data-utc="@snap.CreatedAt.ToString("O")">
-                                                @snap.CreatedAt.ToString("yyyy-MM-dd HH:mm") UTC
+                                            <span class="text-muted small">
+                                                @ToUserLocal(snap.CreatedAt).ToString("yyyy-MM-dd HH:mm") Local
                                             </span>
                                         </td>
                                         <td>@snap.TransactionCount</td>
@@ -222,22 +222,6 @@
         anchorElement.remove();
         URL.revokeObjectURL(url);
     }
-
-    window.updateLocalTimes = () => {
-        document.querySelectorAll('.local-time').forEach(el => {
-            const utc = el.getAttribute('data-utc');
-            // Check if we already formatted this to prevent unnecessary re-renders
-            if (utc && !el.hasAttribute('data-formatted')) {
-                const date = new Date(utc);
-                // Explicitly including the date and time to avoid cross-timezone confusion
-                el.innerText = date.toLocaleString(undefined, { 
-                    year: 'numeric', month: 'short', day: 'numeric', 
-                    hour: '2-digit', minute: '2-digit' 
-                });
-                el.setAttribute('data-formatted', 'true');
-            }
-        });
-    }
 </script>
 
 @code {
@@ -253,6 +237,15 @@
     private int currentPage = 1;
     private int pageSize = 120; // 5 days worth of hourly snapshots
     private int totalPages = 1;
+
+    // Browser local time logic
+    private int TimezoneOffset { get; set; }
+
+    private DateTime ToUserLocal(DateTime utcDate)
+    {
+        if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
+        return utcDate.AddMinutes(-TimezoneOffset);
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -273,11 +266,15 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        try 
+        if (firstRender)
         {
-            await JS.InvokeVoidAsync("updateLocalTimes");
+            try 
+            {
+                TimezoneOffset = await JS.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                StateHasChanged();
+            }
+            catch { /* Ignore JS errors */ }
         }
-        catch { /* Ignore JS errors during rendering */ }
     }
 
     private async Task LoadSnapshots()
