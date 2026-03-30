@@ -1,0 +1,310 @@
+@page "/admin/finance"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.EntityFrameworkCore
+@using BettingApp.Data
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<h3>Finance Dashboard</h3>
+
+@if (!isAuthorized)
+{
+    <p><em>Loading...</em></p>
+    return;
+}
+
+<div class="row mb-4 mt-3">
+    <div class="col-12">
+        <div class="card bg-dark text-white shadow">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="card-title text-info mb-1"><i class="bi bi-broadcast me-2"></i>Live Tracker</h5>
+                    <p class="card-text mb-0">Current Net Open Liability (Approved Bets)</p>
+                </div>
+                <div class="text-end">
+                    <h2 class="mb-0 text-warning">@netOpenLiability.ToString("N0") kr</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center flex-wrap">
+        <div class="btn-group mb-2 mb-md-0" role="group">
+            <button type="button" class="btn btn-@(viewMode == ViewMode.Daily ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Daily)">Daily</button>
+            <button type="button" class="btn btn-@(viewMode == ViewMode.Weekly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Weekly)">Weekly</button>
+            <button type="button" class="btn btn-@(viewMode == ViewMode.Monthly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Monthly)">Monthly</button>
+            <button type="button" class="btn btn-@(viewMode == ViewMode.Yearly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Yearly)">Yearly</button>
+        </div>
+        
+        <div class="d-flex align-items-center">
+            <button class="btn btn-outline-light btn-sm me-2" @onclick="PreviousPeriod"><i class="bi bi-chevron-left"></i></button>
+            <span class="fw-bold mx-2">@GetPeriodDisplayString()</span>
+            <button class="btn btn-outline-light btn-sm ms-2" @onclick="NextPeriod"><i class="bi bi-chevron-right"></i></button>
+            <button class="btn btn-light btn-sm ms-3" @onclick="GoToCurrent">Today</button>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col-md-4 mb-3">
+                <div class="p-3 border rounded bg-light">
+                    <h6 class="text-muted">Total Stakes</h6>
+                    <h4 class="mb-0">@totalStakes.ToString("N0") kr</h4>
+                    <small class="text-muted">From @totalBets bets</small>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="p-3 border rounded bg-light">
+                    <h6 class="text-muted">Net Profit</h6>
+                    <h4 class="mb-0 @(netProfit >= 0 ? "text-success" : "text-danger")">@netProfit.ToString("N0") kr</h4>
+                    <small class="text-muted">Stakes minus Payouts</small>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="p-3 border rounded bg-light">
+                    <h6 class="text-muted">Hold %</h6>
+                    <h4 class="mb-0">@holdPercentage.ToString("0.00")%</h4>
+                    <small class="text-muted">Profit margin</small>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="p-3 border rounded bg-light">
+                    <h6 class="text-muted">Average Bet Size</h6>
+                    <h4 class="mb-0">@avgBetSize.ToString("N0") kr</h4>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="p-3 border rounded bg-light">
+                    <h6 class="text-muted">Average Net Liability</h6>
+                    <h4 class="mb-0 text-warning">@avgNetLiability.ToString("N0") kr</h4>
+                    <small class="text-muted">Avg (Potential Payout - Stake)</small>
+                </div>
+            </div>
+        </div>
+        <div class="text-end text-muted small mt-2">
+            <em>*Metrics based on Norwegian Timezone (CET/CEST). Excludes Cancelled, Rejected, and Pending bets.</em>
+        </div>
+    </div>
+</div>
+
+@code {
+    private enum ViewMode { Daily, Weekly, Monthly, Yearly }
+
+    private bool isAuthorized = false;
+    private HubConnection? hubConnection;
+    private TimeZoneInfo norwayTimeZone = default!;
+    
+    // State
+    private ViewMode viewMode = ViewMode.Daily;
+    private DateTime currentDateNorway; // Tracks the currently viewed date in Norway time
+    
+    // Live Tracker
+    private decimal netOpenLiability = 0;
+    
+    // Period Metrics
+    private decimal totalStakes = 0;
+    private decimal netProfit = 0;
+    private decimal holdPercentage = 0;
+    private decimal avgBetSize = 0;
+    private decimal avgNetLiability = 0;
+    private int totalBets = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 1. Authorization Check
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userName = authState.User.Identity?.Name;
+
+        if (string.IsNullOrEmpty(userName)) { Nav.NavigateTo("/"); return; }
+
+        using var context = DbFactory.CreateDbContext();
+        var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == userName);
+        if (dbUser == null || !dbUser.IsAdmin) { Nav.NavigateTo("/"); return; }
+
+        isAuthorized = true;
+
+        // 2. Setup Timezone (Handles cross-platform differences for Linux/Windows)
+        try {
+            norwayTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Oslo");
+        } catch {
+            norwayTimeZone = TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time");
+        }
+
+        GoToCurrent();
+
+        // 3. Setup SignalR for live liability updates
+        try 
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Nav.ToAbsoluteUri("/bethub"))
+                .Build();
+
+            hubConnection.On<string>("ReceiveAdminNotification", async (msg) => await RefreshLiveLiability(context));
+            hubConnection.On<string>("ReceiveUpdate", async (msg) => await RefreshLiveLiability(context));
+
+            await hubConnection.StartAsync();
+            await hubConnection.InvokeAsync("JoinAdminGroup");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Finance SignalR Error: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshLiveLiability(ApplicationDbContext context)
+    {
+        // Net Open Liability = Sum of (Potential Payout - Stake) for active ("Approved") bets.
+        var activeBets = await context.Bets
+            .Where(b => b.Status == "Approved")
+            .AsNoTracking()
+            .ToListAsync();
+
+        netOpenLiability = activeBets.Sum(b => b.PotentialPayout - (b.AmountNOK ?? 0));
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void GoToCurrent()
+    {
+        currentDateNorway = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, norwayTimeZone);
+        _ = LoadMetricsAsync();
+    }
+
+    private void SetViewMode(ViewMode mode)
+    {
+        viewMode = mode;
+        _ = LoadMetricsAsync();
+    }
+
+    private void PreviousPeriod()
+    {
+        currentDateNorway = viewMode switch
+        {
+            ViewMode.Daily => currentDateNorway.AddDays(-1),
+            ViewMode.Weekly => currentDateNorway.AddDays(-7),
+            ViewMode.Monthly => currentDateNorway.AddMonths(-1),
+            ViewMode.Yearly => currentDateNorway.AddYears(-1),
+            _ => currentDateNorway
+        };
+        _ = LoadMetricsAsync();
+    }
+
+    private void NextPeriod()
+    {
+        currentDateNorway = viewMode switch
+        {
+            ViewMode.Daily => currentDateNorway.AddDays(1),
+            ViewMode.Weekly => currentDateNorway.AddDays(7),
+            ViewMode.Monthly => currentDateNorway.AddMonths(1),
+            ViewMode.Yearly => currentDateNorway.AddYears(1),
+            _ => currentDateNorway
+        };
+        _ = LoadMetricsAsync();
+    }
+
+    private string GetPeriodDisplayString()
+    {
+        return viewMode switch
+        {
+            ViewMode.Daily => currentDateNorway.ToString("dd MMM yyyy"),
+            ViewMode.Weekly => 
+                GetStartOfWeek(currentDateNorway).ToString("dd MMM") + " - " + 
+                GetStartOfWeek(currentDateNorway).AddDays(6).ToString("dd MMM yyyy"),
+            ViewMode.Monthly => currentDateNorway.ToString("MMMM yyyy"),
+            ViewMode.Yearly => currentDateNorway.ToString("yyyy"),
+            _ => ""
+        };
+    }
+
+    private DateTime GetStartOfWeek(DateTime dt)
+    {
+        int diff = (7 + (dt.DayOfWeek - DayOfWeek.Monday)) % 7;
+        return dt.Date.AddDays(-1 * diff);
+    }
+
+    private async Task LoadMetricsAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+
+        await RefreshLiveLiability(context);
+
+        // Calculate UTC boundaries based on Norwegian Time
+        DateTime startNorway;
+        DateTime endNorway;
+
+        switch (viewMode)
+        {
+            case ViewMode.Daily:
+                startNorway = currentDateNorway.Date;
+                endNorway = startNorway.AddDays(1);
+                break;
+            case ViewMode.Weekly:
+                startNorway = GetStartOfWeek(currentDateNorway);
+                endNorway = startNorway.AddDays(7);
+                break;
+            case ViewMode.Monthly:
+                startNorway = new DateTime(currentDateNorway.Year, currentDateNorway.Month, 1);
+                endNorway = startNorway.AddMonths(1);
+                break;
+            case ViewMode.Yearly:
+                startNorway = new DateTime(currentDateNorway.Year, 1, 1);
+                endNorway = startNorway.AddYears(1);
+                break;
+            default:
+                startNorway = currentDateNorway.Date;
+                endNorway = startNorway.AddDays(1);
+                break;
+        }
+
+        DateTime startUtc = TimeZoneInfo.ConvertTimeToUtc(startNorway, norwayTimeZone);
+        DateTime endUtc = TimeZoneInfo.ConvertTimeToUtc(endNorway, norwayTimeZone);
+
+        // Fetch valid bets (ignoring Cancelled, Rejected, Void, and Pending)
+        var validStatuses = new[] { "Approved", "Won", "Lost" };
+        
+        var periodBets = await context.Bets
+            .Where(b => b.CreatedAt >= startUtc && b.CreatedAt < endUtc && validStatuses.Contains(b.Status))
+            .AsNoTracking()
+            .ToListAsync();
+
+        totalBets = periodBets.Count;
+        
+        if (totalBets == 0)
+        {
+            totalStakes = 0;
+            netProfit = 0;
+            holdPercentage = 0;
+            avgBetSize = 0;
+            avgNetLiability = 0;
+        }
+        else
+        {
+            totalStakes = periodBets.Sum(b => b.AmountNOK ?? 0);
+            
+            // Total Payouts calculation (only Won bets pay out the potential payout)
+            decimal totalPayouts = periodBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
+            netProfit = totalStakes - totalPayouts;
+            
+            holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
+            avgBetSize = totalStakes / totalBets;
+            
+            // Liability definition: Potential Payout minus original stake
+            avgNetLiability = periodBets.Average(b => b.PotentialPayout - (b.AmountNOK ?? 0));
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

@@ -29,23 +29,27 @@
         <div class="nav-item px-3">
             @if (isAdmin)
             {
-                <NavLink class="nav-link d-flex align-items-center" href="admin" Match="NavLinkMatch.All">
+               
+                 <NavLink class="nav-link d-flex align-items-center" href="admin" Match="NavLinkMatch.All">
                     <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> 
                     <span>Admin Home</span>
                     @if (adminHomeTasks > 0)
                     {
-                        <span class="badge rounded-pill bg-danger ms-2">@adminHomeTasks</span>
+      
+                         <span class="badge rounded-pill bg-danger ms-2">@adminHomeTasks</span>
                     }
                 </NavLink>
             }
             else
             {
-                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+      
+                  <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
                     <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
                 </NavLink>
                 
                 <NavLink class="nav-link d-flex align-items-center" href="deposit-withdraw">
-                     <span class="bi bi-wallet2" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
+           
+                  <span class="bi bi-wallet2" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
                     <span>Deposit/Withdrawal</span>
                 </NavLink>
 
@@ -57,7 +61,8 @@
         </div>
         <AuthorizeView>
             <Authorized>
-                @if (isAdmin)
+                
+@if (isAdmin)
                 {
                     <div class="nav-item px-3">
                         <NavLink class="nav-link d-flex align-items-center" href="admin/transactions">
@@ -65,10 +70,12 @@
                             <span>Transactions</span>
                             @if (transactionTasks > 0)
                             {
-                                <span class="badge rounded-pill bg-danger ms-2">@transactionTasks</span>
+        
+                                 <span class="badge rounded-pill bg-danger ms-2">@transactionTasks</span>
                             }
                         </NavLink>
-                    </div>
+                    
+ </div>
                     <div class="nav-item px-3">
                         <NavLink class="nav-link d-flex align-items-center" href="admin/creditlimits">
                             <span class="bi bi-cash-coin" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
@@ -81,8 +88,17 @@
                             <span>All Users</span>
                             @if (userTasks > 0)
                             {
-                                <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
+       
+                                 <span class="badge rounded-pill bg-danger ms-2">@userTasks</span>
                             }
+                        </NavLink>
+                   
+  </div>
+
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link d-flex align-items-center" href="admin/finance">
+                            <span class="bi bi-graph-up-arrow" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
+                            <span>Finance</span>
                         </NavLink>
                     </div>
 
@@ -105,7 +121,8 @@
                         </NavLink>
                     </div>
                 }
-            </Authorized>
+      
+             </Authorized>
         </AuthorizeView>
 
         <AuthorizeView>
@@ -117,27 +134,32 @@
                 </div>
                 <div class="nav-item px-3">
                     <form action="Account/Logout" method="post">
-                        <AntiforgeryToken />
+                      
+                         <AntiforgeryToken />
                         <input type="hidden" name="ReturnUrl" value="@currentUrl" />
                         <button type="submit" class="nav-link">
                             <span class="bi bi-arrow-bar-left-nav-menu" aria-hidden="true"></span> Logout
-                        </button>
+           
+                          </button>
                     </form>
                 </div>
             </Authorized>
             <NotAuthorized>
                 <div class="nav-item px-3">
+         
                     <NavLink class="nav-link" href="Account/Register">
                         <span class="bi bi-person-nav-menu" aria-hidden="true"></span> Register
                     </NavLink>
                 </div>
                 <div class="nav-item px-3">
+     
                     <NavLink class="nav-link" href="Account/Login">
                         <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Login
                     </NavLink>
                 </div>
             </NotAuthorized>
-        </AuthorizeView>
+       
+  </AuthorizeView>
     </nav>
 </div>
 
@@ -145,44 +167,43 @@
     private string? currentUrl;
     private bool isAdmin;
     private HubConnection? hubConnection;
-    private int adminHomeTasks = 0;
+ private int adminHomeTasks = 0;
     private int transactionTasks = 0;
     private int userTasks = 0;
-
-    protected override async Task OnInitializedAsync()
+ protected override async Task OnInitializedAsync()
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-        NavigationManager.LocationChanged += OnLocationChanged;
+ NavigationManager.LocationChanged += OnLocationChanged;
 
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-        if (user.Identity?.IsAuthenticated == true)
+ if (user.Identity?.IsAuthenticated == true)
         {
             using var context = DbFactory.CreateDbContext();
-            var dbUser = await context.Users
+ var dbUser = await context.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
-            isAdmin = dbUser?.IsAdmin ?? false;
+ isAdmin = dbUser?.IsAdmin ?? false;
 
             if (isAdmin)
             {
                 await LoadAdminTasks(context);
-                try 
+ try 
                 {
                     hubConnection = new HubConnectionBuilder()
                         .WithUrl(NavigationManager.ToAbsoluteUri("/bethub"))
                         .Build();
-                    hubConnection.On<string>("ReceiveAdminNotification", async (message) => await RefreshTasks());
+ hubConnection.On<string>("ReceiveAdminNotification", async (message) => await RefreshTasks());
                     hubConnection.On("ReceiveUserRegistration", async () => await RefreshTasks());
                     hubConnection.On<string>("ReceiveUpdate", async (message) => await RefreshTasks());
 
                     await hubConnection.StartAsync();
-                    await hubConnection.InvokeAsync("JoinAdminGroup");
+ await hubConnection.InvokeAsync("JoinAdminGroup");
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"NavMenu SignalR Error: {ex.Message}");
-                }
+ }
             }
         }
     }
@@ -190,14 +211,14 @@
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        if (isAdmin)
+ if (isAdmin)
         {
             _ = InvokeAsync(RefreshTasks);
-        }
+ }
         else 
         {
             StateHasChanged();
-        }
+ }
     }
 
     private async Task RefreshTasks()
@@ -205,34 +226,33 @@
         try 
         {
             using var context = DbFactory.CreateDbContext();
-            await LoadAdminTasks(context);
+ await LoadAdminTasks(context);
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error refreshing admin tasks: {ex.Message}");
-        }
+ }
     }
 
     private async Task LoadAdminTasks(ApplicationDbContext context)
     {
         var pendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
-        var activeBets = await context.Bets.CountAsync(b => b.Status == "Approved");
+ var activeBets = await context.Bets.CountAsync(b => b.Status == "Approved");
         adminHomeTasks = pendingBets + activeBets;
-        
-        transactionTasks = await context.Transactions.CountAsync(t => t.Type == "Withdrawal" && t.Status == "Pending");
+ transactionTasks = await context.Transactions.CountAsync(t => t.Type == "Withdrawal" && t.Status == "Pending");
         userTasks = await context.Users.CountAsync(u => !u.EmailConfirmed);
-    }
+ }
 
     public async ValueTask DisposeAsync()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
-        if (hubConnection is not null)
+ if (hubConnection is not null)
         {
             try 
             {
                 await hubConnection.DisposeAsync();
-            }
+ }
             catch { /* Ignore disposal errors */ }
         }
     }
