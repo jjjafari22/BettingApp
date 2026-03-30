@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,21 +24,22 @@ namespace BettingApp.Services
             {
                 var now = DateTime.UtcNow; // Or convert to Norway time if needed
                 
-                // Norway is usually UTC+1 or UTC+2. Let's assume target is Norway 23:59.
+                // Norway is usually UTC+1 or UTC+2. Let's assume target is Norway.
                 // We'll check every minute.
                 var norwayTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
                 var norwayTime = TimeZoneInfo.ConvertTimeFromUtc(now, norwayTimeZone);
 
-                if (norwayTime.DayOfWeek == DayOfWeek.Sunday && norwayTime.Hour == 23 && norwayTime.Minute == 59)
+                // Run every hour at xx:59
+                if (norwayTime.Minute == 59)
                 {
                     try
                     {
                         using var scope = _serviceProvider.CreateScope();
                         var settlementService = scope.ServiceProvider.GetRequiredService<SettlementService>();
-                        _logger.LogInformation("Running Scheduled Buddy Settlement Snapshot...");
+                        _logger.LogInformation($"Running Scheduled Buddy Settlement Snapshot for {norwayTime:HH:mm}...");
                         await settlementService.CreateSnapshotAsync();
                         
-                        // Wait 2 minutes to ensure we don't run it twice in the same minute window
+                        // Wait 2 minutes to ensure we don't run it twice in the same minute window (shifts to xx:01)
                         await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
                     }
                     catch (Exception ex)
