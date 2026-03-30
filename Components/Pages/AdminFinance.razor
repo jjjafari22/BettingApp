@@ -73,17 +73,25 @@
                     <small class="text-muted">Profit margin</small>
                 </div>
             </div>
-            <div class="col-md-6 mb-3">
+            
+            <div class="col-md-4 mb-3">
                 <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Average Bet Size</h6>
                     <h4 class="mb-0">@avgBetSize.ToString("N0") kr</h4>
                 </div>
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-4 mb-3">
                 <div class="p-3 border rounded bg-light">
-                    <h6 class="text-muted">Average Net Liability</h6>
+                    <h6 class="text-muted">Average Liability Per Bet</h6>
                     <h4 class="mb-0 text-warning">@avgNetLiability.ToString("N0") kr</h4>
-                    <small class="text-muted">Avg (Potential Payout - Stake)</small>
+                    <small class="text-muted">Avg risk per individual bet (Payout - Stake)</small>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="p-3 border rounded bg-light">
+                    <h6 class="text-muted">Total Period Liability</h6>
+                    <h4 class="mb-0 text-danger">@totalNetLiability.ToString("N0") kr</h4>
+                    <small class="text-muted">Total exposure for this period</small>
                 </div>
             </div>
         </div>
@@ -106,13 +114,14 @@
     
     // Live Tracker
     private decimal netOpenLiability = 0;
-    
+
     // Period Metrics
     private decimal totalStakes = 0;
     private decimal netProfit = 0;
     private decimal holdPercentage = 0;
     private decimal avgBetSize = 0;
     private decimal avgNetLiability = 0;
+    private decimal totalNetLiability = 0;
     private int totalBets = 0;
 
     protected override async Task OnInitializedAsync()
@@ -230,7 +239,6 @@
     private async Task LoadMetricsAsync()
     {
         using var context = DbFactory.CreateDbContext();
-
         await RefreshLiveLiability(context);
 
         // Calculate UTC boundaries based on Norwegian Time
@@ -266,7 +274,7 @@
 
         // Fetch valid bets (ignoring Cancelled, Rejected, Void, and Pending)
         var validStatuses = new[] { "Approved", "Won", "Lost" };
-        
+
         var periodBets = await context.Bets
             .Where(b => b.CreatedAt >= startUtc && b.CreatedAt < endUtc && validStatuses.Contains(b.Status))
             .AsNoTracking()
@@ -281,20 +289,26 @@
             holdPercentage = 0;
             avgBetSize = 0;
             avgNetLiability = 0;
+            totalNetLiability = 0;
         }
         else
         {
             totalStakes = periodBets.Sum(b => b.AmountNOK ?? 0);
-            
+
             // Total Payouts calculation (only Won bets pay out the potential payout)
             decimal totalPayouts = periodBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
+
             netProfit = totalStakes - totalPayouts;
             
             holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
+
             avgBetSize = totalStakes / totalBets;
             
             // Liability definition: Potential Payout minus original stake
             avgNetLiability = periodBets.Average(b => b.PotentialPayout - (b.AmountNOK ?? 0));
+            
+            // NEW Metric: Total Period Liability
+            totalNetLiability = periodBets.Sum(b => b.PotentialPayout - (b.AmountNOK ?? 0));
         }
 
         await InvokeAsync(StateHasChanged);
