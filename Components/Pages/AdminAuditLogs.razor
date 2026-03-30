@@ -36,17 +36,17 @@ else
                            @onkeyup="HandleKeyUp"
                            placeholder="Search admin (Press Enter)..." />
                 </div>
-                <div class="col-md-2">
+                 <div class="col-md-2">
                     <label class="form-label">Start Date</label>
                     <input type="date" class="form-control" @bind="startDate" />
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label">End Date</label>
+                     <label class="form-label">End Date</label>
                     <input type="date" class="form-control" @bind="endDate" />
                 </div>
                 <div class="col-md-2 d-flex align-items-end gap-2">
                     <button class="btn btn-primary flex-grow-1" @onclick="SearchLogs">Search</button>
-                    <button class="btn btn-outline-secondary" @onclick="ClearFilters" title="Clear Filters">
+                     <button class="btn btn-outline-secondary" @onclick="ClearFilters" title="Clear Filters">
                         <i class="bi bi-x-lg"></i>
                     </button>
                 </div>
@@ -59,8 +59,9 @@ else
             <thead class="table-dark">
                 <tr>
                     <th>Time (Local)</th>
+                    <th>Time (Norway)</th>
                     <th>Admin</th>
-                    <th>Action</th>
+                     <th>Action</th>
                     <th>Target User</th>
                     <th>Discord Username</th>
                     <th>Last Name</th>
@@ -71,20 +72,21 @@ else
                 @foreach (var log in logs)
                 {
                     <tr>
-                        <td>@log.Timestamp.AddMinutes(-TimezoneOffset).ToString("g")</td>
+                         <td>@log.Timestamp.AddMinutes(-TimezoneOffset).ToString("g")</td>
+                        <td>@TimeHelpers.GetNorwayTime(log.Timestamp).ToString("g")</td>
                         <td><span class="badge bg-secondary">@log.AdminUserName</span></td>
                         <td><span class="fw-bold">@log.Action</span></td>
                         <td>@log.TargetUserName</td>
-                        <td>@(userLookup.TryGetValue(log.TargetUserName, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : "")</td>
+                         <td>@(userLookup.TryGetValue(log.TargetUserName, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : "")</td>
                         <td>@(userLookup.TryGetValue(log.TargetUserName, out var u2) ? u2.LastName : "")</td>
                         <td class="text-muted small">@log.Details</td>
                     </tr>
                 }
-                @if (logs.Count == 0)
+                 @if (logs.Count == 0)
                 {
                     <tr>
-                        <td colspan="7" class="text-center text-muted">No logs found matching criteria.</td>
-                    </tr>
+                        <td colspan="8" class="text-center text-muted">No logs found matching criteria.</td>
+                     </tr>
                 }
             </tbody>
         </table>
@@ -95,7 +97,7 @@ else
         <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(currentPage <= 1)">
             <i class="bi bi-arrow-left"></i> Previous
         </button>
-        <span class="text-muted">Page @currentPage of @totalPages (Total: @totalLogs)</span>
+         <span class="text-muted">Page @currentPage of @totalPages (Total: @totalLogs)</span>
         <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasNextPage)">
             Next <i class="bi bi-arrow-right"></i>
         </button>
@@ -104,28 +106,22 @@ else
 
 @code {
     private List<AuditLog> logs = new();
-    
-    // Lookup dictionary where key is the UserName string
     private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
-
-    // Filters
     private string targetFilter = "";
     private string adminFilter = "";
     private DateTime? startDate;
     private DateTime? endDate;
     
-    // Pagination State
     private int currentPage = 1;
     private const int pageSize = 20;
     private int totalLogs = 0;
     private bool isAdmin = false;
     private int totalPages => totalLogs == 0 ? 1 : (int)Math.Ceiling((double)totalLogs / pageSize);
     private bool hasNextPage => currentPage < totalPages;
-    // Timezone Logic
     private int TimezoneOffset { get; set; }
     
     private HubConnection? hubConnection;
-    
+
     private async Task PopulateUserLookup(IEnumerable<string> targetUserNames)
     {
         var missingNames = targetUserNames.Except(userLookup.Keys).Distinct().ToList();
@@ -154,11 +150,9 @@ else
         if (isAdmin)
         {
             await LoadLogs();
-            // --- SignalR Setup ---
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(Nav.ToAbsoluteUri("/bethub"))
                 .Build();
-            // When ANY admin notification happens (bet change, withdraw, settings), we refresh logs
             hubConnection.On<string>("ReceiveAdminNotification", async (msg) => 
             { 
                 await LoadLogs();
@@ -171,7 +165,7 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && isAdmin)
+        if (firstRender) // FIXED: Removed && isAdmin to ensure offset loads properly
         {
             try
             {
@@ -242,7 +236,6 @@ else
             .Skip((currentPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
-            
         await PopulateUserLookup(logs.Select(l => l.TargetUserName));
     }
 

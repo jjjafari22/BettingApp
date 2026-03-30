@@ -17,7 +17,6 @@
 
 <h3>Credit/Payout Limits</h3>
 
-@* --- PERSISTENT NOTIFICATION AREA --- *@
 @if (!string.IsNullOrEmpty(successMessage))
 {
     <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -37,45 +36,45 @@ else if (users == null)
 else
 {
     <div class="row mb-3">
-        <div class="col-md-6">
+         <div class="col-md-6">
             <div class="input-group">
                 <span class="input-group-text">Search User</span>
                 <input type="text" class="form-control" placeholder="Username..." 
                      @bind="searchTerm" @bind:event="oninput" />
             </div>
         </div>
-    </div>
+     </div>
 
     <div class="table-responsive">
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
                 <tr>
-                    <th>Last Updated</th>
+                    <th>Last Updated (Local)</th>
+                    <th>Last Updated (Norway)</th>
                     <th>Discord Username</th>
-                    <th>Last Name</th>
+                     <th>Last Name</th>
                     <th>Credit Limit (NOK)</th>
                     <th>Max Payout (NOK)</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var user in FilteredUsers)
+                 @foreach (var user in FilteredUsers)
                 {
                     <tr @key="GetRowKey(user.Id)">
                         <td>@ToUserLocal(user.UpdatedAt).ToString("g")</td>
+                        <td>@TimeHelpers.GetNorwayTime(user.UpdatedAt).ToString("g")</td>
                         <td>@(!string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : user.UserName)</td>
                         <td>@user.LastName</td>
                         <td>
-                            <input type="text" class="form-control form-control-sm" style="width: 150px;"
-                                   value="@user.CreditLimit.ToString("N0")"
+                            <input type="text" class="form-control form-control-sm" style="width: 150px;" value="@user.CreditLimit.ToString("N0")"
                                    @onchange="@(async (e) => await UpdateLimit(user, e.Value?.ToString(), isCredit: true))" />
                         </td>
                         <td>
-                            <input type="text" class="form-control form-control-sm" style="width: 150px;"
-                                   value="@user.MaxPayout.ToString("N0")"
+                             <input type="text" class="form-control form-control-sm" style="width: 150px;" value="@user.MaxPayout.ToString("N0")"
                                    @onchange="@(async (e) => await UpdateLimit(user, e.Value?.ToString(), isCredit: false))" />
                         </td>
                     </tr>
-                }
+                 }
             </tbody>
         </table>
     </div>
@@ -90,7 +89,6 @@ else
     private int TimezoneOffset { get; set; }
     private HubConnection? hubConnection;
     private Dictionary<string, Guid> rowKeys = new();
-    
     private IEnumerable<ApplicationUser> FilteredUsers => 
         string.IsNullOrWhiteSpace(searchTerm) 
             ? users ?? new List<ApplicationUser>() 
@@ -130,13 +128,16 @@ else
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && isAdmin)
+        if (firstRender) // FIXED: Removed && isAdmin to ensure offset loads properly
         {
             try {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
-                await SetupSignalR();
                 StateHasChanged();
             } catch { }
+            
+            if (isAdmin) {
+                try { await SetupSignalR(); } catch { }
+            }
         }
     }
     
@@ -196,7 +197,6 @@ else
 
         using var context = DbFactory.CreateDbContext();
         var dbUser = await context.Users.FindAsync(userToUpdate.Id);
-        
         if (dbUser != null)
         {
             string logDetails = "";

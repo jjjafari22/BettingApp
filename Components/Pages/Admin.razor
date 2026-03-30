@@ -18,7 +18,6 @@
 @implements IAsyncDisposable
 
 <script>
-    // CLIENT-SIDE: Calculates payout instantly without sending data to the server
     function calculatePayout() {
         const amountInput = document.getElementById('betAmountInput');
         const oddsInput = document.getElementById('betOddsInput');
@@ -28,16 +27,13 @@
             const amount = parseFloat(amountInput.value) || 0;
             const odds = parseFloat(oddsInput.value) || 0;
             
-            // Calculate payout
             const payout = amount * odds;
-            // Format currency (Norwegian Krone format loosely)
             payoutDisplay.innerText = payout.toLocaleString('no-NO', { maximumFractionDigits: 0 }) + ' kr';
         }
     }
 </script>
 
 <style>
-    /* Prevent background scrolling when modal is open */
     .modal { overscroll-behavior: contain; outline: none; }
     .review-modal-content { max-height: 90vh; height: 90vh; display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain; }
     .review-modal-body { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; background-color: #212529; overflow-y: auto; overscroll-behavior: contain; position: relative; }
@@ -75,7 +71,6 @@
     </div>
 }
 
-@* --- Review Bet Modal --- *@
 @if (reviewingBetModel != null)
 {
     <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.85);" tabindex="-1" role="dialog" @ref="reviewModalRef" @onkeydown="OnReviewModalKeyDown">
@@ -103,7 +98,7 @@
                        </div>
                    }
                    @if (reviewErrorMessage != null) {
-                       <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
+                      <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
                            <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
                                <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
                                <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
@@ -129,7 +124,6 @@
                                 <div class="col-4">
                                     <label class="form-label fw-bold text-muted small mb-1">Amount</label>
                                     <div class="input-group input-group-sm">
-                                       @* HYBRID FIX: Bind (onblur) + JS (oninput) *@
                                        <input type="number" id="betAmountInput" class="form-control fw-bold" 
                                               @bind-value="reviewingBetModel.AmountNOK" 
                                               oninput="calculatePayout()" 
@@ -139,7 +133,6 @@
                                </div>
                                <div class="col-3">
                                    <label class="form-label fw-bold text-muted small mb-1">Odds</label>
-                                   @* FIX: Bind to OddsProxy so 0 shows as empty *@
                                    <input type="number" step="0.01" id="betOddsInput" class="form-control form-control-sm fw-bold" 
                                            @bind-value="OddsProxy" 
                                            oninput="calculatePayout()" 
@@ -147,7 +140,6 @@
                                </div>
                                <div class="col-5">
                                      <label class="form-label fw-bold text-muted small mb-1">Payout</label>
-                                     @* ID added for JS target *@
                                      <div id="payoutDisplay" class="form-control form-control-sm bg-light text-success fw-bold text-end">
                                          @reviewingBetModel.PotentialPayout.ToString("N0") kr
                                      </div>
@@ -164,7 +156,7 @@
                                     <div class="col-5"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Won")'><i class="bi bi-trophy-fill me-1"></i> Won</button></div>
                                     <div class="col-5"><button class="btn btn-danger w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Lost")'><i class="bi bi-x-lg me-1"></i> Lost</button></div>
                                     <div class="col-2"><button class="btn btn-secondary w-100 btn-xl-mobile fw-bold shadow-sm px-0" @onclick='() => ProcessBet(reviewingBetModel, "Void")'>Void</button></div>
-                                </div>
+                                 </div>
                             } else {
                                   <div class="row g-2">
                                    <div class="col-12 text-center pb-2"><small class="text-muted"><i class="bi bi-pencil-fill me-1"></i> Edit Mode</small></div>
@@ -176,7 +168,6 @@
                            }
                   </div>
                   </div>
-        
             </div>
            </div>
         </div>
@@ -185,15 +176,15 @@
 
 <div class="row">
   <div class="col-md-12">
-        @* PENDING BETS QUEUE (Limited to top 100 to avoid overload) *@
         <h4 class="mb-3">Pending Bets Queue</h4>
-        <div class="table-responsive">
+         <div class="table-responsive">
              <table class="table table-sm table-striped table-hover mb-5 text-nowrap align-middle">
                  <thead class="table-dark">
                      <tr>
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
-                        <th>Last Updated</th>
+                        <th>Last Updated (Local)</th>
+                        <th>Last Updated (Norway)</th>
                         <th>Discord Username</th>
                         <th>Last Name</th>
                     </tr>
@@ -209,24 +200,25 @@
                              </td>
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
+                            <td>@TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g")</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                         </tr>
                     }
-                    @if (pendingBets.Count == 0) { <tr><td colspan="5" class="text-muted">No pending bets.</td></tr> }
+                   @if (pendingBets.Count == 0) { <tr><td colspan="6" class="text-muted">No pending bets.</td></tr> }
                </tbody>
             </table>
          </div>
 
-        @* ACTIVE BETS (PAGINATED) *@
         <h4 class="mb-3">Active Bets (Approved)</h4>
         <div class="table-responsive mb-5">
             <table class="table table-sm table-striped table-hover text-nowrap align-middle">
-                <thead class="table-dark">
+                 <thead class="table-dark">
                    <tr>
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
-                        <th>Last Updated</th>
+                        <th>Last Updated (Local)</th>
+                        <th>Last Updated (Norway)</th>
                         <th>Discord Username</th>
                         <th>Last Name</th>
                         <th>Bet Amount</th>
@@ -239,26 +231,26 @@
                     {
                         <tr>
                              <td>
-                                <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
+                                 <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
                                      <i class="bi bi-play-circle"></i> Process
                                  </button>
-                             </td>
+                              </td>
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
+                            <td>@TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g")</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                             <td>@bet.AmountNOK?.ToString("N0") kr</td>
                              <td>@bet.Odds.ToString("N2")</td>
-                             <td>@bet.PotentialPayout.ToString("N0") kr</td>
+                              <td>@bet.PotentialPayout.ToString("N0") kr</td>
                         </tr>
                     }
-                    @if (approvedBets.Count == 0) { <tr><td colspan="8" class="text-muted">No active bets.</td></tr> }
-                </tbody>
+                    @if (approvedBets.Count == 0) { <tr><td colspan="9" class="text-muted">No active bets.</td></tr> }
+                 </tbody>
             </table>
-            @* Pagination for Approved Bets *@
             <div class="d-flex justify-content-between align-items-center mt-2">
                 <button class="btn btn-outline-secondary btn-sm" @onclick="PrevApprovedPage" disabled="@(approvedPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
-                 <span class="text-muted">Page @approvedPage</span>
+                  <span class="text-muted">Page @approvedPage</span>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="NextApprovedPage" disabled="@(!hasMoreApprovedBets)">Next <i class="bi bi-arrow-right"></i></button>
             </div>
         </div>
@@ -270,7 +262,8 @@
                     <tr>
                          <th>Action</th>
                          <th>ID</th>
-                         <th>Last Updated</th>
+                         <th>Last Updated (Local)</th>
+                         <th>Last Updated (Norway)</th>
                          <th>Discord Username</th>
                          <th>Last Name</th>
                          <th>Bet Amount</th>
@@ -286,26 +279,27 @@
                         <tr class="@rowClass">
                             <td>
                                   <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
-                                       <i class="bi bi-pencil-square"></i> View/Edit
+                                        <i class="bi bi-pencil-square"></i> View/Edit
                                   </button>
                             </td>
                             <td>@bet.Id</td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
+                            <td>@TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g")</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                             <td>@bet.AmountNOK?.ToString("N0") kr</td>
                             <td>@bet.Odds.ToString("N2")</td>
                             <td>
-                                <span class="badge @GetStatusBadgeClass(bet.Status)">@bet.Status</span>
+                                 <span class="badge @GetStatusBadgeClass(bet.Status)">@bet.Status</span>
                             </td>
                             <td>
-                             @if(bet.Status == "Won") { @bet.PotentialPayout.ToString("N0") <span>kr</span> }
+                              @if(bet.Status == "Won") { @bet.PotentialPayout.ToString("N0") <span>kr</span> }
                              else if (bet.Status == "Lost") { <span>0 kr</span> }
                              else { <span class="text-muted">-</span> }
-                             </td>
+                              </td>
                         </tr>
                     }
-                    @if (completedBets.Count == 0) { <tr><td colspan="9" class="text-muted">No completed bets found.</td></tr> }
+                    @if (completedBets.Count == 0) { <tr><td colspan="10" class="text-muted">No completed bets found.</td></tr> }
             </tbody>
             </table>
             
@@ -322,11 +316,7 @@
     private List<Bet> pendingBets = new();
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
-    
-    // Lookup for rendering names without modifying DB schema
     private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
-
-    // Pagination State
     private int completedPage = 1;
     private int approvedPage = 1;
     private const int pageSize = 20;
@@ -341,7 +331,6 @@
     private Bet? reviewingBetModel;
     private string? reviewErrorMessage;
     
-    // FIX: Proxy property to make "0" odds appear as empty in the input
     private decimal? OddsProxy
     {
         get => (reviewingBetModel?.Odds == 0) ? null : reviewingBetModel?.Odds;
@@ -374,7 +363,7 @@
         if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
         return utcDate.AddMinutes(-TimezoneOffset);
     }
-    
+
     private string GetStatusBadgeClass(string status)
     {
         return status switch
@@ -498,7 +487,8 @@
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         }
-        if (shouldFocusReviewModal) { shouldFocusReviewModal = false; try { await reviewModalRef.FocusAsync(); } catch { } }
+        if (shouldFocusReviewModal) { shouldFocusReviewModal = false;
+        try { await reviewModalRef.FocusAsync(); } catch { } }
     }
 
     public async ValueTask DisposeAsync()
@@ -614,17 +604,13 @@
         {
             if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount"; return; }
             
-            // Standard validation on model (since we bound directly)
             if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds"; return; }
             
-            // Ensure strict 2 decimal places
             if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals"; return; }
 
             using var validationContext = DbFactory.CreateDbContext();
-            // FIX: Add OrderBy to silence the "unpredictable results" warning
             var settings = await validationContext.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
             var betUser = await validationContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == bet.UserId);
-            // 1. Check Global Min Bet
             if (settings != null)
             {
                  if ((decimal)(bet.AmountNOK ?? 0) < settings.MinBetAmount) { 
@@ -633,7 +619,6 @@
                  }
             }
             
-            // 2. Check Per-User Max Payout
             if (betUser != null)
             {
                  decimal potentialPayout = Math.Floor((decimal)(bet.AmountNOK ?? 0) * bet.Odds);
@@ -680,19 +665,16 @@
                  return;
             }
 
-            // Calculate old balance impact using the DB values (before update)
             decimal oldWager = dbBet.AmountNOK ?? 0;
             decimal oldPayout = dbBet.PotentialPayout;
             decimal oldImpact = 0;
             if (originalStatus == "Approved" || originalStatus == "Lost") oldImpact = -oldWager;
             else if (originalStatus == "Won") oldImpact = -oldWager + oldPayout;
-            // Calculate new balance impact using the incoming bet values
             decimal newWager = bet.AmountNOK ?? 0;
             decimal newPayout = bet.PotentialPayout;
             decimal newImpact = 0;
             if (newStatus == "Approved" || newStatus == "Lost") newImpact = -newWager;
             else if (newStatus == "Won") newImpact = -newWager + newPayout;
-            // Apply the difference
             dbUser.Balance += (newImpact - oldImpact);
             dbBet.Status = newStatus;
             dbBet.AmountNOK = bet.AmountNOK;
