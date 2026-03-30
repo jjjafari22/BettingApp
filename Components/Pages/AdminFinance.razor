@@ -51,9 +51,13 @@
     </div>
     
     <div class="card-body">
+        <h5 class="text-secondary mb-4 border-bottom pb-2">
+            <i class="bi bi-journal-check me-2"></i>Settled Bets Metrics (Won, Lost, Void)
+        </h5>
+
         <div class="row text-center">
             <div class="col-md-4 mb-3">
-                <div class="p-3 border rounded bg-light">
+                 <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Total Stakes</h6>
                     <h4 class="mb-0">@totalStakes.ToString("N0") kr</h4>
                     <small class="text-muted">From @totalBets bets</small>
@@ -96,7 +100,7 @@
             </div>
         </div>
         <div class="text-end text-muted small mt-2">
-            <em>*Metrics based on Norwegian Timezone (CET/CEST). Excludes Cancelled, Rejected, and Pending bets.</em>
+            <em>*Metrics based on Norwegian Timezone (CET/CEST). Includes ONLY Settled bets (Won, Lost, Void). Active/Approved bets are tracked separately above.</em>
         </div>
     </div>
 </div>
@@ -114,7 +118,7 @@
     
     // Live Tracker
     private decimal netOpenLiability = 0;
-
+    
     // Period Metrics
     private decimal totalStakes = 0;
     private decimal netProfit = 0;
@@ -153,7 +157,6 @@
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(Nav.ToAbsoluteUri("/bethub"))
                 .Build();
-
             hubConnection.On<string>("ReceiveAdminNotification", async (msg) => await RefreshLiveLiability(context));
             hubConnection.On<string>("ReceiveUpdate", async (msg) => await RefreshLiveLiability(context));
 
@@ -173,7 +176,6 @@
             .Where(b => b.Status == "Approved")
             .AsNoTracking()
             .ToListAsync();
-
         netOpenLiability = activeBets.Sum(b => b.PotentialPayout - (b.AmountNOK ?? 0));
         await InvokeAsync(StateHasChanged);
     }
@@ -272,14 +274,13 @@
         DateTime startUtc = TimeZoneInfo.ConvertTimeToUtc(startNorway, norwayTimeZone);
         DateTime endUtc = TimeZoneInfo.ConvertTimeToUtc(endNorway, norwayTimeZone);
 
-        // Fetch valid bets (ignoring Cancelled, Rejected, Void, and Pending)
-        var validStatuses = new[] { "Approved", "Won", "Lost" };
-
+        // Fetch settled bets ONLY
+        var validStatuses = new[] { "Won", "Lost", "Void" };
         var periodBets = await context.Bets
             .Where(b => b.CreatedAt >= startUtc && b.CreatedAt < endUtc && validStatuses.Contains(b.Status))
             .AsNoTracking()
             .ToListAsync();
-
+            
         totalBets = periodBets.Count;
         
         if (totalBets == 0)
@@ -294,14 +295,13 @@
         else
         {
             totalStakes = periodBets.Sum(b => b.AmountNOK ?? 0);
-
+            
             // Total Payouts calculation (only Won bets pay out the potential payout)
             decimal totalPayouts = periodBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
-
+            
             netProfit = totalStakes - totalPayouts;
             
             holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
-
             avgBetSize = totalStakes / totalBets;
             
             // Liability definition: Potential Payout minus original stake
