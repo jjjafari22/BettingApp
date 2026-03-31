@@ -21,8 +21,19 @@ namespace BettingApp.Data
     public class SettlementResult
     {
         public DateTime Date { get; set; }
+        
+        // --- NEW: List to capture historical balances exactly as they were ---
+        public List<SettlementUserBalance> UserBalances { get; set; } = new();
+        
         public List<SettlementInstruction> Instructions { get; set; } = new();
         public List<SettlementAdjustment> Adjustments { get; set; } = new();
+    }
+
+    // --- NEW: Helper class to store individual user balances ---
+    public class SettlementUserBalance
+    {
+        public string UserName { get; set; } = string.Empty;
+        public decimal Balance { get; set; }
     }
 
     public class SettlementInstruction

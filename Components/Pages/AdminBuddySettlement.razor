@@ -127,6 +127,28 @@
                                                     <div class="card-body p-0">
                                                         @if (details != null)
                                                         {
+                                                            // Historical Balances Display
+                                                            <div class="p-3 bg-light border-bottom">
+                                                                <h6 class="text-secondary mb-2">Balances at time of snapshot</h6>
+                                                                @if (details.UserBalances != null && details.UserBalances.Any())
+                                                                {
+                                                                    <div class="d-flex flex-wrap gap-2">
+                                                                        @foreach (var u in details.UserBalances)
+                                                                        {
+                                                                            var badgeClass = u.Balance > 0 ? "bg-success" : "bg-danger";
+                                                                            <div class="badge @badgeClass text-white fs-6 p-2 shadow-sm">
+                                                                                <span class="fw-normal me-1">@u.UserName:</span>
+                                                                                <strong>@u.Balance.ToString("N0") kr</strong>
+                                                                            </div>
+                                                                        }
+                                                                    </div>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <p class="text-muted small mb-0">No historical balances recorded for this snapshot.</p>
+                                                                }
+                                                            </div>
+
                                                             <div class="row g-0">
                                                                 <div class="col-md-6 p-3 border-end">
                                                                     <h6 class="text-secondary">Instructions (Who pays who)</h6>
@@ -232,12 +254,12 @@
     
     private bool isLoading = true;
     private bool showConfirmation = false;
-
+    
     // Pagination
     private int currentPage = 1;
     private int pageSize = 120; // 5 days worth of hourly snapshots
     private int totalPages = 1;
-
+    
     // Browser local time logic
     private int TimezoneOffset { get; set; }
 
@@ -282,6 +304,7 @@
         isLoading = true;
         using var context = DbFactory.CreateDbContext();
         
+        // Load Snapshots
         int totalCount = await context.SettlementSnapshots.CountAsync();
         totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
         if (totalPages < 1) totalPages = 1;
@@ -291,12 +314,12 @@
             .Skip((currentPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
-
+            
         // Group the fetched snapshots by Norway Date using TimeHelpers
         groupedSnapshots = snapshots
             .GroupBy(s => TimeHelpers.GetNorwayTime(s.CreatedAt).Date)
             .ToList();
-
+            
         // Optional: Auto-expand the most recent day
         if (groupedSnapshots.Any() && !expandedDays.Any())
         {
@@ -339,7 +362,7 @@
         
         // Reset to page 1 to see the new snapshot
         currentPage = 1;
-        await LoadSnapshots();
+        await LoadSnapshots(); 
     }
 
     private void ToggleDay(DateTime date)
@@ -385,7 +408,6 @@
 
         var norwayTime = TimeHelpers.GetNorwayTime(snap.CreatedAt);
         var fileName = $"Settlement_{norwayTime:yyyyMMdd_HHmm}.csv";
-
         await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
     }
 }

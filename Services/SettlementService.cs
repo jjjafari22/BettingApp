@@ -37,11 +37,21 @@ namespace BettingApp.Services
                     ? user.UserName! 
                     : $"{user.DiscordUsername} ({user.LastName})";
 
+                // Capture the exact balance at this moment using the exact display name
+                result.UserBalances.Add(new SettlementUserBalance 
+                { 
+                    UserName = displayName, 
+                    Balance = user.Balance 
+                });
+
                 if (user.Balance < 0)
                     debtors.Add((displayName, Math.Abs(user.Balance)));
                 else
                     creditors.Add((displayName, user.Balance));
             }
+
+            // Sort balances so they appear nicely in UI (highest to lowest)
+            result.UserBalances = result.UserBalances.OrderByDescending(b => b.Balance).ToList();
 
             // Sort by amount descending to minimize transaction count (Greedy approach)
             debtors = debtors.OrderByDescending(x => x.Amount).ToList();
@@ -65,15 +75,15 @@ namespace BettingApp.Services
                     Amount = amount
                 });
 
-                // Adjust remaining amounts
-                debtor.Amount -= amount;
-                creditor.Amount -= amount;
+                // Adjust remaining amounts safely
+                var newDebtorAmount = debtor.Amount - amount;
+                var newCreditorAmount = creditor.Amount - amount;
 
-                if (debtor.Amount < 0.01m) dIndex++; // Debtor settled
-                else debtors[dIndex] = (debtor.Name, debtor.Amount); // Update remainder
+                if (newDebtorAmount < 0.01m) dIndex++; // Debtor settled
+                else debtors[dIndex] = (debtor.Name, newDebtorAmount); // Update remainder
 
-                if (creditor.Amount < 0.01m) cIndex++; // Creditor settled
-                else creditors[cIndex] = (creditor.Name, creditor.Amount); // Update remainder
+                if (newCreditorAmount < 0.01m) cIndex++; // Creditor settled
+                else creditors[cIndex] = (creditor.Name, newCreditorAmount); // Update remainder
             }
 
             // Any remaining unmatched balances are system imbalances (adjustments)
@@ -140,6 +150,17 @@ namespace BettingApp.Services
             foreach (var adj in result.Adjustments)
             {
                 sb.AppendLine($"Adjustment,-,-,{adj.Amount:F0},{adj.Reason} ({adj.UserName})");
+            }
+
+            // Add historical balances to the CSV export
+            if (result.UserBalances != null && result.UserBalances.Any())
+            {
+                sb.AppendLine();
+                sb.AppendLine("Historical Balances,User,Balance");
+                foreach (var bal in result.UserBalances)
+                {
+                    sb.AppendLine($",{bal.UserName},{bal.Balance:F0}");
+                }
             }
 
             return sb.ToString();
