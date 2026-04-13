@@ -67,7 +67,7 @@
                 <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Net Profit</h6>
                     <h4 class="mb-0 @(netProfit >= 0 ? "text-success" : "text-danger")">@netProfit.ToString("N0") kr</h4>
-                    <small class="text-muted">Stakes minus Payouts</small>
+                    <small class="text-muted">Stakes minus Payouts & Void Refunds</small>
                 </div>
             </div>
             <div class="col-md-4 mb-3">
@@ -100,7 +100,9 @@
             </div>
         </div>
         <div class="text-end text-muted small mt-2">
-            <em>*Metrics based on Norwegian Timezone (CET/CEST). Includes ONLY Settled bets (Won, Lost, Void). Active/Approved bets are tracked separately above. <strong>Bets from Test Users are EXCLUDED from all metrics.</strong></em>
+            <em>*Metrics based on Norwegian Timezone (CET/CEST).
+            Includes ONLY Settled bets (Won, Lost, Void). Active/Approved bets are tracked separately above.
+            <strong>Bets from Test Users are EXCLUDED from all metrics.</strong></em>
         </div>
     </div>
 </div>
@@ -178,7 +180,7 @@
             .Where(b => b.Status == "Approved" && !context.Users.Any(u => u.Id == b.UserId && u.IsTestUser))
             .AsNoTracking()
             .ToListAsync();
-
+            
         netOpenLiability = activeBets.Sum(b => b.PotentialPayout - (b.AmountNOK ?? 0));
         await InvokeAsync(StateHasChanged);
     }
@@ -299,19 +301,30 @@
         }
         else
         {
+            // 1. Total Stakes: Includes Volume from all Settled bets (Won, Lost, Void)
             totalStakes = periodBets.Sum(b => b.AmountNOK ?? 0);
             
-            // Total Payouts calculation (only Won bets pay out the potential payout)
-            decimal totalPayouts = periodBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
+            // 2. Total Payouts calculation:
+            // - Won bets pay out the PotentialPayout
+            // - Void bets refund the original stake (AmountNOK)
+            // - Lost bets pay out 0
+            decimal wonPayouts = periodBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
+            decimal voidRefunds = periodBets.Where(b => b.Status == "Void").Sum(b => b.AmountNOK ?? 0);
+            decimal totalPayouts = wonPayouts + voidRefunds;
+            
+            // 3. Net Profit: Total Volume minus everything paid back out to players
             netProfit = totalStakes - totalPayouts;
             
+            // 4. Hold %: Profit Margin
             holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
+            
+            // 5. Averages and Liabilities
             avgBetSize = totalStakes / totalBets;
             
             // Liability definition: Potential Payout minus original stake
             avgNetLiability = periodBets.Average(b => b.PotentialPayout - (b.AmountNOK ?? 0));
             
-            // NEW Metric: Total Period Liability
+            // Total Period Liability
             totalNetLiability = periodBets.Sum(b => b.PotentialPayout - (b.AmountNOK ?? 0));
         }
 
