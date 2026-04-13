@@ -6,6 +6,12 @@
 
 main {
     flex: 1;
+    display: flex; /* Added to support sticky footer */
+    flex-direction: column; /* Added to support sticky footer */
+}
+
+article {
+    flex: 1; /* Pushes the footer to the bottom */
 }
 
 .sidebar {
@@ -35,6 +41,14 @@ main {
         overflow: hidden;
         text-overflow: ellipsis;
     }
+
+.footer {
+    border-top: 1px solid #e7e7e7;
+    background-color: transparent;
+}
+.footer a:hover {
+    text-decoration: underline !important;
+}
 
 @media (max-width: 640.98px) {
     .top-row {
