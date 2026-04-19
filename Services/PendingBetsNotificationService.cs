@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Concurrent;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,14 +16,12 @@ public class PendingBetsNotificationService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly DiscordNotificationService _discordService;
     private readonly ILogger<PendingBetsNotificationService> _logger;
-    
-    // Check every 1 minute to catch the 15-minute mark accurately
-    private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1);
 
-    // --- TRACKING STATE ---
-    private int? _lastSeenNewestBetId = null;
-    private DateTime _nextNotificationTime = DateTime.MinValue;
-    private int _currentWaitMinutes = 15;
+    // Track the highest notification interval (in minutes) sent for each individual bet ID
+    private readonly ConcurrentDictionary<int, int> _betNotificationStages = new();
+
+    // The notification intervals in minutes. You can adjust these thresholds as needed.
+    private readonly int[] _notificationIntervals = new[] { 15, 30, 60, 120, 240, 480 };
 
     public PendingBetsNotificationService(
         IServiceScopeFactory scopeFactory,
@@ -32,73 +35,82 @@ public class PendingBetsNotificationService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Pending Bets Notification Service starting...");
-
-        using var timer = new PeriodicTimer(_checkInterval);
-
-        while (await timer.WaitForNextTickAsync(stoppingToken) && !stoppingToken.IsCancellationRequested)
+        while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await CheckAndNotifyAsync();
+                await CheckPendingBetsAsync(stoppingToken);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error occurred while checking for pending bets.");
             }
+
+            // Poll the database every 1 minute
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
         }
     }
 
-    private async Task CheckAndNotifyAsync()
+    private async Task CheckPendingBetsAsync(CancellationToken stoppingToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        // Find the most recently created pending bet
-        var newestPendingBet = await context.Bets
+        // Fetch all currently pending bets
+        var pendingBets = await dbContext.Bets
             .Where(b => b.Status == "Pending")
-            .OrderByDescending(b => b.Id) // Use ID or CreatedAt for "newest"
-            .FirstOrDefaultAsync();
+            .ToListAsync(stoppingToken);
 
-        if (newestPendingBet == null)
+        // If there are no pending bets, clear the tracking dictionary and return
+        if (!pendingBets.Any())
         {
-            _lastSeenNewestBetId = null;
+            _betNotificationStages.Clear();
             return;
         }
 
-        var now = DateTime.UtcNow;
-
-        // LOGIC: If a brand new bet has appeared at the top of the queue
-        if (_lastSeenNewestBetId != newestPendingBet.Id)
+        var currentPendingBetIds = pendingBets.Select(b => b.Id).ToHashSet();
+        
+        // Cleanup tracking memory for bets that are no longer pending (approved, denied, etc.)
+        var keysToRemove = _betNotificationStages.Keys.Where(k => !currentPendingBetIds.Contains(k)).ToList();
+        foreach (var key in keysToRemove)
         {
-            _lastSeenNewestBetId = newestPendingBet.Id;
-            _currentWaitMinutes = 15; // Reset backoff
-            
-            // Schedule the notification for 15 minutes after THIS new bet was created
-            _nextNotificationTime = newestPendingBet.CreatedAt.AddMinutes(_currentWaitMinutes);
-            
-            _logger.LogInformation($"Newest bet detected (ID: {newestPendingBet.Id}). Next notification at: {_nextNotificationTime:HH:mm:ss} UTC");
+            _betNotificationStages.TryRemove(key, out _);
         }
 
-        // Check if it's time to notify
-        if (now >= _nextNotificationTime)
-        {
-            // Gather aggregate data for the message
-            var pendingBets = await context.Bets.Where(b => b.Status == "Pending").ToListAsync();
-            var count = pendingBets.Count;
-            var oldestTime = pendingBets.Min(b => b.CreatedAt);
-            var durationSinceOldest = now - oldestTime;
-            
-            // Send the reminder
-            await _discordService.SendPendingBetsReminderAsync(count, durationSinceOldest);
-            
-            // Calculate backoff for the NEXT notification
-            _currentWaitMinutes *= 2;
-            if (_currentWaitMinutes > 1440) _currentWaitMinutes = 1440; // Cap at 24h
+        bool shouldNotify = false;
+        var now = DateTime.UtcNow;
 
-            _nextNotificationTime = now.AddMinutes(_currentWaitMinutes);
+        foreach (var bet in pendingBets)
+        {
+            var betAgeMinutes = (now - bet.CreatedAt).TotalMinutes;
             
-            _logger.LogInformation($"Sent reminder. Backing off: next notify in {_currentWaitMinutes} mins.");
+            // Find the highest interval threshold this specific bet has crossed
+            var applicableInterval = _notificationIntervals.LastOrDefault(interval => betAgeMinutes >= interval);
+            
+            if (applicableInterval > 0)
+            {
+                var lastSentInterval = _betNotificationStages.GetValueOrDefault(bet.Id, 0);
+                
+                // If we haven't sent a notification for this specific interval on this specific bet
+                if (applicableInterval > lastSentInterval)
+                {
+                    shouldNotify = true;
+                    
+                    // Mark this interval as sent for this bet
+                    _betNotificationStages[bet.Id] = applicableInterval;
+                }
+            }
+        }
+
+        // If at least one bet crossed a new time threshold, send the reminder to Discord
+        if (shouldNotify)
+        {
+            // Calculate the wait time of the oldest pending bet for the TimeSpan parameter
+            var oldestBetCreatedAt = pendingBets.Min(b => b.CreatedAt);
+            TimeSpan oldestWaitTime = now - oldestBetCreatedAt;
+
+            // Call the existing method with both the count and the required oldestWaitTime
+            await _discordService.SendPendingBetsReminderAsync(pendingBets.Count, oldestWaitTime);
         }
     }
 }
