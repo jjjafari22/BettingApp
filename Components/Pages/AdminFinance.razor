@@ -56,25 +56,32 @@
         </h5>
 
         <div class="row text-center">
-            <div class="col-md-4 mb-3">
+            <div class="col-md-3 mb-3">
                  <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Total Stakes</h6>
                     <h4 class="mb-0">@totalStakes.ToString("N0") kr</h4>
                     <small class="text-muted">From @totalBets bets</small>
                 </div>
             </div>
-            <div class="col-md-4 mb-3">
+            <div class="col-md-3 mb-3">
                 <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Net Profit</h6>
                     <h4 class="mb-0 @(netProfit >= 0 ? "text-success" : "text-danger")">@netProfit.ToString("N0") kr</h4>
-                    <small class="text-muted">Stakes minus Payouts & Void Refunds</small>
+                    <small class="text-muted">Stakes minus Payouts, Refunds & Free Bets</small>
                 </div>
             </div>
-            <div class="col-md-4 mb-3">
+            <div class="col-md-3 mb-3">
                 <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Hold %</h6>
                     <h4 class="mb-0">@holdPercentage.ToString("0.00")%</h4>
                     <small class="text-muted">Profit margin</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                 <div class="p-3 border rounded bg-light">
+                    <h6 class="text-muted">Free Bets</h6>
+                    <h4 class="mb-0 text-info">@totalFreeBetsAmount.ToString("N0") kr</h4>
+                    <small class="text-muted">From @totalFreeBetsCount transactions</small>
                 </div>
             </div>
             
@@ -123,6 +130,8 @@
     
     // Period Metrics
     private decimal totalStakes = 0;
+    private decimal totalFreeBetsAmount = 0;
+    private int totalFreeBetsCount = 0;
     private decimal netProfit = 0;
     private decimal holdPercentage = 0;
     private decimal avgBetSize = 0;
@@ -279,6 +288,16 @@
         DateTime startUtc = TimeZoneInfo.ConvertTimeToUtc(startNorway, norwayTimeZone);
         DateTime endUtc = TimeZoneInfo.ConvertTimeToUtc(endNorway, norwayTimeZone);
 
+        // Fetch free bet transactions
+        var freeBetTransactions = await context.Transactions
+            .Where(t => t.UpdatedAt >= startUtc && t.UpdatedAt < endUtc && t.Type == "Free Bet" && t.Status == "Completed")
+            .Where(t => !context.Users.Any(u => u.Id == t.UserId && u.IsTestUser))
+            .AsNoTracking()
+            .ToListAsync();
+        
+        totalFreeBetsCount = freeBetTransactions.Count;
+        totalFreeBetsAmount = freeBetTransactions.Sum(t => (decimal)t.AmountNOK);
+
         // Fetch settled bets ONLY (using UpdatedAt instead of CreatedAt)
         // EXCLUDES Test Users.
         var validStatuses = new[] { "Won", "Lost", "Void" };
@@ -293,7 +312,7 @@
         if (totalBets == 0)
         {
             totalStakes = 0;
-            netProfit = 0;
+            netProfit = -totalFreeBetsAmount;
             holdPercentage = 0;
             avgBetSize = 0;
             avgNetLiability = 0;
@@ -312,8 +331,8 @@
             decimal voidRefunds = periodBets.Where(b => b.Status == "Void").Sum(b => b.AmountNOK ?? 0);
             decimal totalPayouts = wonPayouts + voidRefunds;
             
-            // 3. Net Profit: Total Volume minus everything paid back out to players
-            netProfit = totalStakes - totalPayouts;
+            // 3. Net Profit: Total Volume minus payouts and free bets given
+            netProfit = totalStakes - totalPayouts - totalFreeBetsAmount;
             
             // 4. Hold %: Profit Margin
             holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
