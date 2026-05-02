@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 @using Microsoft.AspNetCore.SignalR
 @using BettingApp.Hubs
@@ -17,9 +17,8 @@
 @inject IConfiguration Config
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
-@attribute [Authorize]
 
-<PageTitle>Dashboard</PageTitle>
+<PageTitle>Home</PageTitle>
 
 <style>
     .modal { overscroll-behavior: contain; outline: none; }
@@ -39,183 +38,325 @@
         .review-modal-content { max-height: 95vh; height: 95vh; margin: 0.5rem; }
         .review-controls-container { padding: 0.75rem; }
     }
+
+    /* Landing Page Specific Styles */
+    .hero-section {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        color: white;
+        padding: 4rem 0;
+        border-radius: 0 0 2rem 2rem;
+        margin-bottom: 3rem;
+    }
+    .landing-card {
+        transition: transform 0.2s;
+        border: none;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+    .landing-card:hover {
+        transform: translateY(-5px);
+    }
 </style>
 
 @if (IsLoading)
 {
-    <div class="alert alert-info">Loading your data...</div>
-}
-
-@if (!string.IsNullOrEmpty(ErrorMessage))
-{
-    <div class="alert alert-danger"><strong>Error:</strong> <pre>@ErrorMessage</pre></div>
-}
-
-@if (!string.IsNullOrEmpty(SuccessMessage))
-{
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <strong>Success!</strong> @SuccessMessage
-        <button type="button" class="btn-close" @onclick="() => SuccessMessage = null" aria-label="Close"></button>
+    <div class="d-flex justify-content-center align-items-center p-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
     </div>
 }
-
-@if (viewBetModel != null)
+else if (string.IsNullOrEmpty(userId))
 {
-    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.85);" tabindex="-1" role="dialog" @ref="viewModalRef" @onkeydown="OnModalKeyDown">
-        <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
-            <div class="modal-content review-modal-content" @ontouchstart="HandleTouchStart" @ontouchend="HandleTouchEnd">
-                <div class="modal-header py-2 flex-shrink-0">
-                    <div class="d-flex align-items-center w-100 overflow-hidden">
-                        <h5 class="modal-title fs-6 me-2 flex-grow-1 text-truncate">
-                            Bet #@viewBetModel.Id 
-                            @{ var (statusText, statusClass) = GetDisplayStatus(viewBetModel); }
-                            <span class="badge ms-2 @statusClass">@statusText</span>
-                        </h5>
-                        <button type="button" class="btn-close flex-shrink-0" @onclick="CloseViewModal"></button>
-                    </div>
-                </div>
-                <div class="d-block d-md-none bg-dark text-white-50 text-center py-1 small border-bottom border-secondary">
-                    <i class="bi bi-arrows-move"></i> Swipe left/right to navigate
-                </div>
-                <div class="modal-body review-modal-body">
-                    <div class="review-image-container">
-                        <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateView(-1)" disabled="@(currentViewIndex <= 0)">
-                            <i class="bi bi-chevron-left"></i>
-                        </button>
-                        @if (!string.IsNullOrEmpty(viewBetModel.ScreenshotUrl))
-                        {
-                             <img src="@viewBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
-                        }
-                        else
-                        {
-                             <div class="text-white-50 fst-italic text-center">
-                                <i class="bi bi-image-fill display-1 d-block mb-3"></i>
-                                <span>No Image Available</span>
-                             </div>
-                        }
-                        <button class="nav-arrow nav-arrow-right shadow-lg" @onclick="() => NavigateView(1)" disabled="@(currentViewIndex >= myBets.Count - 1)">
-                           <i class="bi bi-chevron-right"></i>
-                        </button>
-                    </div>
-                    <div class="review-controls-container">
-                        <div class="row g-3 text-center mb-3">
-                            <div class="col-4">
-                                <label class="text-muted small d-block">Amount</label>
-                                <span class="fw-bold fs-5">@GetAmountDisplay(viewBetModel)</span>
-                             </div>
-                            <div class="col-4">
-                                 <label class="text-muted small d-block">Odds</label>
-                                 <span class="fw-bold fs-5">@GetOddsDisplay(viewBetModel)</span>
-                             </div>
-                            <div class="col-4">
-                                <label class="text-muted small d-block">@GetPayoutLabel(viewBetModel)</label>
-                                <span class="fw-bold fs-5 @(viewBetModel.Status == "Lost" ? "text-danger" : "text-success")">
-                                    @GetPayoutDisplay(viewBetModel)
-                                </span>
+    @* LANDING PAGE FOR ANONYMOUS USERS *@
+    <div class="hero-section text-center shadow">
+        <div class="container">
+            <img src="images/logo.png" alt="Logo" style="max-height: 100px;" class="mb-4" />
+            <h1 class="display-4 fw-bold mb-3">Welcome to the Castle of Happiness!</h1>
+            <p class="lead mb-4 mx-auto" style="max-width: 700px;">
+                We are thrilled to have you here. Our mission is to provide you with a seamless and enjoyable betting experience.
+            </p>
+            <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mt-4">
+                <a href="Account/Login" class="btn btn-light btn-lg px-5 me-sm-3 fw-bold">Log In</a>
+                <a href="Account/Register" class="btn btn-outline-light btn-lg px-5">Register</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mb-5">
+        <div class="row g-4 justify-content-center">
+            @* Communication Section *@
+            <div class="col-md-10">
+                <div class="card landing-card bg-light">
+                    <div class="card-body p-4">
+                        <h4 class="card-title text-primary border-bottom pb-3 mb-4">
+                            <i class="bi bi-chat-dots-fill me-2"></i>Communication
+                        </h4>
+                        <p class="card-text lead small mb-4">Our community and support hub is hosted exclusively on Discord.</p>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <div class="d-flex align-items-start">
+                                    <i class="bi bi-discord text-primary fs-3 me-3"></i>
+                                    <div>
+                                        <strong>Join our server:</strong><br />
+                                        <a href="https://discord.gg/rNnsQWENMs" target="_blank" class="text-decoration-none">Click here to join</a>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="d-flex align-items-start">
+                                    <i class="bi bi-headset text-primary fs-3 me-3"></i>
+                                    <div>
+                                        <strong>Support:</strong><br />
+                                        <span>Admins available 24/7 on Discord.</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="d-flex align-items-start">
+                                    <i class="bi bi-messenger text-primary fs-3 me-3"></i>
+                                    <div>
+                                        <strong>Facebook Messenger:</strong><br />
+                                        <a href="https://m.me/61587418012797" target="_blank" class="text-decoration-none">Message us here</a>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        @if (viewBetModel.Status == "Pending")
-                        {
-                            <div class="d-grid">
-                                <button class="btn btn-outline-danger btn-lg fw-bold" @onclick="() => CancelBet(viewBetModel)">
-                                    <i class="bi bi-trash3-fill me-2"></i>Cancel Pick
-                                </button>
-                            </div>
-                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Betting Policy Section *@
+            <div class="col-md-5">
+                <div class="card landing-card h-100">
+                    <div class="card-body p-4">
+                        <h5 class="fw-bold text-primary mb-3 border-bottom pb-2">
+                            <i class="bi bi-journal-bookmark-fill me-2"></i>Betting Policy
+                        </h5>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item px-0 bg-transparent border-0 mb-2">
+                                <i class="bi bi-check2-circle text-success me-2"></i>
+                                <strong>Bookies:</strong> Almost all major sportsbooks accepted.
+                            </li>
+                            <li class="list-group-item px-0 bg-transparent border-0 mb-2">
+                                <i class="bi bi-cpu text-primary me-2"></i>
+                                <strong>Custom Bets:</strong> Feature currently in development—stay tuned!
+                            </li>
+                            <li class="list-group-item px-0 bg-transparent border-0">
+                                <i class="bi bi-shield-lock text-warning me-2"></i>
+                                <strong>Terms:</strong> We reserve the right to decline specific wagers.
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            @* Credit & Deposits Section *@
+            <div class="col-md-5">
+                <div class="card landing-card h-100">
+                    <div class="card-body p-4">
+                        <h5 class="fw-bold text-primary mb-3 border-bottom pb-2">
+                            <i class="bi bi-credit-card-fill me-2"></i>Credit & Deposits
+                        </h5>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item px-0 bg-transparent border-0 mb-3">
+                                <i class="bi bi-graph-up-arrow text-success me-2"></i>
+                                <strong>Credit Limits:</strong> New accounts start modest. Limits increase with consistent payment history.
+                            </li>
+                            <li class="list-group-item px-0 bg-transparent border-0">
+                                <i class="bi bi-paypal text-primary me-2"></i>
+                                <strong>Deposits:</strong> Wagering capacity can be increased at any time via PayPal.
+                            </li>
+                        </ul>
                     </div>
                 </div>
             </div>
         </div>
+
+        <div class="text-center mt-5">
+            <p class="fst-italic text-muted border-top pt-4">We wish you the best of luck and thank you for choosing the Castle of Happiness!</p>
+        </div>
     </div>
 }
+else
+{
+    @* DASHBOARD FOR AUTHENTICATED USERS *@
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="alert alert-danger"><strong>Error:</strong> <pre>@ErrorMessage</pre></div>
+    }
 
-<div class="container mt-4">
-    <div class="card bg-light mb-4">
-        <div class="card-body text-center">
-            <h3>Balance</h3>
-            <h1 class="display-4 @GetBalanceClass(Balance)">@Balance.ToString("N0") kr</h1>
-            <small class="text-muted">
-                Available Credit: <strong>@AvailableCredit.ToString("N0") kr</strong> 
-                (Credit Limit: @CreditLimit.ToString("N0") kr)
-            </small>
+    @if (!string.IsNullOrEmpty(SuccessMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <strong>Success!</strong> @SuccessMessage
+            <button type="button" class="btn-close" @onclick="() => SuccessMessage = null" aria-label="Close"></button>
         </div>
-    </div>
+    }
 
-    <div class="card mb-4">
-        <div class="card-header">New Pick</div>
-        <div class="card-body">
-            <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
-                <DataAnnotationsValidator />
-                <div class="mb-3">
-                    <label class="form-label">Screenshots *</label>
-                    <InputFile OnChange="HandleFileSelected" class="form-control" accept="image/*" multiple />
-                    <div class="form-text text-muted">You can select multiple screenshots to upload multiple picks at once.</div>
-                    @if (uploadedFiles.Any())
-                    {
-                        <div class="mt-2 text-success small">
-                              <i class="bi bi-check-circle me-1"></i> @uploadedFiles.Count file(s) selected
+    @if (viewBetModel != null)
+    {
+        <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.85);" tabindex="-1" role="dialog" @ref="viewModalRef" @onkeydown="OnModalKeyDown">
+            <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+                <div class="modal-content review-modal-content" @ontouchstart="HandleTouchStart" @ontouchend="HandleTouchEnd">
+                    <div class="modal-header py-2 flex-shrink-0">
+                        <div class="d-flex align-items-center w-100 overflow-hidden">
+                            <h5 class="modal-title fs-6 me-2 flex-grow-1 text-truncate">
+                                Bet #@viewBetModel.Id 
+                                @{ var (statusText, statusClass) = GetDisplayStatus(viewBetModel); }
+                                <span class="badge ms-2 @statusClass">@statusText</span>
+                            </h5>
+                            <button type="button" class="btn-close flex-shrink-0" @onclick="CloseViewModal"></button>
                         </div>
-                    }
-                </div>
-                 <button type="submit" class="btn btn-primary w-100" disabled="@IsSubmitting">
-                   @if (IsSubmitting)
-                    {
-                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        <span class="ms-2">Sending @(uploadedFiles.Count > 1 ? "Picks" : "Pick")...</span>
-                    }
-                    else
-                    {
-                       <span>Send Pick(s)</span>
-                    }
-                </button>
-            </EditForm>
-        </div>
-    </div>
-
-    <h4>My Bets History (@totalBets)</h4>
-    <div class="table-responsive">
-        <table class="table table-sm table-striped table-hover align-middle text-nowrap">
-            <thead class="table-dark">
-                <tr>
-                    <th style="width: 150px;">Action</th>
-                    <th>Last Updated</th>
-                    <th>Bet Amount</th>
-                    <th>Odds</th>
-                    <th>Potential Payout</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                 @foreach (var bet in myBets)
-                 {
-                    var (statusText, statusClass) = GetDisplayStatus(bet);
-                    <tr class="@GetRowClass(bet)">
-                        <td>
-                            <button class="btn btn-primary btn-sm action-btn" @onclick="() => OpenViewModal(bet)">
-                                 <i class="bi bi-eye me-1"></i> View Bet
+                    </div>
+                    <div class="d-block d-md-none bg-dark text-white-50 text-center py-1 small border-bottom border-secondary">
+                        <i class="bi bi-arrows-move"></i> Swipe left/right to navigate
+                    </div>
+                    <div class="modal-body review-modal-body">
+                        <div class="review-image-container">
+                            <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateView(-1)" disabled="@(currentViewIndex <= 0)">
+                                <i class="bi bi-chevron-left"></i>
                             </button>
-                        </td>
-                        <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                        <td>@GetAmountDisplay(bet)</td>
-                        <td>@GetOddsDisplay(bet)</td>
-                        <td>@GetPayoutDisplay(bet)</td>
-                        <td><span class="badge @statusClass">@statusText</span></td>
+                            @if (!string.IsNullOrEmpty(viewBetModel.ScreenshotUrl))
+                            {
+                                 <img src="@viewBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
+                            }
+                            else
+                            {
+                                 <div class="text-white-50 fst-italic text-center">
+                                    <i class="bi bi-image-fill display-1 d-block mb-3"></i>
+                                    <span>No Image Available</span>
+                                 </div>
+                            }
+                            <button class="nav-arrow nav-arrow-right shadow-lg" @onclick="() => NavigateView(1)" disabled="@(currentViewIndex >= myBets.Count - 1)">
+                               <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                        <div class="review-controls-container">
+                            <div class="row g-3 text-center mb-3">
+                                <div class="col-4">
+                                    <label class="text-muted small d-block">Amount</label>
+                                    <span class="fw-bold fs-5">@GetAmountDisplay(viewBetModel)</span>
+                                 </div>
+                                <div class="col-4">
+                                     <label class="text-muted small d-block">Odds</label>
+                                     <span class="fw-bold fs-5">@GetOddsDisplay(viewBetModel)</span>
+                                 </div>
+                                <div class="col-4">
+                                    <label class="text-muted small d-block">@GetPayoutLabel(viewBetModel)</label>
+                                    <span class="fw-bold fs-5 @(viewBetModel.Status == "Lost" ? "text-danger" : "text-success")">
+                                        @GetPayoutDisplay(viewBetModel)
+                                    </span>
+                                </div>
+                            </div>
+                            @if (viewBetModel.Status == "Pending")
+                            {
+                                <div class="d-grid">
+                                    <button class="btn btn-outline-danger btn-lg fw-bold" @onclick="() => CancelBet(viewBetModel)">
+                                        <i class="bi bi-trash3-fill me-2"></i>Cancel Pick
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="container mt-4">
+        <div class="card bg-light mb-4 shadow-sm border-0">
+            <div class="card-body text-center p-4">
+                <h4 class="text-muted mb-1">Balance</h4>
+                <h1 class="display-3 fw-bold @GetBalanceClass(Balance)">@Balance.ToString("N0") kr</h1>
+                <div class="mt-2">
+                    <span class="badge bg-white text-dark border p-2">
+                        Available Credit: <strong>@AvailableCredit.ToString("N0") kr</strong>
+                    </span>
+                    <span class="ms-2 small text-muted">
+                        Limit: @CreditLimit.ToString("N0") kr
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4 shadow-sm border-0">
+            <div class="card-header bg-primary text-white fw-bold"><i class="bi bi-plus-circle me-2"></i>New Pick</div>
+            <div class="card-body p-4">
+                <EditForm Model="@newBet" OnValidSubmit="PlaceBet" FormName="PlaceBetForm">
+                    <DataAnnotationsValidator />
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Upload Screenshots *</label>
+                        <InputFile OnChange="HandleFileSelected" class="form-control form-control-lg" accept="image/*" multiple />
+                        <div class="form-text text-muted mt-2">Select one or more screenshots of your picks to upload.</div>
+                        @if (uploadedFiles.Any())
+                        {
+                            <div class="mt-3 text-success p-2 bg-light rounded d-inline-block">
+                                  <i class="bi bi-check-circle-fill me-1"></i> @uploadedFiles.Count file(s) ready
+                            </div>
+                        }
+                    </div>
+                     <button type="submit" class="btn btn-primary btn-lg w-100 shadow-sm fw-bold" disabled="@IsSubmitting">
+                       @if (IsSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <span class="ms-2">Uploading Picks...</span>
+                        }
+                        else
+                        {
+                           <span>Send Pick(s)</span>
+                        }
+                    </button>
+                </EditForm>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">My Bets History (@totalBets)</h4>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover align-middle text-nowrap shadow-sm bg-white">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 150px;">Action</th>
+                        <th>Last Updated</th>
+                        <th>Amount</th>
+                        <th>Odds</th>
+                        <th>Payout</th>
+                        <th>Status</th>
                     </tr>
-                }
-            </tbody>
-        </table>
-        
-        <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
-            <button class="btn btn-outline-secondary btn-sm" @onclick="PrevBetsPage" disabled="@(betsPage <= 1)">
-                <i class="bi bi-arrow-left"></i> Previous
-            </button>
-            <span class="text-muted">Page @betsPage</span>
-            <button class="btn btn-outline-secondary btn-sm" @onclick="NextBetsPage" disabled="@(!hasMoreBets)">
-                Next <i class="bi bi-arrow-right"></i>
-            </button>
+                </thead>
+                <tbody>
+                     @foreach (var bet in myBets)
+                     {
+                        var (statusText, statusClass) = GetDisplayStatus(bet);
+                        <tr class="@GetRowClass(bet)">
+                            <td>
+                                <button class="btn btn-primary btn-sm action-btn" @onclick="() => OpenViewModal(bet)">
+                                     <i class="bi bi-eye me-1"></i> View
+                                </button>
+                            </td>
+                            <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
+                            <td>@GetAmountDisplay(bet)</td>
+                            <td>@GetOddsDisplay(bet)</td>
+                            <td>@GetPayoutDisplay(bet)</td>
+                            <td><span class="badge @statusClass">@statusText</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            
+            <div class="d-flex justify-content-between align-items-center mt-3 mb-5">
+                <button class="btn btn-outline-secondary btn-sm px-3" @onclick="PrevBetsPage" disabled="@(betsPage <= 1)">
+                    <i class="bi bi-arrow-left me-1"></i> Previous
+                </button>
+                <span class="text-muted fw-bold">Page @betsPage</span>
+                <button class="btn btn-outline-secondary btn-sm px-3" @onclick="NextBetsPage" disabled="@(!hasMoreBets)">
+                    Next <i class="bi bi-arrow-right ms-1"></i>
+                </button>
+            </div>
         </div>
     </div>
-</div>
+}
 
 @code {
     private Bet newBet { get; set; } = new() { Odds = 1.0m }; 
@@ -280,7 +421,7 @@
                 newBet.UserName = userName;
             }
         }
-        catch (Exception ex) when (ex is not NavigationException) // <--- Add this filter
+        catch (Exception ex) when (ex is not NavigationException)
         {
             ErrorMessage = $"Startup Error: {ex.Message}";
             Console.WriteLine(ex);
@@ -326,7 +467,6 @@
         if (user != null)
         {
             CreditLimit = user.CreditLimit;
-            // PERFORMANCE FIX: Use stored balance instead of calculating from history
             Balance = user.Balance;
         }
 
@@ -445,7 +585,7 @@
                 return;
             }
 
-            await LoadData(); // Refresh Balance
+            await LoadData();
             if (AvailableCredit <= 0) 
             {
                 ErrorMessage = "Your available credit is zero. To send a pick, you need to deposit more money.";
@@ -454,14 +594,6 @@
             }
             
             using var context = DbFactory.CreateDbContext();
-            
-            // --- BALANCE UPDATE LOGIC ---
-            // We need to fetch the tracked user to update balance (if needed)
-            var dbUser = await context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            
-            // Note: Since AmountNOK is null here (Admin sets it later), we do NOT deduct balance yet.
-            // Balance is deducted when Admin approves the bet in Admin.razor.
-            
             var containerClient = BlobService.GetBlobContainerClient("uploads");
             await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
             await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob);
@@ -534,13 +666,11 @@
             try
             {
                 using var context = DbFactory.CreateDbContext();
-                // Load user and bet to update balance
                 var dbBet = await context.Bets.FindAsync(bet.Id);
                 var dbUser = await context.Users.FindAsync(userId);
                 
                 if (dbBet != null && dbBet.UserId == userId && dbBet.Status == "Pending")
                 {
-                    // If the bet had an amount set (rare for Pending, but possible if Admin edited it), refund it
                     if (dbBet.AmountNOK.HasValue && dbBet.AmountNOK > 0 && dbUser != null)
                     {
                         dbUser.Balance += dbBet.AmountNOK.Value;
@@ -554,12 +684,6 @@
 
                     SuccessMessage = "Bet cancelled successfully.";
                     if (viewBetModel?.Id == bet.Id) CloseViewModal();
-                    await LoadData();
-                }
-                else
-                {
-                    ErrorMessage = "Unable to cancel bet. It may have already been processed.";
-                    CloseViewModal(); 
                     await LoadData();
                 }
             }
@@ -622,7 +746,6 @@
             "bg-danger" => "table-danger",
             "bg-warning text-dark" => "table-warning",
             "bg-secondary" => "table-secondary",
-            "bg-primary" => "", 
             _ => ""
         };
     }
@@ -632,4 +755,12 @@
         >= 0 => "text-success",
         _ => "text-danger"
     };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
 }
