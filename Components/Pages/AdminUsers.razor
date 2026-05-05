@@ -215,15 +215,28 @@ else
     <div class="alert alert-info py-2 d-flex align-items-center shadow-sm">
         <i class="bi bi-info-circle-fill me-2 fs-5"></i>
         <div>
-            <strong>Hint:</strong> Click on any row in the table below to view the detailed betting history and stats for that user.
+            @if (hideZeroBalance)
+            {
+                <strong>Filter Enabled:</strong><span> Showing all users with a balance other than 0 kr. Standard pagination (20 per page) is applied.</span>
+            }
+            else
+            {
+                <strong>Activity Spotlight:</strong><span> Page 1 displays users active within the last 14 days. Subsequent pages show the remaining user base.</span>
+            }
         </div>
     </div>
     
-    <div class="row mb-3">
-        <div class="col-md-6">
+    <div class="row mb-3 align-items-center">
+        <div class="col-md-5">
             <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-search"></i></span>
-                 <input type="text" class="form-control" placeholder="Search by name or email..." @bind="searchTerm" @bind:event="oninput" />
+                 <input type="text" class="form-control" placeholder="Search by name or email..." @bind="searchTerm" @bind:event="oninput" @onkeyup="HandleSearchResetPage" />
+             </div>
+         </div>
+         <div class="col-md-4">
+             <div class="form-check form-switch">
+                 <input class="form-check-input" type="checkbox" role="switch" id="hideZeroToggle" checked="@hideZeroBalance" @onchange="ToggleHideZero" />
+                 <label class="form-check-label fw-bold" for="hideZeroToggle">Hide users with 0 kr balance</label>
              </div>
          </div>
     </div>
@@ -312,6 +325,16 @@ else
                 }
             </tbody>
         </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3 mb-5">
+        <button class="btn btn-outline-secondary btn-sm px-3" @onclick="PrevUsersPage" disabled="@(usersPage <= 1)">
+            <i class="bi bi-arrow-left me-1"></i> Previous
+        </button>
+        <span class="text-muted fw-bold">Page @usersPage</span>
+        <button class="btn btn-outline-secondary btn-sm px-3" @onclick="NextUsersPage" disabled="@(!HasMoreUsers)">
+            Next <i class="bi bi-arrow-right ms-1"></i>
+        </button>
     </div>
 
     @if (selectedUserId != null)
@@ -462,6 +485,7 @@ else
     private decimal currentReviewUserFreeBalance = 0;
     private double touchStartX = 0;
     private double touchEndX = 0;
+    private bool hideZeroBalance = false;
 
     private int TimezoneOffset { get; set; }
     
@@ -1167,6 +1191,22 @@ else
         if (hubConnection is not null) { await hubConnection.DisposeAsync(); }
     }
 
+    private int usersPage = 1;
+    private const int PageSize = 20;
+    private int totalFilteredCount = 0;
+
+    private async Task ToggleHideZero(ChangeEventArgs e)
+    {
+        hideZeroBalance = (bool)(e.Value ?? false);
+        usersPage = 1;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleSearchResetPage()
+    {
+        usersPage = 1;
+    }
+
     private IEnumerable<UserViewModel> FilteredAndSortedUsers
     {
         get
@@ -1182,7 +1222,12 @@ else
                     u.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
             }
 
-            query = sortColumn switch
+            if (hideZeroBalance)
+            {
+                query = query.Where(u => u.Balance != 0);
+            }
+
+            var baseList = sortColumn switch
             {
                 "LastActive" => sortAscending ? query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
                 "DateJoined" => sortAscending ? query.OrderBy(u => u.DateJoined) : query.OrderByDescending(u => u.DateJoined),
@@ -1199,9 +1244,68 @@ else
                 "IsTestUser" => sortAscending ? query.OrderBy(u => u.IsTestUser) : query.OrderByDescending(u => u.IsTestUser),
                 _ => query
             };
-            return query;
+
+            var list = baseList.ToList();
+            totalFilteredCount = list.Count;
+
+            if (hideZeroBalance)
+            {
+                return list.Skip((usersPage - 1) * PageSize).Take(PageSize);
+            }
+            else
+            {
+                var cutoff = DateTime.UtcNow.AddDays(-14);
+                var recentUsers = list.Where(u => u.LastActive >= cutoff).ToList();
+                int page1Count = Math.Min(PageSize, recentUsers.Count);
+
+                if (usersPage == 1)
+                {
+                    return recentUsers.Take(PageSize);
+                }
+                else
+                {
+                    int skipAmount = page1Count + (usersPage - 2) * PageSize;
+                    return list.Skip(skipAmount).Take(PageSize);
+                }
+            }
         }
     }
+
+    private bool HasMoreUsers 
+    {
+        get 
+        {
+            if (hideZeroBalance) return totalFilteredCount > usersPage * PageSize;
+
+            var cutoff = DateTime.UtcNow.AddDays(-14);
+            var currentSearchList = allUsersVM.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                currentSearchList = currentSearchList.Where(u => 
+                    u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) || 
+                    u.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    u.FirstName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    u.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var recentCount = currentSearchList.Count(u => u.LastActive >= cutoff);
+            int page1DisplayCount = Math.Min(PageSize, recentCount);
+            
+            if (usersPage == 1)
+            {
+                return totalFilteredCount > page1DisplayCount;
+            }
+            else
+            {
+                int shownSoFar = page1DisplayCount + (usersPage - 1) * PageSize;
+                return totalFilteredCount > shownSoFar;
+            }
+        }
+    }
+
+    private void NextUsersPage() { usersPage++; StateHasChanged(); }
+    private void PrevUsersPage() { if (usersPage > 1) usersPage--; StateHasChanged(); }
+
 
     public class UserViewModel
     {
