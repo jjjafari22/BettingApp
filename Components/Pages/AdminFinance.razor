@@ -58,7 +58,7 @@
         <div class="row text-center">
             <div class="col-md-3 mb-3">
                  <div class="p-3 border rounded bg-light">
-                    <h6 class="text-muted">Total Stakes</h6>
+                    <h6 class="text-muted">Total Stakes (Real)</h6>
                     <h4 class="mb-0">@totalStakes.ToString("N0") kr</h4>
                     <small class="text-muted">From @totalBets bets</small>
                 </div>
@@ -67,19 +67,19 @@
                 <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Net Profit</h6>
                     <h4 class="mb-0 @(netProfit >= 0 ? "text-success" : "text-danger")">@netProfit.ToString("N0") kr</h4>
-                    <small class="text-muted">Stakes minus Payouts, Refunds & Free Bets</small>
+                    <small class="text-muted">Stakes minus Payouts & Free Bets</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
                 <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Hold %</h6>
                     <h4 class="mb-0">@holdPercentage.ToString("0.00")%</h4>
-                    <small class="text-muted">Profit margin</small>
+                    <small class="text-muted">Profit on real stakes</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
                  <div class="p-3 border rounded bg-light">
-                    <h6 class="text-muted">Free Bets</h6>
+                    <h6 class="text-muted">Free Bets Granted</h6>
                     <h4 class="mb-0 text-info">@totalFreeBetsAmount.ToString("N0") kr</h4>
                     <small class="text-muted">From @totalFreeBetsCount transactions</small>
                 </div>
@@ -95,14 +95,14 @@
                 <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Average Liability Per Bet</h6>
                     <h4 class="mb-0 text-warning">@avgNetLiability.ToString("N0") kr</h4>
-                    <small class="text-muted">Avg risk per individual bet (Payout - Stake)</small>
+                    <small class="text-muted">Avg net risk per bet (Net Payout potential)</small>
                 </div>
             </div>
             <div class="col-md-4 mb-3">
                 <div class="p-3 border rounded bg-light">
                     <h6 class="text-muted">Total Period Liability</h6>
                     <h4 class="mb-0 text-danger">@totalNetLiability.ToString("N0") kr</h4>
-                    <small class="text-muted">Total exposure for this period</small>
+                    <small class="text-muted">Total net exposure for this period</small>
                 </div>
             </div>
         </div>
@@ -183,14 +183,15 @@
 
     private async Task RefreshLiveLiability(ApplicationDbContext context)
     {
-        // Net Open Liability = Sum of (Potential Payout - Stake) for active ("Approved") bets.
-        // EXCLUDES Test Users.
+        // Net Open Liability = Sum of (Potential Payout - Normal Stake Portion) for active ("Approved") bets.
+        // For free bets, PotentialPayout IS the net liability.
+        // Formula: PotentialPayout - (TotalStake - FreeBetAmount)
         var activeBets = await context.Bets
             .Where(b => b.Status == "Approved" && !context.Users.Any(u => u.Id == b.UserId && u.IsTestUser))
             .AsNoTracking()
             .ToListAsync();
             
-        netOpenLiability = activeBets.Sum(b => b.PotentialPayout - (b.AmountNOK ?? 0));
+        netOpenLiability = activeBets.Sum(b => b.PotentialPayout - ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
         await InvokeAsync(StateHasChanged);
     }
 
@@ -321,30 +322,32 @@
         else
         {
             // 1. Total Stakes: Includes Volume from all Settled bets (Won, Lost, Void)
-            totalStakes = periodBets.Sum(b => b.AmountNOK ?? 0);
+            // CRITICAL FIX: Only count real money stakes to avoid distorted hold % and profit
+            totalStakes = periodBets.Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount);
             
             // 2. Total Payouts calculation:
-            // - Won bets pay out the PotentialPayout
+            // - Won bets pay out the PotentialPayout (already accounts for net winnings on free bet portion)
             // - Void bets refund the original stake (AmountNOK)
             // - Lost bets pay out 0
             decimal wonPayouts = periodBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
-            decimal voidRefunds = periodBets.Where(b => b.Status == "Void").Sum(b => b.AmountNOK ?? 0);
+            decimal voidRefunds = periodBets.Where(b => b.Status == "Void").Sum(b => (decimal)(b.AmountNOK ?? 0));
             decimal totalPayouts = wonPayouts + voidRefunds;
             
-            // 3. Net Profit: Total Volume minus payouts and free bets given
+            // 3. Net Profit: Real Stakes minus payouts and free bets given
             netProfit = totalStakes - totalPayouts - totalFreeBetsAmount;
             
-            // 4. Hold %: Profit Margin
+            // 4. Hold %: Profit Margin on real money flow
             holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
             
             // 5. Averages and Liabilities
-            avgBetSize = totalStakes / totalBets;
+            avgBetSize = (decimal)periodBets.Average(b => (decimal)(b.AmountNOK ?? 0));
             
-            // Liability definition: Potential Payout minus original stake
-            avgNetLiability = periodBets.Average(b => b.PotentialPayout - (b.AmountNOK ?? 0));
+            // Liability definition: Net winnings potential
+            // (Potential Payout - Normal Stake Portion)
+            avgNetLiability = periodBets.Average(b => b.PotentialPayout - ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
             
             // Total Period Liability
-            totalNetLiability = periodBets.Sum(b => b.PotentialPayout - (b.AmountNOK ?? 0));
+            totalNetLiability = periodBets.Sum(b => b.PotentialPayout - ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
         }
 
         await InvokeAsync(StateHasChanged);

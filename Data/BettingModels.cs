@@ -11,7 +11,26 @@ namespace BettingApp.Data
         public int? AmountNOK { get; set; }
         public decimal Odds { get; set; }
 
-        public decimal PotentialPayout => Math.Floor((decimal)(AmountNOK ?? 0) * Odds);
+        // Portion of the bet that was placed using a Free Bet balance
+        public decimal FreeBetAmount { get; set; } = 0m;
+
+        public decimal PotentialPayout 
+        {
+            get 
+            {
+                if (!AmountNOK.HasValue) return 0;
+
+                // Normal part: Stake * Odds
+                decimal normalAmount = (decimal)AmountNOK.Value - FreeBetAmount;
+                decimal normalPayout = normalAmount * Odds;
+
+                // Free Bet part: Stake * (Odds - 1)
+                // Net winnings only
+                decimal freeBetPayout = FreeBetAmount * (Odds - 1);
+
+                return Math.Floor(normalPayout + freeBetPayout);
+            }
+        }
         
         public string? ScreenshotUrl { get; set; }
         

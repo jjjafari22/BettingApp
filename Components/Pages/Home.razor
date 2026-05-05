@@ -204,6 +204,9 @@ else
                                 Bet #@viewBetModel.Id 
                                 @{ var (statusText, statusClass) = GetDisplayStatus(viewBetModel); }
                                 <span class="badge ms-2 @statusClass">@statusText</span>
+                                @if (viewBetModel.FreeBetAmount > 0) {
+                                    <span class="badge bg-info text-dark ms-2"><i class="bi bi-gift-fill me-1"></i>Free Bet</span>
+                                }
                             </h5>
                             <button type="button" class="btn-close flex-shrink-0" @onclick="CloseViewModal"></button>
                         </div>
@@ -268,6 +271,16 @@ else
             <div class="card-body text-center p-4">
                 <h4 class="text-muted mb-1">Balance</h4>
                 <h1 class="display-3 fw-bold @GetBalanceClass(Balance)">@Balance.ToString("N0") kr</h1>
+                
+                @if (FreeBetBalance > 0)
+                {
+                    <div class="mb-3">
+                        <span class="badge bg-info text-dark p-2 fs-6 shadow-sm">
+                            <i class="bi bi-gift-fill me-1"></i> Free Bet Balance: <strong>@FreeBetBalance.ToString("N0") kr</strong>
+                        </span>
+                    </div>
+                }
+
                 <div class="mt-2">
                     <span class="badge bg-white text-dark border p-2">
                         Available Credit: <strong>@AvailableCredit.ToString("N0") kr</strong>
@@ -295,6 +308,20 @@ else
                             </div>
                         }
                     </div>
+
+                    @if (FreeBetBalance > 0)
+                    {
+                        <div class="mb-4 p-3 border rounded bg-info bg-opacity-10 border-info">
+                            <div class="d-flex align-items-center text-info fw-bold mb-1">
+                                <i class="bi bi-gift-fill me-2 fs-4"></i>
+                                <span>Free Bet Automatically Applied</span>
+                            </div>
+                            <div class="small text-muted">
+                                Your available Free Bet balance (<strong>@FreeBetBalance.ToString("N0") kr</strong>) will be automatically applied to your next approved pick(s).
+                            </div>
+                        </div>
+                    }
+
                      <button type="submit" class="btn btn-primary btn-lg w-100 shadow-sm fw-bold" disabled="@IsSubmitting">
                        @if (IsSubmitting)
                         {
@@ -336,7 +363,12 @@ else
                                 </button>
                             </td>
                             <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                            <td>@GetAmountDisplay(bet)</td>
+                            <td>
+                                @GetAmountDisplay(bet)
+                                @if (bet.FreeBetAmount > 0) {
+                                    <br/><span class="badge bg-info text-dark small"><i class="bi bi-gift-fill"></i> Free Bet</span>
+                                }
+                            </td>
                             <td>@GetOddsDisplay(bet)</td>
                             <td>@GetPayoutDisplay(bet)</td>
                             <td><span class="badge @statusClass">@statusText</span></td>
@@ -363,6 +395,7 @@ else
     private List<Bet> myBets = new();
     private decimal CreditLimit = 0;
     private decimal Balance = 0;
+    private decimal FreeBetBalance = 0;
     private decimal AvailableCredit = 1000;
     private IReadOnlyList<IBrowserFile> uploadedFiles = new List<IBrowserFile>();
     
@@ -468,9 +501,10 @@ else
         {
             CreditLimit = user.CreditLimit;
             Balance = user.Balance;
+            FreeBetBalance = user.FreeBetBalance;
         }
 
-        AvailableCredit = Balance + CreditLimit;
+        AvailableCredit = Balance + CreditLimit + FreeBetBalance;
         await LoadBetsList();
     }
     
@@ -618,7 +652,7 @@ else
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
                     Odds = 1.0m,
-                    AmountNOK = null 
+                    AmountNOK = null
                 };
                 context.Bets.Add(bet);
                 betsToNotify.Add(bet);
@@ -671,9 +705,13 @@ else
                 
                 if (dbBet != null && dbBet.UserId == userId && dbBet.Status == "Pending")
                 {
+                    // Logic for refunding stake if it was set (should only happen for Approved bets usually, 
+                    // but safety check for legacy/admin edge cases)
                     if (dbBet.AmountNOK.HasValue && dbBet.AmountNOK > 0 && dbUser != null)
                     {
-                        dbUser.Balance += dbBet.AmountNOK.Value;
+                        // Note: Pending bets don't deduct stakes anymore in current logic
+                        // Only Approved/Won/Lost do. So we do nothing here unless 
+                        // the status was already past Pending.
                     }
 
                     dbBet.Status = "Cancelled";

@@ -63,6 +63,10 @@
                 <div class="card-header bg-warning text-dark">Withdrawal Request</div>
                 <div class="card-body">
                     <p class="mb-0">Current Balance: <strong>@Balance.ToString("N0") kr</strong></p>
+                    @if (FreeBetBalance > 0)
+                    {
+                        <p class="mb-0 text-info small"><i class="bi bi-gift-fill"></i> Free Bet Balance: <strong>@FreeBetBalance.ToString("N0") kr</strong></p>
+                    }
                     <p class="text-muted small mb-3">
                         <i class="bi bi-exclamation-triangle"></i> Withdrawals requested outside of the standard payment day is subject to a 20% fee.
                     </p>
@@ -200,6 +204,7 @@
     private string? cryptoNetwork; 
     private List<Transaction> myTransactions = new();
     private decimal Balance = 0;
+    private decimal FreeBetBalance = 0;
     private string userId = string.Empty;
     private bool IsLoading = true;
     private bool IsSubmitting = false;
@@ -269,6 +274,7 @@
         if (user != null)
         {
             Balance = user.Balance;
+            FreeBetBalance = user.FreeBetBalance;
         }
 
         totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);

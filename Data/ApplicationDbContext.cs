@@ -34,6 +34,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .Property(u => u.MaxPayout)
             .HasPrecision(18, 0);
 
+        builder.Entity<ApplicationUser>()
+            .Property(u => u.FreeBetBalance)
+            .HasPrecision(18, 2);
+
+        builder.Entity<Bet>()
+            .Property(b => b.FreeBetAmount)
+            .HasPrecision(18, 2);
+
         // --- Fix for Warning [30000] ---
         builder.Entity<SettlementSnapshot>()
             .Property(s => s.TotalVolume)

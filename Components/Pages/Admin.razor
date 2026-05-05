@@ -174,6 +174,20 @@
                                 </div>
                             </div>
 
+                            @if (reviewingBetModel.Status == "Pending" && currentReviewUserFreeBalance > 0)
+                            {
+                                <div class="alert alert-info py-1 px-2 mb-3 small d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-gift-fill me-1"></i> User Free Balance: <strong>@currentReviewUserFreeBalance.ToString("N0") kr</strong></span>
+                                    <span class="text-primary fw-bold">Projected Free Bet: @Math.Min((decimal)(reviewingBetModel.AmountNOK ?? 0), currentReviewUserFreeBalance).ToString("N0") kr</span>
+                                </div>
+                            }
+                            else if (reviewingBetModel.FreeBetAmount > 0)
+                            {
+                                <div class="alert alert-info py-1 px-2 mb-3 small">
+                                    <i class="bi bi-gift-fill me-1"></i> This bet used <strong>@reviewingBetModel.FreeBetAmount.ToString("N0") kr</strong> from Free Bet balance.
+                                </div>
+                            }
+
                            @if (reviewingBetModel.Status == "Pending") {
                              
                                <div class="row g-3">
@@ -298,11 +312,16 @@
   
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
-                            <td>@bet.AmountNOK?.ToString("N0") kr</td>
+                            <td>
+                                @bet.AmountNOK?.ToString("N0") kr
+                                @if (bet.FreeBetAmount > 0) {
+                                    <br/><span class="badge bg-info text-dark small"><i class="bi bi-gift-fill"></i> Free Bet</span>
+                                }
+                            </td>
                              <td>@bet.Odds.ToString("N2")</td>
      
                             <td>@bet.PotentialPayout.ToString("N0") kr</td>
-                            <td class="text-danger">@((bet.PotentialPayout - (bet.AmountNOK ?? 0)).ToString("N0")) kr</td>
+                            <td class="text-danger">@((bet.PotentialPayout - ((decimal)(bet.AmountNOK ?? 0) - bet.FreeBetAmount)).ToString("N0")) kr</td>
                         </tr>
                     }
                     @if (approvedBets.Count == 0) { <tr><td colspan="10" class="text-muted">No active bets.</td></tr> }
@@ -360,7 +379,12 @@
                             <td>@TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g")</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
-                            <td>@bet.AmountNOK?.ToString("N0") kr</td>
+                            <td>
+                                @bet.AmountNOK?.ToString("N0") kr
+                                @if (bet.FreeBetAmount > 0) {
+                                    <br/><span class="badge bg-info text-dark small"><i class="bi bi-gift-fill"></i> Free Bet</span>
+                                }
+                            </td>
                             <td>@bet.Odds.ToString("N2")</td>
        
                             <td>
@@ -411,6 +435,7 @@
     private string? currentAdminName;
     private Bet? reviewingBetModel;
     private string? reviewErrorMessage;
+    private decimal currentReviewUserFreeBalance = 0;
     
     private decimal? OddsProxy
     {
@@ -461,9 +486,16 @@
 
     private decimal GetNetProfit(Bet bet)
     {
-        if (bet.Status == "Lost") return bet.AmountNOK ?? 0;
-        if (bet.Status == "Won") return (bet.AmountNOK ?? 0) - bet.PotentialPayout;
-        return 0; // Void, Cancelled, Rejected have 0 profit logic
+        // Admin profit logic:
+        // For normal bets, profit is (Stake - Payout).
+        // For free bets, profit is (-Payout) because the stake was already "paid for" upon granting.
+        // Stake portions that matter: Real portion = (Total - Free).
+        
+        decimal realStakePortion = (decimal)(bet.AmountNOK ?? 0) - bet.FreeBetAmount;
+
+        if (bet.Status == "Lost") return realStakePortion;
+        if (bet.Status == "Won") return realStakePortion - bet.PotentialPayout;
+        return 0; // Void/Rejected/Cancelled don't affect profit
     }
 
     private async Task PopulateUserLookup(IEnumerable<string> userIds)
@@ -591,12 +623,13 @@
         var targetUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
         
         var currentBal = targetUser?.Balance ?? 0;
+        var freeBetBal = targetUser?.FreeBetBalance ?? 0;
         var creditLimit = targetUser?.CreditLimit ?? 0;
         
-        var availableCredit = currentBal + creditLimit - newBetAmount;
+        var availableCredit = currentBal + freeBetBal + creditLimit - newBetAmount;
         if (availableCredit < 0)
         {
-            return (false, $"Insufficient funds. Available: {(currentBal + creditLimit):N0} kr. Required: {newBetAmount:N0} kr.");
+            return (false, $"Insufficient funds. Available: {(currentBal + freeBetBal + creditLimit):N0} kr. Required: {newBetAmount:N0} kr.");
         }
         return (true, string.Empty);
     }
@@ -632,6 +665,7 @@
         { 
             Id = bet.Id, UserId = bet.UserId, UserName = bet.UserName, 
             AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, 
+            FreeBetAmount = bet.FreeBetAmount,
             ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt
         };
         if (reviewingBetModel.Status == "Pending")
@@ -713,8 +747,16 @@
             
             if (betUser != null)
             {
-                 decimal potentialPayout = Math.Floor((decimal)(bet.AmountNOK ?? 0) * bet.Odds);
-                 if (potentialPayout > betUser.MaxPayout) { 
+                 decimal currentAmount = (decimal)(bet.AmountNOK ?? 0);
+                 decimal tempFreeBet = originalStatus == "Pending" 
+                    ? Math.Min(currentAmount, betUser.FreeBetBalance)
+                    : bet.FreeBetAmount;
+
+                 decimal normalPart = currentAmount - tempFreeBet;
+                 decimal freePart = tempFreeBet;
+                 decimal totalPotentialPayout = Math.Floor((normalPart * bet.Odds) + (freePart * (bet.Odds - 1)));
+
+                 if (totalPotentialPayout > betUser.MaxPayout) { 
                      reviewErrorMessage = $"Payout exceeds user limit ({betUser.MaxPayout:N0})";
                      return; 
                  }
@@ -728,11 +770,11 @@
              if (!confirmed) return;
         }
 
-        if (newStatus == "Approved")
+        if (newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost")
         {
             if (originalStatus == "Pending")
             {
-                var (allowed, error) = await CheckUserBalance(bet.UserId, (decimal)bet.AmountNOK!);
+                var (allowed, error) = await CheckUserBalance(bet.UserId, (decimal)(bet.AmountNOK ?? 0));
                 if (!allowed)
                 {
                     reviewErrorMessage = error;
@@ -757,27 +799,63 @@
                  return;
             }
 
-            decimal oldWager = dbBet.AmountNOK ?? 0;
-            decimal oldPayout = dbBet.PotentialPayout;
-            decimal oldImpact = 0;
-            if (originalStatus == "Approved" || originalStatus == "Lost") oldImpact = -oldWager;
-            else if (originalStatus == "Won") oldImpact = -oldWager + oldPayout;
-            decimal newWager = bet.AmountNOK ?? 0;
-            decimal newPayout = bet.PotentialPayout;
-            decimal newImpact = 0;
-            if (newStatus == "Approved" || newStatus == "Lost") newImpact = -newWager;
-            else if (newStatus == "Won") newImpact = -newWager + newPayout;
-            dbUser.Balance += (newImpact - oldImpact);
+            decimal dbAmount = (decimal)(dbBet.AmountNOK ?? 0);
+
+            // REVERSE OLD IMPACT
+            // Statuses that have deducted balance: Approved, Won, Lost
+            if (originalStatus == "Approved" || originalStatus == "Lost")
+            {
+                dbUser.Balance += (dbAmount - dbBet.FreeBetAmount);
+                dbUser.FreeBetBalance += dbBet.FreeBetAmount;
+            }
+            else if (originalStatus == "Won")
+            {
+                dbUser.Balance += (dbAmount - dbBet.FreeBetAmount);
+                dbUser.FreeBetBalance += dbBet.FreeBetAmount;
+                dbUser.Balance -= dbBet.PotentialPayout;
+            }
+            // originalStatus == Void/Rejected/Cancelled/Pending already has balance returned
+
+            // APPLY NEW VALUES
             dbBet.Status = newStatus;
             dbBet.AmountNOK = bet.AmountNOK;
-            dbBet.Odds = bet.Odds; 
+            dbBet.Odds = bet.Odds;
+
+            decimal newAmount = (decimal)(dbBet.AmountNOK ?? 0);
+
+            if (originalStatus == "Pending")
+            {
+                // Automatic consumption if user has free bet balance
+                dbBet.FreeBetAmount = Math.Min(newAmount, dbUser.FreeBetBalance);
+            }
+            else 
+            {
+                 // Safety: Capping free bet amount if admin reduced the total stake
+                 dbBet.FreeBetAmount = Math.Min(dbBet.FreeBetAmount, newAmount);
+            }
+
+            // APPLY NEW STATUS IMPACT
+            // Statuses that should deduct balance: Approved, Won, Lost
+            if (newStatus == "Approved" || newStatus == "Lost")
+            {
+                dbUser.Balance -= (newAmount - dbBet.FreeBetAmount);
+                dbUser.FreeBetBalance -= dbBet.FreeBetAmount;
+            }
+            else if (newStatus == "Won")
+            {
+                dbUser.Balance -= (newAmount - dbBet.FreeBetAmount);
+                dbUser.FreeBetBalance -= dbBet.FreeBetAmount;
+                dbUser.Balance += dbBet.PotentialPayout;
+            }
+            // newStatus == Void/Rejected/Cancelled doesn't deduct stakes
+
             dbBet.UpdatedAt = DateTime.UtcNow;
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
                 Action = $"Bet {newStatus}",
                 TargetUserName = bet.UserName,
-                Details = $"Bet ID: {bet.Id}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, Payout: {dbBet.PotentialPayout:N0}"
+                Details = $"Bet ID: {bet.Id}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Payout: {dbBet.PotentialPayout:N0}"
             });
             await context.SaveChangesAsync();
         }
@@ -801,9 +879,6 @@
 
         if (currentReviewList.Count > 0)
         {
-            bool betStillInList = currentReviewList.Any(b => b.Id == originalBetId);
-            if (betStillInList) currentReviewIndex++;
-            
             if (currentReviewIndex >= currentReviewList.Count) 
             {
                 reviewingBetModel = null;
@@ -811,17 +886,8 @@
             }
             else
             {
-                var nextBet = currentReviewList[currentReviewIndex];
-                reviewingBetModel = new Bet 
-                { 
-                    Id = nextBet.Id, UserId = nextBet.UserId, UserName = nextBet.UserName, 
-                    AmountNOK = nextBet.AmountNOK, Odds = nextBet.Odds, Status = nextBet.Status, 
-                    ScreenshotUrl = nextBet.ScreenshotUrl, CreatedAt = nextBet.CreatedAt
-                };
-                if (reviewingBetModel.Status == "Pending")
-                {
-                    reviewingBetModel.Odds = 0;
-                }
+                var actualNextBet = currentReviewList[currentReviewIndex];
+                StartReview(actualNextBet);
                 modalSuccessMessage = null;
             }
         }
@@ -879,7 +945,7 @@
 
             if (exportType == "Active")
             {
-                var netLiability = bet.PotentialPayout - (bet.AmountNOK ?? 0);
+                var netLiability = bet.PotentialPayout - ((decimal)(bet.AmountNOK ?? 0) - bet.FreeBetAmount);
                 line += $",{netLiability}";
             }
             if (exportType == "Completed")

@@ -117,6 +117,20 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
+    public async Task NotifyUserFreeBetAsync(string? discordUserId, int amount, string? note)
+    {
+        if (string.IsNullOrWhiteSpace(discordUserId)) return;
+
+        string noteLine = string.IsNullOrWhiteSpace(note) ? "" : $"\nNote: *{note}*";
+        string message = $"🎁 **Free Bet Received!**\n" +
+                         $"You have been granted a **{amount:N0} NOK** free bet balance!\n" +
+                         $"This will be automatically applied to your next approved pick(s).{noteLine}\n" +
+                         $"Good luck! 🍀\n" +
+                         $"------------------------------\n";
+
+        await SendDmAsync(discordUserId, message);
+    }
+
     // --- ADMIN WEBHOOK LOGIC (Unchanged) ---
     public async Task NotifyAdminNewPickAsync(Bet bet)
     {

@@ -622,9 +622,13 @@
                 return;
             }
 
-            if (dbTrans.Type == "Deposit" || dbTrans.Type == "Free Bet")
+            if (dbTrans.Type == "Deposit")
             {
                 user.Balance -= dbTrans.AmountNOK;
+            }
+            else if (dbTrans.Type == "Free Bet")
+            {
+                user.FreeBetBalance -= dbTrans.AmountNOK;
             }
             else if (dbTrans.Type == "Withdrawal")
             {
@@ -686,6 +690,10 @@
             }
             user.Balance -= adminAddAmount.Value;
         }
+        else if (newTrans.Type == "Free Bet")
+        {
+            user.FreeBetBalance += adminAddAmount.Value;
+        }
         else 
         {
             user.Balance += adminAddAmount.Value;
@@ -703,9 +711,17 @@
         
         await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", $"New transaction: {newTrans.Type}");
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        if (!string.IsNullOrEmpty(user.DiscordUserId) && newTrans.Type == "Withdrawal")
+        
+        if (!string.IsNullOrEmpty(user.DiscordUserId))
         {
-             await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, newTrans, "Completed");
+            if (newTrans.Type == "Withdrawal")
+            {
+                await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, newTrans, "Completed");
+            }
+            else if (newTrans.Type == "Free Bet")
+            {
+                await DiscordService.NotifyUserFreeBetAsync(user.DiscordUserId, newTrans.AmountNOK, newTrans.PaymentDetails);
+            }
         }
         
         successMessage = "Transaction added successfully!";

@@ -20,6 +20,9 @@ public class ApplicationUser : IdentityUser
     // This allows instant reads without summing history.
     public decimal Balance { get; set; } = 0m;
 
+    // Separate balance for free bets that only pay out net winnings.
+    public decimal FreeBetBalance { get; set; } = 0m;
+
     public string? DiscordUserId { get; set; }
     public string? DiscordUsername { get; set; }
 
