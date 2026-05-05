@@ -41,6 +41,42 @@
         .review-controls-container { padding: 0.75rem; }
         .btn-xl-mobile { padding-top: 0.75rem; padding-bottom: 0.75rem; font-size: 1.1rem; }
     }
+
+    /* Balanced Large Toggle Switch */
+    .form-switch .form-check-input.large-switch {
+        width: 4rem;
+        height: 2rem;
+        cursor: pointer;
+        margin-top: 0;
+    }
+    .toggle-container {
+        background-color: #f8f9fa;
+        padding: 0.6rem 1.25rem;
+        border-radius: 50px;
+        border: 2px solid #dee2e6;
+        display: inline-flex;
+        align-items: center;
+        transition: all 0.2s ease-in-out;
+        cursor: pointer;
+        user-select: none;
+    }
+    .toggle-container:hover {
+        border-color: #0d6efd;
+        background-color: #f8f9fa;
+    }
+    .toggle-container.active {
+        border-color: #0d6efd;
+        background-color: #0d6efd;
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.2);
+    }
+    .toggle-container.active .toggle-label-text {
+        color: white !important;
+    }
+    .toggle-label-text {
+        font-weight: 600;
+        margin-left: 0.75rem;
+        font-size: 1.05rem;
+    }
 </style>
 
 @* --- REVIEW BET MODAL --- *@
@@ -226,18 +262,20 @@ else
         </div>
     </div>
     
-    <div class="row mb-3 align-items-center">
-        <div class="col-md-5">
-            <div class="input-group">
-                <span class="input-group-text"><i class="bi bi-search"></i></span>
-                 <input type="text" class="form-control" placeholder="Search by name or email..." @bind="searchTerm" @bind:event="oninput" @onkeyup="HandleSearchResetPage" />
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-6">
+            <div class="input-group shadow-sm">
+                <span class="input-group-text bg-white border-end-0 px-3"><i class="bi bi-search text-muted"></i></span>
+                 <input type="text" class="form-control border-start-0 ps-0" placeholder="Search users by name or email..." @bind="searchTerm" @bind:event="oninput" @onkeyup="HandleSearchResetPage" />
              </div>
          </div>
-         <div class="col-md-4">
-             <div class="form-check form-switch">
-                 <input class="form-check-input" type="checkbox" role="switch" id="hideZeroToggle" checked="@hideZeroBalance" @onchange="ToggleHideZero" />
-                 <label class="form-check-label fw-bold" for="hideZeroToggle">Hide users with 0 kr balance</label>
-             </div>
+         <div class="col-md-6 text-md-end mt-3 mt-md-0">
+             <label class="toggle-container shadow-sm @(hideZeroBalance ? "active" : "")" for="hideZeroToggle">
+                 <div class="form-check form-switch m-0 p-0 d-flex align-items-center">
+                     <input class="form-check-input large-switch m-0 me-3 shadow-none" type="checkbox" role="switch" id="hideZeroToggle" checked="@hideZeroBalance" @onchange="ToggleHideZero" />
+                     <span class="toggle-label-text @(hideZeroBalance ? "text-primary" : "text-muted")">Hide 0 kr balance</span>
+                 </div>
+             </label>
          </div>
     </div>
 
