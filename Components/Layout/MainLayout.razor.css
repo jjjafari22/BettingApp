@@ -14,6 +14,7 @@ main {
 
 article {
     flex: 1; /* Pushes the footer to the bottom */
+    min-width: 0;
 }
 
 .sidebar {

@@ -77,6 +77,54 @@
         margin-left: 0.75rem;
         font-size: 1.05rem;
     }
+
+    /* --- STICKY TABLE STYLES --- */
+    .table-responsive {
+        position: relative;
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    
+    .sticky-col {
+        position: sticky;
+        left: 0;
+        z-index: 10;
+        background-color: white !important;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    }
+    
+    .table-dark .sticky-col {
+        background-color: #212529 !important;
+    }
+    
+    .table-striped tbody tr:nth-of-type(odd) .sticky-col {
+        background-color: #f8f9fa !important;
+    }
+    
+    .table-hover tbody tr:hover .sticky-col {
+        background-color: #e9ecef !important;
+    }
+    
+    tr.table-primary .sticky-col {
+        background-color: #cfe2ff !important;
+    }
+
+    .pagination-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1.5rem;
+        margin-top: 1rem;
+        margin-bottom: 2rem;
+        padding: 0.75rem;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        position: sticky;
+        bottom: 1rem;
+        z-index: 20;
+    }
 </style>
 
 @* --- REVIEW BET MODAL --- *@
@@ -266,7 +314,7 @@ else
         <div class="col-md-6">
             <div class="input-group shadow-sm">
                 <span class="input-group-text bg-white border-end-0 px-3"><i class="bi bi-search text-muted"></i></span>
-                 <input type="text" class="form-control border-start-0 ps-0" placeholder="Search users by name or email..." @bind="searchTerm" @bind:event="oninput" @onkeyup="HandleSearchResetPage" />
+                 <input type="text" class="form-control border-start-0 ps-0" placeholder="Search by name or discord username..." @bind="searchTerm" @bind:event="oninput" @onkeyup="HandleSearchResetPage" />
              </div>
          </div>
          <div class="col-md-6 text-md-end mt-3 mt-md-0">
@@ -280,92 +328,95 @@ else
     </div>
 
     <div class="table-responsive">
-        <table class="table table-sm table-striped table-hover align-middle text-nowrap">
+        <table class="table table-sm table-striped table-hover align-middle">
             <thead class="table-dark">
                   <tr>
-                    <th style="cursor: pointer;" @onclick='() => Sort("LastActive")'>Last Active (Local) @GetSortIcon("LastActive")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("LastActive")'>Last Active (Norway) @GetSortIcon("LastActive")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("IsManuallyVerified")'>Verified @GetSortIcon("IsManuallyVerified")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("FirstName")'>First Name @GetSortIcon("FirstName")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("LastName")'>Last Name @GetSortIcon("LastName")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("UserName")'>User @GetSortIcon("UserName")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("Balance")'>Balance @GetSortIcon("Balance")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("FreeBetBalance")'>Free Bet Bal. @GetSortIcon("FreeBetBalance")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("AvailableCredit")'>Avail. Credit @GetSortIcon("AvailableCredit")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("Handle")'>Handle @GetSortIcon("Handle")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("LifetimeProfit")'>Lifetime Profit @GetSortIcon("LifetimeProfit")</th>
-                    <th>Discord ID</th>
-                    <th>Discord Username</th>
+                    <th class="sticky-col text-nowrap" style="cursor: pointer;" @onclick='() => Sort("LastActive")'>Last Active @GetSortIcon("LastActive")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("IsManuallyVerified")'>Verified @GetSortIcon("IsManuallyVerified")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("DiscordUsername")'>Discord Username @GetSortIcon("DiscordUsername")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("Balance")'>Balance @GetSortIcon("Balance")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("FreeBetBalance")'>Free Bet @GetSortIcon("FreeBetBalance")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("AvailableCredit")'>Avail. Credit @GetSortIcon("AvailableCredit")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("Handle")'>Handle @GetSortIcon("Handle")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("LifetimeProfit")'>Lifetime Profit @GetSortIcon("LifetimeProfit")</th>
+                    <th style="cursor: pointer; min-width: 120px;" @onclick='() => Sort("FirstName")'>Full Name @GetSortIcon("FirstName")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("Email")'>Email @GetSortIcon("Email")</th>
+                    <th>Discord Info</th>
                     <th>Referred By</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("IsAdmin")'>Role @GetSortIcon("IsAdmin")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("IsTestUser")'>Test User @GetSortIcon("IsTestUser")</th>
+                    <th>Status</th>
                 </tr>
             </thead>
             <tbody>
                  @foreach (var user in FilteredAndSortedUsers)
                 {
                       <tr class="cursor-pointer @(selectedUserId == user.Id ? "table-primary border border-primary" : "")" @onclick="() => SelectUser(user.Id, user.UserName)">
-                        <td>@ToUserLocal(user.LastActive).ToString("g")</td>
-                        <td>@TimeHelpers.GetNorwayTime(user.LastActive).ToString("g")</td>
+                        <td class="sticky-col text-nowrap">
+                            <div>@ToUserLocal(user.LastActive).ToString("g")</div>
+                            <small class="text-muted" style="font-size: 0.7rem;">NO: @TimeHelpers.GetNorwayTime(user.LastActive).ToString("g")</small>
+                        </td>
                         
-                        <td @onclick:stopPropagation="true">
+                        <td @onclick:stopPropagation="true" class="text-center">
                                <button class="btn btn-sm @(user.IsManuallyVerified ? "btn-success" : "btn-outline-secondary")" 
                                     @onclick="() => ToggleVerification(user.Id)"
                                      title="Click to toggle verification status">
                                 <i class="bi @(user.IsManuallyVerified ? "bi-check-circle-fill" : "bi-circle")"></i>
-                                @(user.IsManuallyVerified ? "Verified" : "Unverified")
                              </button>
                         </td>
 
-                        <td>@user.FirstName</td>
-                        <td>@user.LastName</td>
-                        <td>@user.UserName</td>
-                        <td class="@(user.Balance >= 0 ? "text-success" : "text-danger") fw-bold">@user.Balance.ToString("N0") kr</td>
-                        <td class="text-info fw-bold">@user.FreeBetBalance.ToString("N0") kr</td>
-                        <td>@user.AvailableCredit.ToString("N0") kr</td>
-                          <td class="fw-bold">@user.Handle.ToString("N0") kr</td>
-                        <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold">@user.LifetimeProfit.ToString("N0") kr</td>
-                          <td @onclick:stopPropagation="true">
-                            <input class="form-control form-control-sm" 
-                                   style="min-width: 120px;" value="@user.DiscordUserId" 
-                                   @onchange="@(e => UpdateDiscordId(user.Id, e.Value?.ToString()))"
-                                   placeholder="Discord ID" />
-                          </td>
+                        <td>@user.DiscordUsername</td>
+
+                        <td class="@(user.Balance >= 0 ? "text-success" : "text-danger") fw-bold text-nowrap">@user.Balance.ToString("N0") kr</td>
+                        <td class="text-info fw-bold text-nowrap">@user.FreeBetBalance.ToString("N0") kr</td>
+                        <td class="text-nowrap">@user.AvailableCredit.ToString("N0") kr</td>
+                        <td class="fw-bold text-nowrap">@user.Handle.ToString("N0") kr</td>
+                        <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold text-nowrap">@user.LifetimeProfit.ToString("N0") kr</td>
+                        
+                        <td style="white-space: normal; word-break: break-word;">@user.FirstName @user.LastName</td>
+                        
+                        <td class="text-nowrap">@user.Email</td>
+
                         <td @onclick:stopPropagation="true">
-                            <input class="form-control form-control-sm" 
-                                   style="min-width: 120px;" value="@user.DiscordUsername" 
-                                   @onchange="@(e => UpdateDiscordUsername(user.Id, e.Value?.ToString()))"
-                                   placeholder="Username" />
+                            <div class="d-flex flex-column gap-1">
+                                <input class="form-control form-control-sm" 
+                                       style="min-width: 110px; font-size: 0.75rem;" value="@user.DiscordUsername" 
+                                       @onchange="@(e => UpdateDiscordUsername(user.Id, e.Value?.ToString()))"
+                                       placeholder="Username" />
+                                <input class="form-control form-control-sm" 
+                                       style="min-width: 110px; font-size: 0.7rem;" value="@user.DiscordUserId" 
+                                       @onchange="@(e => UpdateDiscordId(user.Id, e.Value?.ToString()))"
+                                       placeholder="ID" />
+                            </div>
                         </td>
+
                         <td @onclick:stopPropagation="true">
                                <input class="form-control form-control-sm" 
-                                   style="min-width: 100px;" value="@user.ReferredBy" 
+                                   style="min-width: 80px; font-size: 0.75rem;" value="@user.ReferredBy" 
                                    @onchange="@(e => UpdateUserReferral(user.Id, e.Value?.ToString()))"
                                    placeholder="-" />
                         </td>
                         <td @onclick:stopPropagation="true">
-                               <button class="btn btn-sm @(user.IsAdmin ? "btn-primary" : "btn-outline-secondary")" 
-                                    @onclick="() => ToggleAdmin(user.Id)">
+                            <div class="d-flex flex-column gap-1">
+                               <button class="btn btn-sm @(user.IsAdmin ? "btn-primary" : "btn-outline-secondary") py-0" 
+                                    style="font-size: 0.7rem;" @onclick="() => ToggleAdmin(user.Id)">
                                 @(user.IsAdmin ? "Admin" : "User")
                                </button>
-                        </td>
-                         <td @onclick:stopPropagation="true">
-                            <button class="btn btn-sm @(user.IsTestUser ? "btn-warning text-dark" : "btn-outline-secondary")" 
-                                    @onclick="() => ToggleTestUser(user.Id)">
-                                 @(user.IsTestUser ? "Test" : "Real")
-                            </button>
+                                <button class="btn btn-sm @(user.IsTestUser ? "btn-warning text-dark" : "btn-outline-secondary") py-0" 
+                                        style="font-size: 0.7rem;" @onclick="() => ToggleTestUser(user.Id)">
+                                     @(user.IsTestUser ? "Test" : "Real")
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 }
                   @if (!FilteredAndSortedUsers.Any())
                 {
-                     <tr><td colspan="16" class="text-center text-muted">No active users found.</td></tr>
+                     <tr><td colspan="13" class="text-center text-muted">No active users found.</td></tr>
                 }
             </tbody>
         </table>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mt-3 mb-5">
+    <div class="pagination-container">
         <button class="btn btn-outline-secondary btn-sm px-3" @onclick="PrevUsersPage" disabled="@(usersPage <= 1)">
             <i class="bi bi-arrow-left me-1"></i> Previous
         </button>
@@ -1253,11 +1304,9 @@ else
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query = query.Where(u => 
-                    u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) || 
-                    u.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                    u.FirstName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) 
-                    ||
-                    u.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+                    u.FirstName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) || 
+                    u.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    (u.DiscordUsername != null && u.DiscordUsername.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)));
             }
 
             if (hideZeroBalance)
@@ -1286,7 +1335,8 @@ else
             var list = baseList.ToList();
             totalFilteredCount = list.Count;
 
-            if (hideZeroBalance)
+            // If searching or filtering zero balance, use simple pagination
+            if (hideZeroBalance || !string.IsNullOrWhiteSpace(searchTerm))
             {
                 return list.Skip((usersPage - 1) * PageSize).Take(PageSize);
             }
@@ -1313,20 +1363,10 @@ else
     {
         get 
         {
-            if (hideZeroBalance) return totalFilteredCount > usersPage * PageSize;
+            if (hideZeroBalance || !string.IsNullOrWhiteSpace(searchTerm)) return totalFilteredCount > usersPage * PageSize;
 
-            var cutoff = DateTime.UtcNow.AddDays(-14);
             var currentSearchList = allUsersVM.AsEnumerable();
-            if (!string.IsNullOrWhiteSpace(searchTerm))
-            {
-                currentSearchList = currentSearchList.Where(u => 
-                    u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) || 
-                    u.Email.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                    u.FirstName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-                    u.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
-            }
-
-            var recentCount = currentSearchList.Count(u => u.LastActive >= cutoff);
+            var recentCount = currentSearchList.Count(u => u.LastActive >= DateTime.UtcNow.AddDays(-14));
             int page1DisplayCount = Math.Min(PageSize, recentCount);
             
             if (usersPage == 1)
