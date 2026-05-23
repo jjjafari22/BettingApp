@@ -107,7 +107,7 @@ else
 
     private async Task LoadSettings(ApplicationDbContext context)
     {
-        var existingSettings = await context.Settings.FirstOrDefaultAsync();
+        var existingSettings = await context.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
         if (existingSettings == null)
         {
             // Default MinBet 100
@@ -126,7 +126,7 @@ else
         showSuccess = false;
         using var context = DbFactory.CreateDbContext();
         
-        var dbSettings = await context.Settings.FirstOrDefaultAsync();
+        var dbSettings = await context.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
         if (dbSettings != null)
         {
             var oldMinBet = dbSettings.MinBetAmount;

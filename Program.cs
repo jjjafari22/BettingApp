@@ -112,7 +112,8 @@ builder.Services.AddScoped<ApplicationDbContext>(p =>
 builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
-    .AddDefaultTokenProviders();
+    .AddDefaultTokenProviders()
+    .AddErrorDescriber<CustomIdentityErrorDescriber>();
 
 builder.Services.AddTransient<IEmailSender<ApplicationUser>, EmailSender>();
 

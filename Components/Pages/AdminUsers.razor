@@ -305,7 +305,7 @@ else
             }
             else
             {
-                <strong>Activity Spotlight:</strong><span> Page 1 displays users active within the last 14 days. Subsequent pages show the remaining user base.</span>
+                <strong>All Users:</strong><span> Showing all active and inactive users. Standard pagination (20 per page) is applied. Click any header to sort.</span>
             }
         </div>
     </div>
@@ -339,8 +339,9 @@ else
                     <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("AvailableCredit")'>Avail. Credit @GetSortIcon("AvailableCredit")</th>
                     <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("Handle")'>Handle @GetSortIcon("Handle")</th>
                     <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("LifetimeProfit")'>Lifetime Profit @GetSortIcon("LifetimeProfit")</th>
-                    <th style="cursor: pointer; min-width: 120px;" @onclick='() => Sort("FirstName")'>Full Name @GetSortIcon("FirstName")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("Email")'>Email @GetSortIcon("Email")</th>
+                    <th style="cursor: pointer;" @onclick='() => Sort("FirstName")'>Full Name @GetSortIcon("FirstName")</th>
+                    <th style="cursor: pointer;" @onclick='() => Sort("Email")'>Email @GetSortIcon("Email")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("PhoneNumber")'>Phone @GetSortIcon("PhoneNumber")</th>
                     <th>Discord Info</th>
                     <th>Referred By</th>
                     <th>Status</th>
@@ -366,14 +367,33 @@ else
                         <td>@user.DiscordUsername</td>
 
                         <td class="@(user.Balance >= 0 ? "text-success" : "text-danger") fw-bold text-nowrap">@user.Balance.ToString("N0") kr</td>
-                        <td class="text-info fw-bold text-nowrap">@user.FreeBetBalance.ToString("N0") kr</td>
+                        <td class="text-nowrap">
+                            <div class="text-info fw-bold">@user.FreeBetBalance.ToString("N0") kr</div>
+                            <small class="text-muted" style="font-size: 0.7rem;">Total: @user.TotalFreeBetsGiven.ToString("N0") kr</small>
+                        </td>
                         <td class="text-nowrap">@user.AvailableCredit.ToString("N0") kr</td>
                         <td class="fw-bold text-nowrap">@user.Handle.ToString("N0") kr</td>
                         <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold text-nowrap">@user.LifetimeProfit.ToString("N0") kr</td>
                         
-                        <td style="white-space: normal; word-break: break-word;">@user.FirstName @user.LastName</td>
+                        <td style="word-break: break-word; min-width: 80px;">
+                            <div>@user.FirstName</div>
+                            <div>@user.LastName</div>
+                        </td>
                         
-                        <td class="text-nowrap">@user.Email</td>
+                        <td style="word-break: break-all; min-width: 80px;">
+                            @if (!string.IsNullOrEmpty(user.Email) && user.Email.Contains("@"))
+                            {
+                                var emailParts = user.Email.Split('@');
+                                <div>@emailParts[0]</div>
+                                <div class="text-muted" style="font-size: 0.85em;">@@@emailParts[1]</div>
+                            }
+                            else
+                            {
+                                @user.Email
+                            }
+                        </td>
+                        
+                        <td class="text-nowrap">@(user.PhoneNumber ?? "-")</td>
 
                         <td @onclick:stopPropagation="true">
                             <div class="d-flex flex-column gap-1">
@@ -709,6 +729,9 @@ else
             var userUpdateDate = u.UpdatedAt == DateTime.MinValue ? u.CreatedAt : u.UpdatedAt;
             
             var lastActive = new[] { userUpdateDate, lastBetDate, lastTransDate }.Max();
+            
+            var totalFreeBetsGiven = userTrans.Where(t => t.Type == "Free Bet").Sum(t => (decimal)t.AmountNOK);
+
             var vm = new UserViewModel
             {
                 Id = u.Id,
@@ -722,6 +745,7 @@ else
                 CreditLimit = u.CreditLimit, 
                 Balance = u.Balance, 
                 FreeBetBalance = u.FreeBetBalance,
+                TotalFreeBetsGiven = totalFreeBetsGiven,
                 AvailableCredit = u.Balance + u.CreditLimit + u.FreeBetBalance, 
                 LifetimeProfit = lifetimeProfit,
                 DateJoined = dateJoined,
@@ -729,6 +753,7 @@ else
                 DiscordUserId = u.DiscordUserId,
                 DiscordUsername = u.DiscordUsername,
                 ReferredBy = u.ReferredBy,           
+                PhoneNumber = u.PhoneNumber,
                 IsManuallyVerified = u.IsManuallyVerified 
             };
             if (u.EmailConfirmed)
@@ -884,7 +909,13 @@ else
         
         if (user != null)
         {
-            user.IsManuallyVerified = !user.IsManuallyVerified;
+            var newStatus = !user.IsManuallyVerified;
+            var actionText = newStatus ? "verify" : "unverify";
+            
+            bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to {actionText} {user.UserName}?");
+            if (!confirmed) return;
+
+            user.IsManuallyVerified = newStatus;
             user.UpdatedAt = DateTime.UtcNow;
 
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -915,7 +946,13 @@ else
         if (user != null)
         {
             if (user.UserName == currentAdmin) return;
-            user.IsAdmin = !user.IsAdmin;
+
+            var newStatus = !user.IsAdmin;
+            var actionText = newStatus ? "grant admin privileges to" : "revoke admin privileges from";
+            bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to {actionText} {user.UserName}?");
+            if (!confirmed) return;
+
+            user.IsAdmin = newStatus;
             user.UpdatedAt = DateTime.UtcNow;
 
             context.AuditLogs.Add(new AuditLog 
@@ -939,7 +976,12 @@ else
         
         if (user != null)
         {
-            user.IsTestUser = !user.IsTestUser;
+            var newStatus = !user.IsTestUser;
+            var actionText = newStatus ? "mark as Test User" : "mark as Real User";
+            bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to {actionText}: {user.UserName}?");
+            if (!confirmed) return;
+
+            user.IsTestUser = newStatus;
             user.UpdatedAt = DateTime.UtcNow;
 
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -1321,6 +1363,7 @@ else
                 "UserName" => sortAscending ? query.OrderBy(u => u.UserName) : query.OrderByDescending(u => u.UserName),
                 "FirstName" => sortAscending ? query.OrderBy(u => u.FirstName) : query.OrderByDescending(u => u.FirstName),
                 "LastName" => sortAscending ? query.OrderBy(u => u.LastName) : query.OrderByDescending(u => u.LastName),
+                "PhoneNumber" => sortAscending ? query.OrderBy(u => u.PhoneNumber) : query.OrderByDescending(u => u.PhoneNumber),
                 "Balance" => sortAscending ? query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
                 "FreeBetBalance" => sortAscending ? query.OrderBy(u => u.FreeBetBalance) : query.OrderByDescending(u => u.FreeBetBalance),
                 "Handle" => sortAscending ? query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
@@ -1335,27 +1378,7 @@ else
             var list = baseList.ToList();
             totalFilteredCount = list.Count;
 
-            // If searching or filtering zero balance, use simple pagination
-            if (hideZeroBalance || !string.IsNullOrWhiteSpace(searchTerm))
-            {
-                return list.Skip((usersPage - 1) * PageSize).Take(PageSize);
-            }
-            else
-            {
-                var cutoff = DateTime.UtcNow.AddDays(-14);
-                var recentUsers = list.Where(u => u.LastActive >= cutoff).ToList();
-                int page1Count = Math.Min(PageSize, recentUsers.Count);
-
-                if (usersPage == 1)
-                {
-                    return recentUsers.Take(PageSize);
-                }
-                else
-                {
-                    int skipAmount = page1Count + (usersPage - 2) * PageSize;
-                    return list.Skip(skipAmount).Take(PageSize);
-                }
-            }
+            return list.Skip((usersPage - 1) * PageSize).Take(PageSize);
         }
     }
 
@@ -1363,21 +1386,7 @@ else
     {
         get 
         {
-            if (hideZeroBalance || !string.IsNullOrWhiteSpace(searchTerm)) return totalFilteredCount > usersPage * PageSize;
-
-            var currentSearchList = allUsersVM.AsEnumerable();
-            var recentCount = currentSearchList.Count(u => u.LastActive >= DateTime.UtcNow.AddDays(-14));
-            int page1DisplayCount = Math.Min(PageSize, recentCount);
-            
-            if (usersPage == 1)
-            {
-                return totalFilteredCount > page1DisplayCount;
-            }
-            else
-            {
-                int shownSoFar = page1DisplayCount + (usersPage - 1) * PageSize;
-                return totalFilteredCount > shownSoFar;
-            }
+            return totalFilteredCount > usersPage * PageSize;
         }
     }
 
@@ -1397,6 +1406,7 @@ else
         public int CreditLimit { get; set; }
         public decimal Balance { get; set; }
         public decimal FreeBetBalance { get; set; }
+        public decimal TotalFreeBetsGiven { get; set; }
         public decimal Handle { get; set; }
         public decimal AvailableCredit { get; set; }
         public decimal LifetimeProfit { get; set; }
@@ -1405,6 +1415,7 @@ else
         public string? DiscordUserId { get; set; }
         public string? DiscordUsername { get; set; }
         public string? ReferredBy { get; set; }
+        public string? PhoneNumber { get; set; }
         public bool IsManuallyVerified { get; set; }
     }
 }
