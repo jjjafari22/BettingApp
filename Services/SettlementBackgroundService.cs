@@ -25,9 +25,8 @@ namespace BettingApp.Services
                 var now = DateTime.UtcNow; // Or convert to Norway time if needed
                 
                 // Norway is usually UTC+1 or UTC+2. Let's assume target is Norway.
-                // We'll check every minute.
-                var norwayTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
-                var norwayTime = TimeZoneInfo.ConvertTimeFromUtc(now, norwayTimeZone);
+                // Get Norway time safely using centralized helper
+                var norwayTime = BettingApp.Data.TimeHelpers.GetNorwayTime(now);
 
                 // Run every hour at xx:59
                 if (norwayTime.Minute == 59)

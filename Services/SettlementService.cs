@@ -118,21 +118,7 @@ namespace BettingApp.Services
         {
             var sb = new StringBuilder();
 
-            DateTime GetNorwayTime(DateTime utc)
-            {
-                try
-                {
-                    var tz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Oslo");
-                    return TimeZoneInfo.ConvertTimeFromUtc(utc, tz);
-                }
-                catch
-                {
-                    try { return TimeZoneInfo.ConvertTimeFromUtc(utc, TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time")); }
-                    catch { return utc.AddHours(1); }
-                }
-            }
-
-            var norwayTime = GetNorwayTime(createdAtUtc);
+            var norwayTime = BettingApp.Data.TimeHelpers.GetNorwayTime(createdAtUtc);
 
             // Add Header Info
             sb.AppendLine($"Snapshot Time (UTC),{createdAtUtc:yyyy-MM-dd HH:mm:ss}");

@@ -119,7 +119,6 @@
 
     private bool isAuthorized = false;
     private HubConnection? hubConnection;
-    private TimeZoneInfo norwayTimeZone = default!;
     
     // State
     private ViewMode viewMode = ViewMode.Daily;
@@ -153,12 +152,8 @@
 
         isAuthorized = true;
 
-        // 2. Setup Timezone (Handles cross-platform differences for Linux/Windows)
-        try {
-            norwayTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Oslo");
-        } catch {
-            norwayTimeZone = TimeZoneInfo.FindSystemTimeZoneById("W. Europe Standard Time");
-        }
+        // Time Setup
+        currentDateNorway = TimeHelpers.GetNorwayTime(DateTime.UtcNow);
 
         GoToCurrent();
 
@@ -197,7 +192,7 @@
 
     private void GoToCurrent()
     {
-        currentDateNorway = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, norwayTimeZone);
+        currentDateNorway = TimeHelpers.GetNorwayTime(DateTime.UtcNow);
         _ = LoadMetricsAsync();
     }
 
@@ -286,8 +281,8 @@
                 break;
         }
 
-        DateTime startUtc = TimeZoneInfo.ConvertTimeToUtc(startNorway, norwayTimeZone);
-        DateTime endUtc = TimeZoneInfo.ConvertTimeToUtc(endNorway, norwayTimeZone);
+        DateTime startUtc = TimeHelpers.GetUtcFromNorwayTime(startNorway);
+        DateTime endUtc = TimeHelpers.GetUtcFromNorwayTime(endNorway);
 
         // Fetch free bet transactions
         var freeBetTransactions = await context.Transactions
