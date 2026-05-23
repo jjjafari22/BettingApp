@@ -20,8 +20,8 @@ public class PendingBetsNotificationService : BackgroundService
     // Track the highest notification interval (in minutes) sent for each individual bet ID
     private readonly ConcurrentDictionary<int, int> _betNotificationStages = new();
 
-    // The notification intervals in minutes. You can adjust these thresholds as needed.
-    private readonly int[] _notificationIntervals = new[] { 15, 30, 60, 120, 240, 480 };
+    // Flag to track the first run after application startup to prevent restart notification spam
+    private bool _isFirstRun = true;
 
     public PendingBetsNotificationService(
         IServiceScopeFactory scopeFactory,
@@ -85,7 +85,7 @@ public class PendingBetsNotificationService : BackgroundService
             var betAgeMinutes = (now - bet.CreatedAt).TotalMinutes;
             
             // Find the highest interval threshold this specific bet has crossed
-            var applicableInterval = _notificationIntervals.LastOrDefault(interval => betAgeMinutes >= interval);
+            var applicableInterval = GetApplicableInterval(betAgeMinutes);
             
             if (applicableInterval > 0)
             {
@@ -94,12 +94,21 @@ public class PendingBetsNotificationService : BackgroundService
                 // If we haven't sent a notification for this specific interval on this specific bet
                 if (applicableInterval > lastSentInterval)
                 {
-                    shouldNotify = true;
+                    if (!_isFirstRun)
+                    {
+                        shouldNotify = true;
+                    }
                     
                     // Mark this interval as sent for this bet
                     _betNotificationStages[bet.Id] = applicableInterval;
                 }
             }
+        }
+
+        // After processing all bets on the first run, clear the flag
+        if (_isFirstRun)
+        {
+            _isFirstRun = false;
         }
 
         // If at least one bet crossed a new time threshold, send the reminder to Discord
@@ -112,5 +121,21 @@ public class PendingBetsNotificationService : BackgroundService
             // Call the existing method with both the count and the required oldestWaitTime
             await _discordService.SendPendingBetsReminderAsync(pendingBets.Count, oldestWaitTime);
         }
+    }
+
+    private int GetApplicableInterval(double betAgeMinutes)
+    {
+        if (betAgeMinutes < 15) return 0;
+        if (betAgeMinutes < 30) return 15;
+        if (betAgeMinutes < 60) return 30;
+        if (betAgeMinutes < 120) return 60;
+        if (betAgeMinutes < 240) return 120;
+        if (betAgeMinutes < 480) return 240;
+        if (betAgeMinutes < 960) return 480;
+        if (betAgeMinutes < 1440) return 960;
+        
+        // 24 hours (1440 minutes) or more. Reminds every 24 hours.
+        int days = (int)(betAgeMinutes / 1440);
+        return days * 1440;
     }
 }
