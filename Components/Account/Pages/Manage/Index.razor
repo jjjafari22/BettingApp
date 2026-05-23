@@ -1,4 +1,4 @@
-﻿@page "/Account/Manage"
+@page "/Account/Manage"
 
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Identity
@@ -37,6 +37,12 @@
                 <ValidationMessage For="() => Input.LastName" class="text-danger" />
             </div>
 
+            <div class="form-floating mb-3">
+                <InputText @bind-Value="Input.PhoneNumber" id="Input.PhoneNumber" class="form-control" placeholder="+47 123 45 678" />
+                <label for="Input.PhoneNumber" class="form-label">Phone Number</label>
+                <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
+            </div>
+
             @* --- Referred By Field --- *@
             <div class="form-floating mb-3">
                 <InputText @bind-Value="Input.ReferredBy" id="Input.ReferredBy" class="form-control" placeholder="" />
@@ -71,6 +77,7 @@
         Input.FirstName ??= user.FirstName;
         Input.LastName ??= user.LastName;
         Input.ReferredBy ??= user.ReferredBy; 
+        Input.PhoneNumber ??= user.PhoneNumber;
     }
 
     private async Task OnValidSubmitAsync()
@@ -93,6 +100,12 @@
         if (Input.ReferredBy != user.ReferredBy)
         {
             user.ReferredBy = Input.ReferredBy;
+            hasChanges = true;
+        }
+
+        if (Input.PhoneNumber != user.PhoneNumber)
+        {
+            user.PhoneNumber = Input.PhoneNumber;
             hasChanges = true;
         }
 
@@ -120,5 +133,10 @@
 
         [Display(Name = "Referred By")]
         public string? ReferredBy { get; set; }
+
+        [Required]
+        [Phone]
+        [Display(Name = "Phone Number")]
+        public string? PhoneNumber { get; set; }
     }
 }

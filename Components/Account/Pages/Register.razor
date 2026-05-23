@@ -1,4 +1,4 @@
-﻿@page "/Account/Register"
+@page "/Account/Register"
 
 @using System.ComponentModel.DataAnnotations
 @using System.Text
@@ -44,6 +44,12 @@
                 <InputText id="lastname" @bind-Value="Input.LastName" class="form-control" placeholder="Doe" />
                 <label for="lastname">Last Name</label>
                 <ValidationMessage For="() => Input.LastName" class="text-danger" />
+            </div>
+
+            <div class="form-floating mb-3">
+                <InputText id="phonenumber" @bind-Value="Input.PhoneNumber" class="form-control" autocomplete="tel" aria-required="true" placeholder="+47 123 45 678" />
+                <label for="phonenumber">Phone Number</label>
+                <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
             </div>
 
             <div class="form-floating mb-3">
@@ -120,6 +126,7 @@
             // Custom Fields
             user.FirstName = Input.FirstName;
             user.LastName = Input.LastName;
+            user.PhoneNumber = Input.PhoneNumber; // <--- Save Phone Number
             user.ReferredBy = Input.ReferredBy; // <--- Save Referral
             user.CreatedAt = DateTime.UtcNow;
             user.UpdatedAt = DateTime.UtcNow;
@@ -140,6 +147,7 @@
                     await DiscordService.SendNotificationAsync("New User Registered", 
                         $"**Name:** {Input.FirstName} {Input.LastName}\n" +
                         $"**Email:** {Input.Email}\n" +
+                        $"**Phone:** {Input.PhoneNumber}\n" +
                         $"**Referred By:** {Input.ReferredBy ?? "None"}\n" +
                         $"**Status:** Pending Approval\n" +
                         $"[Approve User Now]({adminUsersUrl})");
@@ -216,6 +224,11 @@
         [Required]
         [Display(Name = "Last Name")]
         public string? LastName { get; set; }
+
+        [Required]
+        [Phone]
+        [Display(Name = "Phone Number")]
+        public string PhoneNumber { get; set; } = "";
 
         [Display(Name = "Referred by")]
         public string? ReferredBy { get; set; }
