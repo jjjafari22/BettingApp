@@ -14,11 +14,6 @@ using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Azure Port Configuration ---
-builder.WebHost.ConfigureKestrel(options =>
-{
-    options.ListenAnyIP(8080);
-});
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
