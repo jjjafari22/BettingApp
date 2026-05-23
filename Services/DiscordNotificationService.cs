@@ -6,6 +6,8 @@ using Microsoft.Extensions.Configuration;
 using System.Net.Http.Json; 
 using BettingApp.Data;      
 
+using Microsoft.Extensions.DependencyInjection;
+
 namespace BettingApp.Services;
 
 public class DiscordNotificationService : IHostedService
@@ -14,13 +16,15 @@ public class DiscordNotificationService : IHostedService
     private readonly IConfiguration _config;
     private readonly ILogger<DiscordNotificationService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly string _botToken;
 
-    public DiscordNotificationService(IConfiguration config, ILogger<DiscordNotificationService> logger, IHttpClientFactory httpClientFactory)
+    public DiscordNotificationService(IConfiguration config, ILogger<DiscordNotificationService> logger, IHttpClientFactory httpClientFactory, IServiceScopeFactory scopeFactory)
     {
         _config = config;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _scopeFactory = scopeFactory;
         _botToken = _config["Discord:BotToken"] ?? "";
 
         var socketConfig = new DiscordSocketConfig
@@ -140,8 +144,34 @@ public class DiscordNotificationService : IHostedService
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
         string adminUrl = $"{baseUrl}/admin?ReviewBetId={bet.Id}";
 
+        string userDisplayName = bet.UserName;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var user = await db.Users.FindAsync(bet.UserId);
+            if (user != null)
+            {
+                string discordName = !string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : bet.UserName;
+                string fullName = $"{user.FirstName} {user.LastName}".Trim();
+                
+                if (!string.IsNullOrEmpty(fullName))
+                {
+                    userDisplayName = $"{discordName} ({fullName})";
+                }
+                else
+                {
+                    userDisplayName = discordName;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load user details for discord notification.");
+        }
+
         string description = $"**New Pick Placed!**\n" +
-                             $"**User:** {bet.UserName}\n" +
+                             $"**User:** {userDisplayName}\n" +
                              $"[Approve Pick Here]({adminUrl})\n" +
                              (string.IsNullOrEmpty(bet.ScreenshotUrl) ? "" : $"[View Screenshot]({bet.ScreenshotUrl})\n") +
                              $"------------------------------\n";
