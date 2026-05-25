@@ -299,13 +299,13 @@ else
     <div class="alert alert-info py-2 d-flex align-items-center shadow-sm">
         <i class="bi bi-info-circle-fill me-2 fs-5"></i>
         <div>
-            @if (hideZeroBalance)
+            @if (showActiveRealUsers)
             {
-                <strong>Filter Enabled:</strong><span> Showing all users with a balance other than 0 kr. Standard pagination (20 per page) is applied.</span>
+                <strong>Filter Enabled:</strong><span> Showing only active real players (excluding 0 kr balance, admins, and test users).</span>
             }
             else
             {
-                <strong>All Users:</strong><span> Showing all active and inactive users. Standard pagination (20 per page) is applied. Click any header to sort.</span>
+                <strong>All Users:</strong><span> Showing all active and inactive users, including staff. Click any header to sort.</span>
             }
         </div>
     </div>
@@ -318,10 +318,10 @@ else
              </div>
          </div>
          <div class="col-md-6 text-md-end mt-3 mt-md-0">
-             <label class="toggle-container shadow-sm @(hideZeroBalance ? "active" : "")" for="hideZeroToggle">
+             <label class="toggle-container shadow-sm @(showActiveRealUsers ? "active" : "")" for="showActiveRealToggle">
                  <div class="form-check form-switch m-0 p-0 d-flex align-items-center">
-                     <input class="form-check-input large-switch m-0 me-3 shadow-none" type="checkbox" role="switch" id="hideZeroToggle" checked="@hideZeroBalance" @onchange="ToggleHideZero" />
-                     <span class="toggle-label-text @(hideZeroBalance ? "text-primary" : "text-muted")">Hide 0 kr balance</span>
+                     <input class="form-check-input large-switch m-0 me-3 shadow-none" type="checkbox" role="switch" id="showActiveRealToggle" checked="@showActiveRealUsers" @onchange="ToggleShowActiveReal" />
+                     <span class="toggle-label-text @(showActiveRealUsers ? "text-primary" : "text-muted")">Show Active Real Users</span>
                  </div>
              </label>
          </div>
@@ -594,7 +594,7 @@ else
     private decimal currentReviewUserFreeBalance = 0;
     private double touchStartX = 0;
     private double touchEndX = 0;
-    private bool hideZeroBalance = false;
+    private bool showActiveRealUsers = false;
 
     private int TimezoneOffset { get; set; }
     
@@ -1326,9 +1326,9 @@ else
     private const int PageSize = 20;
     private int totalFilteredCount = 0;
 
-    private async Task ToggleHideZero(ChangeEventArgs e)
+    private async Task ToggleShowActiveReal(ChangeEventArgs e)
     {
-        hideZeroBalance = (bool)(e.Value ?? false);
+        showActiveRealUsers = (bool)(e.Value ?? false);
         usersPage = 1;
         await InvokeAsync(StateHasChanged);
     }
@@ -1351,9 +1351,9 @@ else
                     (u.DiscordUsername != null && u.DiscordUsername.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)));
             }
 
-            if (hideZeroBalance)
+            if (showActiveRealUsers)
             {
-                query = query.Where(u => u.Balance != 0);
+                query = query.Where(u => u.Balance != 0 && !u.IsAdmin && !u.IsTestUser);
             }
 
             var baseList = sortColumn switch

@@ -5,7 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>aspnet-BettingApp-4a8a64cd-f902-4d72-a4a3-d311110b2a5b</UserSecretsId>
-    </PropertyGroup>
+    <NoWarn>$(NoWarn);BL0008</NoWarn>
+  </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" Version="12.23.0" />
