@@ -1,0 +1,388 @@
+@page "/admin/broadcast"
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@using BettingApp.Services
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject DiscordNotificationService DiscordService
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<style>
+    .channel-list {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 0.5rem;
+        background-color: #f8f9fa;
+    }
+    .discord-preview {
+        background-color: #313338;
+        color: #dbdee1;
+        border-radius: 8px;
+        padding: 16px;
+        font-family: 'gg sans', 'Noto Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+    .discord-preview h2 {
+        color: #ffffff;
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-top: 0;
+        margin-bottom: 8px;
+    }
+    .discord-preview p {
+        margin: 0;
+        white-space: pre-wrap;
+    }
+</style>
+
+<h3>Broadcast Message to Discord</h3>
+
+@if (!hasAccess)
+{
+    <div class="alert alert-danger">You are not authorized to view this page.</div>
+}
+else if (isLoading)
+{
+    <p><em>Loading channels...</em></p>
+}
+else
+{
+    <div class="row">
+        <!-- FORM SECTION -->
+        <div class="col-md-7">
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-broadcast"></i> Compose Broadcast</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Title (Optional)</label>
+                        <input type="text" class="form-control" @bind="broadcastTitle" @bind:event="oninput" placeholder="Rendered as an H2 header (e.g., ## Title)" />
+                        <small class="text-muted">Will be sent as a Discord header if provided.</small>
+                    </div>
+                    <div class="mb-3 position-relative">
+                        <label class="form-label fw-bold">Message <span class="text-danger">*</span></label>
+                        
+                        <div class="btn-toolbar mb-2 bg-light p-1 rounded border" role="toolbar">
+                            <div class="btn-group btn-group-sm me-2" role="group">
+                                <button type="button" class="btn btn-outline-secondary" @onclick="@(() => InsertMarkdown("**", "**"))" title="Bold"><b>B</b></button>
+                                <button type="button" class="btn btn-outline-secondary" @onclick="@(() => InsertMarkdown("*", "*"))" title="Italic"><i>I</i></button>
+                                <button type="button" class="btn btn-outline-secondary" @onclick="@(() => InsertMarkdown("__", "__"))" title="Underline"><u>U</u></button>
+                            </div>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-secondary" @onclick="ToggleEmojiPicker" title="Insert Emoji">😀</button>
+                            </div>
+                        </div>
+
+                        @if (showEmojiPicker)
+                        {
+                            <div class="card p-2 shadow" style="position: absolute; z-index: 100; max-width: 280px; top: 75px; left: 120px;">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted fw-bold">Emojis</small>
+                                    <button type="button" class="btn-close" style="font-size: 0.5rem;" @onclick="ToggleEmojiPicker"></button>
+                                </div>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var emoji in commonEmojis)
+                                    {
+                                        <button type="button" class="btn btn-light btn-sm px-2 py-1" @onclick="@(() => InsertEmoji(emoji))">@emoji</button>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <textarea id="broadcastMessageInput" class="form-control" rows="6" @bind="broadcastMessage" @bind:event="oninput" placeholder="Type your message here..."></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Select Target Channels (@selectedChannelIds.Count selected)</label>
+                        <div class="d-flex gap-2 mb-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="SelectAllChannels">Select All</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="DeselectAllChannels">Deselect All</button>
+                        </div>
+                        <div class="channel-list">
+                            @if (availableChannels.Count == 0)
+                            {
+                                <div class="text-muted">No text channels found in this server.</div>
+                            }
+                            @foreach (var channel in availableChannels)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="chk_@channel.Id" 
+                                           checked="@selectedChannelIds.Contains(channel.Id)"
+                                           @onchange="@((ChangeEventArgs e) => ToggleChannelSelection(channel.Id, e.Value))" />
+                                    <label class="form-check-label" for="chk_@channel.Id">
+                                        #@channel.Name
+                                    </label>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <button class="btn btn-success w-100 fw-bold" @onclick="OpenPreview" disabled="@(!CanSend)">
+                        <i class="bi bi-eye"></i> Preview + Send
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- HISTORY SECTION -->
+        <div class="col-md-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Broadcast History</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        @foreach (var history in broadcastHistories)
+                        {
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between align-items-center mb-1">
+                                    <strong class="text-truncate" style="max-width: 60%;">@(string.IsNullOrEmpty(history.Title) ? "(No Title)" : history.Title)</strong>
+                                    <small class="text-muted">@history.CreatedAt.ToLocalTime().ToString("g")</small>
+                                </div>
+                                <p class="mb-1 text-muted text-truncate" style="max-height: 3rem;">@history.Message</p>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-primary" title="@history.RecipientNames">
+                                        <i class="bi bi-people"></i> Sent to @history.RecipientCount channels by @history.AdminUserName
+                                    </small>
+                                    <button class="btn btn-sm btn-outline-dark py-0" @onclick="() => UseAsTemplate(history)">
+                                        <i class="bi bi-copy"></i> Use as Template
+                                    </button>
+                                </div>
+                                @if (!string.IsNullOrEmpty(history.RecipientNames))
+                                {
+                                    <div style="font-size: 0.75rem; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="@history.RecipientNames">
+                                        <strong>To:</strong> @history.RecipientNames
+                                    </div>
+                                }
+                            </div>
+                        }
+                        @if (!broadcastHistories.Any())
+                        {
+                            <div class="p-3 text-center text-muted">No broadcast history found.</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- PREVIEW MODAL -->
+@if (showPreviewModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Broadcast</h5>
+                    <button type="button" class="btn-close" @onclick="ClosePreview"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-2">This is exactly how the message will look in Discord:</p>
+                    <div class="discord-preview mb-4">
+                        @if (!string.IsNullOrWhiteSpace(broadcastTitle))
+                        {
+                            <h2>@broadcastTitle</h2>
+                        }
+                        <p>@((MarkupString)ParseDiscordMarkdown(broadcastMessage))</p>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <strong><i class="bi bi-exclamation-triangle"></i> Warning:</strong> You are about to send this message to <strong>@selectedChannelIds.Count</strong> channels. This action cannot be undone.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="ClosePreview">Cancel</button>
+                    <button type="button" class="btn btn-primary fw-bold" @onclick="SendBroadcast" disabled="@isSending">
+                        @if (isSending)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Sending...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-send me-2"></i> <span>Yes, Send to @selectedChannelIds.Count Channels</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool hasAccess = false;
+    private bool isLoading = true;
+    private bool showPreviewModal = false;
+    private bool isSending = false;
+    private bool showEmojiPicker = false;
+
+    private string broadcastTitle = "";
+    private string broadcastMessage = "";
+
+    private readonly string[] commonEmojis = new[] 
+    { 
+        "😀", "😂", "🥰", "😎", "🤔", "🙌", "👍", "👎", "👏", "🎉", 
+        "🔥", "💯", "✅", "❌", "⚠️", "ℹ️", "🎁", "💸", "⚽", "🎮",
+        "🤝", "🍀", "👑", "✨", "🚀", "📢", "🏆", "🌟", "💡", "💰"
+    };
+    
+    private List<(ulong Id, string Name)> availableChannels = new();
+    private HashSet<ulong> selectedChannelIds = new();
+    private List<BroadcastHistory> broadcastHistories = new();
+
+    private bool CanSend => !string.IsNullOrWhiteSpace(broadcastMessage) && selectedChannelIds.Count > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            using var context = DbFactory.CreateDbContext();
+            var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+            hasAccess = dbUser?.IsAdmin ?? false;
+
+            if (hasAccess)
+            {
+                await LoadHistoryAsync(context);
+                availableChannels = await DiscordService.GetGuildTextChannelsAsync();
+                // Select all by default
+                selectedChannelIds = new HashSet<ulong>(availableChannels.Select(c => c.Id));
+            }
+        }
+        isLoading = false;
+    }
+
+    private async Task LoadHistoryAsync(ApplicationDbContext context)
+    {
+        broadcastHistories = await context.Broadcasts
+            .AsNoTracking()
+            .OrderByDescending(b => b.CreatedAt)
+            .Take(20)
+            .ToListAsync();
+    }
+
+    private void ToggleChannelSelection(ulong channelId, object? isChecked)
+    {
+        if (isChecked is bool check && check)
+        {
+            selectedChannelIds.Add(channelId);
+        }
+        else
+        {
+            selectedChannelIds.Remove(channelId);
+        }
+    }
+
+    private void SelectAllChannels() => selectedChannelIds = new HashSet<ulong>(availableChannels.Select(c => c.Id));
+    private void DeselectAllChannels() => selectedChannelIds.Clear();
+
+    private void UseAsTemplate(BroadcastHistory history)
+    {
+        broadcastTitle = history.Title;
+        broadcastMessage = history.Message;
+    }
+
+    private void OpenPreview()
+    {
+        if (CanSend)
+        {
+            showPreviewModal = true;
+        }
+    }
+
+    private void ClosePreview()
+    {
+        if (!isSending)
+        {
+            showPreviewModal = false;
+        }
+    }
+
+    private async Task SendBroadcast()
+    {
+        if (isSending || !CanSend) return;
+
+        isSending = true;
+        StateHasChanged();
+
+        int successCount = await DiscordService.BroadcastMessageAsync(selectedChannelIds.ToList(), broadcastTitle, broadcastMessage);
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var adminName = authState.User.Identity?.Name ?? "Unknown";
+
+        using var context = DbFactory.CreateDbContext();
+        var recipientNamesList = availableChannels
+            .Where(c => selectedChannelIds.Contains(c.Id))
+            .Select(c => c.Name);
+        string recipientNamesStr = string.Join(", ", recipientNamesList);
+
+        var newHistory = new BroadcastHistory
+        {
+            Title = broadcastTitle,
+            Message = broadcastMessage,
+            AdminUserName = adminName,
+            RecipientCount = successCount,
+            RecipientNames = recipientNamesStr,
+            CreatedAt = DateTime.UtcNow
+        };
+        context.Broadcasts.Add(newHistory);
+        await context.SaveChangesAsync();
+
+        await LoadHistoryAsync(context);
+
+        broadcastTitle = "";
+        broadcastMessage = "";
+        showPreviewModal = false;
+        isSending = false;
+
+        await JSRuntime.InvokeVoidAsync("alert", $"Successfully broadcasted message to {successCount} channels.");
+        StateHasChanged();
+    }
+
+    private void ToggleEmojiPicker()
+    {
+        showEmojiPicker = !showEmojiPicker;
+    }
+
+    private async Task InsertMarkdown(string prefix, string suffix)
+    {
+        await JSRuntime.InvokeVoidAsync("insertDiscordMarkdown", "broadcastMessageInput", prefix, suffix);
+    }
+
+    private async Task InsertEmoji(string emoji)
+    {
+        await JSRuntime.InvokeVoidAsync("insertDiscordEmoji", "broadcastMessageInput", emoji);
+        showEmojiPicker = false;
+    }
+
+    private string ParseDiscordMarkdown(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return text;
+        
+        // Escape HTML to prevent XSS in the preview
+        var html = System.Net.WebUtility.HtmlEncode(text);
+
+        // Bold **text**
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+        
+        // Underline __text__
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"__(.+?)__", "<u>$1</u>");
+        
+        // Italic *text* or _text_
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*(.+?)\*", "<em>$1</em>");
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"_(.+?)_", "<em>$1</em>");
+        
+        // Strikethrough ~~text~~
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"~~(.+?)~~", "<del>$1</del>");
+
+        return html;
+    }
+}

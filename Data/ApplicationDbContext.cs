@@ -9,6 +9,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Transaction> Transactions { get; set; }
     public DbSet<SystemSetting> Settings { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
+    public DbSet<BroadcastHistory> Broadcasts { get; set; }
 
     public DbSet<SettlementSnapshot> SettlementSnapshots { get; set; }
 

@@ -82,4 +82,15 @@ namespace BettingApp.Data
         public string TargetUserName { get; set; } = string.Empty; 
         public string Details { get; set; } = string.Empty; 
     }
+
+    public class BroadcastHistory
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string AdminUserName { get; set; } = string.Empty;
+        public int RecipientCount { get; set; }
+        public string RecipientNames { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
 }

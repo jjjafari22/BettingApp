@@ -370,4 +370,74 @@ public class DiscordNotificationService : IHostedService
             _logger.LogError(ex, $"Failed to send Discord DM to {discordUserId}");
         }
     }
+
+    public async Task<List<(ulong Id, string Name)>> GetGuildTextChannelsAsync()
+    {
+        if (_client.LoginState != LoginState.LoggedIn) return new();
+        
+        var guildIdString = _config["Discord:GuildId"];
+        if (!ulong.TryParse(guildIdString, out var guildId))
+        {
+            _logger.LogWarning("Invalid or missing Discord:GuildId config.");
+            return new();
+        }
+
+        try
+        {
+            var guild = await _client.Rest.GetGuildAsync(guildId);
+            if (guild == null)
+            {
+                _logger.LogWarning($"Could not find Guild with ID {guildId}. Ensure bot is invited.");
+                return new();
+            }
+
+            var channels = await guild.GetTextChannelsAsync();
+            return channels
+                .OrderBy(c => c.Name)
+                .Select(c => (c.Id, c.Name))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to fetch text channels for guild {guildId}");
+            return new();
+        }
+    }
+
+    public async Task<int> BroadcastMessageAsync(List<ulong> channelIds, string title, string message)
+    {
+        if (_client.LoginState != LoginState.LoggedIn) return 0;
+
+        string header = string.IsNullOrWhiteSpace(title) ? "" : $"## {title}\n";
+        string content = $"{header}{message}";
+
+        int count = 0;
+        int successfulSends = 0;
+        foreach (var channelId in channelIds)
+        {
+            try
+            {
+                if (_client.GetChannel(channelId) is ITextChannel channel)
+                {
+                    await channel.SendMessageAsync(content);
+                    successfulSends++;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to send broadcast to channel {channelId}");
+            }
+
+            count++;
+            if (count % 30 == 0)
+            {
+                await Task.Delay(1500); // 1.5-second delay every 30 messages to respect rate limits
+            }
+            else
+            {
+                await Task.Delay(50); // slight delay between all messages
+            }
+        }
+        return successfulSends;
+    }
 }
