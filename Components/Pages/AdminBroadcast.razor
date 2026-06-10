@@ -98,6 +98,33 @@ else
                     </div>
 
                     <div class="mb-3">
+                        <label class="form-label fw-bold">Attachments (Optional)</label>
+                        <InputFile OnChange="HandleFileSelected" class="form-control" multiple />
+                        @if (uploadedFiles.Any())
+                        {
+                            <div class="mt-2 d-flex flex-wrap gap-2">
+                                @foreach (var model in uploadedFiles)
+                                {
+                                    <div class="position-relative border p-1 rounded bg-white shadow-sm" style="width: 100px; height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+                                        <button type="button" class="btn btn-sm btn-danger position-absolute" style="top: -5px; right: -5px; border-radius: 50%; padding: 0.1rem 0.3rem;" @onclick="() => ClearAttachment(model)">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                        @if (model.PreviewUrl != null)
+                                        {
+                                            <img src="@model.PreviewUrl" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-file-earmark fs-3 text-secondary"></i>
+                                            <small class="text-truncate w-100 mt-1" style="font-size: 0.7rem;" title="@model.File.Name">@model.File.Name</small>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="mb-3">
                         <label class="form-label fw-bold">Select Target Channels (@selectedChannelIds.Count selected)</label>
                         <div class="d-flex gap-2 mb-2">
                             <button type="button" class="btn btn-sm btn-outline-primary" @onclick="SelectAllChannels">Select All</button>
@@ -190,6 +217,28 @@ else
                             <h2>@broadcastTitle</h2>
                         }
                         <p>@((MarkupString)ParseDiscordMarkdown(broadcastMessage))</p>
+                        @if (uploadedFiles.Any())
+                        {
+                            <div class="mt-2 p-2 rounded" style="background-color: #2b2d31; border: 1px solid #1e1f22;">
+                                <div class="fw-bold mb-2"><i class="bi bi-paperclip me-2"></i>Attachments (@uploadedFiles.Count):</div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    @foreach (var model in uploadedFiles)
+                                    {
+                                        if (model.PreviewUrl != null)
+                                        {
+                                            <img src="@model.PreviewUrl" style="max-height: 150px; max-width: 100%; border-radius: 4px;" />
+                                        }
+                                        else
+                                        {
+                                            <div class="p-2 bg-dark rounded d-flex align-items-center" style="border: 1px solid #3f4147;">
+                                                <i class="bi bi-file-earmark me-2"></i>
+                                                <small>@model.File.Name</small>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
                     </div>
                     
                     <div class="alert alert-warning">
@@ -224,6 +273,13 @@ else
 
     private string broadcastTitle = "";
     private string broadcastMessage = "";
+    
+    private class FileUploadModel
+    {
+        public IBrowserFile File { get; set; } = default!;
+        public string? PreviewUrl { get; set; }
+    }
+    private List<FileUploadModel> uploadedFiles = new();
 
     private readonly string[] commonEmojis = new[] 
     { 
@@ -284,6 +340,36 @@ else
     private void SelectAllChannels() => selectedChannelIds = new HashSet<ulong>(availableChannels.Select(c => c.Id));
     private void DeselectAllChannels() => selectedChannelIds.Clear();
 
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var files = e.GetMultipleFiles(maximumFileCount: 10);
+        foreach (var file in files)
+        {
+            var model = new FileUploadModel { File = file };
+            
+            if (file.ContentType.StartsWith("image/"))
+            {
+                try
+                {
+                    var resizedImageFile = await file.RequestImageFileAsync(file.ContentType, 800, 800);
+                    using var ms = new System.IO.MemoryStream();
+                    await resizedImageFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+                    model.PreviewUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(ms.ToArray())}";
+                }
+                catch
+                {
+                    // Ignore preview errors
+                }
+            }
+            uploadedFiles.Add(model);
+        }
+    }
+
+    private void ClearAttachment(FileUploadModel model)
+    {
+        uploadedFiles.Remove(model);
+    }
+
     private void UseAsTemplate(BroadcastHistory history)
     {
         broadcastTitle = history.Title;
@@ -313,7 +399,46 @@ else
         isSending = true;
         StateHasChanged();
 
-        int successCount = await DiscordService.BroadcastMessageAsync(selectedChannelIds.ToList(), broadcastTitle, broadcastMessage);
+        List<string> tempFilePaths = new();
+        if (uploadedFiles.Any())
+        {
+            try
+            {
+                foreach (var model in uploadedFiles)
+                {
+                    var extension = System.IO.Path.GetExtension(model.File.Name);
+                    if (string.IsNullOrEmpty(extension)) extension = ".tmp";
+                    
+                    var safeName = System.IO.Path.GetFileNameWithoutExtension(model.File.Name);
+                    safeName = new string(safeName.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_').ToArray());
+                    if (string.IsNullOrEmpty(safeName)) safeName = "file";
+                    
+                    var tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{safeName}_{Guid.NewGuid().ToString().Substring(0, 4)}{extension}");
+                    
+                    await using var fs = new System.IO.FileStream(tempPath, System.IO.FileMode.Create);
+                    await model.File.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024).CopyToAsync(fs);
+                    tempFilePaths.Add(tempPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Failed to process attachments: {ex.Message}");
+                foreach (var path in tempFilePaths)
+                {
+                    if (System.IO.File.Exists(path)) { try { System.IO.File.Delete(path); } catch { } }
+                }
+                isSending = false;
+                StateHasChanged();
+                return;
+            }
+        }
+
+        int successCount = await DiscordService.BroadcastMessageAsync(selectedChannelIds.ToList(), broadcastTitle, broadcastMessage, tempFilePaths);
+
+        foreach (var path in tempFilePaths)
+        {
+            if (System.IO.File.Exists(path)) { try { System.IO.File.Delete(path); } catch { } }
+        }
 
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var adminName = authState.User.Identity?.Name ?? "Unknown";
@@ -340,6 +465,7 @@ else
 
         broadcastTitle = "";
         broadcastMessage = "";
+        uploadedFiles.Clear();
         showPreviewModal = false;
         isSending = false;
 

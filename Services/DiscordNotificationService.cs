@@ -404,7 +404,7 @@ public class DiscordNotificationService : IHostedService
         }
     }
 
-    public async Task<int> BroadcastMessageAsync(List<ulong> channelIds, string title, string message)
+    public async Task<int> BroadcastMessageAsync(List<ulong> channelIds, string title, string message, List<string>? attachmentPaths = null)
     {
         if (_client.LoginState != LoginState.LoggedIn) return 0;
 
@@ -419,7 +419,26 @@ public class DiscordNotificationService : IHostedService
             {
                 if (_client.GetChannel(channelId) is ITextChannel channel)
                 {
-                    await channel.SendMessageAsync(content);
+                    if (attachmentPaths != null && attachmentPaths.Any())
+                    {
+                        var fileAttachments = attachmentPaths
+                            .Where(p => System.IO.File.Exists(p))
+                            .Select(p => new FileAttachment(p))
+                            .ToList();
+
+                        if (fileAttachments.Any())
+                        {
+                            await channel.SendFilesAsync(fileAttachments, text: content);
+                        }
+                        else
+                        {
+                            await channel.SendMessageAsync(content);
+                        }
+                    }
+                    else
+                    {
+                        await channel.SendMessageAsync(content);
+                    }
                     successfulSends++;
                 }
             }
