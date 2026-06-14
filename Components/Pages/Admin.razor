@@ -32,6 +32,23 @@
         }
     }
 
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            const modal = document.querySelector('.review-modal-content');
+            if (modal) {
+                const activeEl = document.activeElement;
+                if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+                    activeEl.blur(); // Forces onchange event to be sent to Blazor Server
+                }
+                
+                setTimeout(() => {
+                    const closeBtn = modal.querySelector('.btn-close');
+                    if (closeBtn) closeBtn.click();
+                }, 100);
+            }
+        }
+    });
+
     function downloadCsv(filename, content) {
         const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
@@ -149,7 +166,7 @@
                                     <div class="input-group input-group-sm">
                                        <input type="number" id="betAmountInput" class="form-control fw-bold" 
                                            @bind-value="reviewingBetModel.AmountNOK" 
-                                              oninput="calculatePayout()" 
+                                           oninput="calculatePayout()"
                                               placeholder="0" enterkeyhint="next" />
  
                                        <span class="input-group-text">kr</span>
@@ -160,10 +177,10 @@
                                    <label class="form-label fw-bold text-muted small mb-1">Odds</label>
                       
                                    <input type="number" step="0.01" id="betOddsInput" class="form-control form-control-sm fw-bold" 
-                                           @bind-value="OddsProxy" 
-                                           oninput="calculatePayout()" 
+                                           @bind-value="reviewingBetModel.Odds" 
+                                           oninput="calculatePayout()"
                                            placeholder="1.00" enterkeyhint="done" />
-                               </div>
+                                </div>
                 
                                 <div class="col-5">
                                      <label class="form-label fw-bold text-muted small mb-1">Payout</label>
@@ -434,20 +451,11 @@
     private HubConnection? hubConnection;
     private string? currentAdminName;
     private Bet? reviewingBetModel;
+    private Bet? originalBetModel;
     private string? reviewErrorMessage;
     private decimal currentReviewUserFreeBalance = 0;
     
-    private decimal? OddsProxy
-    {
-        get => (reviewingBetModel?.Odds == 0) ? null : reviewingBetModel?.Odds;
-        set 
-        {
-            if (reviewingBetModel != null)
-            {
-                reviewingBetModel.Odds = value ?? 0;
-            }
-        }
-    }
+
 
     private string? modalSuccessMessage;
     private ElementReference reviewModalRef;
@@ -661,6 +669,7 @@
             currentReviewIndex = 0;
         }
 
+        originalBetModel = bet;
         reviewingBetModel = new Bet 
         { 
             Id = bet.Id, UserId = bet.UserId, UserName = bet.UserName, 
@@ -678,7 +687,22 @@
         shouldFocusReviewModal = true;
     }
 
-    private void CancelReview() { reviewingBetModel = null; reviewErrorMessage = null; modalSuccessMessage = null; }
+    private async Task CancelReview() 
+    { 
+        if (reviewingBetModel != null && originalBetModel != null)
+        {
+            if (originalBetModel.Status != "Pending" && (reviewingBetModel.Odds != originalBetModel.Odds || reviewingBetModel.AmountNOK != originalBetModel.AmountNOK))
+            {
+                 bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "You have unsaved changes to Odds or Stake.\n\nPlease click a status button (Won, Lost, Void) to save them, or click OK to discard changes and close.");
+                 if (!confirmed) return;
+            }
+        }
+        
+        reviewingBetModel = null; 
+        originalBetModel = null;
+        reviewErrorMessage = null; 
+        modalSuccessMessage = null; 
+    }
 
     private void NavigateReview(int direction)
     {
@@ -698,8 +722,7 @@
 
     private void OnReviewModalKeyDown(KeyboardEventArgs e) 
     { 
-        if (e.Key == "Escape") CancelReview();
-        else if (e.Key == "ArrowRight") NavigateReview(1);
+        if (e.Key == "ArrowRight") NavigateReview(1);
         else if (e.Key == "ArrowLeft") NavigateReview(-1);
     }
 

@@ -607,11 +607,12 @@ else
     private void UpdateAmount(object? value)
     {
         if (reviewingBetModel == null) return;
+        
         if (int.TryParse(value?.ToString(), out int result))
         {
             reviewingBetModel.AmountNOK = result;
         }
-        else
+        else if (string.IsNullOrWhiteSpace(value?.ToString()))
         {
             reviewingBetModel.AmountNOK = null;
         }
@@ -1101,8 +1102,11 @@ else
         }
     }
 
+    private Bet? originalBetModel;
+
     private void StartReview(Bet bet)
     {
+        originalBetModel = bet;
         currentReviewList = displayedUserBets;
         currentReviewIndex = displayedUserBets.FindIndex(b => b.Id == bet.Id);
         reviewingBetModel = new Bet 
@@ -1130,7 +1134,22 @@ else
         shouldFocusReviewModal = true;
     }
 
-    private void CancelReview() { reviewingBetModel = null; reviewErrorMessage = null; modalSuccessMessage = null; }
+    private async Task CancelReview() 
+    { 
+        if (reviewingBetModel != null && originalBetModel != null)
+        {
+            if (originalBetModel.Status != "Pending" && (reviewingBetModel.Odds != originalBetModel.Odds || reviewingBetModel.AmountNOK != originalBetModel.AmountNOK))
+            {
+                 bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "You have unsaved changes to Odds or Stake.\n\nPlease click a status button (Won, Lost, Void) to save them, or click OK to discard changes and close.");
+                 if (!confirmed) return;
+            }
+        }
+        
+        reviewingBetModel = null; 
+        originalBetModel = null;
+        reviewErrorMessage = null; 
+        modalSuccessMessage = null; 
+    }
 
     private void NavigateReview(int direction)
     {
@@ -1148,9 +1167,9 @@ else
         }
     }
 
-    private void OnReviewModalKeyDown(KeyboardEventArgs e) 
+    private async Task OnReviewModalKeyDown(KeyboardEventArgs e) 
     { 
-        if (e.Key == "Escape") CancelReview();
+        if (e.Key == "Escape") await CancelReview();
         else if (e.Key == "ArrowRight") NavigateReview(1);
         else if (e.Key == "ArrowLeft") NavigateReview(-1);
     }
@@ -1295,6 +1314,13 @@ else
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
         modalSuccessMessage = $"Bet #{bet.Id} updated.";
         
+        if (originalBetModel != null)
+        {
+            originalBetModel.Odds = bet.Odds;
+            originalBetModel.AmountNOK = bet.AmountNOK;
+            originalBetModel.Status = newStatus;
+        }
+
         await RefreshData();
     }
 

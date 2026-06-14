@@ -12,6 +12,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<BroadcastHistory> Broadcasts { get; set; }
 
     public DbSet<SettlementSnapshot> SettlementSnapshots { get; set; }
+    
+    public DbSet<Referral> Referrals { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -46,6 +48,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // --- Fix for Warning [30000] ---
         builder.Entity<SettlementSnapshot>()
             .Property(s => s.TotalVolume)
+            .HasPrecision(18, 0);
+
+        builder.Entity<Referral>()
+            .Property(r => r.TotalBonusAmount)
             .HasPrecision(18, 0);
 
         // --- NEW: Performance Indexes ---

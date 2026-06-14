@@ -174,7 +174,7 @@
                         </td>
                         <td>
                             @t.Platform
-                            @if(t.Type == "Withdrawal" && !string.IsNullOrEmpty(t.PaymentDetails)) {
+                            @if((t.Type == "Withdrawal" || t.Type == "Free Bet") && !string.IsNullOrEmpty(t.PaymentDetails)) {
                                 <br/><small class="text-muted">@t.PaymentDetails</small>
                             }
                         </td>

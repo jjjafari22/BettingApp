@@ -30,6 +30,7 @@ public class ApplicationUser : IdentityUser
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
     public string? ReferredBy { get; set; }
+    public bool IsReferralDiscarded { get; set; }
     public bool IsManuallyVerified { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

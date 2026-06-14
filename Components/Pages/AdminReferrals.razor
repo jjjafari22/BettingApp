@@ -1,0 +1,567 @@
+@page "/admin/referrals"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using BettingApp.Data
+@using Microsoft.AspNetCore.SignalR
+@using BettingApp.Hubs
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IHubContext<BetHub> HubContext
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>Admin Referrals</PageTitle>
+
+@if (!isAdmin)
+{
+    <div class="alert alert-danger mt-4 mx-3">You are not authorized to view this page.</div>
+}
+else
+{
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Referrals Management</h2>
+            <p class="text-muted">Create referrals, track turnover progress, and pay out Free Bets.</p>
+        </div>
+    </div>
+    
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    <!-- Possible Referrals -->
+    @if (possibleReferrals.Any())
+    {
+        <div class="card shadow-sm border-warning mb-4">
+            <div class="card-header bg-warning text-dark fw-bold">
+                <i class="bi bi-exclamation-circle-fill me-2"></i> Possible Referrals (Pending Action)
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>New User</th>
+                                <th>"Referred By" Text</th>
+                                <th>Referrer</th>
+                                <th>FB Amount</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in possibleReferrals)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold">@FormatAdminDisplay(user, user.UserName ?? "")</div>
+                                        <div class="small text-muted">@user.Email</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border"><i class="bi bi-chat-quote-fill text-muted me-1"></i> @user.ReferredBy</span>
+                                    </td>
+                                    <td>
+                                        <select class="form-select form-select-sm" @bind="possibleReferralSelections[user.Id]">
+                                            <option value="">-- Select Referrer --</option>
+                                            @foreach(var u in allUsers) { <option value="@u.Id">@FormatAdminDisplay(u, u.UserName ?? "")</option> }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <div class="input-group input-group-sm" style="width: 120px;">
+                                            <input type="number" class="form-control" @bind="possibleReferralBonusAmounts[user.Id]" step="500" min="0" />
+                                            <span class="input-group-text">kr</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-nowrap">
+                                        <button class="btn btn-sm btn-success me-2" @onclick="() => AddPossibleReferral(user)" title="Create this referral">
+                                            <i class="bi bi-check-lg"></i> Add Referral
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DiscardPossibleReferral(user)" title="Discard this possible referral">
+                                            <i class="bi bi-trash3-fill"></i> Discard
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Add New Referral Form -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">Add New Referral</div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Referrer (Who invited?)</label>
+                    <select class="form-select" @bind="newReferrerId">
+                        <option value="">-- Select User --</option>
+                        @foreach(var u in allUsers) { <option value="@u.Id">@FormatAdminDisplay(u, u.UserName ?? "")</option> }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Referred User (New Player)</label>
+                    <select class="form-select" @bind="newReferredId">
+                        <option value="">-- Select User --</option>
+                        @foreach(var u in allUsers) { <option value="@u.Id">@FormatAdminDisplay(u, u.UserName ?? "")</option> }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Total Bonus FB Amount</label>
+                    <input type="number" class="form-control" @bind="newBonusAmount" />
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-success w-100" @onclick="CreateReferral" disabled="@isCreating">
+                        @(isCreating ? "Creating..." : "Create Referral")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Tracking -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-warning text-dark">Active Referrals</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-nowrap">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Referrer</th>
+                            <th>Referred</th>
+                            <th>Total Bonus</th>
+                            <th>Turnover (Odds >= 1.5)</th>
+                            <th>Status & Actions</th>
+                            <th style="width: 50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!activeReferrals.Any())
+                        {
+                            <tr><td colspan="5" class="text-center p-3 text-muted">No active referrals found.</td></tr>
+                        }
+                        @foreach(var vm in activeReferrals)
+                        {
+                            <tr>
+                                <td>@vm.ReferrerDisplay</td>
+                                <td>@vm.ReferredDisplay</td>
+                                <td>@vm.Ref.TotalBonusAmount.ToString("N0") FB</td>
+                                <td><strong>@vm.Turnover.ToString("N0") kr</strong></td>
+                                <td>
+                                    <div class="d-flex flex-column gap-1">
+                                        <!-- Tier 1: 20% -->
+                                        @if (vm.Ref.Tier1Paid)
+                                        {
+                                            <span class="badge bg-success text-start"><i class="bi bi-check-circle"></i> 20% Paid (@((vm.Ref.TotalBonusAmount * 0.2m).ToString("N0")) FB)</span>
+                                        }
+                                        else if (vm.Turnover >= 5000)
+                                        {
+                                            <button class="btn btn-sm btn-success text-start" @onclick="() => PayTier(vm.Ref, 1)"><i class="bi bi-gift-fill"></i> Pay 20% (@((vm.Ref.TotalBonusAmount * 0.2m).ToString("N0")) FB)</button>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary text-start"><i class="bi bi-lock-fill"></i> 20% (Needs @(Math.Max(0, 5000 - vm.Turnover).ToString("N0")) kr more)</span>
+                                        }
+
+                                        <!-- Tier 2: 30% -->
+                                        @if (vm.Ref.Tier2Paid)
+                                        {
+                                            <span class="badge bg-success text-start"><i class="bi bi-check-circle"></i> 30% Paid (@((vm.Ref.TotalBonusAmount * 0.3m).ToString("N0")) FB)</span>
+                                        }
+                                        else if (vm.Turnover >= 20000 && vm.Ref.Tier1Paid)
+                                        {
+                                            <button class="btn btn-sm btn-success text-start" @onclick="() => PayTier(vm.Ref, 2)"><i class="bi bi-gift-fill"></i> Pay 30% (@((vm.Ref.TotalBonusAmount * 0.3m).ToString("N0")) FB)</button>
+                                        }
+                                        else if (vm.Turnover >= 20000 && !vm.Ref.Tier1Paid)
+                                        {
+                                            <span class="badge bg-warning text-dark text-start"><i class="bi bi-hourglass-split"></i> 30% (Pay Tier 1 first)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary text-start"><i class="bi bi-lock-fill"></i> 30% (Needs @(Math.Max(0, 20000 - vm.Turnover).ToString("N0")) kr more)</span>
+                                        }
+
+                                        <!-- Tier 3: 50% -->
+                                        @if (vm.Ref.Tier3Paid)
+                                        {
+                                            <span class="badge bg-success text-start"><i class="bi bi-check-circle"></i> 50% Paid (@((vm.Ref.TotalBonusAmount * 0.5m).ToString("N0")) FB)</span>
+                                        }
+                                        else if (vm.Turnover >= 50000 && vm.Ref.Tier2Paid)
+                                        {
+                                            <button class="btn btn-sm btn-success text-start" @onclick="() => PayTier(vm.Ref, 3)"><i class="bi bi-gift-fill"></i> Pay 50% (@((vm.Ref.TotalBonusAmount * 0.5m).ToString("N0")) FB)</button>
+                                        }
+                                        else if (vm.Turnover >= 50000 && !vm.Ref.Tier2Paid)
+                                        {
+                                            <span class="badge bg-warning text-dark text-start"><i class="bi bi-hourglass-split"></i> 50% (Pay Tier 2 first)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary text-start"><i class="bi bi-lock-fill"></i> 50% (Needs @(Math.Max(0, 50000 - vm.Turnover).ToString("N0")) kr more)</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-end align-middle">
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteReferral(vm.Ref.Id)" title="Delete Referral">
+                                        <i class="bi bi-trash3-fill"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Historic -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-success text-white">Historic (Completed) Referrals</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-nowrap">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Referrer</th>
+                            <th>Referred</th>
+                            <th>Total Bonus</th>
+                            <th>Completed Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!historicReferrals.Any())
+                        {
+                            <tr><td colspan="4" class="text-center p-3 text-muted">No completed referrals found.</td></tr>
+                        }
+                        @foreach(var h in historicReferrals)
+                        {
+                            <tr>
+                                <td>@h.ReferrerDisplay</td>
+                                <td>@h.ReferredDisplay</td>
+                                <td>@h.Ref.TotalBonusAmount.ToString("N0") FB</td>
+                                <td><span class="badge bg-success">Fully Paid</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    private bool isAdmin = false;
+    private List<ApplicationUser> allUsers = new();
+    private List<ReferralVM> activeReferrals = new();
+    private List<ReferralVM> historicReferrals = new();
+    private List<ApplicationUser> possibleReferrals = new();
+    private Dictionary<string, string> possibleReferralSelections = new();
+    private Dictionary<string, decimal> possibleReferralBonusAmounts = new();
+    
+    
+    private string? newReferrerId;
+    private string? newReferredId;
+    private decimal newBonusAmount = 2500m;
+    private bool isCreating = false;
+    
+    private string? successMessage;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            using var context = DbFactory.CreateDbContext();
+            var currentUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == authState.User.Identity.Name);
+            if (currentUser != null && currentUser.IsAdmin)
+            {
+                isAdmin = true;
+                await LoadData();
+            }
+        }
+    }
+
+    private string FormatAdminDisplay(ApplicationUser? u, string fallback)
+    {
+        if (u == null) return fallback;
+        string fullName = $"{u.FirstName} {u.LastName}".Trim();
+        if (string.IsNullOrEmpty(fullName)) fullName = "No Name";
+        string discord = string.IsNullOrEmpty(u.DiscordUsername) ? "No Discord" : u.DiscordUsername;
+        return $"{discord} ({fullName})";
+    }
+
+
+    private async Task AddPossibleReferral(ApplicationUser referredUser)
+    {
+        if (!possibleReferralSelections.TryGetValue(referredUser.Id, out var selectedReferrerId) || string.IsNullOrEmpty(selectedReferrerId))
+        {
+            errorMessage = $"Please select a referrer for {referredUser.UserName}.";
+            return;
+        }
+
+        if (selectedReferrerId == referredUser.Id)
+        {
+            errorMessage = "User cannot refer themselves.";
+            return;
+        }
+
+        using var context = DbFactory.CreateDbContext();
+        var referrer = await context.Users.FindAsync(selectedReferrerId);
+        var referred = await context.Users.FindAsync(referredUser.Id);
+
+        if (referrer != null && referred != null)
+        {
+            bool alreadyReferred = await context.Referrals.AnyAsync(r => r.ReferredUserId == referred.Id);
+            if (alreadyReferred)
+            {
+                errorMessage = "This user has already been referred.";
+                return;
+            }
+            var r = new Referral
+            {
+                ReferrerUserId = referrer.Id,
+                ReferrerUserName = referrer.UserName ?? "",
+                ReferredUserId = referred.Id,
+                ReferredUserName = referred.UserName ?? "",
+                TotalBonusAmount = possibleReferralBonusAmounts.TryGetValue(referredUser.Id, out var amt) ? amt : 2500m,
+                CreatedAt = DateTime.UtcNow
+            };
+            context.Referrals.Add(r);
+            
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var adminName = authState.User.Identity?.Name ?? "System";
+            context.AuditLogs.Add(new AuditLog { AdminUserName = adminName, Action = "Created Referral", TargetUserName = referrer.UserName ?? "Unknown", Details = $"Referred: {referred.UserName ?? "Unknown"}, Amount: {r.TotalBonusAmount}" });
+            
+            await context.SaveChangesAsync();
+            successMessage = $"Referral created successfully for {FormatAdminDisplay(referredUser, referred.UserName ?? "")}.";
+            await LoadData();
+        }
+    }
+
+    private async Task DiscardPossibleReferral(ApplicationUser user)
+    {
+        using var context = DbFactory.CreateDbContext();
+        var dbUser = await context.Users.FindAsync(user.Id);
+        if (dbUser != null)
+        {
+            dbUser.IsReferralDiscarded = true;
+            await context.SaveChangesAsync();
+            await LoadData();
+            successMessage = $"Discarded possible referral for {FormatAdminDisplay(user, user.Email ?? "")}.";
+        }
+    }
+
+    private async Task LoadData()
+    {
+        using var context = DbFactory.CreateDbContext();
+        allUsers = await context.Users.OrderBy(u => u.UserName).ToListAsync();
+        
+        var allRefs = await context.Referrals.ToListAsync();
+        var hist = allRefs.Where(r => r.Tier1Paid && r.Tier2Paid && r.Tier3Paid).ToList();
+        var active = allRefs.Where(r => !(r.Tier1Paid && r.Tier2Paid && r.Tier3Paid)).ToList();
+        
+        historicReferrals.Clear();
+        activeReferrals.Clear();
+        
+        var settledBets = await context.Bets
+            .Where(b => (b.Status == "Won" || b.Status == "Lost") && b.Odds >= 1.50m)
+            .Select(b => new { b.UserId, b.AmountNOK })
+            .ToListAsync();
+            
+        var turnoverDict = settledBets
+            .GroupBy(b => b.UserId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.AmountNOK ?? 0));
+
+        var referredUserIds = allRefs.Select(r => r.ReferredUserId).ToHashSet();
+        
+        possibleReferrals = allUsers
+            .Where(u => u.EmailConfirmed 
+                     && !string.IsNullOrEmpty(u.ReferredBy) 
+                     && !u.IsReferralDiscarded 
+                     && !referredUserIds.Contains(u.Id))
+            .ToList();
+
+        possibleReferralSelections.Clear();
+        possibleReferralBonusAmounts.Clear();
+        foreach (var user in possibleReferrals)
+        {
+            string query = user.ReferredBy?.ToLower() ?? "";
+            var match = allUsers.FirstOrDefault(u => 
+                (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(query)) ||
+                (u.FirstName != null && u.FirstName.ToLower().Contains(query)) ||
+                (u.LastName != null && u.LastName.ToLower().Contains(query)) ||
+                (u.Email != null && u.Email.ToLower().Contains(query)) ||
+                (u.UserName != null && u.UserName.ToLower().Contains(query))
+            );
+            possibleReferralSelections[user.Id] = (match != null && match.Id != user.Id) ? match.Id : "";
+            possibleReferralBonusAmounts[user.Id] = 2500m;
+        }
+
+        foreach(var r in hist)
+        {
+            var referrerUser = allUsers.FirstOrDefault(u => u.Id == r.ReferrerUserId);
+            var referredUser = allUsers.FirstOrDefault(u => u.Id == r.ReferredUserId);
+            historicReferrals.Add(new ReferralVM { 
+                Ref = r, 
+                Turnover = 0,
+                ReferrerDisplay = FormatAdminDisplay(referrerUser, r.ReferrerUserName),
+                ReferredDisplay = FormatAdminDisplay(referredUser, r.ReferredUserName)
+            });
+        }
+            
+        foreach(var r in active)
+        {
+            decimal tOver = settledBets.Where(b => b.UserId == r.ReferredUserId).Sum(b => (decimal)(b.AmountNOK ?? 0));
+            var referrerUser = allUsers.FirstOrDefault(u => u.Id == r.ReferrerUserId);
+            var referredUser = allUsers.FirstOrDefault(u => u.Id == r.ReferredUserId);
+            activeReferrals.Add(new ReferralVM { 
+                Ref = r, 
+                Turnover = tOver,
+                ReferrerDisplay = FormatAdminDisplay(referrerUser, r.ReferrerUserName),
+                ReferredDisplay = FormatAdminDisplay(referredUser, r.ReferredUserName)
+            });
+        }
+    }
+
+    private async Task CreateReferral()
+    {
+        if (string.IsNullOrEmpty(newReferrerId) || string.IsNullOrEmpty(newReferredId))
+        {
+            errorMessage = "Please select both users.";
+            return;
+        }
+        if (newReferrerId == newReferredId)
+        {
+            errorMessage = "User cannot refer themselves.";
+            return;
+        }
+        
+        isCreating = true;
+        errorMessage = null;
+        successMessage = null;
+        
+        using var context = DbFactory.CreateDbContext();
+        var referrer = await context.Users.FindAsync(newReferrerId);
+        var referred = await context.Users.FindAsync(newReferredId);
+        
+        if (referrer != null && referred != null)
+        {
+            bool alreadyReferred = await context.Referrals.AnyAsync(r => r.ReferredUserId == referred.Id);
+            if (alreadyReferred)
+            {
+                errorMessage = "This user has already been referred. A user can only be referred once.";
+                isCreating = false;
+                return;
+            }
+            var r = new Referral
+            {
+                ReferrerUserId = referrer.Id,
+                ReferrerUserName = referrer.UserName ?? "",
+                ReferredUserId = referred.Id,
+                ReferredUserName = referred.UserName ?? "",
+                TotalBonusAmount = newBonusAmount,
+                CreatedAt = DateTime.UtcNow
+            };
+            context.Referrals.Add(r);
+            
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var adminName = authState.User.Identity?.Name ?? "System";
+            context.AuditLogs.Add(new AuditLog { AdminUserName = adminName, Action = "Created Referral", TargetUserName = referrer.UserName ?? "Unknown", Details = $"Referred: {referred.UserName ?? "Unknown"}, Amount: {newBonusAmount}" });
+            
+            await context.SaveChangesAsync();
+            successMessage = "Referral created successfully.";
+            newReferrerId = null;
+            newReferredId = null;
+            newBonusAmount = 2500m;
+            await LoadData();
+        }
+        
+        isCreating = false;
+    }
+
+    private async Task PayTier(Referral r, int tier)
+    {
+        using var context = DbFactory.CreateDbContext();
+        var dbRef = await context.Referrals.FindAsync(r.Id);
+        if (dbRef == null) return;
+        
+        var referrer = await context.Users.FindAsync(dbRef.ReferrerUserId);
+        if (referrer == null) return;
+        
+        decimal payout = 0;
+        string msg = "";
+        if (tier == 1 && !dbRef.Tier1Paid) { payout = dbRef.TotalBonusAmount * 0.2m; dbRef.Tier1Paid = true; msg = "20% Tier 1"; }
+        else if (tier == 2 && !dbRef.Tier2Paid) { payout = dbRef.TotalBonusAmount * 0.3m; dbRef.Tier2Paid = true; msg = "30% Tier 2"; }
+        else if (tier == 3 && !dbRef.Tier3Paid) { payout = dbRef.TotalBonusAmount * 0.5m; dbRef.Tier3Paid = true; msg = "50% Tier 3"; }
+        else return;
+
+        referrer.FreeBetBalance += payout;
+        
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var adminName = authState.User.Identity?.Name ?? "System";
+        context.AuditLogs.Add(new AuditLog { AdminUserName = adminName, Action = $"Paid Referral Bonus ({msg})", TargetUserName = referrer.UserName ?? "Unknown", Details = $"Amount: {payout} FB, Referred: {dbRef.ReferredUserName}" });
+        
+        context.Transactions.Add(new Transaction
+        {
+            UserId = referrer.Id,
+            UserName = referrer.UserName ?? "Unknown",
+            Type = "Free Bet",
+            AmountNOK = (int)payout,
+            Platform = "System",
+            PaymentDetails = $"Referral Bonus ({msg}) for inviting {dbRef.ReferredUserName}",
+            Status = "Completed",
+            Date = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        
+        await context.SaveChangesAsync();
+        await HubContext.Clients.Group(referrer.Id).SendAsync("ReceiveUpdate", $"You received a referral bonus of {payout:N0} FB!");
+        
+        successMessage = $"Successfully paid {payout:N0} FB to {referrer.UserName}.";
+        await LoadData();
+    }
+    
+    private async Task DeleteReferral(int referralId)
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to permanently delete this referral?");
+        if (!confirmed) return;
+        
+        using var context = DbFactory.CreateDbContext();
+        var r = await context.Referrals.FindAsync(referralId);
+        if (r != null)
+        {
+            context.Referrals.Remove(r);
+            
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var adminName = authState.User.Identity?.Name ?? "System";
+            context.AuditLogs.Add(new AuditLog { AdminUserName = adminName, Action = "Deleted Referral", TargetUserName = r.ReferrerUserName, Details = $"Deleted referral for: {r.ReferredUserName}" });
+            
+            await context.SaveChangesAsync();
+            await LoadData();
+            successMessage = "Referral deleted successfully.";
+        }
+    }
+
+    public class ReferralVM
+    {
+        public Referral Ref { get; set; } = new();
+        public decimal Turnover { get; set; }
+        public string ReferrerDisplay { get; set; } = "";
+        public string ReferredDisplay { get; set; } = "";
+    }
+}

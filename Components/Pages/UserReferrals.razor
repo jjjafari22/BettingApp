@@ -1,0 +1,183 @@
+@page "/my-referrals"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using BettingApp.Data
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>My Referrals</PageTitle>
+
+<div class="container mt-4 mb-5">
+    <h2 class="mb-4">My Referrals</h2>
+
+    @if (isLoading)
+    {
+        <div class="text-center mt-5"><div class="spinner-border text-primary" role="status"></div></div>
+    }
+    else
+    {
+        if (myReferrals.Count == 0)
+        {
+            <div class="card shadow-sm border-primary mb-4">
+                <div class="card-body text-center py-5">
+                    <h3 class="card-title text-primary"><i class="bi bi-gift-fill me-2"></i>Invite Friends & Earn Free Bets!</h3>
+                    <p class="card-text mt-3" style="font-size: 1.1rem;">
+                        You haven't referred anyone yet. Share the Castle of Happiness with your friends and get rewarded when they play!
+                    </p>
+                    <p class="card-text text-muted">
+                        When your referred friend starts betting, you can earn Free Bets released in stages (20%, 30%, and 50%) based on their activity. Make sure they mention your username when registering or reaching out to an admin.
+                    </p>
+                    <a href="/disclaimer" class="btn btn-outline-primary mt-3">Read Referral Rules</a>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="row">
+                <div class="col-md-8">
+                    @if (activeReferrals.Any())
+                    {
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header bg-warning text-dark fw-bold">Current Referrals (In Progress)</div>
+                            <ul class="list-group list-group-flush">
+                                @foreach(var vm in activeReferrals)
+                                {
+                                    <li class="list-group-item p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <strong><i class="bi bi-person-fill me-2"></i>@vm.ReferredDisplay</strong>
+                                            <span class="badge bg-primary rounded-pill">Total Reward: @vm.Ref.TotalBonusAmount.ToString("N0")kr Free Bet (FB)</span>
+                                        </div>
+                                        <div class="mt-3">
+                                            <!-- Tier 1 -->
+                                            <div class="d-flex justify-content-between small mb-1">
+                                                <span>Tier 1 (20% = @((vm.Ref.TotalBonusAmount * 0.2m).ToString("N0"))kr FB): 5,000 kr Turnover</span>
+                                                @if (vm.Ref.Tier1Paid) { <span class="text-success fw-bold"><i class="bi bi-check-circle-fill"></i> Paid</span> }
+                                                else if (vm.Turnover >= 5000) { <span class="text-warning text-dark fw-bold"><i class="bi bi-hourglass-split"></i> Reached (Awaiting Payout)</span> }
+                                                else { <span class="text-primary fw-bold">@(Math.Floor(Math.Min(100m, (vm.Turnover / 5000m) * 100m)).ToString("0"))%</span> }
+                                            </div>
+                                            <div class="progress mb-3" style="height: 8px;">
+                                                <div class="progress-bar @(vm.Ref.Tier1Paid ? "bg-success" : (vm.Turnover >= 5000 ? "bg-warning" : "bg-primary"))" style="width: @(Math.Min(100m, (vm.Turnover / 5000m) * 100m).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                                            </div>
+                                            
+                                            <!-- Tier 2 -->
+                                            <div class="d-flex justify-content-between small mb-1">
+                                                <span>Tier 2 (30% = @((vm.Ref.TotalBonusAmount * 0.3m).ToString("N0"))kr FB): 20,000 kr Turnover</span>
+                                                @if (vm.Ref.Tier2Paid) { <span class="text-success fw-bold"><i class="bi bi-check-circle-fill"></i> Paid</span> }
+                                                else if (vm.Turnover >= 20000 && vm.Ref.Tier1Paid) { <span class="text-warning text-dark fw-bold"><i class="bi bi-hourglass-split"></i> Reached (Awaiting Payout)</span> }
+                                                else { <span class="text-primary fw-bold">@(Math.Floor(Math.Min(100m, (vm.Turnover / 20000m) * 100m)).ToString("0"))%</span> }
+                                            </div>
+                                            <div class="progress mb-3" style="height: 8px;">
+                                                <div class="progress-bar @(vm.Ref.Tier2Paid ? "bg-success" : (vm.Turnover >= 20000 ? "bg-warning" : "bg-primary"))" style="width: @(Math.Min(100m, (vm.Turnover / 20000m) * 100m).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                                            </div>
+
+                                            <!-- Tier 3 -->
+                                            <div class="d-flex justify-content-between small mb-1">
+                                                <span>Tier 3 (50% = @((vm.Ref.TotalBonusAmount * 0.5m).ToString("N0"))kr FB): 50,000 kr Turnover</span>
+                                                @if (vm.Ref.Tier3Paid) { <span class="text-success fw-bold"><i class="bi bi-check-circle-fill"></i> Paid</span> }
+                                                else if (vm.Turnover >= 50000 && vm.Ref.Tier2Paid) { <span class="text-warning text-dark fw-bold"><i class="bi bi-hourglass-split"></i> Reached (Awaiting Payout)</span> }
+                                                else { <span class="text-primary fw-bold">@(Math.Floor(Math.Min(100m, (vm.Turnover / 50000m) * 100m)).ToString("0"))%</span> }
+                                            </div>
+                                            <div class="progress mb-2" style="height: 8px;">
+                                                <div class="progress-bar @(vm.Ref.Tier3Paid ? "bg-success" : (vm.Turnover >= 50000 ? "bg-warning" : "bg-primary"))" style="width: @(Math.Min(100m, (vm.Turnover / 50000m) * 100m).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                                            </div>
+                                        </div>
+                                        <div class="text-muted small mt-2 fw-bold">Current Total Turnover: @vm.Turnover.ToString("N0") kr</div>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    @if (historicReferrals.Any())
+                    {
+                        <div class="card shadow-sm">
+                            <div class="card-header bg-success text-white fw-bold">Completed Referrals</div>
+                            <ul class="list-group list-group-flush">
+                                @foreach(var h in historicReferrals)
+                                {
+                                    <li class="list-group-item p-3 d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-person-check-fill text-success me-2"></i>@h.ReferredDisplay</span>
+                                        <span class="text-success fw-bold">Fully Paid (@h.Ref.TotalBonusAmount.ToString("N0")kr FB)</span>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private List<Referral> myReferrals = new();
+    private List<ReferralVM> activeReferrals = new();
+    private List<ReferralVM> historicReferrals = new();
+
+    private string FormatUserDisplay(ApplicationUser? u, string fallback)
+    {
+        if (u == null) return fallback;
+        string fullName = $"{u.FirstName} {u.LastName}".Trim();
+        return string.IsNullOrEmpty(fullName) ? fallback : fullName;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            using var context = DbFactory.CreateDbContext();
+            var dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+            
+            if (dbUser != null)
+            {
+                var allUsers = await context.Users.ToListAsync();
+                myReferrals = await context.Referrals.Where(r => r.ReferrerUserId == dbUser.Id).ToListAsync();
+                
+                var hist = myReferrals.Where(r => r.Tier1Paid && r.Tier2Paid && r.Tier3Paid).ToList();
+                var active = myReferrals.Where(r => !(r.Tier1Paid && r.Tier2Paid && r.Tier3Paid)).ToList();
+                
+                historicReferrals.Clear();
+                activeReferrals.Clear();
+                
+                var settledBets = await context.Bets
+                    .Where(b => (b.Status == "Won" || b.Status == "Lost") && b.Odds >= 1.50m)
+                    .Select(b => new { b.UserId, b.AmountNOK })
+                    .ToListAsync();
+
+                foreach(var r in hist)
+                {
+                    var referredUser = allUsers.FirstOrDefault(u => u.Id == r.ReferredUserId);
+                    historicReferrals.Add(new ReferralVM { 
+                        Ref = r, 
+                        Turnover = 0,
+                        ReferredDisplay = FormatUserDisplay(referredUser, r.ReferredUserName)
+                    });
+                }
+
+                foreach(var r in active)
+                {
+                    decimal tOver = settledBets.Where(b => b.UserId == r.ReferredUserId).Sum(b => (decimal)(b.AmountNOK ?? 0));
+                    var referredUser = allUsers.FirstOrDefault(u => u.Id == r.ReferredUserId);
+                    activeReferrals.Add(new ReferralVM { 
+                        Ref = r, 
+                        Turnover = tOver,
+                        ReferredDisplay = FormatUserDisplay(referredUser, r.ReferredUserName)
+                    });
+                }
+            }
+        }
+        isLoading = false;
+    }
+
+    public class ReferralVM
+    {
+        public Referral Ref { get; set; } = new();
+        public decimal Turnover { get; set; }
+        public string ReferredDisplay { get; set; } = "";
+    }
+}

@@ -17,10 +17,10 @@
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
-@if (isAdmin && (adminHomeTasks + transactionTasks + userTasks) > 0)
+@if (isAdmin && (adminHomeTasks + transactionTasks + userTasks + referralTasks) > 0)
 {
     <span class="badge rounded-pill bg-danger navbar-toggler-badge">
-        @(adminHomeTasks + transactionTasks + userTasks)
+        @(adminHomeTasks + transactionTasks + userTasks + referralTasks)
     </span>
 }
 
@@ -48,9 +48,13 @@
                 </NavLink>
                 
                 <NavLink class="nav-link d-flex align-items-center" href="deposit-withdraw">
-           
                   <span class="bi bi-wallet2" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
                     <span>Deposit/Withdrawal</span>
+                </NavLink>
+
+                <NavLink class="nav-link d-flex align-items-center" href="my-referrals">
+                    <span class="bi bi-people-fill" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1; vertical-align: text-bottom;" aria-hidden="true"></span> 
+                    <span>My Referrals</span>
                 </NavLink>
 
                 <NavLink class="nav-link d-flex align-items-center" href="contact-us">
@@ -99,6 +103,16 @@
                         <NavLink class="nav-link d-flex align-items-center" href="admin/finance">
                             <span class="bi bi-graph-up-arrow" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
                             <span>Finance</span>
+                        </NavLink>
+                    </div>
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link d-flex align-items-center" href="admin/referrals">
+                            <span class="bi bi-person-lines-fill" style="font-size: 1.25rem; margin-right: 0.75rem; line-height: 1;" aria-hidden="true"></span> 
+                            <span>Referrals</span>
+                            @if (referralTasks > 0)
+                            {
+                                 <span class="badge rounded-pill bg-danger ms-2">@referralTasks</span>
+                            }
                         </NavLink>
                     </div>
 
@@ -173,10 +187,12 @@
     private string? currentUrl;
     private bool isAdmin;
     private HubConnection? hubConnection;
- private int adminHomeTasks = 0;
+    private int adminHomeTasks = 0;
     private int transactionTasks = 0;
     private int userTasks = 0;
- protected override async Task OnInitializedAsync()
+    private int referralTasks = 0;
+
+    protected override async Task OnInitializedAsync()
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
  NavigationManager.LocationChanged += OnLocationChanged;
@@ -244,11 +260,38 @@
     private async Task LoadAdminTasks(ApplicationDbContext context)
     {
         var pendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
- var activeBets = await context.Bets.CountAsync(b => b.Status == "Approved");
+        var activeBets = await context.Bets.CountAsync(b => b.Status == "Approved");
         adminHomeTasks = pendingBets + activeBets;
- transactionTasks = await context.Transactions.CountAsync(t => t.Type == "Withdrawal" && t.Status == "Pending");
+        transactionTasks = await context.Transactions.CountAsync(t => t.Type == "Withdrawal" && t.Status == "Pending");
         userTasks = await context.Users.CountAsync(u => !u.EmailConfirmed);
- }
+
+        var activeRefs = await context.Referrals.Where(r => !(r.Tier1Paid && r.Tier2Paid && r.Tier3Paid)).ToListAsync();
+        if(activeRefs.Any()) {
+            var userIds = activeRefs.Select(r => r.ReferredUserId).ToList();
+            var turnovers = await context.Bets.Where(b => userIds.Contains(b.UserId) && (b.Status == "Won" || b.Status == "Lost") && b.Odds >= 1.50m)
+                .GroupBy(b => b.UserId)
+                .Select(g => new { UserId = g.Key, Turnover = g.Sum(b => b.AmountNOK ?? 0) })
+                .ToDictionaryAsync(x => x.UserId, x => x.Turnover);
+
+            referralTasks = activeRefs.Count(r => {
+                var t = turnovers.GetValueOrDefault(r.ReferredUserId, 0);
+                return (t >= 5000 && !r.Tier1Paid) || (t >= 20000 && !r.Tier2Paid) || (t >= 50000 && !r.Tier3Paid);
+            });
+        } else {
+            referralTasks = 0;
+        }
+
+        // Possible Referrals (Approved users with ReferredBy text who aren't mapped or discarded)
+        var referredUserIds = await context.Referrals.Select(r => r.ReferredUserId).ToListAsync();
+        var possibleReferrals = await context.Users
+            .Where(u => u.EmailConfirmed 
+                     && !string.IsNullOrEmpty(u.ReferredBy) 
+                     && !u.IsReferralDiscarded)
+            .Where(u => !referredUserIds.Contains(u.Id))
+            .CountAsync();
+
+        referralTasks += possibleReferrals;
+    }
 
     public async ValueTask DisposeAsync()
     {
