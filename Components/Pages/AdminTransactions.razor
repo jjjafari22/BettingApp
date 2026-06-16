@@ -685,8 +685,11 @@
         {
             if (user.Balance < adminAddAmount.Value)
             {
-                errorMessage = $"Insufficient funds. Balance: {user.Balance:N0}";
-                return;
+                var confirmNegative = await JSRuntime.InvokeAsync<bool>("confirm", $"This withdrawal will result in a negative balance ({user.Balance - adminAddAmount.Value:N0} kr). Do you want to proceed?");
+                if (!confirmNegative)
+                {
+                    return;
+                }
             }
             user.Balance -= adminAddAmount.Value;
         }
