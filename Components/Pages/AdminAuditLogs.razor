@@ -22,19 +22,26 @@ else
     <div class="card mb-4">
         <div class="card-body">
             <div class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label">Filter by Affected User</label>
+                <div class="col-md-2">
+                    <label class="form-label">Affected User</label>
                     <input type="text" class="form-control" 
                            @bind="targetFilter" 
                            @onkeyup="HandleKeyUp"
-                           placeholder="Search user (Press Enter)..." />
+                           placeholder="Search user..." />
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label">Filter by Admin</label>
+                <div class="col-md-2">
+                    <label class="form-label">Admin</label>
                     <input type="text" class="form-control" 
                            @bind="adminFilter" 
                            @onkeyup="HandleKeyUp"
-                           placeholder="Search admin (Press Enter)..." />
+                           placeholder="Search admin..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Bet/Trans ID</label>
+                    <input type="text" class="form-control" 
+                           @bind="idFilter" 
+                           @onkeyup="HandleKeyUp"
+                           placeholder="Search ID..." />
                 </div>
                  <div class="col-md-2">
                     <label class="form-label">Start Date</label>
@@ -109,6 +116,7 @@ else
     private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
     private string targetFilter = "";
     private string adminFilter = "";
+    private string idFilter = "";
     private DateTime? startDate;
     private DateTime? endDate;
     
@@ -188,6 +196,7 @@ else
     {
         targetFilter = "";
         adminFilter = "";
+        idFilter = "";
         startDate = null;
         endDate = null;
         await SearchLogs();
@@ -207,7 +216,20 @@ else
         if (!string.IsNullOrWhiteSpace(targetFilter))
         {
             var term = targetFilter.Trim().ToLower();
-            query = query.Where(l => l.TargetUserName.ToLower().Contains(term));
+            var matchingUserNames = await context.Users
+                .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(term)) 
+                         || (u.LastName != null && u.LastName.ToLower().Contains(term))
+                         || (u.UserName != null && u.UserName.ToLower().Contains(term)))
+                .Select(u => u.UserName)
+                .ToListAsync();
+
+            query = query.Where(l => matchingUserNames.Contains(l.TargetUserName) || l.TargetUserName.ToLower().Contains(term));
+        }
+
+        if (!string.IsNullOrWhiteSpace(idFilter))
+        {
+            var term = idFilter.Trim().ToLower();
+            query = query.Where(l => l.Details.ToLower().Contains($"id: {term},") || l.Details.ToLower().EndsWith($"id: {term}"));
         }
 
         if (!string.IsNullOrWhiteSpace(adminFilter))
