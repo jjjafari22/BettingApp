@@ -19,14 +19,29 @@
 
 <div class="row mb-4 mt-3">
     <div class="col-12">
-        <div class="card bg-dark text-white shadow">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <h5 class="card-title text-info mb-1"><i class="bi bi-broadcast me-2"></i>Live Tracker</h5>
-                    <p class="card-text mb-0">Current Net Open Liability (Approved Bets - Excl. Test Users)</p>
-                </div>
-                <div class="text-end">
-                    <h2 class="mb-0 text-warning">@netOpenLiability.ToString("N0") kr</h2>
+        <div class="card bg-dark text-white shadow border-0">
+            <div class="card-header border-bottom border-secondary py-2 d-flex justify-content-between align-items-center">
+                <h6 class="card-title text-info mb-0">
+                    <i class="bi bi-broadcast me-2"></i>Live Tracker
+                </h6>
+                <span class="badge bg-secondary fw-normal" style="font-size:0.7rem;">Excl. Test Users</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="row g-0">
+                    <div class="col-6 border-end border-secondary p-2 p-md-3 d-flex flex-column flex-md-row justify-content-md-between align-items-center">
+                        <div class="mb-1 mb-md-0 text-center text-md-start">
+                            <h6 class="text-white mb-0 d-inline-block"><i class="bi bi-graph-up-arrow text-success me-1"></i>Profit</h6>
+                            <small class="text-muted d-block d-md-inline-block ms-md-2" style="font-size: 0.75rem;">(If LOSE)</small>
+                        </div>
+                        <h5 class="mb-0 text-success fw-bold">+@netOpenProfitIfLost.ToString("N0") kr</h5>
+                    </div>
+                    <div class="col-6 p-2 p-md-3 d-flex flex-column flex-md-row justify-content-md-between align-items-center">
+                        <div class="mb-1 mb-md-0 text-center text-md-start">
+                            <h6 class="text-white mb-0 d-inline-block"><i class="bi bi-graph-down-arrow text-danger me-1"></i>Liability</h6>
+                            <small class="text-muted d-block d-md-inline-block ms-md-2" style="font-size: 0.75rem;">(If WIN)</small>
+                        </div>
+                        <h5 class="mb-0 text-danger fw-bold">-@netOpenLiability.ToString("N0") kr</h5>
+                    </div>
                 </div>
             </div>
         </div>
@@ -55,54 +70,62 @@
             <i class="bi bi-journal-check me-2"></i>Settled Bets Metrics (Won, Lost, Void - Excl. Test Users)
         </h5>
 
-        <div class="row text-center">
+        <div class="row text-center align-items-stretch">
             <div class="col-md-3 mb-3">
-                 <div class="p-3 border rounded bg-light">
+                 <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
                     <h6 class="text-muted">Total Stakes (Real)</h6>
                     <h4 class="mb-0">@totalStakes.ToString("N0") kr</h4>
-                    <small class="text-muted">From @totalBets bets</small>
+                    <small class="text-muted mt-1">From @totalBets bets</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="p-3 border rounded bg-light">
+                <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
                     <h6 class="text-muted">Net Profit</h6>
                     <h4 class="mb-0 @(netProfit >= 0 ? "text-success" : "text-danger")">@netProfit.ToString("N0") kr</h4>
-                    <small class="text-muted">Stakes minus Payouts & Free Bets</small>
+                    <small class="text-muted mt-1">Stakes minus Payouts & Free Bets</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="p-3 border rounded bg-light">
+                <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
                     <h6 class="text-muted">Hold %</h6>
                     <h4 class="mb-0">@holdPercentage.ToString("0.00")%</h4>
-                    <small class="text-muted">Profit on real stakes</small>
+                    <small class="text-muted mt-1">Profit on real stakes</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                 <div class="p-3 border rounded bg-light">
+                 <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
                     <h6 class="text-muted">Free Bets Granted</h6>
                     <h4 class="mb-0 text-info">@totalFreeBetsAmount.ToString("N0") kr</h4>
-                    <small class="text-muted">From @totalFreeBetsCount transactions</small>
+                    <small class="text-muted mt-1">From @totalFreeBetsCount transactions</small>
                 </div>
             </div>
             
-            <div class="col-md-4 mb-3">
-                <div class="p-3 border rounded bg-light">
+            <div class="col-md-3 mb-3">
+                <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
+                    <h6 class="text-muted">Average Odds</h6>
+                    <h4 class="mb-0">@avgOdds.ToString("0.00")</h4>
+                    <small class="text-muted mt-1">Across all settled bets</small>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
                     <h6 class="text-muted">Average Bet Size</h6>
                     <h4 class="mb-0">@avgBetSize.ToString("N0") kr</h4>
+                    <small class="text-muted mt-1">Real stakes per bet</small>
                 </div>
             </div>
-            <div class="col-md-4 mb-3">
-                <div class="p-3 border rounded bg-light">
-                    <h6 class="text-muted">Average Liability Per Bet</h6>
+            <div class="col-md-3 mb-3">
+                <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
+                    <h6 class="text-muted">Avg Liability Per Bet</h6>
                     <h4 class="mb-0 text-warning">@avgNetLiability.ToString("N0") kr</h4>
-                    <small class="text-muted">Avg net risk per bet (Net Payout potential)</small>
+                    <small class="text-muted mt-1">Average net risk per bet</small>
                 </div>
             </div>
-            <div class="col-md-4 mb-3">
-                <div class="p-3 border rounded bg-light">
+            <div class="col-md-3 mb-3">
+                <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
                     <h6 class="text-muted">Total Period Liability</h6>
                     <h4 class="mb-0 text-danger">@totalNetLiability.ToString("N0") kr</h4>
-                    <small class="text-muted">Total net exposure for this period</small>
+                    <small class="text-muted mt-1">Total net exposure</small>
                 </div>
             </div>
         </div>
@@ -126,6 +149,7 @@
     
     // Live Tracker
     private decimal netOpenLiability = 0;
+    private decimal netOpenProfitIfLost = 0;
     
     // Period Metrics
     private decimal totalStakes = 0;
@@ -133,6 +157,7 @@
     private int totalFreeBetsCount = 0;
     private decimal netProfit = 0;
     private decimal holdPercentage = 0;
+    private decimal avgOdds = 0;
     private decimal avgBetSize = 0;
     private decimal avgNetLiability = 0;
     private decimal totalNetLiability = 0;
@@ -187,6 +212,7 @@
             .ToListAsync();
             
         netOpenLiability = activeBets.Sum(b => b.PotentialPayout - ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
+        netOpenProfitIfLost = activeBets.Sum(b => ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
         await InvokeAsync(StateHasChanged);
     }
 
@@ -310,6 +336,7 @@
             totalStakes = 0;
             netProfit = -totalFreeBetsAmount;
             holdPercentage = 0;
+            avgOdds = 0;
             avgBetSize = 0;
             avgNetLiability = 0;
             totalNetLiability = 0;
@@ -335,6 +362,9 @@
             holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
             
             // 5. Averages and Liabilities
+            var validBetsWithOdds = periodBets.Where(b => b.Odds > 0).ToList();
+            avgOdds = validBetsWithOdds.Any() ? (decimal)validBetsWithOdds.Average(b => b.Odds) : 0;
+            
             avgBetSize = (decimal)periodBets.Average(b => (decimal)(b.AmountNOK ?? 0));
             
             // Liability definition: Net winnings potential
