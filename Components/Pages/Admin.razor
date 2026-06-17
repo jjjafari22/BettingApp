@@ -166,7 +166,7 @@
                                     <div class="input-group input-group-sm">
                                        <input type="number" id="betAmountInput" class="form-control fw-bold" 
                                            @bind-value="reviewingBetModel.AmountNOK" 
-                                           oninput="calculatePayout()"
+                                           oninput="calculatePayout()" onfocus="this.select();"
                                               placeholder="0" enterkeyhint="next" />
  
                                        <span class="input-group-text">kr</span>
@@ -178,7 +178,7 @@
                       
                                    <input type="number" step="0.01" id="betOddsInput" class="form-control form-control-sm fw-bold" 
                                            @bind-value="reviewingBetModel.Odds" 
-                                           oninput="calculatePayout()"
+                                           oninput="calculatePayout()" onfocus="this.select();"
                                            placeholder="1.00" enterkeyhint="done" />
                                 </div>
                 
