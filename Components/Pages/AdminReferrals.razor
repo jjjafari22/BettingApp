@@ -9,6 +9,8 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IHubContext<BetHub> HubContext
 @inject IJSRuntime JSRuntime
+@using BettingApp.Services
+@inject DiscordNotificationService DiscordService
 @rendermode InteractiveServer
 
 <PageTitle>Admin Referrals</PageTitle>
@@ -73,7 +75,7 @@ else
                                         <span class="badge bg-light text-dark border"><i class="bi bi-chat-quote-fill text-muted me-1"></i> @user.ReferredBy</span>
                                     </td>
                                     <td>
-                                        <select class="form-select form-select-sm" @bind="possibleReferralSelections[user.Id]">
+                                        <select class="form-select form-select-sm" style="min-width: 220px;" @bind="possibleReferralSelections[user.Id]">
                                             <option value="">-- Select Referrer --</option>
                                             @foreach(var u in allUsers) { <option value="@u.Id">@FormatAdminDisplay(u, u.UserName ?? "")</option> }
                                         </select>
@@ -302,7 +304,7 @@ else
         string fullName = $"{u.FirstName} {u.LastName}".Trim();
         if (string.IsNullOrEmpty(fullName)) fullName = "No Name";
         string discord = string.IsNullOrEmpty(u.DiscordUsername) ? "No Discord" : u.DiscordUsername;
-        return $"{discord} ({fullName})";
+        return $"{fullName} ({discord})";
     }
 
 
@@ -348,6 +350,9 @@ else
             context.AuditLogs.Add(new AuditLog { AdminUserName = adminName, Action = "Created Referral", TargetUserName = referrer.UserName ?? "Unknown", Details = $"Referred: {referred.UserName ?? "Unknown"}, Amount: {r.TotalBonusAmount}" });
             
             await context.SaveChangesAsync();
+            string referredName1 = $"{referred.FirstName} {referred.LastName}".Trim();
+            if (string.IsNullOrEmpty(referredName1)) referredName1 = referred.UserName ?? "a friend";
+            _ = DiscordService.NotifyUserReferralAddedAsync(referrer.DiscordUserId, referredName1);
             successMessage = $"Referral created successfully for {FormatAdminDisplay(referredUser, referred.UserName ?? "")}.";
             await LoadData();
         }
@@ -369,7 +374,7 @@ else
     private async Task LoadData()
     {
         using var context = DbFactory.CreateDbContext();
-        allUsers = await context.Users.OrderBy(u => u.UserName).ToListAsync();
+        allUsers = await context.Users.OrderBy(u => u.FirstName).ThenBy(u => u.LastName).ToListAsync();
         
         var allRefs = await context.Referrals.ToListAsync();
         var hist = allRefs.Where(r => r.Tier1Paid && r.Tier2Paid && r.Tier3Paid).ToList();
@@ -484,6 +489,9 @@ else
             context.AuditLogs.Add(new AuditLog { AdminUserName = adminName, Action = "Created Referral", TargetUserName = referrer.UserName ?? "Unknown", Details = $"Referred: {referred.UserName ?? "Unknown"}, Amount: {newBonusAmount}" });
             
             await context.SaveChangesAsync();
+            string referredName2 = $"{referred.FirstName} {referred.LastName}".Trim();
+            if (string.IsNullOrEmpty(referredName2)) referredName2 = referred.UserName ?? "a friend";
+            _ = DiscordService.NotifyUserReferralAddedAsync(referrer.DiscordUserId, referredName2);
             successMessage = "Referral created successfully.";
             newReferrerId = null;
             newReferredId = null;
@@ -531,6 +539,7 @@ else
         
         await context.SaveChangesAsync();
         await HubContext.Clients.Group(referrer.Id).SendAsync("ReceiveUpdate", $"You received a referral bonus of {payout:N0} FB!");
+        _ = DiscordService.NotifyUserFreeBetAsync(referrer.DiscordUserId, (int)payout, $"Referral Bonus ({msg}) for inviting {dbRef.ReferredUserName}");
         
         successMessage = $"Successfully paid {payout:N0} FB to {referrer.UserName}.";
         await LoadData();

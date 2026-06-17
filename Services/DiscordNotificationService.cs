@@ -135,6 +135,20 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
+    public async Task NotifyUserReferralAddedAsync(string? discordUserId, string referredUserName)
+    {
+        if (string.IsNullOrWhiteSpace(discordUserId)) return;
+
+        string message = $"🤝 **New Referral Confirmed!**\n" +
+                         $"You have successfully referred **{referredUserName}**!\n" +
+                         $"Your referral bonuses (Free Bets) will automatically unlock and be added to your balance as they meet the turnover requirements.\n" +
+                         $"You can track the progress of this at any time under **My Referrals** on the website (if you're on a phone, tap the ☰ menu icon in the top corner to find it).\n" +
+                         $"Thanks for inviting your friends! 💸\n" +
+                         $"------------------------------\n";
+
+        await SendDmAsync(discordUserId, message);
+    }
+
     // --- ADMIN WEBHOOK LOGIC (Unchanged) ---
     public async Task NotifyAdminNewPickAsync(Bet bet)
     {
