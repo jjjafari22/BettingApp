@@ -275,7 +275,7 @@
 
             referralTasks = activeRefs.Count(r => {
                 var t = turnovers.GetValueOrDefault(r.ReferredUserId, 0);
-                return (t >= 5000 && !r.Tier1Paid) || (t >= 20000 && !r.Tier2Paid) || (t >= 50000 && !r.Tier3Paid);
+                return (t >= 5000 && !r.Tier1Paid) || (t >= 15000 && !r.Tier2Paid) || (t >= 30000 && !r.Tier3Paid);
             });
         } else {
             referralTasks = 0;

@@ -63,24 +63,24 @@
                                             
                                             <!-- Tier 2 -->
                                             <div class="d-flex justify-content-between small mb-1">
-                                                <span>Tier 2 (30% = @((vm.Ref.TotalBonusAmount * 0.3m).ToString("N0"))kr FB): 20,000 kr Turnover</span>
+                                                <span>Tier 2 (30% = @((vm.Ref.TotalBonusAmount * 0.3m).ToString("N0"))kr FB): 15,000 kr Turnover</span>
                                                 @if (vm.Ref.Tier2Paid) { <span class="text-success fw-bold"><i class="bi bi-check-circle-fill"></i> Paid</span> }
-                                                else if (vm.Turnover >= 20000 && vm.Ref.Tier1Paid) { <span class="text-warning text-dark fw-bold"><i class="bi bi-hourglass-split"></i> Reached (Awaiting Payout)</span> }
-                                                else { <span class="text-primary fw-bold">@(Math.Floor(Math.Min(100m, (vm.Turnover / 20000m) * 100m)).ToString("0"))%</span> }
+                                                else if (vm.Turnover >= 15000 && vm.Ref.Tier1Paid) { <span class="text-warning text-dark fw-bold"><i class="bi bi-hourglass-split"></i> Reached (Awaiting Payout)</span> }
+                                                else { <span class="text-primary fw-bold">@(Math.Floor(Math.Min(100m, (vm.Turnover / 15000m) * 100m)).ToString("0"))%</span> }
                                             </div>
                                             <div class="progress mb-3" style="height: 8px;">
-                                                <div class="progress-bar @(vm.Ref.Tier2Paid ? "bg-success" : (vm.Turnover >= 20000 ? "bg-warning" : "bg-primary"))" style="width: @(Math.Min(100m, (vm.Turnover / 20000m) * 100m).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                                                <div class="progress-bar @(vm.Ref.Tier2Paid ? "bg-success" : (vm.Turnover >= 15000 ? "bg-warning" : "bg-primary"))" style="width: @(Math.Min(100m, (vm.Turnover / 15000m) * 100m).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
                                             </div>
 
                                             <!-- Tier 3 -->
                                             <div class="d-flex justify-content-between small mb-1">
-                                                <span>Tier 3 (50% = @((vm.Ref.TotalBonusAmount * 0.5m).ToString("N0"))kr FB): 50,000 kr Turnover</span>
+                                                <span>Tier 3 (50% = @((vm.Ref.TotalBonusAmount * 0.5m).ToString("N0"))kr FB): 30,000 kr Turnover</span>
                                                 @if (vm.Ref.Tier3Paid) { <span class="text-success fw-bold"><i class="bi bi-check-circle-fill"></i> Paid</span> }
-                                                else if (vm.Turnover >= 50000 && vm.Ref.Tier2Paid) { <span class="text-warning text-dark fw-bold"><i class="bi bi-hourglass-split"></i> Reached (Awaiting Payout)</span> }
-                                                else { <span class="text-primary fw-bold">@(Math.Floor(Math.Min(100m, (vm.Turnover / 50000m) * 100m)).ToString("0"))%</span> }
+                                                else if (vm.Turnover >= 30000 && vm.Ref.Tier2Paid) { <span class="text-warning text-dark fw-bold"><i class="bi bi-hourglass-split"></i> Reached (Awaiting Payout)</span> }
+                                                else { <span class="text-primary fw-bold">@(Math.Floor(Math.Min(100m, (vm.Turnover / 30000m) * 100m)).ToString("0"))%</span> }
                                             </div>
                                             <div class="progress mb-2" style="height: 8px;">
-                                                <div class="progress-bar @(vm.Ref.Tier3Paid ? "bg-success" : (vm.Turnover >= 50000 ? "bg-warning" : "bg-primary"))" style="width: @(Math.Min(100m, (vm.Turnover / 50000m) * 100m).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                                                <div class="progress-bar @(vm.Ref.Tier3Paid ? "bg-success" : (vm.Turnover >= 30000 ? "bg-warning" : "bg-primary"))" style="width: @(Math.Min(100m, (vm.Turnover / 30000m) * 100m).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
                                             </div>
                                         </div>
                                         <div class="text-muted small mt-2 fw-bold">Current Total Turnover: @vm.Turnover.ToString("N0") kr</div>

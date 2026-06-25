@@ -184,17 +184,17 @@ else
                                         {
                                             <span class="badge bg-success text-start"><i class="bi bi-check-circle"></i> 30% Paid (@((vm.Ref.TotalBonusAmount * 0.3m).ToString("N0")) FB)</span>
                                         }
-                                        else if (vm.Turnover >= 20000 && vm.Ref.Tier1Paid)
+                                        else if (vm.Turnover >= 15000 && vm.Ref.Tier1Paid)
                                         {
                                             <button class="btn btn-sm btn-success text-start" @onclick="() => PayTier(vm.Ref, 2)"><i class="bi bi-gift-fill"></i> Pay 30% (@((vm.Ref.TotalBonusAmount * 0.3m).ToString("N0")) FB)</button>
                                         }
-                                        else if (vm.Turnover >= 20000 && !vm.Ref.Tier1Paid)
+                                        else if (vm.Turnover >= 15000 && !vm.Ref.Tier1Paid)
                                         {
                                             <span class="badge bg-warning text-dark text-start"><i class="bi bi-hourglass-split"></i> 30% (Pay Tier 1 first)</span>
                                         }
                                         else
                                         {
-                                            <span class="badge bg-secondary text-start"><i class="bi bi-lock-fill"></i> 30% (Needs @(Math.Max(0, 20000 - vm.Turnover).ToString("N0")) kr more)</span>
+                                            <span class="badge bg-secondary text-start"><i class="bi bi-lock-fill"></i> 30% (Needs @(Math.Max(0, 15000 - vm.Turnover).ToString("N0")) kr more)</span>
                                         }
 
                                         <!-- Tier 3: 50% -->
@@ -202,17 +202,17 @@ else
                                         {
                                             <span class="badge bg-success text-start"><i class="bi bi-check-circle"></i> 50% Paid (@((vm.Ref.TotalBonusAmount * 0.5m).ToString("N0")) FB)</span>
                                         }
-                                        else if (vm.Turnover >= 50000 && vm.Ref.Tier2Paid)
+                                        else if (vm.Turnover >= 30000 && vm.Ref.Tier2Paid)
                                         {
                                             <button class="btn btn-sm btn-success text-start" @onclick="() => PayTier(vm.Ref, 3)"><i class="bi bi-gift-fill"></i> Pay 50% (@((vm.Ref.TotalBonusAmount * 0.5m).ToString("N0")) FB)</button>
                                         }
-                                        else if (vm.Turnover >= 50000 && !vm.Ref.Tier2Paid)
+                                        else if (vm.Turnover >= 30000 && !vm.Ref.Tier2Paid)
                                         {
                                             <span class="badge bg-warning text-dark text-start"><i class="bi bi-hourglass-split"></i> 50% (Pay Tier 2 first)</span>
                                         }
                                         else
                                         {
-                                            <span class="badge bg-secondary text-start"><i class="bi bi-lock-fill"></i> 50% (Needs @(Math.Max(0, 50000 - vm.Turnover).ToString("N0")) kr more)</span>
+                                            <span class="badge bg-secondary text-start"><i class="bi bi-lock-fill"></i> 50% (Needs @(Math.Max(0, 30000 - vm.Turnover).ToString("N0")) kr more)</span>
                                         }
                                     </div>
                                 </td>
