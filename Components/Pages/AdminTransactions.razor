@@ -707,6 +707,10 @@
             {
                 await DiscordService.NotifyUserFreeBetAsync(user.DiscordUserId, newTrans.AmountNOK, newTrans.PaymentDetails);
             }
+            else if (newTrans.Type == "Deposit")
+            {
+                await DiscordService.NotifyUserDepositAsync(user.DiscordUserId, newTrans.AmountNOK);
+            }
         }
         
         successMessage = "Transaction added successfully!";

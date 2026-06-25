@@ -135,6 +135,18 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
+    public async Task NotifyUserDepositAsync(string? discordUserId, int amount)
+    {
+        if (string.IsNullOrWhiteSpace(discordUserId)) return;
+
+        string message = $"💰 **Deposit Processed!**\n" +
+                         $"Your account has been credited with **{amount:N0} NOK**.\n" +
+                         $"Good luck! 🍀\n" +
+                         $"------------------------------\n";
+
+        await SendDmAsync(discordUserId, message);
+    }
+
     public async Task NotifyUserReferralAddedAsync(string? discordUserId, string referredUserName)
     {
         if (string.IsNullOrWhiteSpace(discordUserId)) return;
