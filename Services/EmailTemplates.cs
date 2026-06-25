@@ -43,7 +43,8 @@ public static class EmailTemplates
                         <strong>Having trouble with Discord?</strong><br>
                         No problem! You can also reach out to our admin team directly via <a href="https://m.me/61587418012797" target="_blank">Facebook Messenger</a>.
                     </div>
-                    <p style="margin-top: 35px; font-weight: 500;">We wish you the absolute best of luck!</p>
+                    <p style="margin-top: 25px; font-size: 14px; color: #666;">Before placing your first bet, we kindly ask that you familiarize yourself with our <a href="https://www.castle-of-happiness.com/disclaimer" style="color: #666; text-decoration: underline;">rules and disclaimer</a>.</p>
+                    <p style="margin-top: 20px; font-weight: 500;">We wish you the absolute best of luck!</p>
                     <p style="margin: 0; color: #666;">— The Admins</p>
                 </div>
                 <div class="footer">
