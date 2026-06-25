@@ -198,14 +198,29 @@
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-3">
     <h4 class="mb-0">Transaction History</h4>
     
-    <div class="position-relative" style="min-width: 250px;">
-        <div class="input-group input-group-sm">
-            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-            <input type="text" class="form-control" 
-                   placeholder="Filter by user..." 
-                   @bind="filterSearchTerm" 
-                   @oninput="SearchFilterUsers" />
-        </div>
+    <div class="d-flex gap-2 flex-wrap align-items-start">
+        <select class="form-select form-select-sm" style="width: auto;" @onchange="OnTypeFilterChanged">
+            <option value="">All Types</option>
+            <option value="Deposit">Deposits</option>
+            <option value="Withdrawal">Withdrawals</option>
+            <option value="Free Bet">Free Bets</option>
+        </select>
+        
+        <select class="form-select form-select-sm" style="width: auto;" @onchange="OnStatusFilterChanged">
+            <option value="">All Statuses</option>
+            <option value="Completed">Completed</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Cancelled">Cancelled</option>
+        </select>
+
+        <div class="position-relative" style="min-width: 250px;">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" 
+                       placeholder="Filter by user..." 
+                       @bind="filterSearchTerm" 
+                       @oninput="SearchFilterUsers" />
+            </div>
         
         @if (filterSearchResults.Any())
         {
@@ -227,6 +242,7 @@
                 <button class="btn btn-link btn-sm p-0 text-danger text-decoration-none" @onclick="ClearFilterSelection"><i class="bi bi-x-circle-fill"></i> clear</button>
              </div>
         }
+        </div>
     </div>
 </div>
 
@@ -242,7 +258,6 @@
                 <th>Payment Method</th>
                 <th>Amount</th>
                 <th>Status</th>
-                <th>Actions</th>
             </tr>
         </thead>
          <tbody>
@@ -275,7 +290,7 @@
                     </td>
                     <td>@t.AmountNOK.ToString("N0") kr</td>
                      <td>
-                        @if (t.Status == "Completed" || t.Status == "Won" || t.Status == "Approved")
+                        @if (t.Status == "Completed")
                         {
                             <span class="badge bg-success">@t.Status</span>
                         }
@@ -283,7 +298,7 @@
                         {
                             <span class="badge bg-warning text-dark">@t.Status</span>
                         }
-                        else if (t.Status == "Rejected" || t.Status == "Lost" || t.Status == "Cancelled")
+                        else if (t.Status == "Rejected" || t.Status == "Cancelled")
                         {
                             <span class="badge bg-danger">@t.Status</span>
                         }
@@ -292,19 +307,11 @@
                             <span class="badge bg-secondary">@t.Status</span>
                         }
                     </td>
-                    <td>
-                         @if (t.Status != "Cancelled" && t.Status != "Rejected" && t.Status != "Lost")
-                         {
-                             <button class="btn btn-danger btn-sm py-0" @onclick="() => CancelTransaction(t)" title="Cancel Transaction">
-                                 <i class="bi bi-x-circle"></i> Cancel
-                             </button>
-                         }
-                    </td>
                 </tr>
             }
             @if (allTransactions.Count == 0)
             {
-                <tr><td colspan="9" class="text-muted text-center py-3">No transactions found for this period/user.</td></tr>
+                <tr><td colspan="8" class="text-muted text-center py-3">No transactions found for this period/user.</td></tr>
             }
         </tbody>
     </table>
@@ -335,6 +342,9 @@
     private string filterSearchTerm = "";
     private List<ApplicationUser> filterSearchResults = new();
     private ApplicationUser? filterSelectedUser;
+    
+    private string? filterType;
+    private string? filterStatus;
     
     private string? successMessage;
     private string? errorMessage;
@@ -496,6 +506,22 @@
         await LoadTransactions(context);
     }
 
+    private async Task OnTypeFilterChanged(ChangeEventArgs e)
+    {
+        filterType = e.Value?.ToString();
+        currentPage = 1;
+        using var context = DbFactory.CreateDbContext();
+        await LoadTransactions(context);
+    }
+
+    private async Task OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        filterStatus = e.Value?.ToString();
+        currentPage = 1;
+        using var context = DbFactory.CreateDbContext();
+        await LoadTransactions(context);
+    }
+
     private async Task SetupSignalR()
     {
         hubConnection = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/bethub")).Build();
@@ -517,10 +543,20 @@
 
     private async Task LoadTransactions(ApplicationDbContext context)
     {
-        var query = context.Transactions.AsQueryable();
+        var query = context.Transactions.Where(t => t.Status != "Pending").AsQueryable();
         if (filterSelectedUser != null)
         {
             query = query.Where(t => t.UserId == filterSelectedUser.Id);
+        }
+        
+        if (!string.IsNullOrEmpty(filterType))
+        {
+            query = query.Where(t => t.Type == filterType);
+        }
+        
+        if (!string.IsNullOrEmpty(filterStatus))
+        {
+            query = query.Where(t => t.Status == filterStatus);
         }
 
         allTransactions = await query
@@ -603,61 +639,7 @@
         }
     }
 
-    private async Task CancelTransaction(Transaction t)
-    {
-        var displayUser = userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ?
-        u.DiscordName : t.UserName;
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
-            $"Are you sure you want to CANCEL this transaction?\nType: {t.Type}\nAmount: {t.AmountNOK} kr\nUser: {displayUser}\n\nThis will reverse the balance.");
-        if (!confirmed) return;
 
-        using var context = DbFactory.CreateDbContext();
-        var dbTrans = await context.Transactions.FindAsync(t.Id);
-        var user = await context.Users.FindAsync(t.UserId);
-        if (dbTrans != null && user != null)
-        {
-            if (dbTrans.Status == "Cancelled" || dbTrans.Status == "Rejected")
-            {
-                errorMessage = "Transaction is already cancelled or rejected.";
-                return;
-            }
-
-            if (dbTrans.Type == "Deposit")
-            {
-                user.Balance -= dbTrans.AmountNOK;
-            }
-            else if (dbTrans.Type == "Free Bet")
-            {
-                user.FreeBetBalance -= dbTrans.AmountNOK;
-            }
-            else if (dbTrans.Type == "Withdrawal")
-            {
-                user.Balance += dbTrans.AmountNOK;
-            }
-
-            dbTrans.Status = "Cancelled";
-            dbTrans.UpdatedAt = DateTime.UtcNow;
-
-            context.AuditLogs.Add(new AuditLog 
-            { 
-                AdminUserName = currentAdminName ?? "Unknown", 
-                Action = "Cancelled Transaction", 
-                TargetUserName = user.UserName ?? "Unknown", 
-                Details = $"Cancelled {dbTrans.Type} of {dbTrans.AmountNOK}. ID: {dbTrans.Id}" 
-            });
-            await context.SaveChangesAsync();
-
-            await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", $"Transaction #{t.Id} was cancelled.");
-            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Transaction Cancelled");
-
-            successMessage = "Transaction cancelled and balance reversed successfully.";
-            await LoadTransactions(context);
-        }
-        else
-        {
-            errorMessage = "Transaction or User not found.";
-        }
-    }
 
     private async Task AddTransaction()
     {
