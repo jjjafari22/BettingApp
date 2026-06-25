@@ -10,8 +10,8 @@ public class ApplicationUser : IdentityUser
     public bool IsTestUser { get; set; }
     // ----------------------------------------
     
-    // Change default from 1000 to 0
-    public int CreditLimit { get; set; } = 0; 
+    // Default credit limit is 2000kr
+    public int CreditLimit { get; set; } = 2000; 
 
     // New per-user Max Payout limit (Default 20,000 NOK)
     public decimal MaxPayout { get; set; } = 20000m;
