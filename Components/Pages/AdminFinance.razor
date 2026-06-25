@@ -102,9 +102,9 @@
             
             <div class="col-md-3 mb-3">
                 <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
-                    <h6 class="text-muted">Average Odds</h6>
+                    <h6 class="text-muted">Avg Weighted Odds</h6>
                     <h4 class="mb-0">@avgOdds.ToString("0.00")</h4>
-                    <small class="text-muted mt-1">Across all settled bets</small>
+                    <small class="text-muted mt-1">Weighted by stake</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
@@ -363,7 +363,17 @@
             
             // 5. Averages and Liabilities
             var validBetsWithOdds = periodBets.Where(b => b.Odds > 0).ToList();
-            avgOdds = validBetsWithOdds.Any() ? (decimal)validBetsWithOdds.Average(b => b.Odds) : 0;
+            if (validBetsWithOdds.Any())
+            {
+                var totalWageredForOdds = validBetsWithOdds.Sum(b => (decimal)(b.AmountNOK ?? 0));
+                avgOdds = totalWageredForOdds > 0 
+                    ? validBetsWithOdds.Sum(b => (decimal)(b.AmountNOK ?? 0) * b.Odds) / totalWageredForOdds 
+                    : (decimal)validBetsWithOdds.Average(b => b.Odds);
+            }
+            else
+            {
+                avgOdds = 0;
+            }
             
             avgBetSize = (decimal)periodBets.Average(b => (decimal)(b.AmountNOK ?? 0));
             
