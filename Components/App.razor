@@ -43,23 +43,35 @@
     <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>
     <script src="js/discordMarkdown.js"></script>
     
-    @* --- REVERTED TO STANDARD: Removes the aggressive script that caused freezing --- *@
-    <script src="_framework/blazor.web.js"></script>
-    
-    @* OPTIONAL: A safe 'Watchdog' that refreshes the page ONLY if it gets stuck for too long.
-       This is much safer than the previous script because it doesn't loop. *@
+    @* --- MOBILE OPTIMIZED RECONNECTION LOGIC --- *@
+    <script src="_framework/blazor.web.js" autostart="false"></script>
     <script>
-        // If the 'Rejoining' modal is visible for more than 5 seconds, force a reload.
-        // This prevents the "Infinite Rejoining" spinner.
-        const observer = new MutationObserver((mutations) => {
+        // 1. Tell Blazor to retry faster rather than waiting 10-15 seconds between attempts
+        Blazor.start({
+            circuit: {
+                reconnectionOptions: {
+                    maxRetries: 5,
+                    retryIntervalMilliseconds: 1000
+                }
+            }
+        });
+
+        // 2. Safely monitor for the reconnect modal without queueing infinite loops
+        let reconnectTimer = null;
+        const observer = new MutationObserver(() => {
             const modal = document.getElementById('components-reconnect-modal');
             if (modal && modal.classList.contains('components-reconnect-show')) {
-                setTimeout(() => {
-                    if (modal.classList.contains('components-reconnect-show')) {
-                        console.log("Stuck rejoining. Reloading to recover.");
+                if (!reconnectTimer) {
+                    reconnectTimer = setTimeout(() => {
+                        console.log("Stuck rejoining for 5 seconds. Reloading to recover.");
                         window.location.reload();
-                    }
-                }, 5000); // 5 second timeout
+                    }, 5000);
+                }
+            } else {
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
             }
         });
         observer.observe(document.body, { childList: true, subtree: true, attributes: true });
