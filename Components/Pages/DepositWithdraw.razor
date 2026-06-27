@@ -75,55 +75,41 @@
                     <EditForm Model="@withdrawalRequest" OnValidSubmit="RequestWithdrawal" FormName="WithdrawForm">
                         <DataAnnotationsValidator />
                         
-                        <div class="mb-3">
-                            <label class="form-label">Payment Method</label>
-                            <InputSelect @bind-Value="withdrawalRequest.Platform" class="form-select">
-                                <option value="PayPal">PayPal</option>
-                                <option value="Vipps">Vipps</option>
-                                <option value="Revolut">Revolut</option>
-                                <option value="Crypto">Crypto</option>
-                            </InputSelect>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Amount (NOK)</label>
+                            <InputNumber @bind-Value="withdrawalAmount" class="form-control form-control-lg" />
+                        </div>
+                        
+                        <div class="alert alert-info py-2 small shadow-sm">
+                            <i class="bi bi-info-circle-fill me-1"></i> We strongly recommend providing <u class="fw-bold">Vipps and Revolut</u> so that we can send out your money faster. The more options you provide, the better!
                         </div>
 
-                        <div class="mb-3">
-                            @if (withdrawalRequest.Platform == "PayPal")
-                            {
-                                <label class="form-label">Email/Mobile</label>
-                            }
-                            else if (withdrawalRequest.Platform == "Vipps")
-                            {
-                                <label class="form-label">Phone Number</label>
-                            }
-                            else if (withdrawalRequest.Platform == "Revolut")
-                            {
-                                <label class="form-label">Revtag/Username</label>
-                            }
-                            else if (withdrawalRequest.Platform == "Crypto")
-                            {
-                                <label class="form-label">Wallet Address</label>
-                            }
-                            else
-                            {
-                                <label class="form-label">Payment Details</label>
-                            }
-                            
-                            <InputText @bind-Value="withdrawalRequest.PaymentDetails" class="form-control" />
+                        <div class="card bg-light border-0 mb-3 shadow-sm">
+                            <div class="card-body py-3 px-3">
+                                <label class="form-label fw-semibold mb-2">Vipps</label>
+                                <InputText @bind-Value="vippsDetails" class="form-control" placeholder="8-digit Norwegian Phone Number" />
+                            </div>
                         </div>
 
-                        @if (withdrawalRequest.Platform == "Crypto")
-                        {
-                            <div class="mb-3">
-                                <label class="form-label">Network</label>
-                                <InputText @bind-Value="cryptoNetwork" class="form-control" placeholder="e.g., TRC-20, ERC-20" />
-                                <div class="form-text text-danger small mt-1">
-                                    <i class="bi bi-info-circle"></i> Please ensure you have selected the correct network for your transfer. Network verification is the user's sole responsibility; funds sent to an incorrect network cannot be recovered.
+                        <div class="card bg-light border-0 mb-3 shadow-sm">
+                            <div class="card-body py-3 px-3">
+                                <label class="form-label fw-semibold mb-2">Revolut</label>
+                                <InputText @bind-Value="revolutDetails" class="form-control" placeholder="Revolut Tag / Username" />
+                            </div>
+                        </div>
+
+                        <div class="card bg-light border-0 mb-4 shadow-sm">
+                            <div class="card-body py-3 px-3">
+                                <label class="form-label fw-semibold mb-2">Other Payment Method</label>
+                                <div class="row g-2">
+                                    <div class="col-md-5">
+                                        <InputText @bind-Value="otherPlatformName" class="form-control" placeholder="e.g. PayPal" />
+                                    </div>
+                                    <div class="col-md-7">
+                                        <InputText @bind-Value="otherDetails" class="form-control" placeholder="Receiving Info" />
+                                    </div>
                                 </div>
                             </div>
-                        }
-
-                        <div class="mb-3">
-                            <label class="form-label">Amount (NOK)</label>
-                            <InputNumber @bind-Value="withdrawalAmount" class="form-control" />
                         </div>
 
                         <button type="submit" class="btn btn-primary w-100" disabled="@IsSubmitting">
@@ -199,10 +185,36 @@
     </div>
 </div>
 
+@if (showOneMethodWarning)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-warning text-dark border-0">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i> Just one payment method?</h5>
+                    <button type="button" class="btn-close" @onclick="() => showOneMethodWarning = false"></button>
+                </div>
+                <div class="modal-body py-4">
+                    <p class="fs-5 mb-2">We noticed you only provided one payment method.</p>
+                    <p class="mb-0 text-muted">We highly recommend adding at least two options so that you will get paid faster.</p>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-outline-secondary fw-bold" @onclick="() => showOneMethodWarning = false">Add more payment methods</button>
+                    <button type="button" class="btn btn-primary fw-bold px-4 shadow-sm" @onclick="ConfirmWithdrawal">Withdraw anyways</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
-    private Transaction withdrawalRequest = new() { Platform = "PayPal", Type = "Withdrawal" };
+    private Transaction withdrawalRequest = new() { Type = "Withdrawal", Platform = "Pending" };
     private int? withdrawalAmount;
-    private string? cryptoNetwork; 
+    private string vippsDetails = "";
+    private string revolutDetails = "";
+    private string otherPlatformName = "";
+    private string otherDetails = "";
+    private bool showOneMethodWarning = false;
     private List<Transaction> myTransactions = new();
     private decimal Balance = 0;
     private decimal FreeBetBalance = 0;
@@ -308,21 +320,42 @@
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(withdrawalRequest.PaymentDetails))
+        bool hasVipps = !string.IsNullOrWhiteSpace(vippsDetails);
+        bool hasRevolut = !string.IsNullOrWhiteSpace(revolutDetails);
+        bool hasOther = !string.IsNullOrWhiteSpace(otherPlatformName) && !string.IsNullOrWhiteSpace(otherDetails);
+
+        int methodsCount = (hasVipps ? 1 : 0) + (hasRevolut ? 1 : 0) + (hasOther ? 1 : 0);
+
+        if (methodsCount == 0)
         {
-            ErrorMessage = "Please provide your payment details/address.";
+            ErrorMessage = "Please provide at least one payment method to receive your withdrawal.";
             return;
         }
 
-        if (withdrawalRequest.Platform == "Crypto" && string.IsNullOrWhiteSpace(cryptoNetwork))
+        if (methodsCount == 1)
         {
-            ErrorMessage = "Please specify the network for your crypto transfer.";
+            showOneMethodWarning = true;
             return;
         }
 
+        await ExecuteWithdrawal();
+    }
+
+    private async Task ConfirmWithdrawal()
+    {
+        showOneMethodWarning = false;
+        await ExecuteWithdrawal();
+    }
+
+    private async Task ExecuteWithdrawal()
+    {
         IsSubmitting = true;
         try 
         {
+            bool hasVipps = !string.IsNullOrWhiteSpace(vippsDetails);
+            bool hasRevolut = !string.IsNullOrWhiteSpace(revolutDetails);
+            bool hasOther = !string.IsNullOrWhiteSpace(otherPlatformName) && !string.IsNullOrWhiteSpace(otherDetails);
+
             using var context = DbFactory.CreateDbContext();
             var auth = await AuthState.GetAuthenticationStateAsync();
             var userName = auth.User.Identity?.Name ?? "Unknown";
@@ -330,20 +363,39 @@
             var user = await context.Users.FindAsync(userId);
             if (user != null)
             {
-                user.Balance -= withdrawalAmount.Value;
+                user.Balance -= withdrawalAmount!.Value;
             }
             
-            string finalDetails = withdrawalRequest.Platform == "Crypto" 
-                ? $"{withdrawalRequest.PaymentDetails} (Network: {cryptoNetwork})" 
-                : withdrawalRequest.PaymentDetails!;
+            var providedMethods = new List<string>();
+            string primaryPlatform = "Mixed";
+            
+            if (hasVipps)
+            {
+                providedMethods.Add($"Vipps: {vippsDetails.Trim()}");
+                primaryPlatform = "Vipps";
+            }
+            if (hasRevolut)
+            {
+                providedMethods.Add($"Revolut: {revolutDetails.Trim()}");
+                if (primaryPlatform == "Mixed") primaryPlatform = "Revolut";
+                else primaryPlatform = "Multiple";
+            }
+            if (hasOther)
+            {
+                providedMethods.Add($"{otherPlatformName.Trim()}: {otherDetails.Trim()}");
+                if (primaryPlatform == "Mixed") primaryPlatform = otherPlatformName.Trim();
+                else primaryPlatform = "Multiple";
+            }
+
+            string finalDetails = string.Join(" | ", providedMethods);
 
             var transaction = new Transaction
             {
                 UserId = userId,
                 UserName = userName,
                 Type = "Withdrawal",
-                AmountNOK = withdrawalAmount.Value,
-                Platform = withdrawalRequest.Platform,
+                AmountNOK = withdrawalAmount!.Value,
+                Platform = primaryPlatform,
                 PaymentDetails = finalDetails,
                 Date = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
@@ -358,8 +410,10 @@
             
             SuccessMessage = "Withdrawal request submitted successfully. Waiting for admin approval.";
             withdrawalAmount = null;
-            withdrawalRequest.PaymentDetails = null;
-            cryptoNetwork = null;
+            vippsDetails = "";
+            revolutDetails = "";
+            otherPlatformName = "";
+            otherDetails = "";
             await LoadData();
         }
         catch (Exception ex)
