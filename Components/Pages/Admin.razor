@@ -145,7 +145,7 @@
                    
     
                     <div class="review-image-container">
-                       <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(currentReviewIndex <= 0)"><i class="bi bi-chevron-left"></i></button>
+                       <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(!CanNavigateReview(-1))"><i class="bi bi-chevron-left"></i></button>
                        @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
                          
                            <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
@@ -154,7 +154,7 @@
                                <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
                            </div>
                        }
-                       <button class="nav-arrow nav-arrow-right shadow-lg" @onclick="() => NavigateReview(1)" disabled="@(currentReviewList == null || currentReviewIndex >= currentReviewList.Count - 1)"><i class="bi bi-chevron-right"></i></button>
+                       <button class="nav-arrow nav-arrow-right shadow-lg" @onclick="() => NavigateReview(1)" disabled="@(!CanNavigateReview(1))"><i class="bi bi-chevron-right"></i></button>
                    </div>
 
                    <div class="review-controls-container">
@@ -243,7 +243,7 @@
 <div class="row">
   <div class="col-md-12">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4 class="mb-0">Pending Bets Queue</h4>
+            <h4 class="mb-0">Pending Bets Queue (@totalPendingBets)</h4>
             <button class="btn btn-outline-secondary btn-sm" @onclick="ExportPendingBetsCsv">
                 <i class="bi bi-download"></i> Export CSV
             </button>
@@ -288,7 +288,7 @@
          </div>
 
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4 class="mb-0">Active Bets (Approved)</h4>
+            <h4 class="mb-0">Active Bets (Approved) (@totalApprovedBets)</h4>
             <button class="btn btn-outline-secondary btn-sm" @onclick="ExportActiveBetsCsv">
                  <i class="bi bi-download"></i> Export CSV
             </button>
@@ -345,10 +345,9 @@
                  </tbody>
             </table>
             <div class="d-flex justify-content-between align-items-center mt-2">
-                <button class="btn btn-outline-secondary btn-sm" @onclick="PrevApprovedPage" disabled="@(approvedPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
-                  <span class="text-muted">Page @approvedPage</span>
-         
-                <button class="btn btn-outline-secondary btn-sm" @onclick="NextApprovedPage" disabled="@(!hasMoreApprovedBets)">Next <i class="bi bi-arrow-right"></i></button>
+                <button class="btn btn-sm @(approvedPage <= 1 ? "btn-outline-secondary" : "btn-primary shadow-sm")" @onclick="PrevApprovedPage" disabled="@(approvedPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
+                <span class="text-muted fw-bold">Page @approvedPage</span>
+                <button class="btn btn-sm @(!hasMoreApprovedBets ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold")" @onclick="NextApprovedPage" disabled="@(!hasMoreApprovedBets)">Next <i class="bi bi-arrow-right"></i></button>
             </div>
         </div>
 
@@ -426,9 +425,9 @@
             </table>
             
             <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
-                  <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(completedPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
-                <span class="text-muted">Page @completedPage</span>
-                <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasMoreCompletedBets)">Next <i class="bi bi-arrow-right"></i></button>
+                <button class="btn btn-sm @(completedPage <= 1 ? "btn-outline-secondary" : "btn-primary shadow-sm")" @onclick="PrevPage" disabled="@(completedPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
+                <span class="text-muted fw-bold">Page @completedPage</span>
+                <button class="btn btn-sm @(!hasMoreCompletedBets ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold")" @onclick="NextPage" disabled="@(!hasMoreCompletedBets)">Next <i class="bi bi-arrow-right"></i></button>
             </div>
         </div>
     </div>
@@ -445,6 +444,8 @@
     private bool hasMoreCompletedBets = false;
     private bool hasMoreApprovedBets = false;
     private int totalCompletedBets = 0;
+    private int totalPendingBets = 0;
+    private int totalApprovedBets = 0;
 
     private string? successMessage;
     private string? errorMessage;
@@ -555,6 +556,7 @@
     private async Task LoadPendingBets()
     {
         using var context = DbFactory.CreateDbContext();
+        totalPendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
         pendingBets = await context.Bets.Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).Take(100).ToListAsync();
         await PopulateUserLookup(pendingBets.Select(b => b.UserId));
     }
@@ -562,13 +564,13 @@
     private async Task LoadApprovedBets()
     {
         using var context = DbFactory.CreateDbContext();
-        var totalApproved = await context.Bets.CountAsync(b => b.Status == "Approved");
+        totalApprovedBets = await context.Bets.CountAsync(b => b.Status == "Approved");
         approvedBets = await context.Bets.Where(b => b.Status == "Approved")
             .OrderByDescending(b => b.UpdatedAt)
             .Skip((approvedPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
-        hasMoreApprovedBets = totalApproved > (approvedPage * pageSize);
+        hasMoreApprovedBets = totalApprovedBets > (approvedPage * pageSize);
         await PopulateUserLookup(approvedBets.Select(b => b.UserId));
     }
     
@@ -704,38 +706,87 @@
         modalSuccessMessage = null; 
     }
 
-    private void NavigateReview(int direction)
+    private bool CanNavigateReview(int direction)
+    {
+        if (currentReviewList == null || currentReviewList.Count == 0) return false;
+        if (direction < 0) 
+        {
+            if (currentReviewIndex > 0) return true;
+            if (reviewContext == "Approved") return approvedPage > 1;
+            if (reviewContext == "Completed") return completedPage > 1;
+            return false;
+        }
+        else 
+        {
+            if (currentReviewIndex < currentReviewList.Count - 1) return true;
+            if (reviewContext == "Approved") return hasMoreApprovedBets;
+            if (reviewContext == "Completed") return hasMoreCompletedBets;
+            return false;
+        }
+    }
+
+    private async Task NavigateReview(int direction)
     {
         if (currentReviewList == null || currentReviewList.Count == 0) return;
         modalSuccessMessage = null;
         int newIndex = currentReviewIndex + direction;
 
-        if (newIndex < 0) newIndex = 0;
-        if (newIndex >= currentReviewList.Count) newIndex = currentReviewList.Count - 1;
+        if (newIndex < 0) 
+        {
+            if (reviewContext == "Approved" && approvedPage > 1) {
+                await PrevApprovedPage();
+                currentReviewList = approvedBets;
+                newIndex = currentReviewList.Count - 1;
+            } 
+            else if (reviewContext == "Completed" && completedPage > 1) {
+                await PrevPage();
+                currentReviewList = completedBets;
+                newIndex = currentReviewList.Count - 1;
+            }
+            else {
+                newIndex = 0; // Stick to 0 if we can't go back
+            }
+        }
+        else if (newIndex >= currentReviewList.Count) 
+        {
+            if (reviewContext == "Approved" && hasMoreApprovedBets) {
+                await NextApprovedPage();
+                currentReviewList = approvedBets;
+                newIndex = 0;
+            }
+            else if (reviewContext == "Completed" && hasMoreCompletedBets) {
+                await NextPage();
+                currentReviewList = completedBets;
+                newIndex = 0;
+            }
+            else {
+                newIndex = currentReviewList.Count - 1;
+            }
+        }
 
-        if (newIndex != currentReviewIndex)
+        if (newIndex != currentReviewIndex && newIndex >= 0 && newIndex < currentReviewList.Count)
         {
             var nextBet = currentReviewList[newIndex];
             StartReview(nextBet);
         }
     }
 
-    private void OnReviewModalKeyDown(KeyboardEventArgs e) 
+    private async Task OnReviewModalKeyDown(KeyboardEventArgs e) 
     { 
-        if (e.Key == "ArrowRight") NavigateReview(1);
-        else if (e.Key == "ArrowLeft") NavigateReview(-1);
+        if (e.Key == "ArrowRight") await NavigateReview(1);
+        else if (e.Key == "ArrowLeft") await NavigateReview(-1);
     }
 
     private void HandleTouchStart(TouchEventArgs e) { touchStartX = e.Touches[0].ClientX; }
 
-    private void HandleTouchEnd(TouchEventArgs e)
+    private async Task HandleTouchEnd(TouchEventArgs e)
     {
         touchEndX = e.ChangedTouches[0].ClientX;
         var diff = touchStartX - touchEndX;
         if (Math.Abs(diff) > 50)
         {
-            if (diff > 0) NavigateReview(1);
-            else NavigateReview(-1);
+            if (diff > 0) await NavigateReview(1);
+            else await NavigateReview(-1);
         }
     }
 

@@ -11,7 +11,7 @@
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
-<h3>Audit Logs</h3>
+<h3>Audit Logs (@totalLogs)</h3>
 
 @if (!isAdmin)
 {
@@ -100,12 +100,12 @@ else
     </div>
 
     @* Pagination Controls *@
-    <div class="d-flex justify-content-between align-items-center mt-2">
-        <button class="btn btn-outline-secondary btn-sm" @onclick="PrevPage" disabled="@(currentPage <= 1)">
+    <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
+        <button class="btn btn-sm @(currentPage <= 1 ? "btn-outline-secondary" : "btn-primary shadow-sm")" @onclick="PrevPage" disabled="@(currentPage <= 1)">
             <i class="bi bi-arrow-left"></i> Previous
         </button>
-         <span class="text-muted">Page @currentPage of @totalPages (Total: @totalLogs)</span>
-        <button class="btn btn-outline-secondary btn-sm" @onclick="NextPage" disabled="@(!hasNextPage)">
+        <span class="text-muted fw-bold">Page @currentPage of @totalPages</span>
+        <button class="btn btn-sm @(!hasNextPage ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold")" @onclick="NextPage" disabled="@(!hasNextPage)">
             Next <i class="bi bi-arrow-right"></i>
         </button>
     </div>

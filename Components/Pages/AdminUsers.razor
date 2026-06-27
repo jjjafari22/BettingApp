@@ -294,7 +294,7 @@ else
         </div>
     </div>
 
-    <h3>Active Users</h3>
+    <h3>Active Users (@totalFilteredCount)</h3>
     
     <div class="alert alert-info py-2 d-flex align-items-center shadow-sm">
         <i class="bi bi-info-circle-fill me-2 fs-5"></i>
@@ -436,12 +436,12 @@ else
         </table>
     </div>
 
-    <div class="pagination-container">
-        <button class="btn btn-outline-secondary btn-sm px-3" @onclick="PrevUsersPage" disabled="@(usersPage <= 1)">
+    <div class="pagination-container d-flex justify-content-between align-items-center mt-2 mb-4">
+        <button class="btn btn-sm @(usersPage <= 1 ? "btn-outline-secondary" : "btn-primary shadow-sm") px-3" @onclick="PrevUsersPage" disabled="@(usersPage <= 1)">
             <i class="bi bi-arrow-left me-1"></i> Previous
         </button>
         <span class="text-muted fw-bold">Page @usersPage</span>
-        <button class="btn btn-outline-secondary btn-sm px-3" @onclick="NextUsersPage" disabled="@(!HasMoreUsers)">
+        <button class="btn btn-sm @(!HasMoreUsers ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold") px-3" @onclick="NextUsersPage" disabled="@(!HasMoreUsers)">
             Next <i class="bi bi-arrow-right ms-1"></i>
         </button>
     </div>
@@ -1350,7 +1350,6 @@ else
 
     private int usersPage = 1;
     private const int PageSize = 20;
-    private int totalFilteredCount = 0;
 
     private async Task ToggleShowActiveReal(ChangeEventArgs e)
     {
@@ -1364,7 +1363,7 @@ else
         usersPage = 1;
     }
 
-    private IEnumerable<UserViewModel> FilteredAndSortedUsers
+    private IEnumerable<UserViewModel> BaseFilteredQuery
     {
         get
         {
@@ -1381,7 +1380,18 @@ else
             {
                 query = query.Where(u => u.Balance != 0 && !u.IsAdmin && !u.IsTestUser);
             }
+            return query;
+        }
+    }
 
+    private int totalFilteredCount => BaseFilteredQuery.Count();
+
+    private IEnumerable<UserViewModel> FilteredAndSortedUsers
+    {
+        get
+        {
+            var query = BaseFilteredQuery;
+            
             var baseList = sortColumn switch
             {
                 "LastActive" => sortAscending ? query.OrderBy(u => u.LastActive) : query.OrderByDescending(u => u.LastActive),
@@ -1401,20 +1411,11 @@ else
                 _ => query
             };
 
-            var list = baseList.ToList();
-            totalFilteredCount = list.Count;
-
-            return list.Skip((usersPage - 1) * PageSize).Take(PageSize);
+            return baseList.Skip((usersPage - 1) * PageSize).Take(PageSize);
         }
     }
 
-    private bool HasMoreUsers 
-    {
-        get 
-        {
-            return totalFilteredCount > usersPage * PageSize;
-        }
-    }
+    private bool HasMoreUsers => totalFilteredCount > usersPage * PageSize;
 
     private void NextUsersPage() { usersPage++; StateHasChanged(); }
     private void PrevUsersPage() { if (usersPage > 1) usersPage--; StateHasChanged(); }
