@@ -286,6 +286,12 @@
                </tbody>
             </table>
          </div>
+         
+         <div class="d-flex justify-content-between align-items-center mb-5">
+             <button class="btn btn-sm @(pendingPage <= 1 ? "btn-outline-secondary" : "btn-primary shadow-sm")" @onclick="PrevPendingPage" disabled="@(pendingPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
+             <span class="text-muted fw-bold">Page @pendingPage</span>
+             <button class="btn btn-sm @(!hasMorePendingBets ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold")" @onclick="NextPendingPage" disabled="@(!hasMorePendingBets)">Next <i class="bi bi-arrow-right"></i></button>
+         </div>
 
         <div class="d-flex justify-content-between align-items-center mb-3 flex-nowrap gap-2">
             <h4 class="mb-0 text-truncate" style="font-size: clamp(1rem, 4vw, 1.5rem);">Active Bets (@totalApprovedBets)</h4>
@@ -448,9 +454,10 @@
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
     private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
+    private int pendingPage = 1;
     private int approvedPage = 1;
     private int completedPage = 1;
-    private int pageSize = 100;
+    private int pageSize = 25;
     
     private string completedStatusFilter = "All";
     
@@ -462,6 +469,7 @@
     }
     private bool hasMoreCompletedBets = false;
     private bool hasMoreApprovedBets = false;
+    private bool hasMorePendingBets = false;
     private int totalCompletedBets = 0;
     private int totalPendingBets = 0;
     private int totalApprovedBets = 0;
@@ -576,7 +584,12 @@
     {
         using var context = DbFactory.CreateDbContext();
         totalPendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
-        pendingBets = await context.Bets.Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).Take(100).ToListAsync();
+        pendingBets = await context.Bets.Where(b => b.Status == "Pending")
+            .OrderByDescending(b => b.UpdatedAt)
+            .Skip((pendingPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+        hasMorePendingBets = totalPendingBets > (pendingPage * pageSize);
         await PopulateUserLookup(pendingBets.Select(b => b.UserId));
     }
     
@@ -592,6 +605,9 @@
         hasMoreApprovedBets = totalApprovedBets > (approvedPage * pageSize);
         await PopulateUserLookup(approvedBets.Select(b => b.UserId));
     }
+    
+    private async Task NextPendingPage() { pendingPage++; await LoadPendingBets(); }
+    private async Task PrevPendingPage() { if (pendingPage > 1) { pendingPage--; await LoadPendingBets(); } }
     
     private async Task NextApprovedPage() { approvedPage++; await LoadApprovedBets(); }
     private async Task PrevApprovedPage() { if (approvedPage > 1) { approvedPage--; await LoadApprovedBets(); } }
