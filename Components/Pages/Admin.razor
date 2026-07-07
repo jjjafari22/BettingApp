@@ -242,10 +242,10 @@
 
 <div class="row">
   <div class="col-md-12">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4 class="mb-0">Pending Bets Queue (@totalPendingBets)</h4>
-            <button class="btn btn-outline-secondary btn-sm" @onclick="ExportPendingBetsCsv">
-                <i class="bi bi-download"></i> Export CSV
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-nowrap gap-2">
+            <h4 class="mb-0 text-truncate" style="font-size: clamp(1rem, 4vw, 1.5rem);">Pending Bets (@totalPendingBets)</h4>
+            <button class="btn btn-outline-secondary btn-sm flex-shrink-0" @onclick="ExportPendingBetsCsv" title="Export CSV">
+                <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Export CSV</span>
             </button>
         </div>
          <div class="table-responsive">
@@ -287,10 +287,10 @@
             </table>
          </div>
 
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4 class="mb-0">Active Bets (Approved) (@totalApprovedBets)</h4>
-            <button class="btn btn-outline-secondary btn-sm" @onclick="ExportActiveBetsCsv">
-                 <i class="bi bi-download"></i> Export CSV
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-nowrap gap-2">
+            <h4 class="mb-0 text-truncate" style="font-size: clamp(1rem, 4vw, 1.5rem);">Active Bets (@totalApprovedBets)</h4>
+            <button class="btn btn-outline-secondary btn-sm flex-shrink-0" @onclick="ExportActiveBetsCsv" title="Export CSV">
+                 <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Export CSV</span>
             </button>
         </div>
         <div class="table-responsive mb-5">
@@ -351,10 +351,20 @@
             </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center mb-3 mt-4">
-            <h4 class="mb-0">Completed Bets History (@totalCompletedBets)</h4>
-            <button class="btn btn-outline-secondary btn-sm" @onclick="ExportCompletedBetsCsv">
-                <i class="bi bi-download"></i> Export CSV
+        <div class="d-flex justify-content-between align-items-center mb-2 mt-4 flex-nowrap gap-2">
+            <div class="d-flex align-items-center flex-grow-1 gap-2 overflow-hidden">
+                <h4 class="mb-0 text-truncate" style="font-size: clamp(1rem, 4vw, 1.5rem);">Completed (@totalCompletedBets)</h4>
+                <select class="form-select form-select-sm shadow-sm flex-shrink-0" style="width: auto; min-width: 80px;" @onchange="OnCompletedStatusFilterChanged" value="@completedStatusFilter">
+                    <option value="All">All</option>
+                    <option value="Won">Won</option>
+                    <option value="Lost">Lost</option>
+                    <option value="Void">Void</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Cancelled">Cancelled</option>
+                </select>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm flex-shrink-0" @onclick="ExportCompletedBetsCsv" title="Export CSV">
+                <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Export CSV</span>
             </button>
         </div>
         <div class="table-responsive">
@@ -438,9 +448,18 @@
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
     private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
-    private int completedPage = 1;
     private int approvedPage = 1;
-    private const int pageSize = 20;
+    private int completedPage = 1;
+    private int pageSize = 100;
+    
+    private string completedStatusFilter = "All";
+    
+    private async Task OnCompletedStatusFilterChanged(ChangeEventArgs e)
+    {
+        completedStatusFilter = e.Value?.ToString() ?? "All";
+        completedPage = 1;
+        await LoadCompletedBets();
+    }
     private bool hasMoreCompletedBets = false;
     private bool hasMoreApprovedBets = false;
     private int totalCompletedBets = 0;
@@ -581,8 +600,19 @@
     {
         using var context = DbFactory.CreateDbContext();
         var completedStatuses = new[] { "Won", "Lost", "Void", "Rejected", "Cancelled" };
-        totalCompletedBets = await context.Bets.CountAsync(b => completedStatuses.Contains(b.Status));
-        completedBets = await context.Bets.Where(b => completedStatuses.Contains(b.Status))
+        
+        var query = context.Bets.AsQueryable();
+        if (completedStatusFilter == "All")
+        {
+            query = query.Where(b => completedStatuses.Contains(b.Status));
+        }
+        else
+        {
+            query = query.Where(b => b.Status == completedStatusFilter);
+        }
+        
+        totalCompletedBets = await query.CountAsync();
+        completedBets = await query
             .OrderByDescending(b => b.UpdatedAt)
             .Skip((completedPage - 1) * pageSize)
             .Take(pageSize)
