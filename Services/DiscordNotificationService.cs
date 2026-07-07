@@ -234,8 +234,34 @@ public class DiscordNotificationService : IHostedService
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143";
         string adminUrl = $"{baseUrl}/admin/transactions";
 
+        string userDisplayName = transaction.UserName;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var user = await db.Users.FindAsync(transaction.UserId);
+            if (user != null)
+            {
+                string discordName = !string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : transaction.UserName;
+                string fullName = $"{user.FirstName} {user.LastName}".Trim();
+                
+                if (!string.IsNullOrEmpty(fullName))
+                {
+                    userDisplayName = $"{discordName} ({fullName})";
+                }
+                else
+                {
+                    userDisplayName = discordName;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load user for Discord notification.");
+        }
+
         string description = $"**💸 New Withdrawal Request!**\n" +
-                             $"**User:** {transaction.UserName}\n" +
+                             $"**User:** {userDisplayName}\n" +
                              $"**Amount:** {transaction.AmountNOK:N0} NOK\n" +
                              $"**Platform:** {transaction.Platform}\n" +
                              $"[Manage Transactions]({adminUrl})\n" +
