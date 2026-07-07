@@ -101,7 +101,7 @@ public class DiscordNotificationService : IHostedService
         {
             header = "**Withdrawal Confirmed!**";
             icon = "✅";
-            messageBody = $"Your withdrawal of **{transaction.AmountNOK:N0} NOK** to **{transaction.Platform}** has been processed.";
+            messageBody = $"Your withdrawal of **{transaction.AmountNOK:N0} NOK** has been successfully processed.";
         }
         else if (status == "Rejected")
         {

@@ -69,14 +69,35 @@
                                     <br/><small class="text-muted">@w.PaymentDetails</small>
                                 }
                             </td>
-                            <td><strong>@w.AmountNOK.ToString("N0") kr</strong></td>
                             <td>
-                                <button class="btn btn-success btn-sm me-2" @onclick="() => ConfirmWithdraw(w)">
-                                    Confirm Payout
-                                </button>
-                                <button class="btn btn-danger btn-sm" @onclick="() => RejectWithdraw(w)">
-                                    Reject
-                                </button>
+                                @if (editingTransactionId == w.Id)
+                                {
+                                    <div class="input-group input-group-sm" style="max-width: 120px;">
+                                        <input type="number" class="form-control" @bind="editingTransactionAmount" />
+                                        <span class="input-group-text">kr</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <strong>@w.AmountNOK.ToString("N0") kr</strong>
+                                }
+                            </td>
+                            <td>
+                                @if (editingTransactionId == w.Id)
+                                {
+                                    <div class="d-flex flex-nowrap gap-1">
+                                        <button class="btn btn-primary btn-sm" @onclick="() => SaveTransactionEdit(w)">Save</button>
+                                        <button class="btn btn-secondary btn-sm" @onclick="CancelTransactionEdit">Cancel</button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-nowrap gap-1">
+                                        <button class="btn btn-success btn-sm" @onclick="() => ConfirmWithdraw(w)">Confirm</button>
+                                        <button class="btn btn-warning btn-sm" @onclick="() => StartEditTransaction(w)">Edit</button>
+                                        <button class="btn btn-danger btn-sm" @onclick="() => RejectWithdraw(w)">Reject</button>
+                                    </div>
+                                }
                             </td>
                         </tr>
                     }
@@ -336,6 +357,11 @@
     private int? adminAddAmount; 
     
     private string searchTerm = "";
+    
+    private string dateFilter = "All";
+    
+    private int? editingTransactionId = null;
+    private int editingTransactionAmount = 0;
     private List<ApplicationUser> searchResults = new();
     private ApplicationUser? selectedUser;
 
@@ -622,6 +648,68 @@
             }
 
             successMessage = "Withdrawal confirmed.";
+            await LoadTransactions(context);
+        }
+    }
+
+    private void StartEditTransaction(Transaction t)
+    {
+        editingTransactionId = t.Id;
+        editingTransactionAmount = t.AmountNOK;
+    }
+
+    private void CancelTransactionEdit()
+    {
+        editingTransactionId = null;
+    }
+
+    private async Task SaveTransactionEdit(Transaction t)
+    {
+        if (editingTransactionAmount <= 0)
+        {
+            errorMessage = "Amount must be greater than zero.";
+            return;
+        }
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"Change withdrawal amount from {t.AmountNOK} kr to {editingTransactionAmount} kr?");
+        if (!confirmed) return;
+
+        using var context = DbFactory.CreateDbContext();
+        var dbTrans = await context.Transactions.FindAsync(t.Id);
+        var user = await context.Users.FindAsync(t.UserId);
+        
+        if (dbTrans != null && user != null && dbTrans.Status == "Pending")
+        {
+            int oldAmount = dbTrans.AmountNOK;
+            int difference = oldAmount - editingTransactionAmount;
+            
+            // If difference > 0 (e.g. 1000 -> 500), we return 500 to user.
+            // If difference < 0 (e.g. 1000 -> 1500), we take 500 more from user.
+            
+            if (difference < 0 && user.Balance < Math.Abs(difference))
+            {
+                var confirmNegative = await JSRuntime.InvokeAsync<bool>("confirm", 
+                    $"This edit will result in a negative balance ({user.Balance + difference:N0} kr). Proceed anyway?");
+                if (!confirmNegative) return;
+            }
+
+            user.Balance += difference;
+            dbTrans.AmountNOK = editingTransactionAmount;
+            dbTrans.UpdatedAt = DateTime.UtcNow;
+
+            context.AuditLogs.Add(new AuditLog { 
+                AdminUserName = currentAdminName ?? "Unknown", 
+                Action = "Edited Pending Withdrawal", 
+                TargetUserName = t.UserName, 
+                Details = $"ID: {t.Id}, Old: {oldAmount}, New: {editingTransactionAmount}" 
+            });
+            
+            await context.SaveChangesAsync();
+            await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal amount updated");
+            
+            successMessage = $"Withdrawal amount updated to {editingTransactionAmount} kr.";
+            editingTransactionId = null;
             await LoadTransactions(context);
         }
     }
