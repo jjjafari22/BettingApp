@@ -352,7 +352,7 @@
             // - Void bets refund the original stake (AmountNOK)
             // - Lost bets pay out 0
             decimal wonPayouts = periodBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
-            decimal voidRefunds = periodBets.Where(b => b.Status == "Void").Sum(b => (decimal)(b.AmountNOK ?? 0));
+            decimal voidRefunds = periodBets.Where(b => b.Status == "Void").Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount);
             decimal totalPayouts = wonPayouts + voidRefunds;
             
             // 3. Net Profit: Real Stakes minus payouts and free bets given
