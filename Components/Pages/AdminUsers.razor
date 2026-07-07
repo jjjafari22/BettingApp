@@ -342,6 +342,7 @@ else
                     <th style="cursor: pointer;" @onclick='() => Sort("FirstName")'>Full Name @GetSortIcon("FirstName")</th>
                     <th style="cursor: pointer;" @onclick='() => Sort("Email")'>Email @GetSortIcon("Email")</th>
                     <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("PhoneNumber")'>Phone @GetSortIcon("PhoneNumber")</th>
+                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("DateJoined")'>Registered @GetSortIcon("DateJoined")</th>
                     <th>Discord Info</th>
                     <th>Referred By</th>
                     <th>Status</th>
@@ -394,6 +395,11 @@ else
                         </td>
                         
                         <td class="text-nowrap">@(user.PhoneNumber ?? "-")</td>
+                        
+                        <td class="text-nowrap">
+                            <div>@ToUserLocal(user.DateJoined).ToString("g")</div>
+                            <small class="text-muted" style="font-size: 0.7rem;">NO: @TimeHelpers.GetNorwayTime(user.DateJoined).ToString("g")</small>
+                        </td>
 
                         <td @onclick:stopPropagation="true">
                             <div class="d-flex flex-column gap-1">
