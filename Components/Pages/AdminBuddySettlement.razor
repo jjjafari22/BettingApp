@@ -14,6 +14,7 @@
 @inject IJSRuntime JS
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
+@inject DiscordNotificationService DiscordService
 
 <PageTitle>Buddy Settlement</PageTitle>
 
@@ -32,6 +33,56 @@
         </button>
     </div>
 
+    <div class="accordion mb-4" id="cashCowsAccordion">
+        <div class="accordion-item shadow-sm border-0">
+            <h2 class="accordion-header" id="headingCashCows">
+                <button class="accordion-button collapsed bg-light text-primary fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCashCows" aria-expanded="false" aria-controls="collapseCashCows">
+                    <i class="bi bi-wallet2 me-2"></i> Cash Cows Management
+                </button>
+            </h2>
+            <div id="collapseCashCows" class="accordion-collapse collapse" aria-labelledby="headingCashCows" data-bs-parent="#cashCowsAccordion">
+                <div class="accordion-body">
+                    <div class="row g-3 align-items-end mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted fw-bold">First Name</label>
+                            <input type="text" class="form-control" @bind="newCow.FirstName" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted fw-bold">Last Name</label>
+                            <input type="text" class="form-control" @bind="newCow.LastName" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted fw-bold">Vipps</label>
+                            <input type="text" class="form-control" @bind="newCow.Vipps" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted fw-bold">Revolut</label>
+                            <input type="text" class="form-control" @bind="newCow.Revolut" />
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-success w-100" @onclick="AddCashCow">Add Cash Cow</button>
+                        </div>
+                    </div>
+                    @if (cashCows.Any())
+                    {
+                        <ul class="list-group">
+                            @foreach (var cow in cashCows)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>@cow.FirstName @cow.LastName</strong>
+                                        <span class="text-muted ms-2 small">Vipps: @cow.Vipps | Revolut: @cow.Revolut</span>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveCashCow(cow.Id)"><i class="bi bi-trash"></i></button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
     @if (showConfirmation)
     {
         <div class="alert alert-warning border-warning shadow-sm">
@@ -40,6 +91,26 @@
                 Are you sure you want to trigger a settlement snapshot right now?
                 This will calculate who owes whom based on current balances.
             </p>
+            @if (candidates.Any())
+            {
+                <div class="mb-3 p-3 bg-white rounded border border-warning shadow-sm">
+                    <h5>Exclude Users</h5>
+                    <p class="small text-muted mb-2">Select users to exclude from peer-to-peer matching. (They will be settled by the admin/castle instead):</p>
+                    <div class="d-flex flex-wrap gap-3">
+                        @foreach (var c in candidates)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="excl_@c.UserName" 
+                                       checked="@excludedUsers.Contains(c.UserName)"
+                                       @onchange="@((ChangeEventArgs e) => ToggleExclude(c.UserName, e.Value))" />
+                                <label class="form-check-label" for="excl_@c.UserName">
+                                    @c.DisplayName
+                                </label>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
             <div class="d-flex gap-2">
                 <button class="btn btn-danger" @onclick="ExecuteSnapshot">Yes, Execute</button>
                 <button class="btn btn-secondary" @onclick="() => showConfirmation = false">Cancel</button>
@@ -149,51 +220,142 @@
                                                                 }
                                                             </div>
 
-                                                            <div class="row g-0">
-                                                                <div class="col-md-6 p-3 border-end">
-                                                                    <h6 class="text-secondary">Instructions (Who pays who)</h6>
-                                                                    @if (details.Instructions.Any())
+                                                            <div class="p-3">
+                                                                <h6 class="text-secondary mb-3">Settlement Messages</h6>
+                                                                @if (snapshotDebtorRows.TryGetValue(snap.Id, out var debtorRows) && debtorRows.Any())
+                                                                {
+                                                                    <div class="table-responsive">
+                                                                        <table class="table table-bordered bg-white align-middle">
+                                                                            <thead class="table-light">
+                                                                                <tr>
+                                                                                    <th style="width: 15%">Debtor</th>
+                                                                                    <th style="width: 35%">Destinations & Payment Info</th>
+                                                                                    <th style="width: 30%">Final Text (Editable)</th>
+                                                                                    <th style="width: 20%">Discord Channel & Actions</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                @foreach (var row in debtorRows)
+                                                                                {
+                                                                                    <tr class="@(row.IsCancelled ? "opacity-50 bg-light" : "")">
+                                                                                        <td>
+                                                                                            <strong>@row.UserName</strong><br/>
+                                                                                            <span class="text-danger fw-bold">-@row.TotalAmount.ToString("N0") kr</span>
+                                                                                            @if (row.IsSent)
+                                                                                            {
+                                                                                                <div class="mt-2 badge bg-success"><i class="bi bi-check-circle-fill"></i> Sent via Discord</div>
+                                                                                            }
+                                                                                            @if (row.IsCancelled)
+                                                                                            {
+                                                                                                <div class="mt-2 badge bg-secondary"><i class="bi bi-slash-circle"></i> Cancelled</div>
+                                                                                            }
+                                                                                        </td>
+                                                                                        <td>
+                                                                                            @foreach (var dest in row.Destinations)
+                                                                                            {
+                                                                                                <div class="mb-2 p-2 border rounded bg-light">
+                                                                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                                                                        <div>
+                                                                                                            <strong>To: @dest.ToName</strong> <span class="badge bg-secondary ms-2">@dest.Amount.ToString("N0") kr</span>
+                                                                                                        </div>
+                                                                                                        @if (dest.IsCastle)
+                                                                                                        {
+                                                                                                            <select class="form-select form-select-sm w-50" value="@dest.SelectedCowId" @onchange="@((ChangeEventArgs e) => OnCowSelected(dest, row, e.Value?.ToString()))">
+                                                                                                                <option value="">-- Select Cash Cow --</option>
+                                                                                                                @foreach(var cow in cashCows)
+                                                                                                                {
+                                                                                                                    <option value="@cow.Id">@cow.FirstName @cow.LastName</option>
+                                                                                                                }
+                                                                                                            </select>
+                                                                                                        }
+                                                                                                    </div>
+                                                                                                    <div class="mt-2">
+                                                                                                        <div class="input-group input-group-sm mb-1">
+                                                                                                            <span class="input-group-text" style="width: 70px;">Vipps</span>
+                                                                                                            <input type="text" class="form-control" @bind="dest.Vipps" @bind:event="oninput" @bind:after="() => row.GenerateText()" />
+                                                                                                        </div>
+                                                                                                        <div class="input-group input-group-sm">
+                                                                                                            <span class="input-group-text" style="width: 70px;">Revolut</span>
+                                                                                                            <input type="text" class="form-control" @bind="dest.Revolut" @bind:event="oninput" @bind:after="() => row.GenerateText()" />
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            }
+                                                                                        </td>
+                                                                                        <td>
+                                                                                            <textarea class="form-control form-control-sm" rows="8" style="font-size: 0.8rem; resize: vertical;" @bind="row.FinalText" @bind:event="oninput"></textarea>
+                                                                                        </td>
+                                                                                        <td>
+                                                                                            <label class="small text-muted fw-bold mb-1">Send to Discord</label>
+                                                                                            <select class="form-select form-select-sm mb-2" style="min-width: 200px;" @bind="row.SelectedChannelId">
+                                                                                                <option value="0">-- Select Channel --</option>
+                                                                                                @foreach(var ch in availableChannels)
+                                                                                                {
+                                                                                                    <option value="@ch.Id">#@ch.Name</option>
+                                                                                                }
+                                                                                            </select>
+                                                                                            
+                                                                                            <div class="d-flex gap-2">
+                                                                                                <button class="btn btn-primary btn-sm w-100" disabled="@(row.IsSending || row.SelectedChannelId == 0 || row.IsCancelled)" @onclick="() => SendToDiscord(row, snap.Id)">
+                                                                                                    @if (row.IsSending)
+                                                                                                    {
+                                                                                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                                                                                    }
+                                                                                                    else
+                                                                                                    {
+                                                                                                        <i class="bi bi-send-fill me-1"></i>
+                                                                                                        @(row.IsSent ? "Send Again" : "Send")
+                                                                                                    }
+                                                                                                </button>
+                                                                                                
+                                                                                                <button class="btn @(row.IsCancelled ? "btn-outline-secondary" : "btn-outline-danger") btn-sm" @onclick="() => ToggleCancel(row, snap.Id)" title="Cancel for this week">
+                                                                                                    <i class="bi @(row.IsCancelled ? "bi-arrow-counterclockwise" : "bi-x-circle")"></i>
+                                                                                                </button>
+                                                                                            </div>
+                                                                                            
+                                                                                            @if (!string.IsNullOrEmpty(row.CopiedMessage))
+                                                                                            {
+                                                                                                <div class="text-success small fw-bold mt-2"><i class="bi bi-check-circle-fill"></i> @row.CopiedMessage</div>
+                                                                                            }
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                }
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <p class="text-muted small">No debtors to settle.</p>
+                                                                }
+                                                                
+                                                                @{
+                                                                    var adminPayouts = details.Adjustments.Where(a => a.Reason == "Castle Owes Directly").ToList();
+                                                                    if (adminPayouts.Any())
                                                                     {
-                                                                        <ul class="list-group list-group-flush small">
-                                                                            @foreach (var ins in details.Instructions)
-                                                                            {
-                                                                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                                                    <span>
-                                                                                        <strong>@ins.FromUser</strong> 
-                                                                                        <span class="text-muted mx-1">&rarr;</span> 
-                                                                                        <strong>@ins.ToUser</strong>
-                                                                                    </span>
-                                                                                    <span class="badge bg-success rounded-pill">@ins.Amount.ToString("N0") kr</span>
-                                                                                </li>
-                                                                            }
-                                                                        </ul>
+                                                                        <div class="mt-4 border-top pt-3">
+                                                                            <h5 class="text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>Admin Payouts Required</h5>
+                                                                            <p class="small text-muted">The peer-to-peer settlement could not cover these withdrawals. Castle needs to pay these directly from company funds.</p>
+                                                                            <table class="table table-sm table-bordered mt-2">
+                                                                                <thead class="table-danger">
+                                                                                    <tr>
+                                                                                        <th>User Owed</th>
+                                                                                        <th>Amount to Pay</th>
+                                                                                    </tr>
+                                                                                </thead>
+                                                                                <tbody>
+                                                                                    @foreach (var payout in adminPayouts)
+                                                                                    {
+                                                                                        <tr>
+                                                                                            <td><strong>@payout.UserName</strong></td>
+                                                                                            <td class="text-danger fw-bold">@payout.Amount.ToString("N0") kr</td>
+                                                                                        </tr>
+                                                                                    }
+                                                                                </tbody>
+                                                                            </table>
+                                                                        </div>
                                                                     }
-                                                                    else
-                                                                    {
-                                                                        <p class="text-muted small">No payments required.</p>
-                                                                    }
-                                                                </div>
-                                                                <div class="col-md-6 p-3">
-                                                                    <h6 class="text-secondary">Adjustments</h6>
-                                                                    @if (details.Adjustments.Any())
-                                                                    {
-                                                                        <ul class="list-group list-group-flush small">
-                                                                            @foreach (var adj in details.Adjustments)
-                                                                            {
-                                                                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                                                    <span>
-                                                                                        <strong>@adj.UserName</strong>: @adj.Reason
-                                                                                    </span>
-                                                                                    <span class="badge bg-warning text-dark rounded-pill">@adj.Amount.ToString("N0") kr</span>
-                                                                                </li>
-                                                                            }
-                                                                        </ul>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <p class="text-muted small">No manual adjustments.</p>
-                                                                    }
-                                                                </div>
+                                                                }
                                                             </div>
                                                         }
                                                         else
@@ -244,13 +406,88 @@
         anchorElement.remove();
         URL.revokeObjectURL(url);
     }
+    window.copyTextToClipboard = async (text) => {
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+        }
+    }
 </script>
 
 @code {
+    public class SettlementCandidate
+    {
+        public string UserName { get; set; } = "";
+        public string DisplayName { get; set; } = "";
+    }
+
+    public class DebtorRow
+    {
+        public string UserName { get; set; } = "";
+        public decimal TotalAmount { get; set; }
+        public List<DebtorDestination> Destinations { get; set; } = new();
+        public string CopiedMessage { get; set; } = "";
+        public string FinalText { get; set; } = "";
+        
+        public ulong SelectedChannelId { get; set; }
+        public bool IsSent { get; set; }
+        public bool IsSending { get; set; }
+        public bool IsCancelled { get; set; }
+        
+        public void GenerateText()
+        {
+            string amtStr = TotalAmount.ToString("N0").Replace(",", " ");
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Hei! Saldoen din står i **-{amtStr} kr**");
+            sb.AppendLine();
+            sb.AppendLine("Fint om du kan gjøre opp dette via følgende løsninger:");
+            
+            foreach (var dest in Destinations)
+            {
+                sb.AppendLine($"👉 **Til {dest.ToName} ({dest.Amount.ToString("N0")} kr)**");
+                
+                var methods = new List<string>();
+                if (!string.IsNullOrWhiteSpace(dest.Vipps)) methods.Add($"- **Vipps:** `{dest.Vipps.Trim()}`");
+                if (!string.IsNullOrWhiteSpace(dest.Revolut)) methods.Add($"- **Revolut:** `{dest.Revolut.Trim()}`");
+                
+                if (methods.Any())
+                {
+                    sb.AppendLine(string.Join("\n", methods));
+                }
+                sb.AppendLine();
+            }
+            
+            sb.AppendLine("📸 Vennligst send oss et skjermbilde av kvitteringen når det er gjort, så skal vi sørge for å oppdatere saldoen din så raskt som mulig.");
+            sb.AppendLine();
+            sb.AppendLine("Tusen takk! 🙏");
+            
+            FinalText = sb.ToString().TrimEnd();
+        }
+    }
+
+    public class DebtorDestination
+    {
+        public string ToName { get; set; } = "";
+        public decimal Amount { get; set; }
+        public string Vipps { get; set; } = "";
+        public string Revolut { get; set; } = "";
+        public bool IsCastle { get; set; } = false;
+        public string SelectedCowId { get; set; } = "";
+    }
+
     private List<SettlementSnapshot> snapshots = new();
     private List<IGrouping<DateTime, SettlementSnapshot>> groupedSnapshots = new();
     private HashSet<int> expandedRows = new();
     private HashSet<DateTime> expandedDays = new();
+    private Dictionary<int, List<DebtorRow>> snapshotDebtorRows = new();
+    private List<SettlementCandidate> candidates = new();
+    private HashSet<string> excludedUsers = new();
+    
+    private List<CashCow> cashCows = new();
+    private CashCow newCow = new();
+    
+    private List<(ulong Id, string Name)> availableChannels = new();
     
     private bool isLoading = true;
     private bool showConfirmation = false;
@@ -283,7 +520,44 @@
             return;
         }
 
+        var setting = await context.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
+        if (setting != null && !string.IsNullOrEmpty(setting.CashCowsJson))
+        {
+            try {
+                cashCows = JsonSerializer.Deserialize<List<CashCow>>(setting.CashCowsJson) ?? new();
+            } catch { }
+        }
+
+        availableChannels = await DiscordService.GetGuildTextChannelsAsync();
+
         await LoadSnapshots();
+    }
+
+    private async Task AddCashCow()
+    {
+        if (string.IsNullOrWhiteSpace(newCow.FirstName)) return;
+        cashCows.Add(newCow);
+        newCow = new CashCow();
+        await SaveCashCows();
+    }
+
+    private async Task RemoveCashCow(string id)
+    {
+        cashCows.RemoveAll(c => c.Id == id);
+        await SaveCashCows();
+    }
+
+    private async Task SaveCashCows()
+    {
+        using var context = DbFactory.CreateDbContext();
+        var setting = await context.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
+        if (setting == null)
+        {
+            setting = new SystemSetting();
+            context.Settings.Add(setting);
+        }
+        setting.CashCowsJson = JsonSerializer.Serialize(cashCows);
+        await context.SaveChangesAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -348,9 +622,39 @@
         }
     }
 
-    private void ConfirmSnapshot()
+    private async Task ConfirmSnapshot()
     {
+        using var context = DbFactory.CreateDbContext();
+        
+        var debtorsQuery = await context.Users
+            .Where(u => u.Balance < 0 && !u.IsAdmin && !u.IsTestUser)
+            .Select(u => new { u.UserName, u.DiscordUsername, u.LastName })
+            .ToListAsync();
+            
+        var allUserNames = debtorsQuery.Select(u => u.UserName).Distinct().ToList();
+        
+        var userLookup = debtorsQuery.ToDictionary(u => u.UserName!, u => u);
+
+        candidates = allUserNames.Where(n => !string.IsNullOrEmpty(n)).Select(userName => {
+            var u = userLookup[userName!];
+            string displayName = string.IsNullOrWhiteSpace(u.DiscordUsername) ? u.UserName! : $"{u.DiscordUsername} ({u.LastName})";
+            return new SettlementCandidate
+            {
+                UserName = u.UserName!,
+                DisplayName = displayName
+            };
+        }).OrderBy(c => c.DisplayName).ToList();
+
+        excludedUsers.Clear();
         showConfirmation = true;
+    }
+
+    private void ToggleExclude(string userName, object? isChecked)
+    {
+        if (isChecked is bool b && b)
+            excludedUsers.Add(userName);
+        else
+            excludedUsers.Remove(userName);
     }
 
     private async Task ExecuteSnapshot()
@@ -358,7 +662,7 @@
         showConfirmation = false;
         isLoading = true;
         await Task.Delay(50);
-        await SettlementService.CreateSnapshotAsync();
+        await SettlementService.CreateSnapshotAsync(excludedUsers.ToList());
         
         // Reset to page 1 to see the new snapshot
         currentPage = 1;
@@ -378,7 +682,136 @@
         if (expandedRows.Contains(id))
             expandedRows.Remove(id);
         else
+        {
             expandedRows.Add(id);
+            if (!snapshotDebtorRows.ContainsKey(id))
+            {
+                var snap = snapshots.FirstOrDefault(s => s.Id == id);
+                if (snap != null)
+                {
+                    var details = GetSettlementDetails(snap);
+                    if (details != null)
+                    {
+                        snapshotDebtorRows[id] = BuildDebtorRows(details);
+                    }
+                }
+            }
+        }
+    }
+
+    private List<DebtorRow> BuildDebtorRows(SettlementResult details)
+    {
+        var dict = new Dictionary<string, DebtorRow>();
+        
+        foreach (var ins in details.Instructions)
+        {
+            if (!dict.ContainsKey(ins.FromUser)) 
+            {
+                dict[ins.FromUser] = new DebtorRow 
+                { 
+                    UserName = ins.FromUser,
+                    IsSent = ins.IsSent,
+                    IsCancelled = ins.IsCancelled
+                };
+            }
+            
+            // Use ToUserFirstName if available, otherwise fallback to the first part of the original display name
+            string toName = !string.IsNullOrEmpty(ins.ToUserFirstName) ? ins.ToUserFirstName : ins.ToUser.Split(' ')[0];
+            var dest = new DebtorDestination { ToName = toName, Amount = ins.Amount };
+            
+            if (!string.IsNullOrEmpty(ins.PaymentDetails))
+            {
+                var parts = ins.PaymentDetails.Split(new[] { " / ", " | " }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var part in parts)
+                {
+                    if (part.Trim().StartsWith("Vipps:", StringComparison.OrdinalIgnoreCase))
+                        dest.Vipps = part.Replace("Vipps:", "", StringComparison.OrdinalIgnoreCase).Trim();
+                    else if (part.Trim().StartsWith("Revolut:", StringComparison.OrdinalIgnoreCase))
+                        dest.Revolut = part.Replace("Revolut:", "", StringComparison.OrdinalIgnoreCase).Trim();
+                }
+                if (string.IsNullOrEmpty(dest.Vipps) && string.IsNullOrEmpty(dest.Revolut)) dest.Vipps = ins.PaymentDetails;
+            }
+            dict[ins.FromUser].Destinations.Add(dest);
+        }
+        
+        foreach (var adj in details.Adjustments.Where(a => a.Reason == "Owes Castle Directly"))
+        {
+            if (!dict.ContainsKey(adj.UserName)) 
+            {
+                dict[adj.UserName] = new DebtorRow 
+                { 
+                    UserName = adj.UserName,
+                    IsSent = adj.IsSent,
+                    IsCancelled = adj.IsCancelled
+                };
+            }
+            var dest = new DebtorDestination 
+            { 
+                ToName = "Velg Cash Cow", 
+                Amount = adj.Amount,
+                IsCastle = true
+            };
+            
+            if (details.SelectedCashCows != null && details.SelectedCashCows.TryGetValue(adj.UserName, out var cowId))
+            {
+                dest.SelectedCowId = cowId;
+                var cow = cashCows.FirstOrDefault(c => c.Id == cowId);
+                if (cow != null)
+                {
+                    dest.ToName = cow.FirstName;
+                    dest.Vipps = cow.Vipps;
+                    dest.Revolut = cow.Revolut;
+                }
+            }
+            
+            dict[adj.UserName].Destinations.Add(dest);
+        }
+        
+        var rows = dict.Values.OrderByDescending(r => r.Destinations.Sum(d => d.Amount)).ToList();
+        foreach (var row in rows)
+        {
+            row.TotalAmount = row.Destinations.Sum(d => d.Amount);
+            row.GenerateText();
+            
+            if (details.FinalTexts != null && details.FinalTexts.TryGetValue(row.UserName, out var savedText))
+            {
+                row.FinalText = savedText;
+            }
+            
+            // Auto-select Discord channel based on username (more robust matching)
+            string rawDiscordName = row.UserName.Split('(')[0].Trim().ToLower();
+            string cleanName = rawDiscordName.Replace(" ", "").Replace("-", "").Replace("_", "");
+            
+            var matchedChannel = availableChannels.FirstOrDefault(c => 
+                c.Name.ToLower().Replace("-", "").Replace("_", "").Replace(" ", "") == $"{cleanName}admins" ||
+                c.Name.ToLower().Replace("-", "").Replace("_", "").Replace(" ", "") == $"{cleanName}admin"
+            );
+            
+            if (matchedChannel.Id != 0)
+            {
+                row.SelectedChannelId = matchedChannel.Id;
+            }
+        }
+        return rows;
+    }
+
+    private void OnCowSelected(DebtorDestination dest, DebtorRow row, string? cowId)
+    {
+        dest.SelectedCowId = cowId ?? "";
+        var cow = cashCows.FirstOrDefault(c => c.Id == cowId);
+        if (cow != null)
+        {
+            dest.ToName = cow.FirstName;
+            dest.Vipps = cow.Vipps;
+            dest.Revolut = cow.Revolut;
+        }
+        else
+        {
+            dest.ToName = "Velg Cash Cow";
+            dest.Vipps = "";
+            dest.Revolut = "";
+        }
+        row.GenerateText();
     }
 
     private SettlementResult? GetSettlementDetails(SettlementSnapshot snap)
@@ -409,5 +842,104 @@
         var norwayTime = TimeHelpers.GetNorwayTime(snap.CreatedAt);
         var fileName = $"Settlement_{norwayTime:yyyyMMdd_HHmm}.csv";
         await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+    }
+
+    private async Task SendToDiscord(DebtorRow row, int snapshotId)
+    {
+        if (row.SelectedChannelId == 0) return;
+        
+        row.IsSending = true;
+        StateHasChanged();
+
+        var successCount = await DiscordService.BroadcastMessageAsync(
+            new List<ulong> { row.SelectedChannelId },
+            "", // No title needed, we just want the message directly
+            row.FinalText
+        );
+
+        row.IsSending = false;
+
+        if (successCount > 0)
+        {
+            row.IsSent = true;
+            row.CopiedMessage = "Sent!";
+            
+            // Now we need to save the IsSent flag back into the DB snapshot
+            using var context = DbFactory.CreateDbContext();
+            var snap = await context.SettlementSnapshots.FindAsync(snapshotId);
+            if (snap != null)
+            {
+                var details = GetSettlementDetails(snap);
+                if (details != null)
+                {
+                    // Mark matching instructions
+                    foreach (var ins in details.Instructions.Where(i => i.FromUser == row.UserName))
+                    {
+                        ins.IsSent = true;
+                    }
+                    // Mark matching adjustments
+                    foreach (var adj in details.Adjustments.Where(a => a.UserName == row.UserName && a.Reason == "Owes Castle Directly"))
+                    {
+                        adj.IsSent = true;
+                    }
+                    
+                    if (details.FinalTexts == null) details.FinalTexts = new();
+                    if (details.SelectedCashCows == null) details.SelectedCashCows = new();
+                    
+                    details.FinalTexts[row.UserName] = row.FinalText;
+                    
+                    foreach (var dest in row.Destinations.Where(d => d.IsCastle && !string.IsNullOrEmpty(d.SelectedCowId)))
+                    {
+                        details.SelectedCashCows[row.UserName] = dest.SelectedCowId;
+                    }
+                    
+                    snap.SettlementJson = JsonSerializer.Serialize(details);
+                    await context.SaveChangesAsync();
+                    
+                    // Update our in-memory list
+                    var index = snapshots.FindIndex(s => s.Id == snap.Id);
+                    if (index != -1) snapshots[index] = snap;
+                }
+            }
+        }
+        else
+        {
+            row.CopiedMessage = "Failed!";
+        }
+        
+        StateHasChanged();
+        await Task.Delay(3000);
+        row.CopiedMessage = "";
+        StateHasChanged();
+    }
+
+    private async Task ToggleCancel(DebtorRow row, int snapshotId)
+    {
+        row.IsCancelled = !row.IsCancelled;
+        
+        using var context = DbFactory.CreateDbContext();
+        var snap = await context.SettlementSnapshots.FindAsync(snapshotId);
+        if (snap != null)
+        {
+            var details = GetSettlementDetails(snap);
+            if (details != null)
+            {
+                foreach (var ins in details.Instructions.Where(i => i.FromUser == row.UserName))
+                {
+                    ins.IsCancelled = row.IsCancelled;
+                }
+                foreach (var adj in details.Adjustments.Where(a => a.UserName == row.UserName && a.Reason == "Owes Castle Directly"))
+                {
+                    adj.IsCancelled = row.IsCancelled;
+                }
+                
+                snap.SettlementJson = JsonSerializer.Serialize(details);
+                await context.SaveChangesAsync();
+                
+                var index = snapshots.FindIndex(s => s.Id == snap.Id);
+                if (index != -1) snapshots[index] = snap;
+            }
+        }
+        StateHasChanged();
     }
 }

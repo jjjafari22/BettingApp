@@ -27,6 +27,9 @@ namespace BettingApp.Data
         
         public List<SettlementInstruction> Instructions { get; set; } = new();
         public List<SettlementAdjustment> Adjustments { get; set; } = new();
+        
+        public Dictionary<string, string> FinalTexts { get; set; } = new();
+        public Dictionary<string, string> SelectedCashCows { get; set; } = new();
     }
 
     // --- NEW: Helper class to store individual user balances ---
@@ -40,7 +43,11 @@ namespace BettingApp.Data
     {
         public string FromUser { get; set; } = string.Empty;
         public string ToUser { get; set; } = string.Empty;
+        public string ToUserFirstName { get; set; } = string.Empty;
         public decimal Amount { get; set; }
+        public string PaymentDetails { get; set; } = string.Empty;
+        public bool IsSent { get; set; } = false;
+        public bool IsCancelled { get; set; } = false;
     }
 
     public class SettlementAdjustment
@@ -48,5 +55,7 @@ namespace BettingApp.Data
         public string UserName { get; set; } = string.Empty;
         public decimal Amount { get; set; }
         public string Reason { get; set; } = string.Empty;
+        public bool IsSent { get; set; } = false;
+        public bool IsCancelled { get; set; } = false;
     }
 }

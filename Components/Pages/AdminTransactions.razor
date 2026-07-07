@@ -526,18 +526,31 @@
     private async Task SetupSignalR()
     {
         hubConnection = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/bethub")).Build();
-        hubConnection.On<string>("ReceiveUpdate", async (message) =>
+        
+        System.Timers.Timer? debounceTimer = null;
+        
+        Action triggerRefresh = () => 
         {
-            using var context = DbFactory.CreateDbContext();
-            await LoadTransactions(context);
-            await InvokeAsync(StateHasChanged);
-        });
-        hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
-        {
-            using var context = DbFactory.CreateDbContext();
-            await LoadTransactions(context);
-            await InvokeAsync(StateHasChanged);
-        });
+            if (debounceTimer == null)
+            {
+                debounceTimer = new System.Timers.Timer(1000);
+                debounceTimer.AutoReset = false;
+                debounceTimer.Elapsed += async (s, e) => 
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        using var context = DbFactory.CreateDbContext();
+                        await LoadTransactions(context);
+                        StateHasChanged();
+                    });
+                };
+            }
+            debounceTimer.Stop();
+            debounceTimer.Start();
+        };
+
+        hubConnection.On<string>("ReceiveUpdate", (message) => triggerRefresh());
+        hubConnection.On<string>("ReceiveAdminNotification", (message) => triggerRefresh());
         await hubConnection.StartAsync();
         await hubConnection.InvokeAsync("JoinAdminGroup");
     }

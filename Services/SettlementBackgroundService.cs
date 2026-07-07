@@ -28,8 +28,8 @@ namespace BettingApp.Services
                 // Get Norway time safely using centralized helper
                 var norwayTime = BettingApp.Data.TimeHelpers.GetNorwayTime(now);
 
-                // Run every hour at xx:59
-                if (norwayTime.Minute == 59)
+                // Run every Sunday evening at 23:59 (Norway time)
+                if (norwayTime.DayOfWeek == DayOfWeek.Sunday && norwayTime.Hour == 23 && norwayTime.Minute == 59)
                 {
                     try
                     {

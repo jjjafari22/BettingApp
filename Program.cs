@@ -29,6 +29,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Components.Server.CircuitOptions
 // -----------------------------------------------------
 
 builder.Services.AddHttpClient();
+builder.Services.AddHealthChecks();
 
 // --- FIX 2: Relax SignalR Timeouts for Mobile Data ---
 builder.Services.AddSignalR(hubOptions =>
@@ -151,6 +152,7 @@ app.MapRazorComponents<App>()
 
 app.MapHub<BetHub>("/bethub");
 app.MapAdditionalIdentityEndpoints();
+app.MapHealthChecks("/health");
 
 using (var scope = app.Services.CreateScope())
 {

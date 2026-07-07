@@ -70,7 +70,16 @@ namespace BettingApp.Data
     {
         public int Id { get; set; }
         public decimal MinBetAmount { get; set; } = 100m; 
-        // MaxPayout removed (now per-user)
+        public string CashCowsJson { get; set; } = "[]";
+    }
+
+    public class CashCow
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Vipps { get; set; } = string.Empty;
+        public string Revolut { get; set; } = string.Empty;
     }
 
     public class AuditLog

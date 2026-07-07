@@ -606,14 +606,33 @@
             catch (Exception ex) { Console.WriteLine($"Timezone error: {ex.Message}"); }
 
             hubConnection = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/bethub")).Build();
-            hubConnection.On<string>("ReceiveAdminNotification", async (message) =>
+            
+            System.Timers.Timer? debounceTimer = null;
+            
+            hubConnection.On<string>("ReceiveAdminNotification", (message) =>
             {
-                await LoadPendingBets();
-                await LoadApprovedBets(); 
-                await LoadCompletedBets();
                 if (!string.IsNullOrEmpty(message) && message != "Update") successMessage = message;
-         
-                await InvokeAsync(StateHasChanged);
+                
+                if (debounceTimer == null)
+                {
+                    debounceTimer = new System.Timers.Timer(1000);
+                    debounceTimer.AutoReset = false;
+                    debounceTimer.Elapsed += async (s, e) => 
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            await LoadPendingBets();
+                            await LoadApprovedBets(); 
+                            await LoadCompletedBets();
+                            StateHasChanged();
+                        });
+                    };
+                }
+                
+                debounceTimer.Stop();
+                debounceTimer.Start();
+                
+                InvokeAsync(StateHasChanged);
             });
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");

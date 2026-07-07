@@ -646,11 +646,27 @@ else
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))
             .Build();
-        hubConnection.On("ReceiveUserRegistration", async () =>
+            
+        System.Timers.Timer? debounceTimer = null;
+        
+        Action triggerRefresh = () => 
         {
-            await RefreshData();
-        });
-        hubConnection.On<string>("ReceiveAdminNotification", async (msg) => { await RefreshData(); });
+            if (debounceTimer == null)
+            {
+                debounceTimer = new System.Timers.Timer(1000);
+                debounceTimer.AutoReset = false;
+                debounceTimer.Elapsed += async (s, e) => 
+                {
+                    await InvokeAsync(async () => await RefreshData());
+                };
+            }
+            debounceTimer.Stop();
+            debounceTimer.Start();
+        };
+
+        hubConnection.On("ReceiveUserRegistration", () => triggerRefresh());
+        hubConnection.On<string>("ReceiveAdminNotification", (msg) => triggerRefresh());
+        
         await hubConnection.StartAsync();
         await hubConnection.SendAsync("JoinAdminGroup");
 

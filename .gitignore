@@ -486,6 +486,9 @@ $RECYCLE.BIN/
 *.db-wal
 
 # BettingApp Specific Files
+app.db
+app.db-shm
+app.db-wal
 Data/app.db
 wwwroot/uploads/
 site.zip
