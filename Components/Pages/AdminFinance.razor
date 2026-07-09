@@ -82,7 +82,7 @@
                 <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
                     <h6 class="text-muted">Net Profit</h6>
                     <h4 class="mb-0 @(netProfit >= 0 ? "text-success" : "text-danger")">@netProfit.ToString("N0") kr</h4>
-                    <small class="text-muted mt-1">Stakes minus Payouts & Free Bets</small>
+                    <small class="text-muted mt-1">Real Stakes minus Payouts</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
@@ -334,7 +334,7 @@
         if (totalBets == 0)
         {
             totalStakes = 0;
-            netProfit = -totalFreeBetsAmount;
+            netProfit = 0;
             holdPercentage = 0;
             avgOdds = 0;
             avgBetSize = 0;
@@ -355,8 +355,8 @@
             decimal voidRefunds = periodBets.Where(b => b.Status == "Void").Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount);
             decimal totalPayouts = wonPayouts + voidRefunds;
             
-            // 3. Net Profit: Real Stakes minus payouts and free bets given
-            netProfit = totalStakes - totalPayouts - totalFreeBetsAmount;
+            // 3. Net Profit: Real Stakes minus payouts
+            netProfit = totalStakes - totalPayouts;
             
             // 4. Hold %: Profit Margin on real money flow
             holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
