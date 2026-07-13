@@ -15,6 +15,7 @@
 @inject IHubContext<BetHub> HubContext
 @inject DiscordNotificationService DiscordService
 @inject IEmailSender<ApplicationUser> EmailSenderInterface
+@inject BettingApp.Services.DialogService DialogService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -925,37 +926,49 @@ else
         }
     }
 
+    private bool _isProcessingVerification;
+
     private async Task ToggleVerification(string userId)
     {
-        using var context = DbFactory.CreateDbContext();
-        var user = await context.Users.FindAsync(userId);
+        if (_isProcessingVerification) return;
+        _isProcessingVerification = true;
         
-        if (user != null)
+        try 
         {
-            var newStatus = !user.IsManuallyVerified;
-            var actionText = newStatus ? "verify" : "unverify";
+            using var context = DbFactory.CreateDbContext();
+            var user = await context.Users.FindAsync(userId);
             
-            bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to {actionText} {user.UserName}?");
-            if (!confirmed) return;
-
-            user.IsManuallyVerified = newStatus;
-            user.UpdatedAt = DateTime.UtcNow;
-
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var adminName = authState.User.Identity?.Name ?? "System";
-            context.AuditLogs.Add(new AuditLog 
+            if (user != null)
             {
-                Action = "Toggle Verification",
-                AdminUserName = adminName,
-                TargetUserName = user.UserName ?? "Unknown",
-                Details = $"Manual verification set to {user.IsManuallyVerified}",
-                Timestamp = DateTime.UtcNow
-            });
-            await context.SaveChangesAsync();
-            await RefreshData();
-            
-            successMessage = $"User {user.UserName} is now {(user.IsManuallyVerified ? "Verified" : "Unverified")}.";
-            StateHasChanged();
+                var newStatus = !user.IsManuallyVerified;
+                var actionText = newStatus ? "verify" : "unverify";
+                
+                bool confirmed = await DialogService.ConfirmAsync( $"Are you sure you want to {actionText} {user.UserName}?");
+                if (!confirmed) return;
+
+                user.IsManuallyVerified = newStatus;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+                var adminName = authState.User.Identity?.Name ?? "System";
+                context.AuditLogs.Add(new AuditLog 
+                {
+                    Action = "Toggle Verification",
+                    AdminUserName = adminName,
+                    TargetUserName = user.UserName ?? "Unknown",
+                    Details = $"Manual verification set to {user.IsManuallyVerified}",
+                    Timestamp = DateTime.UtcNow
+                });
+                await context.SaveChangesAsync();
+                await RefreshData();
+                
+                successMessage = $"User {user.UserName} is now {(user.IsManuallyVerified ? "Verified" : "Unverified")}.";
+                StateHasChanged();
+            }
+        }
+        finally 
+        {
+            _isProcessingVerification = false;
         }
     }
 
@@ -972,7 +985,7 @@ else
 
             var newStatus = !user.IsAdmin;
             var actionText = newStatus ? "grant admin privileges to" : "revoke admin privileges from";
-            bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to {actionText} {user.UserName}?");
+            bool confirmed = await DialogService.ConfirmAsync( $"Are you sure you want to {actionText} {user.UserName}?");
             if (!confirmed) return;
 
             user.IsAdmin = newStatus;
@@ -1001,7 +1014,7 @@ else
         {
             var newStatus = !user.IsTestUser;
             var actionText = newStatus ? "mark as Test User" : "mark as Real User";
-            bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to {actionText}: {user.UserName}?");
+            bool confirmed = await DialogService.ConfirmAsync( $"Are you sure you want to {actionText}: {user.UserName}?");
             if (!confirmed) return;
 
             user.IsTestUser = newStatus;
@@ -1030,7 +1043,7 @@ else
         string oldValueDisplay = originalValue ?? "-";
         string newValueDisplay = string.IsNullOrEmpty(newReferral) ? "-" : newReferral;
 
-        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to change Referred By from '{oldValueDisplay}' to '{newValueDisplay}'?");
+        bool confirmed = await DialogService.ConfirmAsync( $"Are you sure you want to change Referred By from '{oldValueDisplay}' to '{newValueDisplay}'?");
         if (!confirmed) 
         { 
             if (vm != null)
@@ -1065,7 +1078,7 @@ else
         string oldValueDisplay = originalValue ?? "-";
         string newValueDisplay = string.IsNullOrEmpty(newId) ? "-" : newId;
 
-        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to change Discord ID from '{oldValueDisplay}' to '{newValueDisplay}'?");
+        bool confirmed = await DialogService.ConfirmAsync( $"Are you sure you want to change Discord ID from '{oldValueDisplay}' to '{newValueDisplay}'?");
         if (!confirmed) 
         { 
             if (vm != null)
@@ -1098,7 +1111,7 @@ else
         string oldValueDisplay = originalValue ?? "-";
         string newValueDisplay = string.IsNullOrEmpty(newUsername) ? "-" : newUsername;
 
-        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to change Discord Username from '{oldValueDisplay}' to '{newValueDisplay}'?");
+        bool confirmed = await DialogService.ConfirmAsync( $"Are you sure you want to change Discord Username from '{oldValueDisplay}' to '{newValueDisplay}'?");
         if (!confirmed) 
         { 
             if (vm != null)
@@ -1162,7 +1175,7 @@ else
         {
             if (originalBetModel.Status != "Pending" && (reviewingBetModel.Odds != originalBetModel.Odds || reviewingBetModel.AmountNOK != originalBetModel.AmountNOK))
             {
-                 bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "You have unsaved changes to Odds or Stake.\n\nPlease click a status button (Won, Lost, Void) to save them, or click OK to discard changes and close.");
+                 bool confirmed = await DialogService.ConfirmAsync( "You have unsaved changes to Odds or Stake.\n\nPlease click a status button (Won, Lost, Void) to save them, or click OK to discard changes and close.");
                  if (!confirmed) return;
             }
         }
@@ -1254,7 +1267,7 @@ else
 
         if (new[] { "Won", "Lost", "Void", "Completed", "Cancelled" }.Contains(originalStatus))
         {
-             bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Update Bet #{bet.Id}?\n\n{originalStatus} -> {newStatus}");
+             bool confirmed = await DialogService.ConfirmAsync( $"Update Bet #{bet.Id}?\n\n{originalStatus} -> {newStatus}");
              if (!confirmed) return;
         }
 

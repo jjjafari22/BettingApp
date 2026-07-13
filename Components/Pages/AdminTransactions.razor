@@ -12,6 +12,7 @@
 @inject IHubContext<BetHub> HubContext
 @inject IJSRuntime JSRuntime
 @inject DiscordNotificationService DiscordService
+@inject BettingApp.Services.DialogService DialogService
 @attribute [Authorize]
 @rendermode InteractiveServer
 
@@ -624,7 +625,7 @@
         successMessage = null;
         errorMessage = null;
         var displayUser = userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName;
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+        var confirmed = await DialogService.ConfirmAsync( 
             $"Confirm payout of {t.AmountNOK} kr to {displayUser}?");
         if (!confirmed) return;
 
@@ -669,7 +670,7 @@
             return;
         }
 
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+        var confirmed = await DialogService.ConfirmAsync( 
             $"Change withdrawal amount from {t.AmountNOK} kr to {editingTransactionAmount} kr?");
         if (!confirmed) return;
 
@@ -687,7 +688,7 @@
             
             if (difference < 0 && user.Balance < Math.Abs(difference))
             {
-                var confirmNegative = await JSRuntime.InvokeAsync<bool>("confirm", 
+                var confirmNegative = await DialogService.ConfirmAsync( 
                     $"This edit will result in a negative balance ({user.Balance + difference:N0} kr). Proceed anyway?");
                 if (!confirmNegative) return;
             }
@@ -714,7 +715,7 @@
 
     private async Task RejectWithdraw(Transaction t)
     {
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Reject this withdrawal request?");
+        var confirmed = await DialogService.ConfirmAsync( "Reject this withdrawal request?");
         if (!confirmed) return;
 
         using var context = DbFactory.CreateDbContext();
@@ -767,7 +768,7 @@
         {
             if (user.Balance < adminAddAmount.Value)
             {
-                var confirmNegative = await JSRuntime.InvokeAsync<bool>("confirm", $"This withdrawal will result in a negative balance ({user.Balance - adminAddAmount.Value:N0} kr). Do you want to proceed?");
+                var confirmNegative = await DialogService.ConfirmAsync( $"This withdrawal will result in a negative balance ({user.Balance - adminAddAmount.Value:N0} kr). Do you want to proceed?");
                 if (!confirmNegative)
                 {
                     return;

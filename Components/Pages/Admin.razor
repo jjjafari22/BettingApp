@@ -13,6 +13,7 @@
 @inject IHubContext<BetHub> HubContext
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
+@inject BettingApp.Services.DialogService DialogService
 @attribute [Authorize]
 @rendermode InteractiveServer
 @implements IAsyncDisposable
@@ -760,7 +761,7 @@
         {
             if (originalBetModel.Status != "Pending" && (reviewingBetModel.Odds != originalBetModel.Odds || reviewingBetModel.AmountNOK != originalBetModel.AmountNOK))
             {
-                 bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "You have unsaved changes to Odds or Stake.\n\nPlease click a status button (Won, Lost, Void) to save them, or click OK to discard changes and close.");
+                 bool confirmed = await DialogService.ConfirmAsync( "You have unsaved changes to Odds or Stake.\n\nPlease click a status button (Won, Lost, Void) to save them, or click OK to discard changes and close.");
                  if (!confirmed) return;
             }
         }
@@ -904,7 +905,7 @@
 
         if (new[] { "Won", "Lost", "Void", "Completed", "Cancelled" }.Contains(originalStatus))
         {
-             bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+             bool confirmed = await DialogService.ConfirmAsync( 
                 $"Update Bet #{bet.Id}?\n\n{originalStatus} -> {newStatus}\nAmount: {bet.AmountNOK} kr\nOdds: {bet.Odds}");
              if (!confirmed) return;
         }

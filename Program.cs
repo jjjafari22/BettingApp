@@ -42,6 +42,7 @@ builder.Services.AddSignalR(hubOptions =>
 // -----------------------------------------------------
 
 builder.Services.AddScoped<SettlementService>();
+builder.Services.AddScoped<DialogService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();
 builder.Services.AddHostedService<PendingBetsNotificationService>();
 

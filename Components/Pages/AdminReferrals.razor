@@ -11,6 +11,7 @@
 @inject IJSRuntime JSRuntime
 @using BettingApp.Services
 @inject DiscordNotificationService DiscordService
+@inject BettingApp.Services.DialogService DialogService
 @rendermode InteractiveServer
 
 <PageTitle>Admin Referrals</PageTitle>
@@ -547,7 +548,7 @@ else
     
     private async Task DeleteReferral(int referralId)
     {
-        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to permanently delete this referral?");
+        bool confirmed = await DialogService.ConfirmAsync( "Are you sure you want to permanently delete this referral?");
         if (!confirmed) return;
         
         using var context = DbFactory.CreateDbContext();
