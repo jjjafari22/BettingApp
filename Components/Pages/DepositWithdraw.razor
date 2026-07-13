@@ -25,16 +25,16 @@
 
 @if (!string.IsNullOrEmpty(ErrorMessage))
 {
-    <div class="alert alert-danger alert-dismissible fade show">
-        @ErrorMessage
+    <div class="alert alert-danger alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
+        <strong>Error:</strong> @ErrorMessage
         <button type="button" class="btn-close" @onclick="() => ErrorMessage = null"></button>
     </div>
 }
 
 @if (!string.IsNullOrEmpty(SuccessMessage))
 {
-    <div class="alert alert-success alert-dismissible fade show">
-        @SuccessMessage
+    <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
+        <strong>Success!</strong> @SuccessMessage
         <button type="button" class="btn-close" @onclick="() => SuccessMessage = null"></button>
     </div>
 }
@@ -221,8 +221,40 @@
     private string userId = string.Empty;
     private bool IsLoading = true;
     private bool IsSubmitting = false;
-    private string? ErrorMessage;
-    private string? SuccessMessage;
+    private CancellationTokenSource? _messageCts;
+    private void AutoClearMessages()
+    {
+        _messageCts?.Cancel();
+        _messageCts = new CancellationTokenSource();
+        var token = _messageCts.Token;
+        _ = Task.Run(async () => 
+        {
+            try { await Task.Delay(5000, token); } catch (TaskCanceledException) { return; }
+            if (!token.IsCancellationRequested)
+            {
+                await InvokeAsync(() => 
+                {
+                    _errorMessage = null;
+                    _successMessage = null;
+                    StateHasChanged();
+                });
+            }
+        });
+    }
+
+    private string? _errorMessage;
+    private string? ErrorMessage
+    {
+        get => _errorMessage;
+        set { _errorMessage = value; if (value != null) AutoClearMessages(); }
+    }
+
+    private string? _successMessage;
+    private string? SuccessMessage
+    {
+        get => _successMessage;
+        set { _successMessage = value; if (value != null) AutoClearMessages(); }
+    }
     private int transPage = 1;
     private bool hasMoreTrans = false;
     private int totalTransactions = 0;
