@@ -98,9 +98,90 @@ namespace BettingApp.Services
             creditors = creditors.OrderByDescending(x => x.Amount).ToList();
 
             // 3. Match P2P Debtors to Creditors
+            
+            // OPTIMIZATION: Full Subset-Sum Matching for absolute minimum transactions
+            IEnumerable<List<int>> GetCombinations(int n, int k)
+            {
+                var combResult = new List<List<int>>();
+                var combination = new int[k];
+                void Generate(int index, int start)
+                {
+                    if (index == k) { combResult.Add(new List<int>(combination)); return; }
+                    for (int i = start; i < n; i++) { combination[index] = i; Generate(index + 1, i + 1); }
+                }
+                Generate(0, 0);
+                return combResult;
+            }
+
+            bool matchFound = true;
+            while (matchFound && p2pDebtors.Count > 0 && creditors.Count > 0)
+            {
+                matchFound = false;
+                int maxSubsetSize = Math.Min(6, p2pDebtors.Count + creditors.Count);
+
+                for (int size = 2; size <= maxSubsetSize && !matchFound; size++)
+                {
+                    for (int dCount = 1; dCount < size; dCount++)
+                    {
+                        int cCount = size - dCount;
+                        if (dCount > p2pDebtors.Count || cCount > creditors.Count) continue;
+
+                        var dCombs = GetCombinations(p2pDebtors.Count, dCount);
+                        var cCombs = GetCombinations(creditors.Count, cCount);
+
+                        foreach (var dComb in dCombs)
+                        {
+                            decimal dSum = dComb.Sum(i => p2pDebtors[i].Amount);
+                            foreach (var cComb in cCombs)
+                            {
+                                decimal cSum = cComb.Sum(i => creditors[i].Amount);
+                                if (Math.Abs(dSum - cSum) < 0.01m)
+                                {
+                                    // Generate greedy instructions for this exact subset
+                                    var subDebtors = dComb.Select(i => p2pDebtors[i]).ToList();
+                                    var subCreditors = cComb.Select(i => creditors[i]).ToList();
+
+                                    int sd = 0, sc = 0;
+                                    while (sd < subDebtors.Count && sc < subCreditors.Count)
+                                    {
+                                        var subD = subDebtors[sd];
+                                        var subC = subCreditors[sc];
+                                        var amount = Math.Min(subD.Amount, subC.Amount);
+
+                                        result.Instructions.Add(new SettlementInstruction
+                                        {
+                                            FromUser = subD.Name,
+                                            ToUser = subC.Name,
+                                            ToUserFirstName = subC.FirstName,
+                                            Amount = amount,
+                                            PaymentDetails = subC.PaymentDetails
+                                        });
+
+                                        var nd = subD.Amount - amount;
+                                        var nc = subC.Amount - amount;
+
+                                        if (nd < 0.01m) sd++; else subDebtors[sd] = (subD.Name, nd, subD.RawUserName);
+                                        if (nc < 0.01m) sc++; else subCreditors[sc] = (subC.Name, nc, subC.PaymentDetails, subC.FirstName);
+                                    }
+
+                                    foreach (var i in dComb.OrderByDescending(x => x)) p2pDebtors.RemoveAt(i);
+                                    foreach (var i in cComb.OrderByDescending(x => x)) creditors.RemoveAt(i);
+
+                                    matchFound = true;
+                                    break;
+                                }
+                            }
+                            if (matchFound) break;
+                        }
+                        if (matchFound) break;
+                    }
+                }
+            }
+
             int dIndex = 0;
             int cIndex = 0;
 
+            // Greedy matching for any remainder that didn't fit into a subset <= size 6
             while (dIndex < p2pDebtors.Count && cIndex < creditors.Count)
             {
                 var debtor = p2pDebtors[dIndex];
