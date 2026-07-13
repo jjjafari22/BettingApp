@@ -34,7 +34,7 @@ else
                 <div class="card-body">
                     @if (showSuccess)
                     {
-                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
                             Settings updated successfully!
                             <button type="button" class="btn-close" @onclick="() => showSuccess = false"></button>
                         </div>

@@ -90,14 +90,14 @@
 
 @if (successMessage != null)
 {
-    <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+    <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
         <i class="bi bi-bell-fill me-2"></i> @successMessage
         <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
     </div>
 }
 @if (errorMessage != null)
 {
-    <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+    <div class="alert alert-danger alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
         <i class="bi bi-exclamation-triangle-fill me-2"></i> @errorMessage
         <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
     </div>

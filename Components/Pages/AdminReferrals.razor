@@ -31,14 +31,14 @@ else
     
     @if (!string.IsNullOrEmpty(successMessage))
     {
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
             @successMessage
             <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
         </div>
     }
     @if (!string.IsNullOrEmpty(errorMessage))
     {
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <div class="alert alert-danger alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
             @errorMessage
             <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
         </div>
