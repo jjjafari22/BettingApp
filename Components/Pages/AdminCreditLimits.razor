@@ -30,70 +30,112 @@
 {
     <p>You are not authorized to view this page.</p>
 }
-else if (users == null)
+else if (userRows == null)
 {
     <p><em>Loading...</em></p>
 }
 else
 {
-    <div class="row mb-3">
+    <div class="row mb-3 align-items-center">
          <div class="col-md-6">
             <div class="input-group">
                 <span class="input-group-text">Search User</span>
-                <input type="text" class="form-control" placeholder="Username..." 
-                     @bind="searchTerm" @bind:event="oninput" />
+                <input type="text" class="form-control" placeholder="Username (Press Enter to search)..." 
+                     @bind="SearchTerm" />
             </div>
+        </div>
+        <div class="col-md-6 text-end">
+            <span class="text-muted fw-bold me-3">Total Users: @totalUsers</span>
         </div>
      </div>
 
-    <div class="table-responsive">
+    <div class="table-responsive mb-4">
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
                 <tr>
                     <th class="text-nowrap">Last Updated</th>
                     <th>Discord Username</th>
                      <th>Last Name</th>
+                     <th># Dep</th>
+                     <th>Total Dep</th>
+                     <th># W/D</th>
+                     <th>Total W/D</th>
                     <th>Credit Limit (NOK)</th>
                     <th>Max Payout (NOK)</th>
                 </tr>
             </thead>
             <tbody>
-                 @foreach (var user in FilteredUsers)
+                 @foreach (var row in FilteredUsers)
                 {
-                    <tr @key="GetRowKey(user.Id)">
-                        <td class="text-nowrap">@ToUserLocal(user.UpdatedAt).ToString("g")</td>
-                        <td>@(!string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : user.UserName)</td>
-                        <td>@user.LastName</td>
+                    <tr @key="GetRowKey(row.User.Id)">
+                        <td class="text-nowrap">@ToUserLocal(row.User.UpdatedAt).ToString("g")</td>
+                        <td>@(!string.IsNullOrEmpty(row.User.DiscordUsername) ? row.User.DiscordUsername : row.User.UserName)</td>
+                        <td>@row.User.LastName</td>
+                        <td>@row.NumDeposits</td>
+                        <td class="text-success fw-bold">@row.TotalDeposits.ToString("N0") kr</td>
+                        <td>@row.NumWithdrawals</td>
+                        <td class="text-danger fw-bold">@row.TotalWithdrawals.ToString("N0") kr</td>
                         <td>
-                            <input type="text" class="form-control form-control-sm" style="width: 150px;" value="@user.CreditLimit.ToString("N0")"
-                                   @onchange="@(async (e) => await UpdateLimit(user, e.Value?.ToString(), isCredit: true))" />
+                            <input type="text" class="form-control form-control-sm" style="width: 120px;" value="@row.User.CreditLimit.ToString("N0")"
+                                   @onchange="@(async (e) => await UpdateLimit(row.User, e.Value?.ToString(), isCredit: true))" />
                         </td>
                         <td>
-                             <input type="text" class="form-control form-control-sm" style="width: 150px;" value="@user.MaxPayout.ToString("N0")"
-                                   @onchange="@(async (e) => await UpdateLimit(user, e.Value?.ToString(), isCredit: false))" />
+                             <input type="text" class="form-control form-control-sm" style="width: 120px;" value="@row.User.MaxPayout.ToString("N0")"
+                                   @onchange="@(async (e) => await UpdateLimit(row.User, e.Value?.ToString(), isCredit: false))" />
                         </td>
                     </tr>
                  }
+                 @if (!FilteredUsers.Any())
+                 {
+                     <tr><td colspan="9" class="text-center text-muted">No users found.</td></tr>
+                 }
             </tbody>
         </table>
+        
+        <div class="d-flex justify-content-between align-items-center mt-2">
+            <button class="btn btn-sm @(currentPage <= 1 ? "btn-outline-secondary" : "btn-primary shadow-sm")" @onclick="PrevPage" disabled="@(currentPage <= 1)"><i class="bi bi-arrow-left"></i> Previous</button>
+            <span class="text-muted fw-bold">Page @currentPage</span>
+            <button class="btn btn-sm @(!hasMoreUsers ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold")" @onclick="NextPage" disabled="@(!hasMoreUsers)">Next <i class="bi bi-arrow-right"></i></button>
+        </div>
     </div>
 }
 
 @code {
-    private List<ApplicationUser>? users;
-    private string searchTerm = "";
+    private class UserCreditRow
+    {
+        public ApplicationUser User { get; set; } = new();
+        public int NumDeposits { get; set; }
+        public decimal TotalDeposits { get; set; }
+        public int NumWithdrawals { get; set; }
+        public decimal TotalWithdrawals { get; set; }
+    }
+
+    private List<UserCreditRow>? userRows;
+    private string _searchTerm = "";
+    private string SearchTerm 
+    { 
+        get => _searchTerm; 
+        set 
+        { 
+            _searchTerm = value;
+            currentPage = 1;
+            _ = LoadUsers(); 
+        } 
+    }
+    
     private bool isAdmin = false;
     private string? successMessage; 
     private string? currentAdminName;
     private int TimezoneOffset { get; set; }
     private HubConnection? hubConnection;
     private Dictionary<string, Guid> rowKeys = new();
-    private IEnumerable<ApplicationUser> FilteredUsers => 
-        string.IsNullOrWhiteSpace(searchTerm) 
-            ? users ?? new List<ApplicationUser>() 
-            : (users ?? new List<ApplicationUser>()) 
-                .Where(u => u.DiscordUsername != null && u.DiscordUsername.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) || 
-                            u.UserName != null && u.UserName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+    
+    private int currentPage = 1;
+    private int pageSize = 50;
+    private int totalUsers = 0;
+    private bool hasMoreUsers = false;
+
+    private IEnumerable<UserCreditRow> FilteredUsers => userRows ?? new List<UserCreditRow>();
 
     private Guid GetRowKey(string userId)
     {
@@ -127,7 +169,7 @@ else
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) // FIXED: Removed && isAdmin to ensure offset loads properly
+        if (firstRender)
         {
             try {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
@@ -163,11 +205,55 @@ else
     private async Task LoadUsers()
     {
         using var context = DbFactory.CreateDbContext();
-        users = await context.Users
-            .Where(u => !u.IsAdmin)
+        
+        var query = context.Users.Where(u => !u.IsAdmin);
+        
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            query = query.Where(u => 
+                (u.DiscordUsername != null && u.DiscordUsername.Contains(_searchTerm)) || 
+                (u.UserName != null && u.UserName.Contains(_searchTerm)));
+        }
+
+        totalUsers = await query.CountAsync();
+        
+        var baseUsers = await query
             .OrderByDescending(u => u.UpdatedAt)
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
+            
+        hasMoreUsers = totalUsers > (currentPage * pageSize);
+            
+        var userIds = baseUsers.Select(u => u.Id).ToList();
+        
+        var transactions = await context.Transactions
+            .Where(t => userIds.Contains(t.UserId) && t.Status == "Completed" && (t.Type == "Deposit" || t.Type == "Withdrawal"))
+            .GroupBy(t => new { t.UserId, t.Type })
+            .Select(g => new { g.Key.UserId, g.Key.Type, Count = g.Count(), Total = g.Sum(x => x.AmountNOK) })
+            .ToListAsync();
+            
+        userRows = new List<UserCreditRow>();
+        foreach(var u in baseUsers)
+        {
+            var userTrans = transactions.Where(t => t.UserId == u.Id).ToList();
+            var dep = userTrans.FirstOrDefault(t => t.Type == "Deposit");
+            var with = userTrans.FirstOrDefault(t => t.Type == "Withdrawal");
+            
+            userRows.Add(new UserCreditRow {
+                User = u,
+                NumDeposits = dep?.Count ?? 0,
+                TotalDeposits = dep?.Total ?? 0,
+                NumWithdrawals = with?.Count ?? 0,
+                TotalWithdrawals = with?.Total ?? 0
+            });
+        }
+        
+        StateHasChanged();
     }
+    
+    private async Task NextPage() { currentPage++; await LoadUsers(); }
+    private async Task PrevPage() { if (currentPage > 1) { currentPage--; await LoadUsers(); } }
 
     private async Task UpdateLimit(ApplicationUser userToUpdate, string? newValueStr, bool isCredit)
     {
@@ -185,7 +271,7 @@ else
         string fieldName = isCredit ? "Credit Limit" : "Max Payout";
         var displayUser = !string.IsNullOrEmpty(userToUpdate.DiscordUsername) ? userToUpdate.DiscordUsername : userToUpdate.UserName;
         string msg = $"Are you sure you want to change {displayUser}'s {fieldName} to {newValue:N0} NOK?";
-        bool confirmed = await DialogService.ConfirmAsync( msg);
+        bool confirmed = await DialogService.ConfirmAsync(msg);
 
         if (!confirmed)
         {
