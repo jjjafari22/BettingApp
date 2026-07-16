@@ -47,10 +47,11 @@
     <script src="_framework/blazor.web.js" autostart="false"></script>
     <script>
         // 1. Tell Blazor to retry faster rather than waiting 10-15 seconds between attempts
+        // Give it up to 30 seconds to try reconnecting before officially failing
         Blazor.start({
             circuit: {
                 reconnectionOptions: {
-                    maxRetries: 5,
+                    maxRetries: 30,
                     retryIntervalMilliseconds: 1000
                 }
             }
@@ -60,17 +61,30 @@
         let reconnectTimer = null;
         const observer = new MutationObserver(() => {
             const modal = document.getElementById('components-reconnect-modal');
-            if (modal && modal.classList.contains('components-reconnect-show')) {
-                if (!reconnectTimer) {
-                    reconnectTimer = setTimeout(() => {
-                        console.log("Stuck rejoining for 5 seconds. Reloading to recover.");
-                        window.location.reload();
-                    }, 5000);
+            if (modal) {
+                // If Blazor officially gave up or the circuit was rejected, reload immediately
+                if (modal.classList.contains('components-reconnect-failed') || 
+                    modal.classList.contains('components-reconnect-rejected')) {
+                    console.log("Reconnection failed/rejected. Reloading to recover.");
+                    window.location.reload();
+                    return;
                 }
-            } else {
-                if (reconnectTimer) {
-                    clearTimeout(reconnectTimer);
-                    reconnectTimer = null;
+                
+                // If it's still trying to reconnect, give it plenty of time to succeed 
+                // so the user doesn't lose their state on a slow connection.
+                if (modal.classList.contains('components-reconnect-show')) {
+                    if (!reconnectTimer) {
+                        reconnectTimer = setTimeout(() => {
+                            console.log("Stuck rejoining for 35 seconds. Reloading to recover.");
+                            window.location.reload();
+                        }, 35000);
+                    }
+                } else {
+                    // Modal is hidden (reconnected successfully!)
+                    if (reconnectTimer) {
+                        clearTimeout(reconnectTimer);
+                        reconnectTimer = null;
+                    }
                 }
             }
         });
