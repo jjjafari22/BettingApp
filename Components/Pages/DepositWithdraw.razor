@@ -68,8 +68,8 @@
                         <p class="mb-0 text-info small"><i class="bi bi-gift-fill"></i> Free Bet Balance: <strong>@FreeBetBalance.ToString("N0") kr</strong></p>
                     }
                     <p class="text-muted small mb-3">
-                        <i class="bi bi-info-circle"></i> Withdrawals must be requested before kl. 23:59 of the day before settlements (usually before 23:59 on Sunday's).<br/>
-                        <i class="bi bi-exclamation-triangle"></i> Withdrawals requested outside of the standard payment day is subject to a 20% fee.
+                        <i class="bi bi-info-circle"></i> To receive your payout on Monday, your withdrawal request must be submitted before kl. 23:59 on Sunday.<br/>
+                        <i class="bi bi-exclamation-triangle"></i> Withdrawals requested outside of the standard payment day is subject to a 25% fee.
                     </p>
                     
                     <EditForm Model="@withdrawalRequest" OnValidSubmit="RequestWithdrawal" FormName="WithdrawForm">
