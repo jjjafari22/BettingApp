@@ -256,8 +256,7 @@
            
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
-                        <th>Last Updated (Local)</th>
-                        <th>Last Updated (Norway)</th>
+                        <th class="text-nowrap">Last Updated</th>
          
                         <th>Discord Username</th>
                         <th>Last Name</th>
@@ -275,9 +274,7 @@
                                 </button>
                              </td>
                             <td>@bet.Id</td>
-                            <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-             
-                            <td>@TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g")</td>
+                            <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                         </tr>
@@ -307,8 +304,7 @@
     
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
-                        <th>Last Updated (Local)</th>
-                        <th>Last Updated (Norway)</th>
+                        <th class="text-nowrap">Last Updated</th>
   
                         <th>Discord Username</th>
                         <th>Last Name</th>
@@ -331,8 +327,7 @@
                 
                                </td>
                             <td>@bet.Id</td>
-                            <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                            <td>@TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g")</td>
+                            <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
   
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
@@ -381,8 +376,7 @@
                 
                          <th>Action</th>
                          <th>ID</th>
-                         <th>Last Updated (Local)</th>
-                         <th>Last Updated (Norway)</th>
+                         <th class="text-nowrap">Last Updated</th>
             
                          <th>Discord Username</th>
                          <th>Last Name</th>
@@ -408,8 +402,7 @@
                             </td>
                     
                             <td>@bet.Id</td>
-                            <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                            <td>@TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g")</td>
+                            <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                             <td>

@@ -354,8 +354,7 @@ else
                 {
                       <tr class="cursor-pointer @(selectedUserId == user.Id ? "table-primary border border-primary" : "")" @onclick="() => SelectUser(user.Id, user.UserName)">
                         <td class="sticky-col text-nowrap">
-                            <div>@ToUserLocal(user.LastActive).ToString("g")</div>
-                            <small class="text-muted" style="font-size: 0.7rem;">NO: @TimeHelpers.GetNorwayTime(user.LastActive).ToString("g")</small>
+                            @ToUserLocal(user.LastActive).ToString("g")
                         </td>
                         
                         <td @onclick:stopPropagation="true" class="text-center">
@@ -398,8 +397,7 @@ else
                         <td class="text-nowrap">@(user.PhoneNumber ?? "-")</td>
                         
                         <td class="text-nowrap">
-                            <div>@ToUserLocal(user.DateJoined).ToString("g")</div>
-                            <small class="text-muted" style="font-size: 0.7rem;">NO: @TimeHelpers.GetNorwayTime(user.DateJoined).ToString("g")</small>
+                            @ToUserLocal(user.DateJoined).ToString("g")
                         </td>
 
                         <td @onclick:stopPropagation="true">
@@ -510,8 +508,7 @@ else
                            <tr>
                              <th>Action</th>
                              <th>ID</th>
-                             <th>Last Updated (Local)</th>
-                             <th>Last Updated (Norway)</th>
+                             <th class="text-nowrap">Last Updated</th>
                              <th>Bet Amount</th>
                              <th>Odds</th>
                              <th>Status</th>
@@ -529,8 +526,7 @@ else
                                           </button>
                                       </td>
                                     <td>@bet.Id</td>
-                                    <td>@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                                    <td>@TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g")</td>
+                                    <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                                      <td>
                                          @(bet.AmountNOK?.ToString("N0") ?? "0") kr
                                          @if (bet.FreeBetAmount > 0) {

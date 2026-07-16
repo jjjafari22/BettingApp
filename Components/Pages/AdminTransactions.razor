@@ -272,8 +272,7 @@
     <table class="table table-sm table-striped table-hover align-middle text-nowrap">
         <thead class="table-dark">
             <tr>
-                <th>Last Updated (Local)</th>
-                <th>Last Updated (Norway)</th>
+                <th class="text-nowrap">Last Updated</th>
                 <th>Discord Username</th>
                 <th>Last Name</th>
                 <th>Type</th>
@@ -286,8 +285,7 @@
             @foreach (var t in allTransactions)
             {
                 <tr>
-                    <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
-                    <td>@TimeHelpers.GetNorwayTime(t.UpdatedAt).ToString("g")</td>
+                    <td class="text-nowrap">@ToUserLocal(t.UpdatedAt).ToString("g")</td>
                     <td>@(userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName)</td>
                     <td>@(userLookup.TryGetValue(t.UserId, out var u2) ? u2.LastName : "")</td>
                     <td>
