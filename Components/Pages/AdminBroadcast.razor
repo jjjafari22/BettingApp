@@ -135,15 +135,28 @@ else
                             {
                                 <div class="text-muted">No text channels found in this server.</div>
                             }
-                            @foreach (var channel in availableChannels)
+                            @foreach (var group in availableChannels.GroupBy(c => c.CategoryName))
                             {
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="chk_@channel.Id" 
-                                           checked="@selectedChannelIds.Contains(channel.Id)"
-                                           @onchange="@((ChangeEventArgs e) => ToggleChannelSelection(channel.Id, e.Value))" />
-                                    <label class="form-check-label" for="chk_@channel.Id">
-                                        #@channel.Name
-                                    </label>
+                                <div class="fw-bold mt-2 text-uppercase text-muted d-flex align-items-center justify-content-between" style="font-size: 0.75rem;">
+                                    <span><i class="bi bi-folder2-open"></i> @group.Key</span>
+                                    <div>
+                                        <button class="btn btn-sm btn-link py-0 text-decoration-none" style="font-size: 0.7rem;" @onclick="() => ToggleCategory(group.Key, true)">All</button>
+                                        <span class="text-muted">|</span>
+                                        <button class="btn btn-sm btn-link py-0 text-decoration-none text-secondary" style="font-size: 0.7rem;" @onclick="() => ToggleCategory(group.Key, false)">None</button>
+                                    </div>
+                                </div>
+                                <div class="ps-2 mb-2">
+                                    @foreach (var channel in group)
+                                    {
+                                        <div class="form-check mb-1">
+                                            <input class="form-check-input" type="checkbox" id="chk_@channel.Id" 
+                                                   checked="@selectedChannelIds.Contains(channel.Id)"
+                                                   @onchange="@((ChangeEventArgs e) => ToggleChannelSelection(channel.Id, e.Value))" />
+                                            <label class="form-check-label" for="chk_@channel.Id">
+                                                #@channel.Name
+                                            </label>
+                                        </div>
+                                    }
                                 </div>
                             }
                         </div>
@@ -288,7 +301,7 @@ else
         "🤝", "🍀", "👑", "✨", "🚀", "📢", "🏆", "🌟", "💡", "💰"
     };
     
-    private List<(ulong Id, string Name)> availableChannels = new();
+    private List<(ulong Id, string Name, string CategoryName)> availableChannels = new();
     private HashSet<ulong> selectedChannelIds = new();
     private List<BroadcastHistory> broadcastHistories = new();
 
@@ -323,6 +336,16 @@ else
             .OrderByDescending(b => b.CreatedAt)
             .Take(20)
             .ToListAsync();
+    }
+
+    private void ToggleCategory(string categoryName, bool select)
+    {
+        var channelIds = availableChannels.Where(c => c.CategoryName == categoryName).Select(c => c.Id);
+        foreach (var id in channelIds)
+        {
+            if (select) selectedChannelIds.Add(id);
+            else selectedChannelIds.Remove(id);
+        }
     }
 
     private void ToggleChannelSelection(ulong channelId, object? isChecked)

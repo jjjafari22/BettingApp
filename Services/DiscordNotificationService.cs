@@ -423,7 +423,7 @@ public class DiscordNotificationService : IHostedService
         }
     }
 
-    public async Task<List<(ulong Id, string Name)>> GetGuildTextChannelsAsync()
+    public async Task<List<(ulong Id, string Name, string CategoryName)>> GetGuildTextChannelsAsync()
     {
         if (_client.LoginState != LoginState.LoggedIn) return new();
         
@@ -443,10 +443,23 @@ public class DiscordNotificationService : IHostedService
                 return new();
             }
 
-            var channels = await guild.GetTextChannelsAsync();
-            return channels
-                .OrderBy(c => c.Name)
-                .Select(c => (c.Id, c.Name))
+            var allChannels = await guild.GetChannelsAsync();
+            var categoriesDict = allChannels
+                .Where(c => c.GetType().Name.Contains("Category"))
+                .ToDictionary(c => c.Id, c => new { c.Name, c.Position });
+            var textChannels = await guild.GetTextChannelsAsync();
+
+            return textChannels
+                .Select(c => (
+                    c.Id, 
+                    c.Name, 
+                    c.CategoryId.HasValue && categoriesDict.TryGetValue(c.CategoryId.Value, out var cat) ? cat.Name : "Uncategorized",
+                    c.CategoryId.HasValue && categoriesDict.TryGetValue(c.CategoryId.Value, out var cat2) ? cat2.Position : -1,
+                    c.Position
+                ))
+                .OrderBy(c => c.Item4)
+                .ThenBy(c => c.Item5)
+                .Select(c => (c.Id, c.Name, c.Item3))
                 .ToList();
         }
         catch (Exception ex)
