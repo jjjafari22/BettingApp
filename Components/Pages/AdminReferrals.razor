@@ -144,6 +144,7 @@ else
                 <table class="table table-hover align-middle mb-0 text-nowrap">
                     <thead class="table-light">
                         <tr>
+                            <th class="text-nowrap">Date Added</th>
                             <th>Referrer</th>
                             <th>Referred</th>
                             <th>Total Bonus</th>
@@ -155,11 +156,12 @@ else
                     <tbody>
                         @if (!activeReferrals.Any())
                         {
-                            <tr><td colspan="5" class="text-center p-3 text-muted">No active referrals found.</td></tr>
+                            <tr><td colspan="6" class="text-center p-3 text-muted">No active referrals found.</td></tr>
                         }
                         @foreach(var vm in activeReferrals)
                         {
                             <tr>
+                                <td class="text-nowrap">@ToUserLocal(vm.Ref.CreatedAt).ToString("g")</td>
                                 <td>@vm.ReferrerDisplay</td>
                                 <td>@vm.ReferredDisplay</td>
                                 <td>@vm.Ref.TotalBonusAmount.ToString("N0") FB</td>
@@ -238,6 +240,7 @@ else
                 <table class="table table-hover align-middle mb-0 text-nowrap">
                     <thead class="table-light">
                         <tr>
+                            <th class="text-nowrap">Date Added</th>
                             <th>Referrer</th>
                             <th>Referred</th>
                             <th>Total Bonus</th>
@@ -247,11 +250,12 @@ else
                     <tbody>
                         @if (!historicReferrals.Any())
                         {
-                            <tr><td colspan="4" class="text-center p-3 text-muted">No completed referrals found.</td></tr>
+                            <tr><td colspan="5" class="text-center p-3 text-muted">No completed referrals found.</td></tr>
                         }
                         @foreach(var h in historicReferrals)
                         {
                             <tr>
+                                <td class="text-nowrap">@ToUserLocal(h.Ref.CreatedAt).ToString("g")</td>
                                 <td>@h.ReferrerDisplay</td>
                                 <td>@h.ReferredDisplay</td>
                                 <td>@h.Ref.TotalBonusAmount.ToString("N0") FB</td>
@@ -283,6 +287,7 @@ else
     
     private string? successMessage;
     private string? errorMessage;
+    private int TimezoneOffset { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -297,6 +302,23 @@ else
                 await LoadData();
             }
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && isAdmin)
+        {
+            try {
+                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                StateHasChanged();
+            } catch { }
+        }
+    }
+
+    private DateTime ToUserLocal(DateTime utcDate)
+    {
+        if (utcDate == DateTime.MinValue) return utcDate;
+        return utcDate.AddMinutes(-TimezoneOffset);
     }
 
     private string FormatAdminDisplay(ApplicationUser? u, string fallback)
