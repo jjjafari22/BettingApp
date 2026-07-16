@@ -182,7 +182,7 @@ else
                             <div class="list-group-item">
                                 <div class="d-flex w-100 justify-content-between align-items-center mb-1">
                                     <strong class="text-truncate" style="max-width: 60%;">@(string.IsNullOrEmpty(history.Title) ? "(No Title)" : history.Title)</strong>
-                                    <small class="text-muted">@history.CreatedAt.ToLocalTime().ToString("g")</small>
+                                    <small class="text-muted">@ToUserLocal(history.CreatedAt).ToString("g")</small>
                                 </div>
                                 <p class="mb-1 text-muted text-truncate" style="max-height: 3rem;">@history.Message</p>
                                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -280,6 +280,24 @@ else
 @code {
     private bool hasAccess = false;
     private bool isLoading = true;
+    private int TimezoneOffset { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try {
+                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                StateHasChanged();
+            } catch { }
+        }
+    }
+
+    private DateTime ToUserLocal(DateTime utcDate)
+    {
+        if (utcDate == DateTime.MinValue) return utcDate;
+        return utcDate.AddMinutes(-TimezoneOffset);
+    }
     private bool showPreviewModal = false;
     private bool isSending = false;
     private bool showEmojiPicker = false;

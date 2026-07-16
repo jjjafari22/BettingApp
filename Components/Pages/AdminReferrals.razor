@@ -306,7 +306,7 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && isAdmin)
+        if (firstRender)
         {
             try {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
