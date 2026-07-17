@@ -121,7 +121,7 @@ else
     private DateTime? endDate;
     
     private int currentPage = 1;
-    private const int pageSize = 20;
+    private const int pageSize = 25;
     private int totalLogs = 0;
     private bool isAdmin = false;
     private int totalPages => totalLogs == 0 ? 1 : (int)Math.Ceiling((double)totalLogs / pageSize);
