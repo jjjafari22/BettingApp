@@ -53,15 +53,15 @@ else
         <table class="table table-sm table-striped table-hover align-middle text-nowrap">
             <thead class="table-dark">
                 <tr>
-                    <th class="text-nowrap">Last Updated</th>
-                    <th>Discord Username</th>
-                     <th>Last Name</th>
-                     <th># Dep</th>
-                     <th>Total Dep</th>
-                     <th># W/D</th>
-                     <th>Total W/D</th>
-                    <th>Credit Limit (NOK)</th>
-                    <th>Max Payout (NOK)</th>
+                    <th class="text-nowrap" style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("UpdatedAt"))">Last Updated <i class="@SortIconClass("UpdatedAt")"></i></th>
+                    <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("DiscordUsername"))">Discord Username <i class="@SortIconClass("DiscordUsername")"></i></th>
+                     <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("LastName"))">Last Name <i class="@SortIconClass("LastName")"></i></th>
+                     <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("NumDeposits"))"># Dep <i class="@SortIconClass("NumDeposits")"></i></th>
+                     <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("TotalDeposits"))">Total Dep <i class="@SortIconClass("TotalDeposits")"></i></th>
+                     <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("NumWithdrawals"))"># W/D <i class="@SortIconClass("NumWithdrawals")"></i></th>
+                     <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("TotalWithdrawals"))">Total W/D <i class="@SortIconClass("TotalWithdrawals")"></i></th>
+                    <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("CreditLimit"))">Credit Limit (NOK) <i class="@SortIconClass("CreditLimit")"></i></th>
+                    <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("MaxPayout"))">Max Payout (NOK) <i class="@SortIconClass("MaxPayout")"></i></th>
                 </tr>
             </thead>
             <tbody>
@@ -146,6 +146,28 @@ else
         return rowKeys[userId];
     }
 
+    private string sortColumn = "UpdatedAt";
+    private bool sortDescending = true;
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+            sortDescending = !sortDescending;
+        else
+        {
+            sortColumn = column;
+            sortDescending = true;
+        }
+        currentPage = 1;
+        _ = LoadUsers();
+    }
+
+    private string SortIconClass(string column)
+    {
+        if (sortColumn != column) return "";
+        return sortDescending ? "bi bi-arrow-down-short text-warning" : "bi bi-arrow-up-short text-warning";
+    }
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -206,48 +228,61 @@ else
     {
         using var context = DbFactory.CreateDbContext();
         
-        var query = context.Users.Where(u => !u.IsAdmin);
+        var baseQuery = context.Users.Where(u => !u.IsAdmin);
         
         if (!string.IsNullOrWhiteSpace(_searchTerm))
         {
-            query = query.Where(u => 
+            baseQuery = baseQuery.Where(u => 
                 (u.DiscordUsername != null && u.DiscordUsername.Contains(_searchTerm)) || 
                 (u.UserName != null && u.UserName.Contains(_searchTerm)));
         }
 
-        totalUsers = await query.CountAsync();
+        totalUsers = await baseQuery.CountAsync();
         
-        var baseUsers = await query
-            .OrderByDescending(u => u.UpdatedAt)
+        var query = baseQuery.Select(u => new 
+        {
+            User = u,
+            NumDeposits = context.Transactions.Count(t => t.UserId == u.Id && t.Status == "Completed" && t.Type == "Deposit"),
+            TotalDeposits = context.Transactions.Where(t => t.UserId == u.Id && t.Status == "Completed" && t.Type == "Deposit").Sum(t => (decimal?)t.AmountNOK) ?? 0m,
+            NumWithdrawals = context.Transactions.Count(t => t.UserId == u.Id && t.Status == "Completed" && t.Type == "Withdrawal"),
+            TotalWithdrawals = context.Transactions.Where(t => t.UserId == u.Id && t.Status == "Completed" && t.Type == "Withdrawal").Sum(t => (decimal?)t.AmountNOK) ?? 0m
+        });
+
+        if (sortColumn == "UpdatedAt")
+            query = sortDescending ? query.OrderByDescending(x => x.User.UpdatedAt) : query.OrderBy(x => x.User.UpdatedAt);
+        else if (sortColumn == "DiscordUsername")
+            query = sortDescending ? query.OrderByDescending(x => x.User.DiscordUsername) : query.OrderBy(x => x.User.DiscordUsername);
+        else if (sortColumn == "LastName")
+            query = sortDescending ? query.OrderByDescending(x => x.User.LastName) : query.OrderBy(x => x.User.LastName);
+        else if (sortColumn == "CreditLimit")
+            query = sortDescending ? query.OrderByDescending(x => x.User.CreditLimit) : query.OrderBy(x => x.User.CreditLimit);
+        else if (sortColumn == "MaxPayout")
+            query = sortDescending ? query.OrderByDescending(x => x.User.MaxPayout) : query.OrderBy(x => x.User.MaxPayout);
+        else if (sortColumn == "NumDeposits")
+            query = sortDescending ? query.OrderByDescending(x => x.NumDeposits) : query.OrderBy(x => x.NumDeposits);
+        else if (sortColumn == "TotalDeposits")
+            query = sortDescending ? query.OrderByDescending(x => x.TotalDeposits) : query.OrderBy(x => x.TotalDeposits);
+        else if (sortColumn == "NumWithdrawals")
+            query = sortDescending ? query.OrderByDescending(x => x.NumWithdrawals) : query.OrderBy(x => x.NumWithdrawals);
+        else if (sortColumn == "TotalWithdrawals")
+            query = sortDescending ? query.OrderByDescending(x => x.TotalWithdrawals) : query.OrderBy(x => x.TotalWithdrawals);
+        else
+            query = query.OrderByDescending(x => x.User.UpdatedAt);
+
+        var results = await query
             .Skip((currentPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
             
         hasMoreUsers = totalUsers > (currentPage * pageSize);
-            
-        var userIds = baseUsers.Select(u => u.Id).ToList();
         
-        var transactions = await context.Transactions
-            .Where(t => userIds.Contains(t.UserId) && t.Status == "Completed" && (t.Type == "Deposit" || t.Type == "Withdrawal"))
-            .GroupBy(t => new { t.UserId, t.Type })
-            .Select(g => new { g.Key.UserId, g.Key.Type, Count = g.Count(), Total = g.Sum(x => x.AmountNOK) })
-            .ToListAsync();
-            
-        userRows = new List<UserCreditRow>();
-        foreach(var u in baseUsers)
-        {
-            var userTrans = transactions.Where(t => t.UserId == u.Id).ToList();
-            var dep = userTrans.FirstOrDefault(t => t.Type == "Deposit");
-            var with = userTrans.FirstOrDefault(t => t.Type == "Withdrawal");
-            
-            userRows.Add(new UserCreditRow {
-                User = u,
-                NumDeposits = dep?.Count ?? 0,
-                TotalDeposits = dep?.Total ?? 0,
-                NumWithdrawals = with?.Count ?? 0,
-                TotalWithdrawals = with?.Total ?? 0
-            });
-        }
+        userRows = results.Select(r => new UserCreditRow {
+            User = r.User,
+            NumDeposits = r.NumDeposits,
+            TotalDeposits = r.TotalDeposits,
+            NumWithdrawals = r.NumWithdrawals,
+            TotalWithdrawals = r.TotalWithdrawals
+        }).ToList();
         
         StateHasChanged();
     }

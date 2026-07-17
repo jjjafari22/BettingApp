@@ -332,18 +332,18 @@ else
         <table class="table table-sm table-striped table-hover align-middle">
             <thead class="table-dark">
                   <tr>
-                    <th class="sticky-col text-nowrap" style="cursor: pointer;" @onclick='() => Sort("LastActive")'>Last Active @GetSortIcon("LastActive")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("IsManuallyVerified")'>Verified @GetSortIcon("IsManuallyVerified")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("DiscordUsername")'>Discord Username @GetSortIcon("DiscordUsername")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("Balance")'>Balance @GetSortIcon("Balance")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("FreeBetBalance")'>Free Bet @GetSortIcon("FreeBetBalance")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("AvailableCredit")'>Avail. Credit @GetSortIcon("AvailableCredit")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("Handle")'>Handle @GetSortIcon("Handle")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("LifetimeProfit")'>Lifetime Profit @GetSortIcon("LifetimeProfit")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("FirstName")'>Full Name @GetSortIcon("FirstName")</th>
-                    <th style="cursor: pointer;" @onclick='() => Sort("Email")'>Email @GetSortIcon("Email")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("PhoneNumber")'>Phone @GetSortIcon("PhoneNumber")</th>
-                    <th class="text-nowrap" style="cursor: pointer;" @onclick='() => Sort("DateJoined")'>Registered @GetSortIcon("DateJoined")</th>
+                    <th class="sticky-col text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("LastActive")'>Last Active <i class="@GetSortIconClass("LastActive")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("IsManuallyVerified")'>Verified <i class="@GetSortIconClass("IsManuallyVerified")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("DiscordUsername")'>Discord Username <i class="@GetSortIconClass("DiscordUsername")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("Balance")'>Balance <i class="@GetSortIconClass("Balance")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("FreeBetBalance")'>Free Bet <i class="@GetSortIconClass("FreeBetBalance")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("AvailableCredit")'>Avail. Credit <i class="@GetSortIconClass("AvailableCredit")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("Handle")'>Handle <i class="@GetSortIconClass("Handle")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("LifetimeProfit")'>Lifetime Profit <i class="@GetSortIconClass("LifetimeProfit")"></i></th>
+                    <th style="cursor: pointer; user-select:none;" @onclick='() => Sort("FirstName")'>Full Name <i class="@GetSortIconClass("FirstName")"></i></th>
+                    <th style="cursor: pointer; user-select:none;" @onclick='() => Sort("Email")'>Email <i class="@GetSortIconClass("Email")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("PhoneNumber")'>Phone <i class="@GetSortIconClass("PhoneNumber")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("DateJoined")'>Registered <i class="@GetSortIconClass("DateJoined")"></i></th>
                     <th>Discord Info</th>
                     <th>Referred By</th>
                     <th>Status</th>
@@ -1372,7 +1372,11 @@ else
         }
     }
 
-    private string GetSortIcon(string column) { if (sortColumn != column) return ""; return sortAscending ? "▲" : "▼"; }
+    private string GetSortIconClass(string column)
+    {
+        if (sortColumn != column) return "";
+        return sortAscending ? "bi bi-arrow-up-short text-warning" : "bi bi-arrow-down-short text-warning";
+    }
 
     public async ValueTask DisposeAsync()
     {
