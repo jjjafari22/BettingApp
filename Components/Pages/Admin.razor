@@ -23,13 +23,20 @@
         const amountInput = document.getElementById('betAmountInput');
         const oddsInput = document.getElementById('betOddsInput');
         const payoutDisplay = document.getElementById('payoutDisplay');
+        const liabilityDisplay = document.getElementById('liabilityDisplay');
 
-        if (amountInput && oddsInput && payoutDisplay) {
+        if (amountInput && oddsInput) {
             const amount = parseFloat(amountInput.value) || 0;
             const odds = parseFloat(oddsInput.value) || 0;
             
-            const payout = amount * odds;
-            payoutDisplay.innerText = payout.toLocaleString('no-NO', { maximumFractionDigits: 0 }) + ' kr';
+            if (payoutDisplay) {
+                const payout = amount * odds;
+                payoutDisplay.innerText = payout.toLocaleString('no-NO', { maximumFractionDigits: 0 }) + ' kr';
+            }
+            if (liabilityDisplay) {
+                const liability = Math.floor(amount * (Math.max(1, odds) - 1));
+                liabilityDisplay.innerText = liability.toLocaleString('no-NO', { maximumFractionDigits: 0 }) + ' kr';
+            }
         }
     }
 
@@ -158,39 +165,42 @@
                        <button class="nav-arrow nav-arrow-right shadow-lg" @onclick="() => NavigateReview(1)" disabled="@(!CanNavigateReview(1))"><i class="bi bi-chevron-right"></i></button>
                    </div>
 
-                   <div class="review-controls-container">
+                   <div class="review-controls-container" @key="reviewingBetModel.Id">
                         <div class="container-fluid p-0">
                            <div class="row g-2 mb-3">
-                                <div class="col-4">
-                                    <label class="form-label fw-bold text-muted small mb-1">Amount</label>
+                                 <div class="col-3">
+                                     <label class="form-label fw-bold text-muted small mb-1">Stake</label>
                          
-                                    <div class="input-group input-group-sm">
-                                       <input type="number" id="betAmountInput" class="form-control fw-bold" 
-                                           @bind-value="reviewingBetModel.AmountNOK" 
-                                           oninput="calculatePayout()" onfocus="this.select();"
-                                              placeholder="0" enterkeyhint="next" />
- 
-                                       <span class="input-group-text">kr</span>
-                                    </div>
-                         
-                               </div>
-                               <div class="col-3">
-                                   <label class="form-label fw-bold text-muted small mb-1">Odds</label>
-                      
-                                   <input type="number" step="0.01" id="betOddsInput" class="form-control form-control-sm fw-bold" 
-                                           @bind-value="reviewingBetModel.Odds" 
-                                           oninput="calculatePayout()" onfocus="this.select();"
-                                           placeholder="1.00" enterkeyhint="done" />
+                                     <div class="input-group input-group-sm">
+                                        <input type="number" id="betAmountInput" class="form-control fw-bold px-2" 
+                                            @bind-value="reviewingBetModel.AmountNOK" 
+                                            oninput="calculatePayout()" onfocus="this.select();"
+                                            @onkeydown:stopPropagation="true"
+                                            placeholder="0" enterkeyhint="next" />
+                                     </div>
                                 </div>
-                
-                                <div class="col-5">
+                                <div class="col-2">
+                                    <label class="form-label fw-bold text-muted small mb-1">Odds</label>
+                      
+                                    <input type="number" step="0.01" id="betOddsInput" class="form-control form-control-sm fw-bold px-2" 
+                                            @bind-value="reviewingBetModel.Odds" 
+                                            oninput="calculatePayout()" onfocus="this.select();"
+                                            @onkeydown:stopPropagation="true"
+                                            placeholder="1.00" enterkeyhint="done" />
+                                 </div>
+                                <div class="col-3">
                                      <label class="form-label fw-bold text-muted small mb-1">Payout</label>
-                                     <div id="payoutDisplay" class="form-control form-control-sm bg-light text-success fw-bold text-end">
+                                     <div id="payoutDisplay" class="form-control form-control-sm bg-light text-success fw-bold text-end px-2">
                                          @reviewingBetModel.PotentialPayout.ToString("N0") kr
                                      </div>
-                   
                                 </div>
-                            </div>
+                                 <div class="col-4">
+                                      <label class="form-label fw-bold text-muted small mb-1">Net Liability</label>
+                                      <div id="liabilityDisplay" class="form-control form-control-sm bg-light text-danger fw-bold text-end px-2">
+                                          @reviewingBetModel.NetLiability.ToString("N0") kr
+                                      </div>
+                                 </div>
+                             </div>
 
                             @if (reviewingBetModel.Status == "Pending" && currentReviewUserFreeBalance > 0)
                             {
@@ -881,16 +891,12 @@
             if (betUser != null)
             {
                  decimal currentAmount = (decimal)(bet.AmountNOK ?? 0);
-                 decimal tempFreeBet = originalStatus == "Pending" 
-                    ? Math.Min(currentAmount, betUser.FreeBetBalance)
-                    : bet.FreeBetAmount;
+                 decimal netLiability = Math.Floor(currentAmount * (bet.Odds - 1));
+                 decimal userLimit = betUser.MaxNetLiability;
 
-                 decimal normalPart = currentAmount - tempFreeBet;
-                 decimal freePart = tempFreeBet;
-                 decimal totalPotentialPayout = Math.Floor((normalPart * bet.Odds) + (freePart * (bet.Odds - 1)));
-
-                 if (totalPotentialPayout > betUser.MaxPayout) { 
-                     reviewErrorMessage = $"Payout exceeds user limit ({betUser.MaxPayout:N0})";
+                 if (netLiability > userLimit) { 
+                     decimal maxBetAmount = Math.Floor(userLimit / (bet.Odds - 1));
+                     reviewErrorMessage = $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {bet.Odds} odds is {maxBetAmount:N0} kr.";
                      return; 
                  }
             }

@@ -61,7 +61,7 @@ else
                      <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("NumWithdrawals"))"># W/D <i class="@SortIconClass("NumWithdrawals")"></i></th>
                      <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("TotalWithdrawals"))">Total W/D <i class="@SortIconClass("TotalWithdrawals")"></i></th>
                     <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("CreditLimit"))">Credit Limit (NOK) <i class="@SortIconClass("CreditLimit")"></i></th>
-                    <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("MaxPayout"))">Max Payout (NOK) <i class="@SortIconClass("MaxPayout")"></i></th>
+                    <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("MaxNetLiability"))">Max Liability (NOK) <i class="@SortIconClass("MaxNetLiability")"></i></th>
                 </tr>
             </thead>
             <tbody>
@@ -80,7 +80,7 @@ else
                                    @onchange="@(async (e) => await UpdateLimit(row.User, e.Value?.ToString(), isCredit: true))" />
                         </td>
                         <td>
-                             <input type="text" class="form-control form-control-sm" style="width: 120px;" value="@row.User.MaxPayout.ToString("N0")"
+                             <input type="text" class="form-control form-control-sm" style="width: 120px;" value="@row.User.MaxNetLiability.ToString("N0")"
                                    @onchange="@(async (e) => await UpdateLimit(row.User, e.Value?.ToString(), isCredit: false))" />
                         </td>
                     </tr>
@@ -256,8 +256,8 @@ else
             query = sortDescending ? query.OrderByDescending(x => x.User.LastName) : query.OrderBy(x => x.User.LastName);
         else if (sortColumn == "CreditLimit")
             query = sortDescending ? query.OrderByDescending(x => x.User.CreditLimit) : query.OrderBy(x => x.User.CreditLimit);
-        else if (sortColumn == "MaxPayout")
-            query = sortDescending ? query.OrderByDescending(x => x.User.MaxPayout) : query.OrderBy(x => x.User.MaxPayout);
+        else if (sortColumn == "MaxNetLiability")
+            query = sortDescending ? query.OrderByDescending(x => x.User.MaxNetLiability) : query.OrderBy(x => x.User.MaxNetLiability);
         else if (sortColumn == "NumDeposits")
             query = sortDescending ? query.OrderByDescending(x => x.NumDeposits) : query.OrderBy(x => x.NumDeposits);
         else if (sortColumn == "TotalDeposits")
@@ -303,7 +303,7 @@ else
             return;
         }
 
-        string fieldName = isCredit ? "Credit Limit" : "Max Payout";
+        string fieldName = isCredit ? "Credit Limit" : "Max Liability";
         var displayUser = !string.IsNullOrEmpty(userToUpdate.DiscordUsername) ? userToUpdate.DiscordUsername : userToUpdate.UserName;
         string msg = $"Are you sure you want to change {displayUser}'s {fieldName} to {newValue:N0} NOK?";
         bool confirmed = await DialogService.ConfirmAsync(msg);
@@ -328,16 +328,16 @@ else
             }
             else
             {
-                var oldVal = dbUser.MaxPayout;
-                dbUser.MaxPayout = newValue;
-                logDetails = $"MaxPayout: {oldVal:N0} -> {dbUser.MaxPayout:N0}";
+                var oldVal = dbUser.MaxNetLiability;
+                dbUser.MaxNetLiability = newValue;
+                logDetails = $"MaxNetLiability: {oldVal:N0} -> {dbUser.MaxNetLiability:N0}";
             }
             
             dbUser.UpdatedAt = DateTime.UtcNow;
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
-                Action = isCredit ? "Changed Credit Limit" : "Changed Max Payout",
+                Action = isCredit ? "Changed Credit Limit" : "Changed Max Liability",
                 TargetUserName = userToUpdate.UserName ?? "Unknown",
                 Details = logDetails
             });

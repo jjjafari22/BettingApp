@@ -14,7 +14,7 @@ public class ApplicationUser : IdentityUser
     public int CreditLimit { get; set; } = 2000; 
 
     // New per-user Max Payout limit (Default 20,000 NOK)
-    public decimal MaxPayout { get; set; } = 20000m;
+    public decimal MaxNetLiability { get; set; } = 12500m;
 
     // --- PERFORMANCE FIX: Store Balance directly ---
     // This allows instant reads without summing history.

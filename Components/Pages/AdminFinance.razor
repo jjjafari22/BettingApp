@@ -211,7 +211,7 @@
             .AsNoTracking()
             .ToListAsync();
             
-        netOpenLiability = activeBets.Sum(b => b.PotentialPayout - ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
+        netOpenLiability = activeBets.Sum(b => b.NetLiability);
         netOpenProfitIfLost = activeBets.Sum(b => ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
         await InvokeAsync(StateHasChanged);
     }
@@ -379,10 +379,10 @@
             
             // Liability definition: Net winnings potential
             // (Potential Payout - Normal Stake Portion)
-            avgNetLiability = periodBets.Average(b => b.PotentialPayout - ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
+            avgNetLiability = periodBets.Average(b => b.NetLiability);
             
             // Total Period Liability
-            totalNetLiability = periodBets.Sum(b => b.PotentialPayout - ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
+            totalNetLiability = periodBets.Sum(b => b.NetLiability);
         }
 
         await InvokeAsync(StateHasChanged);

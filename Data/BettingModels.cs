@@ -31,6 +31,15 @@ namespace BettingApp.Data
                 return Math.Floor(normalPayout + freeBetPayout);
             }
         }
+
+        public decimal NetLiability
+        {
+            get
+            {
+                if (!AmountNOK.HasValue) return 0;
+                return Math.Floor((decimal)AmountNOK.Value * (Odds - 1));
+            }
+        }
         
         public string? ScreenshotUrl { get; set; }
         

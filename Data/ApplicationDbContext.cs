@@ -34,7 +34,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasPrecision(18, 0); 
             
         builder.Entity<ApplicationUser>()
-            .Property(u => u.MaxPayout)
+            .Property(u => u.MaxNetLiability)
             .HasPrecision(18, 0);
 
         builder.Entity<ApplicationUser>()
