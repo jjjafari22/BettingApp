@@ -374,6 +374,16 @@
                     <option value="Rejected">Rejected</option>
                     <option value="Cancelled">Cancelled</option>
                 </select>
+                <div class="input-group input-group-sm shadow-sm flex-shrink-0" style="max-width: 150px;">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Bet ID..." @bind="completedSearchBetId" @bind:after="OnCompletedSearchChanged" />
+                    @if (!string.IsNullOrWhiteSpace(completedSearchBetId))
+                    {
+                        <button class="btn btn-outline-secondary" type="button" @onclick="ClearCompletedSearch" title="Clear search">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    }
+                </div>
             </div>
             <button class="btn btn-outline-secondary btn-sm flex-shrink-0" @onclick="ExportCompletedBetsCsv" title="Export CSV">
                 <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Export CSV</span>
@@ -464,10 +474,24 @@
     private int pageSize = 25;
     
     private string completedStatusFilter = "All";
+    private string completedSearchBetId = "";
     
     private async Task OnCompletedStatusFilterChanged(ChangeEventArgs e)
     {
         completedStatusFilter = e.Value?.ToString() ?? "All";
+        completedPage = 1;
+        await LoadCompletedBets();
+    }
+
+    private async Task OnCompletedSearchChanged()
+    {
+        completedPage = 1;
+        await LoadCompletedBets();
+    }
+
+    private async Task ClearCompletedSearch()
+    {
+        completedSearchBetId = "";
         completedPage = 1;
         await LoadCompletedBets();
     }
@@ -622,13 +646,27 @@
         var completedStatuses = new[] { "Won", "Lost", "Void", "Rejected", "Cancelled" };
         
         var query = context.Bets.AsQueryable();
-        if (completedStatusFilter == "All")
+        if (!string.IsNullOrWhiteSpace(completedSearchBetId))
         {
-            query = query.Where(b => completedStatuses.Contains(b.Status));
+            if (int.TryParse(completedSearchBetId.Trim(), out int searchId))
+            {
+                query = query.Where(b => b.Id == searchId && completedStatuses.Contains(b.Status));
+            }
+            else
+            {
+                query = query.Where(b => false);
+            }
         }
         else
         {
-            query = query.Where(b => b.Status == completedStatusFilter);
+            if (completedStatusFilter == "All")
+            {
+                query = query.Where(b => completedStatuses.Contains(b.Status));
+            }
+            else
+            {
+                query = query.Where(b => b.Status == completedStatusFilter);
+            }
         }
         
         totalCompletedBets = await query.CountAsync();
