@@ -178,14 +178,16 @@ namespace BettingApp.Services
                 }
             }
 
-            int dIndex = 0;
-            int cIndex = 0;
-
             // Greedy matching for any remainder that didn't fit into a subset <= size 6
-            while (dIndex < p2pDebtors.Count && cIndex < creditors.Count)
+            // We re-sort after EVERY transaction. This spreads the load across multiple users
+            // rather than completely "draining" the largest user and forcing them to make many payments.
+            while (p2pDebtors.Count > 0 && creditors.Count > 0)
             {
-                var debtor = p2pDebtors[dIndex];
-                var creditor = creditors[cIndex];
+                p2pDebtors = p2pDebtors.OrderByDescending(x => x.Amount).ToList();
+                creditors = creditors.OrderByDescending(x => x.Amount).ToList();
+
+                var debtor = p2pDebtors[0];
+                var creditor = creditors[0];
 
                 var amount = Math.Min(debtor.Amount, creditor.Amount);
 
@@ -201,18 +203,17 @@ namespace BettingApp.Services
                 var newDebtorAmount = debtor.Amount - amount;
                 var newCreditorAmount = creditor.Amount - amount;
 
-                if (newDebtorAmount < 0.01m) dIndex++; 
-                else p2pDebtors[dIndex] = (debtor.Name, newDebtorAmount, debtor.RawUserName); 
+                if (newDebtorAmount < 0.01m) p2pDebtors.RemoveAt(0);
+                else p2pDebtors[0] = (debtor.Name, newDebtorAmount, debtor.RawUserName); 
 
-                if (newCreditorAmount < 0.01m) cIndex++; 
-                else creditors[cIndex] = (creditor.Name, newCreditorAmount, creditor.PaymentDetails, creditor.FirstName); 
+                if (newCreditorAmount < 0.01m) creditors.RemoveAt(0);
+                else creditors[0] = (creditor.Name, newCreditorAmount, creditor.PaymentDetails, creditor.FirstName); 
             }
 
             // Any remaining unmatched P2P balances are system imbalances (adjustments)
-            while (dIndex < p2pDebtors.Count)
+            foreach (var debtor in p2pDebtors)
             {
-                result.Adjustments.Add(new SettlementAdjustment { UserName = p2pDebtors[dIndex].Name, Amount = p2pDebtors[dIndex].Amount, Reason = "Owes Castle Directly" });
-                dIndex++;
+                result.Adjustments.Add(new SettlementAdjustment { UserName = debtor.Name, Amount = debtor.Amount, Reason = "Owes Castle Directly" });
             }
             
             // ALL CastleOnly (Excluded) Debtors owe Castle directly
@@ -220,10 +221,9 @@ namespace BettingApp.Services
             {
                 result.Adjustments.Add(new SettlementAdjustment { UserName = debtor.Name, Amount = debtor.Amount, Reason = "Owes Castle Directly" });
             }
-            while (cIndex < creditors.Count)
+            foreach (var creditor in creditors)
             {
-                result.Adjustments.Add(new SettlementAdjustment { UserName = creditors[cIndex].Name, Amount = creditors[cIndex].Amount, Reason = "Castle Owes Directly" });
-                cIndex++;
+                result.Adjustments.Add(new SettlementAdjustment { UserName = creditor.Name, Amount = creditor.Amount, Reason = "Castle Owes Directly" });
             }
 
             // 4. Save Snapshot
