@@ -256,7 +256,7 @@
                                                                                                 <div class="mb-2 p-2 border rounded bg-light">
                                                                                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                                                                                         <div>
-                                                                                                            <strong>To: @dest.ToName</strong> <span class="badge bg-secondary ms-2">@dest.Amount.ToString("N0") kr</span>
+                                                                                                            <strong>To: @dest.ToDisplayName</strong> <span class="badge bg-secondary ms-2">@dest.Amount.ToString("N0") kr</span>
                                                                                                         </div>
                                                                                                         @if (dest.IsCastle)
                                                                                                         {
@@ -469,6 +469,7 @@
     public class DebtorDestination
     {
         public string ToName { get; set; } = "";
+        public string ToDisplayName { get; set; } = "";
         public decimal Amount { get; set; }
         public string Vipps { get; set; } = "";
         public string Revolut { get; set; } = "";
@@ -717,7 +718,9 @@
             
             // Use ToUserFirstName if available, otherwise fallback to the first part of the original display name
             string toName = !string.IsNullOrEmpty(ins.ToUserFirstName) ? ins.ToUserFirstName : ins.ToUser.Split(' ')[0];
-            var dest = new DebtorDestination { ToName = toName, Amount = ins.Amount };
+            string fullName = !string.IsNullOrEmpty(ins.ToUserFullName) ? ins.ToUserFullName : toName;
+            string toDisplayName = !string.IsNullOrEmpty(ins.ToUserDiscordUsername) ? $"{ins.ToUserDiscordUsername} ({fullName})" : toName;
+            var dest = new DebtorDestination { ToName = toName, ToDisplayName = toDisplayName, Amount = ins.Amount };
             
             if (!string.IsNullOrEmpty(ins.PaymentDetails))
             {
@@ -748,6 +751,7 @@
             var dest = new DebtorDestination 
             { 
                 ToName = "Velg Cash Cow", 
+                ToDisplayName = "Velg Cash Cow",
                 Amount = adj.Amount,
                 IsCastle = true
             };
@@ -759,6 +763,7 @@
                 if (cow != null)
                 {
                     dest.ToName = cow.FirstName;
+                    dest.ToDisplayName = cow.FirstName;
                     dest.Vipps = cow.Vipps;
                     dest.Revolut = cow.Revolut;
                 }

@@ -49,7 +49,7 @@ namespace BettingApp.Services
             var result = new SettlementResult { Date = DateTime.UtcNow };
             
             var debtors = new List<(string Name, decimal Amount, string RawUserName)>();
-            var creditors = new List<(string Name, decimal Amount, string PaymentDetails, string FirstName)>();
+            var creditors = new List<(string Name, decimal Amount, string PaymentDetails, string FirstName, string DiscordUsername, string FullName)>();
 
             // Need a quick lookup for User display names if we want to format Creditors correctly
             var allUsersToFormat = debtorsList.Select(u => u.UserName)
@@ -74,6 +74,25 @@ namespace BettingApp.Services
                 return userName.Split('@')[0];
             }
 
+            string GetDiscordUsername(string userName)
+            {
+                if (userLookup.TryGetValue(userName, out var u) && !string.IsNullOrWhiteSpace(u.DiscordUsername))
+                    return u.DiscordUsername;
+                return string.Empty;
+            }
+
+            string GetFullName(string userName)
+            {
+                if (userLookup.TryGetValue(userName, out var u))
+                {
+                    var parts = new List<string>();
+                    if (!string.IsNullOrWhiteSpace(u.FirstName)) parts.Add(u.FirstName);
+                    if (!string.IsNullOrWhiteSpace(u.LastName)) parts.Add(u.LastName);
+                    if (parts.Any()) return string.Join(" ", parts);
+                }
+                return userName.Split('@')[0];
+            }
+
             foreach (var debtor in debtorsList)
             {
                 string displayName = GetDisplayName(debtor.UserName!);
@@ -85,7 +104,9 @@ namespace BettingApp.Services
             {
                 string displayName = GetDisplayName(creditor.UserName!);
                 string firstName = GetFirstName(creditor.UserName!);
-                creditors.Add((displayName, creditor.TotalAmount, creditor.PaymentDetails, firstName));
+                string discordUsername = GetDiscordUsername(creditor.UserName!);
+                string fullName = GetFullName(creditor.UserName!);
+                creditors.Add((displayName, creditor.TotalAmount, creditor.PaymentDetails, firstName, discordUsername, fullName));
                 // Add to UserBalances to show what they are owed in the snapshot history
                 result.UserBalances.Add(new SettlementUserBalance { UserName = displayName + " (Pending Withdrawal)", Balance = creditor.TotalAmount });
             }
@@ -153,6 +174,8 @@ namespace BettingApp.Services
                                             FromUser = subD.Name,
                                             ToUser = subC.Name,
                                             ToUserFirstName = subC.FirstName,
+                                            ToUserFullName = subC.FullName,
+                                            ToUserDiscordUsername = subC.DiscordUsername,
                                             Amount = amount,
                                             PaymentDetails = subC.PaymentDetails
                                         });
@@ -161,7 +184,7 @@ namespace BettingApp.Services
                                         var nc = subC.Amount - amount;
 
                                         if (nd < 0.01m) sd++; else subDebtors[sd] = (subD.Name, nd, subD.RawUserName);
-                                        if (nc < 0.01m) sc++; else subCreditors[sc] = (subC.Name, nc, subC.PaymentDetails, subC.FirstName);
+                                        if (nc < 0.01m) sc++; else subCreditors[sc] = (subC.Name, nc, subC.PaymentDetails, subC.FirstName, subC.DiscordUsername, subC.FullName);
                                     }
 
                                     foreach (var i in dComb.OrderByDescending(x => x)) p2pDebtors.RemoveAt(i);
@@ -196,6 +219,8 @@ namespace BettingApp.Services
                     FromUser = debtor.Name,
                     ToUser = creditor.Name,
                     ToUserFirstName = creditor.FirstName,
+                    ToUserFullName = creditor.FullName,
+                    ToUserDiscordUsername = creditor.DiscordUsername,
                     Amount = amount,
                     PaymentDetails = creditor.PaymentDetails
                 });
@@ -207,7 +232,7 @@ namespace BettingApp.Services
                 else p2pDebtors[0] = (debtor.Name, newDebtorAmount, debtor.RawUserName); 
 
                 if (newCreditorAmount < 0.01m) creditors.RemoveAt(0);
-                else creditors[0] = (creditor.Name, newCreditorAmount, creditor.PaymentDetails, creditor.FirstName); 
+                else creditors[0] = (creditor.Name, newCreditorAmount, creditor.PaymentDetails, creditor.FirstName, creditor.DiscordUsername, creditor.FullName); 
             }
 
             // Any remaining unmatched P2P balances are system imbalances (adjustments)

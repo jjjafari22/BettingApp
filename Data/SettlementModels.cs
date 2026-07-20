@@ -44,6 +44,8 @@ namespace BettingApp.Data
         public string FromUser { get; set; } = string.Empty;
         public string ToUser { get; set; } = string.Empty;
         public string ToUserFirstName { get; set; } = string.Empty;
+        public string ToUserFullName { get; set; } = string.Empty;
+        public string ToUserDiscordUsername { get; set; } = string.Empty;
         public decimal Amount { get; set; }
         public string PaymentDetails { get; set; } = string.Empty;
         public bool IsSent { get; set; } = false;
