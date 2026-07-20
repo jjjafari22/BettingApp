@@ -915,28 +915,33 @@
             if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals";
                 return; }
 
-            using var validationContext = DbFactory.CreateDbContext();
-            var settings = await validationContext.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
-            var betUser = await validationContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == bet.UserId);
-            if (settings != null)
-            {
-                 if ((decimal)(bet.AmountNOK ?? 0) < settings.MinBetAmount) { 
-                     reviewErrorMessage = $"Amount below limit ({settings.MinBetAmount:N0})";
-                     return; 
-                 }
-            }
-            
-            if (betUser != null)
-            {
-                 decimal currentAmount = (decimal)(bet.AmountNOK ?? 0);
-                 decimal netLiability = Math.Floor(currentAmount * (bet.Odds - 1));
-                 decimal userLimit = betUser.MaxNetLiability;
+            bool isNewOrModified = originalStatus == "Pending" || (originalBetModel != null && (bet.AmountNOK != originalBetModel.AmountNOK || bet.Odds != originalBetModel.Odds));
 
-                 if (netLiability > userLimit) { 
-                     decimal maxBetAmount = Math.Floor(userLimit / (bet.Odds - 1));
-                     reviewErrorMessage = $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {bet.Odds} odds is {maxBetAmount:N0} kr.";
-                     return; 
-                 }
+            if (isNewOrModified)
+            {
+                using var validationContext = DbFactory.CreateDbContext();
+                var settings = await validationContext.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
+                var betUser = await validationContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == bet.UserId);
+                if (settings != null)
+                {
+                     if ((decimal)(bet.AmountNOK ?? 0) < settings.MinBetAmount) { 
+                         reviewErrorMessage = $"Amount below limit ({settings.MinBetAmount:N0})";
+                         return; 
+                     }
+                }
+                
+                if (betUser != null)
+                {
+                     decimal currentAmount = (decimal)(bet.AmountNOK ?? 0);
+                     decimal netLiability = Math.Floor(currentAmount * (bet.Odds - 1));
+                     decimal userLimit = betUser.MaxNetLiability;
+
+                     if (netLiability > userLimit) { 
+                         decimal maxBetAmount = Math.Floor(userLimit / (bet.Odds - 1));
+                         reviewErrorMessage = $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {bet.Odds} odds is {maxBetAmount:N0} kr.";
+                         return; 
+                     }
+                }
             }
         }
 
