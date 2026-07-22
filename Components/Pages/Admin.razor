@@ -14,6 +14,10 @@
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
 @inject BettingApp.Services.DialogService DialogService
+@inject OddsApiService OddsApi
+@inject KambiScraperService KambiScraper
+@inject AiVisionService AiVision
+@inject MarketMappingService MarketMapper
 @attribute [Authorize]
 @rendermode InteractiveServer
 @implements IAsyncDisposable
@@ -134,39 +138,167 @@
                 </div>
               
  
-                <div class="modal-body review-modal-body">
-                   @if (!string.IsNullOrEmpty(modalSuccessMessage)) {
-                       <div class="alert alert-success m-0 rounded-0 text-center py-2 border-0 border-bottom border-success shadow-sm" role="alert" style="background-color: #d1e7dd; color: #0f5132;">
-                           <i class="bi bi-check-circle-fill me-2"></i> <strong>@modalSuccessMessage</strong>
-                       </div>
-                   }
-                   @if (reviewErrorMessage != null) {
-   
-                     <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
-                           <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
-                               <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
-                              
-                                <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
-                           </div>
-                       </div>
-                   }
-                   
-    
-                    <div class="review-image-container">
-                       <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(!CanNavigateReview(-1))"><i class="bi bi-chevron-left"></i></button>
-                       @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
-                         
-                           <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
-                       } else {
-                           <div class="text-white-50 fst-italic text-center">
-                               <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
-                           </div>
-                       }
-                       <button class="nav-arrow nav-arrow-right shadow-lg" @onclick="() => NavigateReview(1)" disabled="@(!CanNavigateReview(1))"><i class="bi bi-chevron-right"></i></button>
-                   </div>
+                <div class="modal-body review-modal-body p-0">
+                    <div class="row g-0">
+                        <!-- Left Column: Image -->
+                        <div class="col-lg-6 review-image-container position-relative bg-dark d-flex align-items-center justify-content-center" style="min-height: 400px; max-height: 80vh;">
+                            <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(!CanNavigateReview(-1))"><i class="bi bi-chevron-left"></i></button>
+                            @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
+                                <div class="w-100 h-100 p-2 d-flex align-items-center justify-content-center overflow-auto">
+                                    <img src="@reviewingBetModel.ScreenshotUrl" class="img-fluid rounded shadow" style="max-height: 100%; object-fit: contain;" alt="Bet Screenshot" />
+                                </div>
+                                <div class="position-absolute bottom-0 start-50 translate-middle-x mb-3" style="z-index: 10;">
+                                    <button class="btn btn-warning shadow fw-bold rounded-pill px-3" @onclick="AnalyzeImageAsync" disabled="@IsAnalyzingImage">
+                                        @if (IsAnalyzingImage) {
+                                            <span class="spinner-border spinner-border-sm me-1"></span> <span>Analyzing...</span>
+                                        } else {
+                                            <i class="bi bi-robot me-1"></i> <span>AI Auto-Read</span>
+                                        }
+                                    </button>
+                                </div>
+                            } else {
+                                <div class="text-white-50 fst-italic text-center">
+                                    <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
+                                </div>
+                            }
+                            <button class="nav-arrow nav-arrow-right shadow-lg" @onclick="() => NavigateReview(1)" disabled="@(!CanNavigateReview(1))"><i class="bi bi-chevron-right"></i></button>
+                        </div>
+                        
+                        <!-- Right Column: Controls -->
+                        <div class="col-lg-6 p-3 overflow-auto" style="max-height: 80vh;">
+                            @if (!string.IsNullOrEmpty(modalSuccessMessage)) {
+                                <div class="alert alert-success rounded text-center py-2 mb-3 shadow-sm" role="alert" style="background-color: #d1e7dd; color: #0f5132;">
+                                    <i class="bi bi-check-circle-fill me-2"></i> <strong>@modalSuccessMessage</strong>
+                                </div>
+                            }
+                            @if (reviewErrorMessage != null) {
+                                <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
+                                    <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
+                                    <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
+                                </div>
+                            }
+                            
+                            @if (AiVisionResult != null || AiVisionError != null)
+                    {
+                        <div class="alert @(AiVisionError != null ? "alert-danger" : "alert-success") py-2 px-3 mt-2 mb-3 small shadow-sm">
+                            @if (AiVisionError != null) {
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i> @AiVisionError
+                            } else {
+                                <div class="fw-bold mb-2"><i class="bi bi-check-circle-fill me-1"></i> AI Extraction Successful:</div>
+                                <div class="mb-2">
+                                    <strong>Bookmaker:</strong> @AiVisionResult.Bookmaker <br/>
+                                    <strong>Is Combo:</strong> @AiVisionResult.IsCombo <br/>
+                                    <strong>Stake:</strong> @AiVisionResult.Stake <br/>
+                                    <strong>Total Odds:</strong> @AiVisionResult.TotalOdds
+                                </div>
+                                @if (AiVisionResult.Legs != null)
+                                {
+                                    @foreach (var leg in AiVisionResult.Legs)
+                                    {
+                                        bool isActive = (leg == ActiveLookupLeg);
+                                        <div class="card mb-1 @(isActive ? "border-primary shadow" : "shadow-sm border-0")">
+                                            <div class="card-body py-1 px-2" style="font-family: monospace; font-size: 0.85em;">
+                                                Match: @leg.Match <br/>
+                                                Market: @leg.Market <br/>
+                                                Selection: @leg.Selection <br/>
+                                                Odds: @leg.Odds <br/>
+                                                <button class="btn btn-sm mt-1 py-0 px-2 @(isActive ? "btn-primary fw-bold" : "btn-outline-primary")" 
+                                                        @onclick="() => SearchOddsForLeg(leg)">
+                                                    <i class="bi @(isActive ? "bi-check2-circle" : "bi-search")"></i> 
+                                                    @(isActive ? "Active Lookup" : "Lookup Odds")
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            }
+                        </div>
+                    }
 
                    <div class="review-controls-container" @key="reviewingBetModel.Id">
                         <div class="container-fluid p-0">
+                            <!-- ODDS LOOKUP WIDGET -->
+                            <div class="card mb-3 shadow-sm border-0">
+                                <div class="card-header bg-secondary text-white py-1 px-2 small fw-bold" @onclick="ToggleOddsLookup" style="cursor: pointer;">
+                                    <i class="bi bi-search me-1"></i> Quick Odds Lookup 
+                                    <i class="bi bi-chevron-@(ShowOddsLookup ? "up" : "down") float-end"></i>
+                                </div>
+                                @if (ShowOddsLookup)
+                                {
+                                    <div class="card-body p-2">
+                                        @if (!string.IsNullOrEmpty(OddsLookupErrorMessage))
+                                        {
+                                            <div class="alert alert-danger py-1 px-2 mb-2 small">
+                                                <i class="bi bi-exclamation-circle-fill me-1"></i> @OddsLookupErrorMessage
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(OddsLookupWarningMessage))
+                                        {
+                                            <div class="alert alert-warning py-1 px-2 mb-2 small text-dark border-warning">
+                                                <i class="bi bi-exclamation-triangle-fill me-1"></i> @OddsLookupWarningMessage
+                                            </div>
+                                        }
+                                        <div class="input-group input-group-sm mb-2">
+                                            <span class="input-group-text bg-light text-muted fw-bold"><i class="bi bi-robot"></i> Unibet/Kambi</span>
+                                            <input type="text" class="form-control" placeholder="Search team (e.g. Arsenal)..." @bind="OddsSearchTeam" @onkeydown="@(e => { if (e.Key == "Enter") _ = SearchOdds(); })" />
+                                            <button class="btn btn-primary" @onclick="() => SearchOdds()" disabled="@IsSearchingOdds">
+                                                @if(IsSearchingOdds) { <span class="spinner-border spinner-border-sm"></span> } else { <i class="bi bi-search"></i> }
+                                            </button>
+                                        </div>
+                                        
+                                        @if (SelectedKambiEvent != null && AllKambiMarkets != null)
+                                        {
+                                            <div class="alert alert-info py-1 px-2 mb-2 small fw-bold">
+                                                <i class="bi bi-calendar-event me-1"></i> @SelectedKambiEvent.Name <span class="text-muted fw-normal ms-2">(@SelectedKambiEvent.Start.ToLocalTime().ToString("g"))</span>
+                                            </div>
+
+                                            <div class="mb-2">
+                                                <select class="form-select form-select-sm fw-bold" @bind="SelectedKambiCategory">
+                                                    @foreach (var cat in AvailableMarketCategories)
+                                                    {
+                                                        <option value="@cat">@cat</option>
+                                                    }
+                                                </select>
+                                            </div>
+
+                                            <div class="table-responsive" style="max-height: 250px;">
+                                                <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.8rem;">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th class="text-start">Outcome</th>
+                                                            <th>Odds</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach (var market in AllKambiMarkets.Where(m => m.Criterion.EnglishLabel == SelectedKambiCategory))
+                                                        {
+                                                            @foreach (var outcome in market.Outcomes)
+                                                            {
+                                                                <tr>
+                                                                    <td class="text-start fw-bold">
+                                                                        @if (!string.IsNullOrEmpty(outcome.Participant)) {
+                                                                            <span class="text-primary me-1">@outcome.Participant -</span>
+                                                                        }
+                                                                        @outcome.EnglishLabel 
+                                                                        @if (outcome.DecimalLine.HasValue) { <span class="badge bg-secondary ms-1">@outcome.DecimalLine</span> }
+                                                                    </td>
+                                                                    <td class="fw-bold text-primary">@outcome.DecimalOdds.ToString("0.00")</td>
+                                                                </tr>
+                                                            }
+                                                            <!-- Divider if there are multiple sub-markets under the same category -->
+                                                            @if (AllKambiMarkets.Count(m => m.Criterion.EnglishLabel == SelectedKambiCategory) > 1) {
+                                                                <tr style="height:4px; background-color: #f8f9fa;"><td colspan="2" class="p-0 border-0"></td></tr>
+                                                            }
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <!-- END ODDS LOOKUP WIDGET -->
+                            
                            <div class="row g-2 mb-3">
                                  <div class="col-3">
                                      <label class="form-label fw-bold text-muted small mb-1">Stake</label>
@@ -244,7 +376,8 @@
                            }
                         </div>
                    </div>
-        
+                   </div>
+                 </div>
                  </div>
             </div>
         </div>
@@ -729,6 +862,248 @@
             try { await reviewModalRef.FocusAsync(); } catch { } }
     }
 
+    private bool ShowOddsLookup = false;
+    private bool IsSearchingOdds = false;
+    private string OddsSearchTeam = "";
+    
+    // Kambi UI State
+    private BettingApp.Services.KambiEvent? SelectedKambiEvent = null;
+    private List<BettingApp.Services.KambiBetOffer>? AllKambiMarkets = null;
+    private List<string> AvailableMarketCategories = new();
+    private string SelectedKambiCategory = "";
+
+    // AI Vision State
+    private bool IsAnalyzingImage = false;
+    private BettingApp.Services.AiVisionExtractionResult? AiVisionResult = null;
+    private BettingApp.Services.AiVisionLeg? ActiveLookupLeg = null;
+    private string? AiVisionError = null;
+
+    private async Task AnalyzeImageAsync()
+    {
+        if (reviewingBetModel == null || string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) return;
+        
+        IsAnalyzingImage = true;
+        AiVisionResult = null;
+        ActiveLookupLeg = null;
+        AiVisionError = null;
+        StateHasChanged();
+
+        var (result, error) = await AiVision.ExtractBetSlipDataAsync(reviewingBetModel.ScreenshotUrl);
+        IsAnalyzingImage = false;
+        
+        if (error != null)
+        {
+            AiVisionError = error;
+        }
+        else if (result != null)
+        {
+            AiVisionResult = result;
+            
+            // Populate the UI input fields automatically
+            if (!string.IsNullOrEmpty(result.TotalOdds))
+            {
+                // Try parsing with both comma and dot for safety
+                var cleanOdds = result.TotalOdds.Replace(",", ".");
+                if (decimal.TryParse(cleanOdds, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal odds))
+                {
+                    reviewingBetModel.Odds = odds;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(result.Stake))
+            {
+                var rawStake = result.Stake.Trim().ToLower();
+                
+                int multiplier = 1;
+                if (rawStake.EndsWith("k"))
+                {
+                    multiplier = 1000;
+                }
+                else if (rawStake.EndsWith("m"))
+                {
+                    multiplier = 1000000;
+                }
+
+                var cleanStake = new string(rawStake.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray());
+                cleanStake = cleanStake.Replace(",", "."); // Handle European decimals
+
+                if (decimal.TryParse(cleanStake, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal stakeDecimal))
+                {
+                    reviewingBetModel.AmountNOK = (int)(stakeDecimal * multiplier);
+                }
+            }
+            
+            // Auto-fill the Kambi search for the FIRST leg to save time!
+            if (result.Legs != null && result.Legs.Any())
+            {
+                SearchOddsForLeg(result.Legs.First());
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private void SearchOddsForLeg(BettingApp.Services.AiVisionLeg leg)
+    {
+        ActiveLookupLeg = leg;
+        if (string.IsNullOrEmpty(leg.Match)) return;
+        
+        var homeTeam = leg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None)[0];
+        var homeWords = homeTeam.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        
+        OddsSearchTeam = string.Join(" ", homeWords.Take(2));
+        ShowOddsLookup = true;
+        _ = SearchOdds(leg.Market);
+    }
+
+    private string? OddsLookupErrorMessage = null;
+    private string? OddsLookupWarningMessage = null;
+    
+    private async Task ToggleOddsLookup()
+    {
+        ShowOddsLookup = !ShowOddsLookup;
+    }
+
+    private async Task SearchOdds(string? preSelectCategory = null)
+    {
+        if (string.IsNullOrWhiteSpace(OddsSearchTeam)) return;
+
+        IsSearchingOdds = true;
+        OddsLookupErrorMessage = null;
+        OddsLookupWarningMessage = null;
+        SelectedKambiEvent = null;
+        AllKambiMarkets = null;
+        AvailableMarketCategories.Clear();
+        SelectedKambiCategory = "";
+        StateHasChanged();
+
+        var (events, error) = await KambiScraper.SearchEventsAsync(OddsSearchTeam);
+        
+        if (error != null)
+        {
+            OddsLookupErrorMessage = error;
+        }
+        else if (events.Any())
+        {
+            SelectedKambiEvent = events.First();
+            
+            var (markets, marketError) = await KambiScraper.GetEventMarketsAsync(SelectedKambiEvent.Id);
+            if (marketError != null)
+            {
+                OddsLookupErrorMessage = marketError;
+            }
+            else
+            {
+                AllKambiMarkets = markets;
+                AvailableMarketCategories = markets
+                    .Select(m => m.Criterion.EnglishLabel)
+                    .Where(l => !string.IsNullOrEmpty(l))
+                    .Distinct()
+                    .OrderBy(l => l)
+                    .ToList();
+                    
+                if (!string.IsNullOrEmpty(preSelectCategory))
+                {
+                    // 1. Normalize the market name using our dictionary
+                    var normalizedTarget = MarketMapper.NormalizeMarketName(preSelectCategory);
+
+                    // 2. Generic robust match: ignore spaces, punctuation, casing, and plurals/possessives
+                    var simplify = (string s) => 
+                    {
+                        var clean = s.ToLowerInvariant()
+                                     .Replace("players", "player")
+                                     .Replace("player's", "player")
+                                     .Replace("shots", "shot")
+                                     .Replace("cards", "card")
+                                     .Replace("goals", "goal")
+                                     .Replace("corners", "corner");
+                        return new string(clean.Where(char.IsLetterOrDigit).ToArray());
+                    };
+                    var simplifiedTarget = simplify(normalizedTarget);
+
+                    var bestMatch = AvailableMarketCategories.FirstOrDefault(c => 
+                        simplify(c) == simplifiedTarget || 
+                        simplify(c).Contains(simplifiedTarget) ||
+                        simplifiedTarget.Contains(simplify(c)));
+                    if (bestMatch != null) 
+                    {
+                        SelectedKambiCategory = bestMatch;
+                    }
+                    else
+                    {
+                        OddsLookupWarningMessage = $"AI requested market '{preSelectCategory}', but Kambi doesn't offer it for this game.";
+                    }
+                }
+                
+                // Fallbacks if no preSelectCategory or fuzzy match failed
+                if (string.IsNullOrEmpty(SelectedKambiCategory))
+                {
+                    if (AvailableMarketCategories.Contains("Full Time")) SelectedKambiCategory = "Full Time";
+                    else if (AvailableMarketCategories.Contains("Match Odds")) SelectedKambiCategory = "Match Odds";
+                    else SelectedKambiCategory = AvailableMarketCategories.FirstOrDefault() ?? "";
+                }
+            }
+        }
+        else
+        {
+            OddsLookupErrorMessage = "No Kambi matches found for that team.";
+        }
+
+        IsSearchingOdds = false;
+        StateHasChanged();
+    }
+
+    private string KambiSearchQuery = "";
+    private string? KambiTestOutput = null;
+    private bool IsTestingKambi = false;
+
+    private async Task TestKambi()
+    {
+        IsTestingKambi = true;
+        KambiTestOutput = "Fetching Events...";
+        StateHasChanged();
+        
+        var (results, error) = await KambiScraper.SearchEventsAsync(KambiSearchQuery);
+        if (error != null) 
+        {
+            KambiTestOutput = error;
+        } 
+        else 
+        {
+            KambiTestOutput = $"Success! Found {results.Count} events.";
+            if (results.Any()) {
+                var firstEvent = results.First();
+                KambiTestOutput += $"\nFirst event: {firstEvent.Name} ({firstEvent.Start})";
+                
+                KambiTestOutput += $"\n\nFetching Deep Markets for {firstEvent.Name}...";
+                StateHasChanged();
+
+                var (markets, marketError) = await KambiScraper.GetEventMarketsAsync(firstEvent.Id);
+                
+                if (marketError != null)
+                {
+                    KambiTestOutput += $"\nMarket Error: {marketError}";
+                }
+                else
+                {
+                    KambiTestOutput += $"\nFound {markets.Count} total markets!";
+                    
+                    // Group by market type and just show the counts of available markets
+                    var grouped = markets.GroupBy(m => m.Criterion.EnglishLabel).OrderByDescending(g => g.Count());
+                    
+                    KambiTestOutput += "\n\nAvailable Markets:";
+                    foreach(var g in grouped)
+                    {
+                        KambiTestOutput += $"\n- {g.Key} ({g.Count()} variants)";
+                    }
+                }
+            }
+        }
+        
+        IsTestingKambi = false;
+        StateHasChanged();
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (hubConnection is not null) { await hubConnection.DisposeAsync(); }
@@ -793,6 +1168,9 @@
 
         modalSuccessMessage = null;
         reviewErrorMessage = null; errorMessage = null;
+        AiVisionResult = null;
+        AiVisionError = null;
+        ShowOddsLookup = false;
         shouldFocusReviewModal = true;
     }
 
@@ -836,6 +1214,9 @@
     {
         if (currentReviewList == null || currentReviewList.Count == 0) return;
         modalSuccessMessage = null;
+        AiVisionResult = null;
+        AiVisionError = null;
+        ShowOddsLookup = false;
         int newIndex = currentReviewIndex + direction;
 
         if (newIndex < 0) 

@@ -43,6 +43,11 @@ builder.Services.AddSignalR(hubOptions =>
 
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<DialogService>();
+builder.Services.AddHttpClient<OddsApiService>();
+builder.Services.AddHttpClient<KambiScraperService>();
+builder.Services.AddHttpClient<Bet365ScraperService>();
+builder.Services.AddHttpClient<AiVisionService>();
+builder.Services.AddSingleton<MarketMappingService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();
 builder.Services.AddHostedService<PendingBetsNotificationService>();
 
