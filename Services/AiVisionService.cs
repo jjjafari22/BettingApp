@@ -41,6 +41,30 @@ namespace BettingApp.Services
         public string Odds { get; set; } = "";
     }
 
+    public class AiOutcomeLegResult
+    {
+        [JsonPropertyName("match")]
+        public string Match { get; set; } = "";
+        
+        [JsonPropertyName("outcome")]
+        public string Outcome { get; set; } = "";
+        
+        [JsonPropertyName("stats")]
+        public string Stats { get; set; } = "";
+    }
+
+    public class AiOutcomeResultData
+    {
+        [JsonPropertyName("overallStatus")]
+        public string OverallStatus { get; set; } = "";
+        
+        [JsonPropertyName("fullAnalysis")]
+        public string FullAnalysis { get; set; } = "";
+        
+        [JsonPropertyName("legs")]
+        public List<AiOutcomeLegResult> Legs { get; set; } = new();
+    }
+
     public class AiVisionService
     {
         private readonly HttpClient _httpClient;
@@ -78,7 +102,7 @@ namespace BettingApp.Services
                              "4) stake (the amount bet, e.g. '100', '1000'). CRITICAL: Often the user will manually draw or write their stake over the image with a digital pen. You MUST look for manual handwritten digits over the image indicating the stake and prioritize that over printed text! " +
                              "5) legs: an array of objects representing each individual bet, containing: " +
                              "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST use the official, native spelling of the team names, INCLUDING proper diacritics/special characters, even if the screenshot omits them! (e.g. you MUST output 'Beşiktaş' instead of 'Besiktas', and 'Bodø/Glimt' instead of 'Bodo/Glimt'). This is required for our database to find the match. " +
-                             "   - market (e.g. 'Asian Handicap', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt', Swedish, Norwegian), you MUST translate it into standard English (e.g. 'Total Cards'). " +
+                             "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! " +
                              "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). Translate this to English as well if necessary, " +
                              "   - odds (e.g. '1.95'). " +
                              "Return ONLY a raw JSON object with keys: bookmaker, isCombo, totalOdds, stake, legs. Do not include markdown blocks like ```json.";
@@ -187,9 +211,111 @@ namespace BettingApp.Services
 
                 return (null, "No candidates returned from Gemini.");
             }
+
             catch (Exception ex)
             {
                 return (null, $"Exception: {ex.Message}");
+            }
+        }
+
+        public async Task<string?> ConfirmOutcomeAsync(string extractedBetDataJson, DateTime betPlacedAt)
+        {
+            if (string.IsNullOrEmpty(_apiKey)) return "Error: Gemini API key missing.";
+
+            try
+            {
+                var prompt = $"You are a sports betting expert. Here is the JSON data of a bet slip that was placed at {betPlacedAt:yyyy-MM-dd HH:mm}.\n" +
+                             $"{extractedBetDataJson}\n\n" +
+                             $"Please search the web to find the final result for each match (leg) listed in the bet.\n" +
+                             $"Check if the matches are finished, live, or not started. Determine if the overall bet was Won, Lost, or Void based on the results.\n" +
+                             $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
+                             $"Return a strictly formatted JSON object with the following schema:\n" +
+                             $"{{ \"overallStatus\": \"MATCH FINISHED - WON\", \"fullAnalysis\": \"Your detailed reasoning formatted with \n line breaks...\", \"legs\": [ {{ \"match\": \"Team A vs Team B\", \"outcome\": \"Won / Lost / Void\", \"stats\": \"e.g. 12 corners, or 3 goals\" }} ] }}\n" +
+                             $"Return ONLY valid JSON. Do not include markdown code blocks.";
+
+                var payload = new
+                {
+                    contents = new[]
+                    {
+                        new { parts = new[] { new { text = prompt } } }
+                    },
+                    tools = new[]
+                    {
+                        new { google_search = new object() }
+                    }
+                };
+
+                var jsonPayload = JsonSerializer.Serialize(payload);
+                var requestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                
+                // Auto-resolve the best available Flash model
+                var modelsUrl = $"https://generativelanguage.googleapis.com/v1beta/models?key={_apiKey}";
+                var modelsResponse = await _httpClient.GetAsync(modelsUrl);
+                if (!modelsResponse.IsSuccessStatusCode) return "Failed to fetch model list from Gemini.";
+                
+                var modelsJson = await modelsResponse.Content.ReadAsStringAsync();
+                using var modelsDoc = JsonDocument.Parse(modelsJson);
+                var resolvedModel = "gemini-1.5-flash"; // fallback
+                
+                double maxVersion = 0;
+                foreach (var m in modelsDoc.RootElement.GetProperty("models").EnumerateArray())
+                {
+                    var name = m.GetProperty("name").GetString();
+                    if (name != null && name.Contains("flash") && 
+                        !name.Contains("tts") && !name.Contains("text") && !name.Contains("preview") && !name.Contains("vision"))
+                    {
+                        bool supportsGenerate = false;
+                        if (m.TryGetProperty("supportedGenerationMethods", out var methods))
+                        {
+                            foreach (var method in methods.EnumerateArray())
+                            {
+                                if (method.GetString() == "generateContent") supportsGenerate = true;
+                            }
+                        }
+                        if (supportsGenerate)
+                        {
+                            var match = System.Text.RegularExpressions.Regex.Match(name, @"gemini-(\d+\.\d+)-flash$");
+                            if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double version))
+                            {
+                                if (version > maxVersion)
+                                {
+                                    maxVersion = version;
+                                    resolvedModel = name.Replace("models/", "");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                var url = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
+                
+                var response = await _httpClient.PostAsync(url, requestContent);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    return $"Error checking outcome: {response.StatusCode} - {responseContent}";
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                var text = doc.RootElement
+                    .GetProperty("candidates")[0]
+                    .GetProperty("content")
+                    .GetProperty("parts")[0]
+                    .GetProperty("text").GetString();
+
+                if (!string.IsNullOrEmpty(text))
+                {
+                    if (text.StartsWith("```json")) text = text.Substring(7);
+                    if (text.StartsWith("```")) text = text.Substring(3);
+                    if (text.EndsWith("```")) text = text.Substring(0, text.Length - 3);
+                }
+
+                return text?.Trim();
+            }
+            catch (Exception ex)
+            {
+                return $"Exception checking outcome: {ex.Message}";
             }
         }
     }

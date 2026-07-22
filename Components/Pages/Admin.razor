@@ -147,15 +147,27 @@
                                 <div class="w-100 h-100 p-2 d-flex align-items-center justify-content-center overflow-auto">
                                     <img src="@reviewingBetModel.ScreenshotUrl" class="img-fluid rounded shadow" style="max-height: 100%; object-fit: contain;" alt="Bet Screenshot" />
                                 </div>
-                                <div class="position-absolute bottom-0 start-50 translate-middle-x mb-3" style="z-index: 10;">
-                                    <button class="btn btn-warning shadow fw-bold rounded-pill px-3" @onclick="AnalyzeImageAsync" disabled="@IsAnalyzingImage">
-                                        @if (IsAnalyzingImage) {
-                                            <span class="spinner-border spinner-border-sm me-1"></span> <span>Analyzing...</span>
-                                        } else {
-                                            <i class="bi bi-robot me-1"></i> <span>AI Auto-Read</span>
-                                        }
-                                    </button>
-                                </div>
+                                @if (reviewingBetModel.Status == "Pending") {
+                                    <div class="position-absolute bottom-0 start-50 translate-middle-x mb-3" style="z-index: 10;">
+                                        <button class="btn btn-warning shadow fw-bold rounded-pill px-3" @onclick="AnalyzeImageAsync" disabled="@IsAnalyzingImage">
+                                            @if (IsAnalyzingImage) {
+                                                <span class="spinner-border spinner-border-sm me-1"></span> <span>Analyzing...</span>
+                                            } else {
+                                                <i class="bi bi-robot me-1"></i> <span>AI Auto-Read</span>
+                                            }
+                                        </button>
+                                    </div>
+                                } else {
+                                    <div class="position-absolute bottom-0 start-50 translate-middle-x mb-3" style="z-index: 10;">
+                                        <button class="btn btn-info text-white shadow fw-bold rounded-pill px-3" @onclick="ConfirmOutcomeAsync" disabled="@IsConfirmingOutcome">
+                                            @if (IsConfirmingOutcome) {
+                                                <span class="spinner-border spinner-border-sm me-1"></span> <span>Checking...</span>
+                                            } else {
+                                                <i class="bi bi-search me-1"></i> <span>Check Outcome</span>
+                                            }
+                                        </button>
+                                    </div>
+                                }
                             } else {
                                 <div class="text-white-50 fst-italic text-center">
                                     <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
@@ -177,43 +189,73 @@
                                     <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
                                 </div>
                             }
+                            @if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult)) {
+                                <div class="alert alert-info alert-dismissible fade show shadow-sm mb-3" role="alert">
+                                    <i class="bi bi-robot me-1"></i> <strong>AI Checker:</strong> 
+                                    @(ParsedAiOutcome != null ? ParsedAiOutcome.OverallStatus : "Check complete (legacy format)")
+                                    @if (ParsedAiOutcome != null) {
+                                        <button class="btn btn-sm btn-outline-info ms-2 py-0" @onclick="() => showFullAnalysis = !showFullAnalysis">
+                                            @(showFullAnalysis ? "Hide Analysis" : "Show Full AI Analysis")
+                                        </button>
+                                        @if (showFullAnalysis) {
+                                            <div class="mt-2 p-2 bg-white rounded text-dark small border shadow-sm" style="white-space: pre-line; max-height: 250px; overflow-y: auto;">
+                                                @ParsedAiOutcome.FullAnalysis
+                                            </div>
+                                        }
+                                    }
+                                    <button type="button" class="btn-close" @onclick="() => reviewingBetModel.AiOutcomeResult = null"></button>
+                                </div>
+                            }
                             
                             @if (AiVisionResult != null || AiVisionError != null)
-                    {
-                        <div class="alert @(AiVisionError != null ? "alert-danger" : "alert-success") py-2 px-3 mt-2 mb-3 small shadow-sm">
-                            @if (AiVisionError != null) {
-                                <i class="bi bi-exclamation-triangle-fill me-1"></i> @AiVisionError
-                            } else {
-                                <div class="fw-bold mb-2"><i class="bi bi-check-circle-fill me-1"></i> AI Extraction Successful:</div>
-                                <div class="mb-2">
-                                    <strong>Bookmaker:</strong> @AiVisionResult.Bookmaker <br/>
-                                    <strong>Is Combo:</strong> @AiVisionResult.IsCombo <br/>
-                                    <strong>Stake:</strong> @AiVisionResult.Stake <br/>
-                                    <strong>Total Odds:</strong> @AiVisionResult.TotalOdds
-                                </div>
-                                @if (AiVisionResult.Legs != null)
-                                {
-                                    @foreach (var leg in AiVisionResult.Legs)
-                                    {
-                                        bool isActive = (leg == ActiveLookupLeg);
-                                        <div class="card mb-1 @(isActive ? "border-primary shadow" : "shadow-sm border-0")">
-                                            <div class="card-body py-1 px-2" style="font-family: monospace; font-size: 0.85em;">
-                                                Match: @leg.Match <br/>
-                                                Market: @leg.Market <br/>
-                                                Selection: @leg.Selection <br/>
-                                                Odds: @leg.Odds <br/>
-                                                <button class="btn btn-sm mt-1 py-0 px-2 @(isActive ? "btn-primary fw-bold" : "btn-outline-primary")" 
-                                                        @onclick="() => SearchOddsForLeg(leg)">
-                                                    <i class="bi @(isActive ? "bi-check2-circle" : "bi-search")"></i> 
-                                                    @(isActive ? "Active Lookup" : "Lookup Odds")
-                                                </button>
-                                            </div>
+                            {
+                                <div class="alert @(AiVisionError != null ? "alert-danger" : "alert-success") py-2 px-3 mt-2 mb-3 small shadow-sm">
+                                    @if (AiVisionError != null) {
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i> @AiVisionError
+                                    } else {
+                                        <div class="fw-bold mb-2"><i class="bi bi-check-circle-fill me-1"></i> AI Extraction Successful:</div>
+                                        <div class="mb-2">
+                                            <strong>Bookmaker:</strong> @AiVisionResult.Bookmaker <br/>
+                                            <strong>Is Combo:</strong> @AiVisionResult.IsCombo <br/>
+                                            <strong>Stake:</strong> @AiVisionResult.Stake <br/>
+                                            <strong>Total Odds:</strong> @AiVisionResult.TotalOdds
                                         </div>
+                                        @if (AiVisionResult.Legs != null)
+                                        {
+                                            @foreach (var leg in AiVisionResult.Legs)
+                                            {
+                                                var matchingOutcome = ParsedAiOutcome?.Legs?.FirstOrDefault(l => l.Match == leg.Match);
+                                                bool isActive = (leg == ActiveLookupLeg);
+                                                <div class="card mb-1 @(isActive ? "border-primary shadow" : "shadow-sm border-0")">
+                                                    <div class="card-body py-1 px-2" style="font-family: monospace; font-size: 0.85em;">
+                                                        Match: @leg.Match <br/>
+                                                        Market: @leg.Market <br/>
+                                                        Selection: @leg.Selection <br/>
+                                                        Odds: @leg.Odds <br/>
+                                                        @if (matchingOutcome != null && !string.IsNullOrEmpty(matchingOutcome.Outcome)) {
+                                                            var color = matchingOutcome.Outcome.ToLower().Contains("won") ? "text-success" : 
+                                                                        matchingOutcome.Outcome.ToLower().Contains("lost") ? "text-danger" : "text-warning";
+                                                            var emoji = matchingOutcome.Outcome.ToLower().Contains("won") ? "✅" : 
+                                                                        matchingOutcome.Outcome.ToLower().Contains("lost") ? "❌" : "➖";
+                                                            <div class="mt-1 p-1 bg-light rounded border border-secondary border-opacity-25">
+                                                                <strong>Outcome:</strong> <span class="@color fw-bold">@emoji @matchingOutcome.Outcome</span><br/>
+                                                                <strong>Stats:</strong> @matchingOutcome.Stats
+                                                            </div>
+                                                        }
+                                                        @if (reviewingBetModel.Status == "Pending") {
+                                                            <button class="btn btn-sm mt-1 py-0 px-2 @(isActive ? "btn-primary fw-bold" : "btn-outline-primary")" 
+                                                                    @onclick="() => SearchOddsForLeg(leg)">
+                                                                <i class="bi @(isActive ? "bi-check2-circle" : "bi-search")"></i> 
+                                                                @(isActive ? "Active Lookup" : "Lookup Odds")
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
                                     }
-                                }
+                                </div>
                             }
-                        </div>
-                    }
 
                    <div class="review-controls-container" @key="reviewingBetModel.Id">
                         <div class="container-fluid p-0">
@@ -446,6 +488,7 @@
                    <tr>
     
                         <th style="width: 150px;">Action</th>
+                        <th style="width: 110px;">AI Outcome</th>
                         <th>ID</th>
                         <th class="text-nowrap">Last Updated</th>
   
@@ -469,6 +512,7 @@
                                 </button>
                 
                                </td>
+                               <td class="text-center">@GetAiOutcomeBadge(bet.AiOutcomeResult)</td>
                             <td>@bet.Id</td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
   
@@ -528,6 +572,7 @@
                     <tr>
                 
                          <th>Action</th>
+                         <th style="width: 110px;">AI Outcome</th>
                          <th>ID</th>
                          <th class="text-nowrap">Last Updated</th>
             
@@ -553,6 +598,7 @@
                                     <i class="bi bi-pencil-square"></i> View/Edit
                                   </button>
                             </td>
+                            <td class="text-center">@GetAiOutcomeBadge(bet.AiOutcomeResult)</td>
                     
                             <td>@bet.Id</td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
@@ -875,8 +921,84 @@
     // AI Vision State
     private bool IsAnalyzingImage = false;
     private BettingApp.Services.AiVisionExtractionResult? AiVisionResult = null;
+    private BettingApp.Services.AiOutcomeResultData? ParsedAiOutcome = null;
+    private bool showFullAnalysis = false;
     private BettingApp.Services.AiVisionLeg? ActiveLookupLeg = null;
     private string? AiVisionError = null;
+
+    private bool IsConfirmingOutcome = false;
+
+    private async Task ConfirmOutcomeAsync()
+    {
+        if (reviewingBetModel == null) return;
+        
+        IsConfirmingOutcome = true;
+        reviewErrorMessage = null;
+        StateHasChanged();
+
+        // 1. If we don't have the AI extraction yet, we must read the image first!
+        if (string.IsNullOrEmpty(reviewingBetModel.AiVisionResultJson))
+        {
+            if (string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl))
+            {
+                reviewErrorMessage = "No screenshot available to analyze.";
+                IsConfirmingOutcome = false;
+                StateHasChanged();
+                return;
+            }
+
+            var (result, error) = await AiVision.ExtractBetSlipDataAsync(reviewingBetModel.ScreenshotUrl);
+            if (error != null)
+            {
+                reviewErrorMessage = $"Failed to extract bet data: {error}";
+                IsConfirmingOutcome = false;
+                StateHasChanged();
+                return;
+            }
+            
+            var json = System.Text.Json.JsonSerializer.Serialize(result);
+            reviewingBetModel.AiVisionResultJson = json;
+            if (originalBetModel != null) originalBetModel.AiVisionResultJson = json;
+            
+            using var context = DbFactory.CreateDbContext();
+            var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
+            if (dbBet != null)
+            {
+                dbBet.AiVisionResultJson = json;
+                await context.SaveChangesAsync();
+            }
+        }
+
+        // 2. We now have the JSON payload for the legs. Ask Gemini to search Google for the outcome.
+        var outcome = await AiVision.ConfirmOutcomeAsync(reviewingBetModel.AiVisionResultJson, reviewingBetModel.CreatedAt);
+        
+        if (!string.IsNullOrEmpty(outcome) && !outcome.StartsWith("Error") && !outcome.StartsWith("Exception"))
+        {
+            reviewingBetModel.AiOutcomeResult = outcome;
+            if (originalBetModel != null) originalBetModel.AiOutcomeResult = outcome;
+            
+            try {
+                ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
+                    outcome, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                );
+            } catch { }
+
+            using var context = DbFactory.CreateDbContext();
+            var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
+            if (dbBet != null)
+            {
+                dbBet.AiOutcomeResult = outcome;
+                await context.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            reviewErrorMessage = outcome ?? "Failed to check outcome.";
+        }
+
+        IsConfirmingOutcome = false;
+        StateHasChanged();
+    }
 
     private async Task AnalyzeImageAsync()
     {
@@ -932,6 +1054,27 @@
                     reviewingBetModel.AmountNOK = (int)(stakeDecimal * multiplier);
                 }
             }
+            
+            // Save to database so we don't need to re-read it later
+            try 
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(result);
+                reviewingBetModel.AiVisionResultJson = json;
+                using var context = DbFactory.CreateDbContext();
+                var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
+                if (dbBet != null)
+                {
+                    dbBet.AiVisionResultJson = json;
+                    await context.SaveChangesAsync();
+                }
+                
+                // Also update the original object in the lists so UI doesn't lose it on navigation
+                if (originalBetModel != null)
+                {
+                    originalBetModel.AiVisionResultJson = json;
+                }
+            } 
+            catch { }
             
             // Auto-fill the Kambi search for the FIRST leg to save time!
             if (result.Legs != null && result.Legs.Any())
@@ -1159,7 +1302,8 @@
             Id = bet.Id, UserId = bet.UserId, UserName = bet.UserName, 
             AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, 
             FreeBetAmount = bet.FreeBetAmount,
-            ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt
+            ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt,
+            AiVisionResultJson = bet.AiVisionResultJson, AiOutcomeResult = bet.AiOutcomeResult
         };
         if (reviewingBetModel.Status == "Pending")
         {
@@ -1170,6 +1314,25 @@
         reviewErrorMessage = null; errorMessage = null;
         AiVisionResult = null;
         AiVisionError = null;
+        
+        if (!string.IsNullOrEmpty(reviewingBetModel.AiVisionResultJson))
+        {
+            try {
+                AiVisionResult = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(reviewingBetModel.AiVisionResultJson);
+            } catch { }
+        }
+
+        ParsedAiOutcome = null;
+        if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult))
+        {
+            try {
+                ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
+                    reviewingBetModel.AiOutcomeResult, 
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                );
+            } catch { }
+        }
+
         ShowOddsLookup = false;
         shouldFocusReviewModal = true;
     }
@@ -1537,4 +1700,52 @@
         
         return field;
     }
+
+    private RenderFragment GetAiOutcomeBadge(string? outcomeResult) => builder =>
+    {
+        if (string.IsNullOrEmpty(outcomeResult))
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "class", "badge bg-secondary bg-opacity-75 text-light fw-normal");
+            builder.AddContent(2, "⏳ Pending");
+            builder.CloseElement();
+            return;
+        }
+
+        try
+        {
+            var parsed = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
+                outcomeResult, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            );
+
+            if (parsed != null && !string.IsNullOrEmpty(parsed.OverallStatus))
+            {
+                var lowerStatus = parsed.OverallStatus.ToLower();
+                var badgeClass = lowerStatus.Contains("won") ? "bg-success" :
+                                 lowerStatus.Contains("lost") ? "bg-danger" :
+                                 lowerStatus.Contains("live") ? "bg-warning text-dark" : "bg-info text-dark";
+                var emoji = lowerStatus.Contains("won") ? "✅" :
+                            lowerStatus.Contains("lost") ? "❌" :
+                            lowerStatus.Contains("live") ? "⏱️" : "➖";
+
+                var displayStatus = lowerStatus.Contains("won") ? "Won" :
+                                    lowerStatus.Contains("lost") ? "Lost" :
+                                    lowerStatus.Contains("live") ? "Live" :
+                                    lowerStatus.Contains("void") ? "Void" : "Checked";
+
+                builder.OpenElement(0, "span");
+                builder.AddAttribute(1, "class", $"badge {badgeClass} shadow-sm");
+                builder.AddContent(2, $"{emoji} {displayStatus}");
+                builder.CloseElement();
+                return;
+            }
+        }
+        catch { }
+
+        // Fallback for old raw string format
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", "badge bg-info text-dark shadow-sm");
+        builder.AddContent(2, "🤖 Checked");
+        builder.CloseElement();
+    };
 }

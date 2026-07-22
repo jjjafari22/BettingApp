@@ -43,6 +43,9 @@ namespace BettingApp.Data
         
         public string? ScreenshotUrl { get; set; }
         
+        public string? AiVisionResultJson { get; set; }
+        public string? AiOutcomeResult { get; set; }
+        
         // Single Source of Truth
         // Lifecycle: Pending -> Approved -> (Won / Lost / Void)
         // Or: Pending -> Rejected / Cancelled
