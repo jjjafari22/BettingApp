@@ -67,7 +67,7 @@ namespace BettingApp.Services
                 if (string.IsNullOrEmpty(bet.AiVisionResultJson)) continue;
 
                 _logger.LogInformation($"Checking outcome for bet #{bet.Id}");
-                string result = await _aiVisionService.ConfirmOutcomeAsync(bet.AiVisionResultJson, bet.CreatedAt);
+                string? result = await _aiVisionService.ConfirmOutcomeAsync(bet.AiVisionResultJson, bet.CreatedAt);
                 
                 // Refresh bet from DB in case it was modified
                 var dbBet = await context.Bets.FindAsync(bet.Id);
@@ -77,19 +77,26 @@ namespace BettingApp.Services
                 
                 try 
                 {
-                    var doc = JsonDocument.Parse(result);
-                    if (doc.RootElement.TryGetProperty("overallStatus", out var statusElement))
+                    if (string.IsNullOrEmpty(result))
                     {
-                        var status = statusElement.GetString();
-                        if (status == "MATCH FINISHED - WON" || status == "MATCH FINISHED - LOST" || status == "MATCH FINISHED - VOID")
+                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                    }
+                    else
+                    {
+                        var doc = JsonDocument.Parse(result);
+                        if (doc.RootElement.TryGetProperty("overallStatus", out var statusElement))
                         {
-                            // Match is finished, stop checking
-                            dbBet.NextCheckTime = null;
-                        }
-                        else 
-                        {
-                            // Match is still running or unknown, check again in 60 minutes
-                            dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                            var status = statusElement.GetString();
+                            if (status == "MATCH FINISHED - WON" || status == "MATCH FINISHED - LOST" || status == "MATCH FINISHED - VOID")
+                            {
+                                // Match is finished, stop checking
+                                dbBet.NextCheckTime = null;
+                            }
+                            else 
+                            {
+                                // Match is still running or unknown, check again in 60 minutes
+                                dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                            }
                         }
                     }
                 }
