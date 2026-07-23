@@ -36,6 +36,9 @@ namespace BettingApp.Services
         
         [JsonPropertyName("selection")]
         public string Selection { get; set; } = "";
+        
+        [JsonPropertyName("badges")]
+        public List<string> Badges { get; set; } = new();
 
         [JsonPropertyName("odds")]
         public string Odds { get; set; } = "";
@@ -105,7 +108,8 @@ namespace BettingApp.Services
                              "5) legs: an array of objects representing each individual bet, containing: " +
                              "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST use the official, native spelling of the team names, INCLUDING proper diacritics/special characters, even if the screenshot omits them! (e.g. you MUST output 'Beşiktaş' instead of 'Besiktas', and 'Bodø/Glimt' instead of 'Bodo/Glimt'). This is required for our database to find the match. " +
                              "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! " +
-                             "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop (like scoring, cards, assists), you MUST include the exact condition in the selection (e.g. 'Marcus Rashford - Will Score', 'Erling Haaland - Over 1.5 Shots', 'Bukayo Saka - Yes'). Do NOT just write the player's name! Translate to English if necessary. CRITICAL FOR POWER SUB: If there is a label indicating 'Power Sub', 'Substitute', or similar on the bet, you MUST append '(Power Sub)' to the selection text so the outcome checker knows it applies to substitutes as well! " +
+                             "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! " +
+                             "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or icons near the bet (e.g., 'Power Sub', 'Early Payout', 'Super Boost'). If you see any, add them to this array! " +
                              "   - odds (e.g. '1.95'). " +
                              "Return ONLY a raw JSON object with keys: bookmaker, isCombo, totalOdds, stake, legs. Do not include markdown blocks like ```json.";
 
@@ -208,6 +212,18 @@ namespace BettingApp.Services
 
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                     var result = JsonSerializer.Deserialize<AiVisionExtractionResult>(textResponse, options);
+                    
+                    if (result?.Legs != null)
+                    {
+                        foreach (var leg in result.Legs)
+                        {
+                            if (leg.Badges != null && leg.Badges.Any(b => b.Contains("Power Sub", StringComparison.OrdinalIgnoreCase) || b.Contains("Substitute", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                if (!leg.Selection.Contains("(Power Sub)")) leg.Selection += " (Power Sub)";
+                            }
+                        }
+                    }
+
                     return (result, null);
                 }
 
