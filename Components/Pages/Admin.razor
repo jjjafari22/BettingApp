@@ -871,9 +871,7 @@
                     && (
                         (b.Status == "Won" && !b.AiOutcomeResult.Contains("WON")) ||
                         (b.Status == "Lost" && !b.AiOutcomeResult.Contains("LOST")) ||
-                        (b.Status == "Void" && !b.AiOutcomeResult.Contains("VOID")) ||
-                        (b.Status == "Rejected") || 
-                        (b.Status == "Cancelled")
+                        (b.Status == "Void" && !b.AiOutcomeResult.Contains("VOID"))
                     ));
             }
             else
