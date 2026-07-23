@@ -17,6 +17,7 @@
 @inject IConfiguration Config
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
+@inject Microsoft.Extensions.DependencyInjection.IServiceScopeFactory ScopeFactory
 
 <PageTitle>Home</PageTitle>
 
@@ -695,10 +696,73 @@ else
 
             await context.SaveChangesAsync();
             
-            foreach (var bet in betsToNotify)
+            // Fire and forget background task to process AI and then notify Discord
+            var betIdsToProcess = betsToNotify.Select(b => b.Id).ToList();
+            _ = Task.Run(async () =>
             {
-                await DiscordService.NotifyAdminNewPickAsync(bet);
-            }
+                try {
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Starting background task for {betIdsToProcess.Count} bets\n");
+                    using var scope = ScopeFactory.CreateScope();
+                    var aiVision = scope.ServiceProvider.GetRequiredService<BettingApp.Services.AiVisionService>();
+                    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BettingApp.Data.ApplicationDbContext>>();
+                    var discord = scope.ServiceProvider.GetRequiredService<BettingApp.Services.DiscordNotificationService>();
+                    var hub = scope.ServiceProvider.GetRequiredService<IHubContext<BettingApp.Hubs.BetHub>>();
+
+                    foreach (var id in betIdsToProcess)
+                    {
+                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Processing bet ID {id}\n");
+                        using var bgContext = dbFactory.CreateDbContext();
+                        var dbBet = await bgContext.Bets.FindAsync(id);
+                        if (dbBet != null && !string.IsNullOrEmpty(dbBet.ScreenshotUrl))
+                        {
+                            System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Calling AI Vision for URL {dbBet.ScreenshotUrl}\n");
+                            var (result, error) = await aiVision.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl);
+                            
+                            if (error != null)
+                            {
+                                System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI ERROR: {error}\n");
+                            }
+                            
+                            if (result != null)
+                            {
+                                System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI SUCCESS. Serializing result...\n");
+                                dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(result);
+                                
+                                // Auto-populate Stake and Odds right away so they appear in the Admin table!
+                                if (!string.IsNullOrEmpty(result.TotalOdds))
+                                {
+                                    var cleanOdds = result.TotalOdds.Replace(",", ".");
+                                    if (decimal.TryParse(cleanOdds, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal odds))
+                                    {
+                                        dbBet.Odds = Math.Floor(odds / 0.05m) * 0.05m;
+                                    }
+                                }
+                                if (!string.IsNullOrEmpty(result.Stake))
+                                {
+                                    var rawStake = result.Stake.Trim().ToLower();
+                                    int multiplier = 1;
+                                    if (rawStake.EndsWith("k"))
+                                    {
+                                        multiplier = 1000;
+                                        rawStake = rawStake.Substring(0, rawStake.Length - 1);
+                                    }
+                                    if (decimal.TryParse(rawStake.Replace(",", "."), out var parsedStake))
+                                    {
+                                        dbBet.AmountNOK = (int)(parsedStake * multiplier);
+                                    }
+                                }
+
+                                await bgContext.SaveChangesAsync();
+                                await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+                                System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Saved to DB and broadcasted SignalR.\n");
+                            }
+                            await discord.NotifyAdminNewPickAsync(dbBet);
+                        }
+                    }
+                } catch (Exception ex) { 
+                    System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] EXCEPTION: {ex}\n");
+                }
+            });
 
             var msg = betsToNotify.Count == 1 
                 ? $"New pick submitted by {userName}" 

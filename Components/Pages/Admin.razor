@@ -159,11 +159,12 @@
                                     </div>
                                 } else {
                                     <div class="position-absolute bottom-0 start-50 translate-middle-x mb-3" style="z-index: 10;">
-                                        <button class="btn btn-info text-white shadow fw-bold rounded-pill px-3" @onclick="ConfirmOutcomeAsync" disabled="@IsConfirmingOutcome">
-                                            @if (IsConfirmingOutcome) {
-                                                <span class="spinner-border spinner-border-sm me-1"></span> <span>Checking...</span>
+                                        <button class="btn btn-info text-white shadow fw-bold rounded-pill px-3" @onclick="ConfirmOutcomeAsync" disabled="@ConfirmingOutcomeBetIds.Contains(reviewingBetModel.Id)">
+                                            @if (ConfirmingOutcomeBetIds.Contains(reviewingBetModel.Id)) {
+                                                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                                <span>Checking...</span>
                                             } else {
-                                                <i class="bi bi-search me-1"></i> <span>Check Outcome</span>
+                                                <i class="bi bi-robot me-1"></i> <span>Check Outcome</span>
                                             }
                                         </button>
                                     </div>
@@ -222,9 +223,10 @@
                                         </div>
                                         @if (AiVisionResult.Legs != null)
                                         {
-                                            @foreach (var leg in AiVisionResult.Legs)
+                                            @for (int i = 0; i < AiVisionResult.Legs.Count; i++)
                                             {
-                                                var matchingOutcome = ParsedAiOutcome?.Legs?.FirstOrDefault(l => l.Match == leg.Match);
+                                                var leg = AiVisionResult.Legs[i];
+                                                var matchingOutcome = (ParsedAiOutcome?.Legs?.Count > i) ? ParsedAiOutcome.Legs[i] : ParsedAiOutcome?.Legs?.FirstOrDefault(l => l.Match == leg.Match);
                                                 bool isActive = (leg == ActiveLookupLeg);
                                                 <div class="card mb-1 @(isActive ? "border-primary shadow" : "shadow-sm border-0")">
                                                     <div class="card-body py-1 px-2" style="font-family: monospace; font-size: 0.85em;">
@@ -926,42 +928,45 @@
     private BettingApp.Services.AiVisionLeg? ActiveLookupLeg = null;
     private string? AiVisionError = null;
 
-    private bool IsConfirmingOutcome = false;
+    private HashSet<int> ConfirmingOutcomeBetIds = new();
 
     private async Task ConfirmOutcomeAsync()
     {
         if (reviewingBetModel == null) return;
         
-        IsConfirmingOutcome = true;
-        reviewErrorMessage = null;
+        var currentBet = reviewingBetModel;
+        var currentOriginal = originalBetModel;
+
+        ConfirmingOutcomeBetIds.Add(currentBet.Id);
+        if (reviewingBetModel.Id == currentBet.Id) reviewErrorMessage = null;
         StateHasChanged();
 
         // 1. If we don't have the AI extraction yet, we must read the image first!
-        if (string.IsNullOrEmpty(reviewingBetModel.AiVisionResultJson))
+        if (string.IsNullOrEmpty(currentBet.AiVisionResultJson))
         {
-            if (string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl))
+            if (string.IsNullOrEmpty(currentBet.ScreenshotUrl))
             {
-                reviewErrorMessage = "No screenshot available to analyze.";
-                IsConfirmingOutcome = false;
+                if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = "No screenshot available to analyze.";
+                ConfirmingOutcomeBetIds.Remove(currentBet.Id);
                 StateHasChanged();
                 return;
             }
 
-            var (result, error) = await AiVision.ExtractBetSlipDataAsync(reviewingBetModel.ScreenshotUrl);
+            var (result, error) = await AiVision.ExtractBetSlipDataAsync(currentBet.ScreenshotUrl);
             if (error != null)
             {
-                reviewErrorMessage = $"Failed to extract bet data: {error}";
-                IsConfirmingOutcome = false;
+                if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = $"Failed to extract bet data: {error}";
+                ConfirmingOutcomeBetIds.Remove(currentBet.Id);
                 StateHasChanged();
                 return;
             }
             
             var json = System.Text.Json.JsonSerializer.Serialize(result);
-            reviewingBetModel.AiVisionResultJson = json;
-            if (originalBetModel != null) originalBetModel.AiVisionResultJson = json;
+            currentBet.AiVisionResultJson = json;
+            if (currentOriginal != null) currentOriginal.AiVisionResultJson = json;
             
             using var context = DbFactory.CreateDbContext();
-            var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
+            var dbBet = await context.Bets.FindAsync(currentBet.Id);
             if (dbBet != null)
             {
                 dbBet.AiVisionResultJson = json;
@@ -970,21 +975,24 @@
         }
 
         // 2. We now have the JSON payload for the legs. Ask Gemini to search Google for the outcome.
-        var outcome = await AiVision.ConfirmOutcomeAsync(reviewingBetModel.AiVisionResultJson, reviewingBetModel.CreatedAt);
+        var outcome = await AiVision.ConfirmOutcomeAsync(currentBet.AiVisionResultJson, currentBet.CreatedAt);
         
         if (!string.IsNullOrEmpty(outcome) && !outcome.StartsWith("Error") && !outcome.StartsWith("Exception"))
         {
-            reviewingBetModel.AiOutcomeResult = outcome;
-            if (originalBetModel != null) originalBetModel.AiOutcomeResult = outcome;
+            currentBet.AiOutcomeResult = outcome;
+            if (currentOriginal != null) currentOriginal.AiOutcomeResult = outcome;
             
-            try {
-                ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
-                    outcome, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                );
-            } catch { }
+            if (reviewingBetModel?.Id == currentBet.Id)
+            {
+                try {
+                    ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
+                        outcome, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+                } catch { }
+            }
 
             using var context = DbFactory.CreateDbContext();
-            var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
+            var dbBet = await context.Bets.FindAsync(currentBet.Id);
             if (dbBet != null)
             {
                 dbBet.AiOutcomeResult = outcome;
@@ -993,10 +1001,10 @@
         }
         else
         {
-            reviewErrorMessage = outcome ?? "Failed to check outcome.";
+            if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = outcome ?? "Failed to check outcome.";
         }
 
-        IsConfirmingOutcome = false;
+        ConfirmingOutcomeBetIds.Remove(currentBet.Id);
         StateHasChanged();
     }
 
@@ -1004,6 +1012,7 @@
     {
         if (reviewingBetModel == null || string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) return;
         
+        var capturingBetId = reviewingBetModel.Id;
         IsAnalyzingImage = true;
         AiVisionResult = null;
         ActiveLookupLeg = null;
@@ -1011,6 +1020,10 @@
         StateHasChanged();
 
         var (result, error) = await AiVision.ExtractBetSlipDataAsync(reviewingBetModel.ScreenshotUrl);
+        
+        // If the user navigated to another bet while processing, discard the result
+        if (reviewingBetModel == null || reviewingBetModel.Id != capturingBetId) return;
+
         IsAnalyzingImage = false;
         
         if (error != null)
@@ -1028,7 +1041,8 @@
                 var cleanOdds = result.TotalOdds.Replace(",", ".");
                 if (decimal.TryParse(cleanOdds, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal odds))
                 {
-                    reviewingBetModel.Odds = odds;
+                    // Round down to the nearest 0.05
+                    reviewingBetModel.Odds = Math.Floor(odds / 0.05m) * 0.05m;
                 }
             }
 
@@ -1319,6 +1333,31 @@
         {
             try {
                 AiVisionResult = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(reviewingBetModel.AiVisionResultJson);
+                if (reviewingBetModel.Status == "Pending" && AiVisionResult != null)
+                {
+                    if (reviewingBetModel.Odds == 0 && !string.IsNullOrEmpty(AiVisionResult.TotalOdds))
+                    {
+                        var cleanOdds = AiVisionResult.TotalOdds.Replace(",", ".");
+                        if (decimal.TryParse(cleanOdds, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal odds))
+                        {
+                            reviewingBetModel.Odds = Math.Floor(odds / 0.05m) * 0.05m;
+                        }
+                    }
+                    if ((reviewingBetModel.AmountNOK == null || reviewingBetModel.AmountNOK == 0) && !string.IsNullOrEmpty(AiVisionResult.Stake))
+                    {
+                        var rawStake = AiVisionResult.Stake.Trim().ToLower();
+                        int multiplier = 1;
+                        if (rawStake.EndsWith("k"))
+                        {
+                            multiplier = 1000;
+                            rawStake = rawStake.Substring(0, rawStake.Length - 1);
+                        }
+                        if (decimal.TryParse(rawStake.Replace(",", "."), out var parsedStake))
+                        {
+                            reviewingBetModel.AmountNOK = (int)(parsedStake * multiplier);
+                        }
+                    }
+                }
             } catch { }
         }
 
@@ -1327,11 +1366,12 @@
         {
             try {
                 ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
-                    reviewingBetModel.AiOutcomeResult, 
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    reviewingBetModel.AiOutcomeResult, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
                 );
             } catch { }
         }
+
+        StateHasChanged();
 
         ShowOddsLookup = false;
         shouldFocusReviewModal = true;
@@ -1376,10 +1416,6 @@
     private async Task NavigateReview(int direction)
     {
         if (currentReviewList == null || currentReviewList.Count == 0) return;
-        modalSuccessMessage = null;
-        AiVisionResult = null;
-        AiVisionError = null;
-        ShowOddsLookup = false;
         int newIndex = currentReviewIndex + direction;
 
         if (newIndex < 0) 
@@ -1417,6 +1453,11 @@
 
         if (newIndex != currentReviewIndex && newIndex >= 0 && newIndex < currentReviewList.Count)
         {
+            modalSuccessMessage = null;
+            AiVisionResult = null;
+            AiVisionError = null;
+            ShowOddsLookup = false;
+            
             var nextBet = currentReviewList[newIndex];
             StartReview(nextBet);
         }
