@@ -50,6 +50,7 @@ builder.Services.AddHttpClient<AiVisionService>();
 builder.Services.AddSingleton<MarketMappingService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();
 builder.Services.AddHostedService<PendingBetsNotificationService>();
+builder.Services.AddHostedService<BetMonitoringService>();
 
 // Register Discord Service
 builder.Services.AddSingleton<DiscordNotificationService>();

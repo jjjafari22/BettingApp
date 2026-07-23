@@ -350,5 +350,99 @@ namespace BettingApp.Services
                 return $"Exception checking outcome: {ex.Message}";
             }
         }
+
+        public async Task<DateTime?> ExtractMatchStartTimeAsync(string extractedBetDataJson, DateTime betPlacedAt)
+        {
+            if (string.IsNullOrEmpty(_apiKey)) return null;
+
+            try
+            {
+                var prompt = $"You are a sports scheduler. Here is the JSON data of a bet slip placed on {betPlacedAt:yyyy-MM-dd HH:mm}.\n" +
+                             $"{extractedBetDataJson}\n\n" +
+                             $"Your task is to identify the EARLIEST (FIRST) START TIME among all the matches listed in this bet slip.\n" +
+                             $"Use Google Search to find the scheduled kick-off time for the matches. Make sure to look for matches occurring ON OR AFTER {betPlacedAt:yyyy-MM-dd}.\n" +
+                             $"First, list out each match and the start time you found. Then, return a JSON object wrapped in a ```json code block containing a single field 'earliestMatchStartTimeUtc' with the ISO 8601 UTC timestamp of the earliest start time among all matches (e.g., '2026-07-23T18:00:00Z'). If you cannot find the time, return null for the field.";
+
+                var payload = new
+                {
+                    contents = new[] { new { parts = new[] { new { text = prompt } } } },
+                    tools = new[] { new { google_search = new object() } }
+                };
+
+                var jsonPayload = JsonSerializer.Serialize(payload);
+                var requestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                
+                // Auto-resolve the best available Flash model
+                var modelsUrl = $"https://generativelanguage.googleapis.com/v1beta/models?key={_apiKey}";
+                var modelsResponse = await _httpClient.GetAsync(modelsUrl);
+                if (!modelsResponse.IsSuccessStatusCode) return null;
+                
+                var modelsJson = await modelsResponse.Content.ReadAsStringAsync();
+                using var modelsDoc = JsonDocument.Parse(modelsJson);
+                var resolvedModel = "gemini-1.5-flash"; // fallback
+                
+                double maxVersion = 0;
+                foreach (var m in modelsDoc.RootElement.GetProperty("models").EnumerateArray())
+                {
+                    var name = m.GetProperty("name").GetString();
+                    if (name != null && name.Contains("flash") && 
+                        !name.Contains("tts") && !name.Contains("text") && !name.Contains("preview") && !name.Contains("vision"))
+                    {
+                        bool supportsGenerate = false;
+                        if (m.TryGetProperty("supportedGenerationMethods", out var methods))
+                        {
+                            foreach (var method in methods.EnumerateArray())
+                            {
+                                if (method.GetString() == "generateContent") supportsGenerate = true;
+                            }
+                        }
+                        if (supportsGenerate)
+                        {
+                            var match = System.Text.RegularExpressions.Regex.Match(name, @"gemini-(\d+\.\d+)-flash$");
+                            if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double version))
+                            {
+                                if (version > maxVersion)
+                                {
+                                    maxVersion = version;
+                                    resolvedModel = name.Replace("models/", "");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                var url = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
+                var response = await _httpClient.PostAsync(url, requestContent);
+                
+                if (!response.IsSuccessStatusCode) return null;
+
+                var json = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                var text = doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
+
+                if (!string.IsNullOrEmpty(text))
+                {
+                    var jsonMatch = System.Text.RegularExpressions.Regex.Match(text, @"```json\s*(\{.*?\})\s*```", System.Text.RegularExpressions.RegexOptions.Singleline);
+                    if (jsonMatch.Success)
+                    {
+                        text = jsonMatch.Groups[1].Value;
+                    }
+
+                    var resultDoc = JsonDocument.Parse(text.Trim());
+                    if (resultDoc.RootElement.TryGetProperty("earliestMatchStartTimeUtc", out var timeElement) && timeElement.ValueKind != JsonValueKind.Null)
+                    {
+                        if (DateTime.TryParse(timeElement.GetString(), null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsedTime))
+                        {
+                            return parsedTime.ToUniversalTime();
+                        }
+                    }
+                }
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 }

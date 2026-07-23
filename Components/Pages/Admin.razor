@@ -22,6 +22,15 @@
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 
+<style>
+    @@keyframes pulse {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 4px rgba(220, 53, 69, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+    }
+    .pulse-dot { animation: pulse 2s infinite; }
+</style>
+
 <script>
     function calculatePayout() {
         const amountInput = document.getElementById('betAmountInput');
@@ -523,6 +532,7 @@
     
                         <th style="width: 150px;">Action</th>
                         <th style="width: 110px;">AI Outcome</th>
+                        <th style="width: 130px;">Auto-Tracking</th>
                         <th>ID</th>
                         <th class="text-nowrap">Last Updated</th>
   
@@ -552,6 +562,9 @@
                                    } else {
                                        @GetAiOutcomeBadge(bet.AiOutcomeResult)
                                    }
+                               </td>
+                               <td class="text-center">
+                                   @GetMonitoringStatusBadge(bet)
                                </td>
                             <td>@bet.Id</td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
@@ -1711,6 +1724,44 @@
                 TargetUserName = bet.UserName,
                 Details = $"Bet ID: {bet.Id}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Payout: {dbBet.PotentialPayout:N0}"
             });
+
+            if (newStatus == "Approved" && !string.IsNullOrEmpty(dbBet.AiVisionResultJson) && dbBet.MatchStartTime == null)
+            {
+                var betId = dbBet.Id;
+                var json = dbBet.AiVisionResultJson;
+                var placedAt = dbBet.CreatedAt;
+                
+                _ = Task.Run(async () => {
+                    try 
+                    {
+                        var startTime = await AiVision.ExtractMatchStartTimeAsync(json, placedAt);
+                        
+                        using var bgContext = DbFactory.CreateDbContext();
+                        var b = await bgContext.Bets.FindAsync(betId);
+                        if (b != null && b.Status == "Approved")
+                        {
+                            if (startTime.HasValue)
+                            {
+                                b.MatchStartTime = startTime;
+                                var twoHoursAfter = startTime.Value.AddHours(2);
+                                b.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
+                            }
+                            else
+                            {
+                                // Fallback if AI fails: schedule check immediately
+                                b.NextCheckTime = DateTime.UtcNow;
+                            }
+                            await bgContext.SaveChangesAsync();
+                            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error extracting start time: {ex.Message}");
+                    }
+                });
+            }
+
             await context.SaveChangesAsync();
         }
 
@@ -1894,5 +1945,40 @@
         builder.AddAttribute(1, "class", "badge bg-info text-dark shadow-sm");
         builder.AddContent(2, "🤖 Checked");
         builder.CloseElement();
+    };
+
+    private RenderFragment GetMonitoringStatusBadge(Bet bet) => __builder =>
+    {
+        if (ConfirmingOutcomeBetIds.Contains(bet.Id))
+        {
+            <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>
+        }
+        else if (bet.NextCheckTime == null)
+        {
+            if (bet.MatchStartTime == null)
+            {
+                <span class="badge bg-secondary shadow-sm"><i class="bi bi-hourglass me-1"></i> Pending</span>
+            }
+            else
+            {
+                <span class="badge bg-secondary shadow-sm"><i class="bi bi-stop-circle me-1"></i> Stopped</span>
+            }
+        }
+        else
+        {
+            var now = DateTime.UtcNow;
+            if (bet.MatchStartTime.HasValue && bet.MatchStartTime.Value > now)
+            {
+                <span class="badge bg-warning text-dark shadow-sm" title="Match hasn't started yet"><i class="bi bi-calendar-event me-1"></i> Starts @ToUserLocal(bet.MatchStartTime.Value).ToString("g")</span>
+            }
+            else if (bet.NextCheckTime.Value <= now)
+            {
+                <span class="badge bg-danger shadow-sm"><span class="pulse-dot bg-white rounded-circle d-inline-block me-1" style="width: 6px; height: 6px;"></span> Live Check</span>
+            }
+            else 
+            {
+                <span class="badge bg-primary shadow-sm"><i class="bi bi-clock me-1"></i> Check @ToUserLocal(bet.NextCheckTime.Value).ToString("g")</span>
+            }
+        }
     };
 }

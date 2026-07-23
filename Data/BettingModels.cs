@@ -51,6 +51,9 @@ namespace BettingApp.Data
         // Or: Pending -> Rejected / Cancelled
         public string Status { get; set; } = "Pending";
         
+        public DateTime? MatchStartTime { get; set; }
+        public DateTime? NextCheckTime { get; set; }
+        
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
