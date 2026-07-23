@@ -192,8 +192,17 @@
                             }
                             @if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult)) {
                                 <div class="alert alert-info alert-dismissible fade show shadow-sm mb-3" role="alert">
-                                    <i class="bi bi-robot me-1"></i> <strong>AI Checker:</strong> 
-                                    @(ParsedAiOutcome != null ? ParsedAiOutcome.OverallStatus : "Check complete (legacy format)")
+                                    @if (ParsedAiOutcome != null) {
+                                        var statusLower = ParsedAiOutcome.OverallStatus.ToLower();
+                                        var badgeClass = "badge bg-secondary";
+                                        if (statusLower.Contains("won")) badgeClass = "badge bg-success";
+                                        else if (statusLower.Contains("lost")) badgeClass = "badge bg-danger";
+                                        else if (statusLower.Contains("not completed") || statusLower.Contains("pending")) badgeClass = "badge text-bg-warning";
+                                        
+                                        <span class="@badgeClass fs-6">@ParsedAiOutcome.OverallStatus</span>
+                                    } else {
+                                        <span>Check complete (legacy format)</span>
+                                    }
                                     @if (ParsedAiOutcome != null) {
                                         <button class="btn btn-sm btn-outline-info ms-2 py-0" @onclick="() => showFullAnalysis = !showFullAnalysis">
                                             @(showFullAnalysis ? "Hide Analysis" : "Show Full AI Analysis")
@@ -1758,17 +1767,32 @@
             if (parsed != null && !string.IsNullOrEmpty(parsed.OverallStatus))
             {
                 var lowerStatus = parsed.OverallStatus.ToLower();
-                var badgeClass = lowerStatus.Contains("won") ? "bg-success" :
-                                 lowerStatus.Contains("lost") ? "bg-danger" :
-                                 lowerStatus.Contains("live") ? "bg-warning text-dark" : "bg-info text-dark";
-                var emoji = lowerStatus.Contains("won") ? "✅" :
-                            lowerStatus.Contains("lost") ? "❌" :
-                            lowerStatus.Contains("live") ? "⏱️" : "➖";
-
-                var displayStatus = lowerStatus.Contains("won") ? "Won" :
-                                    lowerStatus.Contains("lost") ? "Lost" :
-                                    lowerStatus.Contains("live") ? "Live" :
-                                    lowerStatus.Contains("void") ? "Void" : "Checked";
+                
+                var badgeClass = "bg-secondary text-light";
+                var emoji = "➖";
+                var displayStatus = "Unknown";
+                
+                if (lowerStatus.Contains("won")) {
+                    badgeClass = "bg-success text-light";
+                    emoji = "✅";
+                    displayStatus = "Won";
+                } else if (lowerStatus.Contains("lost")) {
+                    badgeClass = "bg-danger text-light";
+                    emoji = "❌";
+                    displayStatus = "Lost";
+                } else if (lowerStatus.Contains("void")) {
+                    badgeClass = "bg-secondary text-light";
+                    emoji = "➖";
+                    displayStatus = "Void";
+                } else if (lowerStatus.Contains("not completed") || lowerStatus.Contains("live")) {
+                    badgeClass = "bg-warning text-dark";
+                    emoji = "⏱️";
+                    displayStatus = "Not Completed";
+                } else if (lowerStatus.Contains("pending") || lowerStatus.Contains("awaiting")) {
+                    badgeClass = "bg-info text-dark";
+                    emoji = "⏳";
+                    displayStatus = "Awaiting Results";
+                }
 
                 builder.OpenElement(0, "span");
                 builder.AddAttribute(1, "class", $"badge {badgeClass} shadow-sm");
