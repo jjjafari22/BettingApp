@@ -204,7 +204,7 @@
                                         if (statusLower.Contains("won")) badgeClass = "badge bg-success";
                                         else if (statusLower.Contains("lost")) badgeClass = "badge bg-danger";
                                         else if (statusLower.Contains("in progress") || statusLower.Contains("live") || statusLower.Contains("not completed")) badgeClass = "badge text-bg-warning";
-                                        else if (statusLower.Contains("not started")) badgeClass = "badge text-bg-info";
+                                        else if (statusLower.Contains("not started") || statusLower.Contains("pending")) badgeClass = "badge text-bg-info";
                                         else if (statusLower.Contains("unknown")) badgeClass = "badge text-bg-secondary";
                                         
                                         <span class="@badgeClass fs-6">@ParsedAiOutcome.OverallStatus</span>
@@ -1818,7 +1818,7 @@
                     badgeClass = "bg-warning text-dark";
                     emoji = "⏱️";
                     displayStatus = "In Progress";
-                } else if (lowerStatus.Contains("not started")) {
+                } else if (lowerStatus.Contains("not started") || lowerStatus.Contains("pending")) {
                     badgeClass = "bg-info text-dark";
                     emoji = "📅";
                     displayStatus = "Not Started";

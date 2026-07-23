@@ -240,7 +240,7 @@ namespace BettingApp.Services
                              $"- 'MATCH FINISHED - WON' (if all legs have finished and won)\n" +
                              $"- 'MATCH FINISHED - LOST' (if any leg has finished and lost, even if other legs are pending)\n" +
                              $"- 'MATCH FINISHED - VOID' (if the bet was voided)\n" +
-                             $"- 'MATCH NOT STARTED' (if the match has not started yet, and no leg has definitively lost)\n" +
+                             $"- 'MATCH NOT STARTED' (if the match has not started yet, and no leg has definitively lost. Do NOT use 'BET PENDING' or other variations!)\n" +
                              $"- 'MATCH IN PROGRESS' (if the match is currently in progress/live, and no leg has definitively lost yet)\n" +
                              $"- 'UNKNOWN' (if the match is finished but the specific prop result cannot be found yet)\n" +
                              $"Return a strictly formatted JSON object with the following schema:\n" +
