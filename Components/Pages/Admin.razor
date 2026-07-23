@@ -147,13 +147,19 @@
                                 <div class="w-100 h-100 p-2 d-flex align-items-center justify-content-center overflow-auto">
                                     <img src="@reviewingBetModel.ScreenshotUrl" class="img-fluid rounded shadow" style="max-height: 100%; object-fit: contain;" alt="Bet Screenshot" />
                                 </div>
-                                @if (reviewingBetModel.Status == "Pending") {
+                                @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") {
                                     <div class="position-absolute bottom-0 start-50 translate-middle-x mb-3" style="z-index: 10;">
-                                        <button class="btn btn-warning shadow fw-bold rounded-pill px-3" @onclick="AnalyzeImageAsync" disabled="@IsAnalyzingImage">
-                                            @if (IsAnalyzingImage) {
+                                        @{
+                                            bool isBackgroundProcessing = BettingApp.Services.AiVisionService.ProcessingAutoReadBetIds.ContainsKey(reviewingBetModel.Id);
+                                            bool isManualProcessing = AnalyzingImageBetIds.Contains(reviewingBetModel.Id);
+                                            bool showAnalyzing = isBackgroundProcessing || isManualProcessing;
+                                            bool hasRanAlready = !string.IsNullOrEmpty(reviewingBetModel.AiVisionResultJson);
+                                        }
+                                        <button class="btn btn-warning shadow fw-bold rounded-pill px-3" @onclick="AnalyzeImageAsync" disabled="@showAnalyzing">
+                                            @if (showAnalyzing) {
                                                 <span class="spinner-border spinner-border-sm me-1"></span> <span>Analyzing...</span>
                                             } else {
-                                                <i class="bi bi-robot me-1"></i> <span>AI Auto-Read</span>
+                                                <i class="bi bi-robot me-1"></i> <span>@(hasRanAlready ? "Re-run AI" : "AI Auto-Read")</span>
                                             }
                                         </button>
                                     </div>
@@ -164,7 +170,7 @@
                                                 <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                                                 <span>Checking...</span>
                                             } else {
-                                                <i class="bi bi-robot me-1"></i> <span>Check Outcome</span>
+                                                <i class="bi bi-robot me-1"></i> <span>@(string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) ? "Check Outcome" : "Re-Check Outcome")</span>
                                             }
                                         </button>
                                     </div>
@@ -197,7 +203,9 @@
                                         var badgeClass = "badge bg-secondary";
                                         if (statusLower.Contains("won")) badgeClass = "badge bg-success";
                                         else if (statusLower.Contains("lost")) badgeClass = "badge bg-danger";
-                                        else if (statusLower.Contains("not completed") || statusLower.Contains("pending")) badgeClass = "badge text-bg-warning";
+                                        else if (statusLower.Contains("in progress") || statusLower.Contains("live") || statusLower.Contains("not completed")) badgeClass = "badge text-bg-warning";
+                                        else if (statusLower.Contains("not started")) badgeClass = "badge text-bg-info";
+                                        else if (statusLower.Contains("unknown")) badgeClass = "badge text-bg-secondary";
                                         
                                         <span class="@badgeClass fs-6">@ParsedAiOutcome.OverallStatus</span>
                                     } else {
@@ -253,7 +261,7 @@
                                                                 <strong>Stats:</strong> @matchingOutcome.Stats
                                                             </div>
                                                         }
-                                                        @if (reviewingBetModel.Status == "Pending") {
+                                                        @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") {
                                                             <button class="btn btn-sm mt-1 py-0 px-2 @(isActive ? "btn-primary fw-bold" : "btn-outline-primary")" 
                                                                     @onclick="() => SearchOddsForLeg(leg)">
                                                                 <i class="bi @(isActive ? "bi-check2-circle" : "bi-search")"></i> 
@@ -401,7 +409,7 @@
                                 </div>
                             }
 
-                           @if (reviewingBetModel.Status == "Pending") {
+                           @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") {
                              
                                <div class="row g-3">
                                    <div class="col-6"><button class="btn btn-success w-100 btn-xl-mobile fw-bold shadow-sm" @onclick='() => ProcessBet(reviewingBetModel, "Approved")'><i class="bi bi-check-lg me-1"></i> Approve</button></div>
@@ -556,6 +564,7 @@
                 <h4 class="mb-0 text-truncate" style="font-size: clamp(1rem, 4vw, 1.5rem);">Completed (@totalCompletedBets)</h4>
                 <select class="form-select form-select-sm shadow-sm flex-shrink-0" style="width: auto; min-width: 80px;" @onchange="OnCompletedStatusFilterChanged" value="@completedStatusFilter">
                     <option value="All">All</option>
+                    <option value="Mismatch">⚠️ Mismatch (AI vs Admin)</option>
                     <option value="Won">Won</option>
                     <option value="Lost">Lost</option>
                     <option value="Void">Void</option>
@@ -801,8 +810,9 @@
     private async Task LoadPendingBets()
     {
         using var context = DbFactory.CreateDbContext();
-        totalPendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
-        pendingBets = await context.Bets.Where(b => b.Status == "Pending")
+        var twoMinsAgo = DateTime.UtcNow.AddMinutes(-2);
+        totalPendingBets = await context.Bets.CountAsync(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo));
+        pendingBets = await context.Bets.Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo))
             .OrderByDescending(b => b.UpdatedAt)
             .Skip((pendingPage - 1) * pageSize)
             .Take(pageSize)
@@ -852,6 +862,19 @@
             if (completedStatusFilter == "All")
             {
                 query = query.Where(b => completedStatuses.Contains(b.Status));
+            }
+            else if (completedStatusFilter == "Mismatch")
+            {
+                query = query.Where(b => completedStatuses.Contains(b.Status) 
+                    && b.AiOutcomeResult != null 
+                    && b.AiOutcomeResult != ""
+                    && (
+                        (b.Status == "Won" && !b.AiOutcomeResult.Contains("WON")) ||
+                        (b.Status == "Lost" && !b.AiOutcomeResult.Contains("LOST")) ||
+                        (b.Status == "Void" && !b.AiOutcomeResult.Contains("VOID")) ||
+                        (b.Status == "Rejected") || 
+                        (b.Status == "Cancelled")
+                    ));
             }
             else
             {
@@ -930,7 +953,7 @@
     private string SelectedKambiCategory = "";
 
     // AI Vision State
-    private bool IsAnalyzingImage = false;
+    private HashSet<int> AnalyzingImageBetIds = new();
     private BettingApp.Services.AiVisionExtractionResult? AiVisionResult = null;
     private BettingApp.Services.AiOutcomeResultData? ParsedAiOutcome = null;
     private bool showFullAnalysis = false;
@@ -1022,7 +1045,7 @@
         if (reviewingBetModel == null || string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) return;
         
         var capturingBetId = reviewingBetModel.Id;
-        IsAnalyzingImage = true;
+        AnalyzingImageBetIds.Add(capturingBetId);
         AiVisionResult = null;
         ActiveLookupLeg = null;
         AiVisionError = null;
@@ -1030,10 +1053,13 @@
 
         var (result, error) = await AiVision.ExtractBetSlipDataAsync(reviewingBetModel.ScreenshotUrl);
         
-        // If the user navigated to another bet while processing, discard the result
-        if (reviewingBetModel == null || reviewingBetModel.Id != capturingBetId) return;
-
-        IsAnalyzingImage = false;
+        AnalyzingImageBetIds.Remove(capturingBetId);
+        
+        // If the user navigated to another bet while processing, discard the result for the UI
+        if (reviewingBetModel == null || reviewingBetModel.Id != capturingBetId) {
+            StateHasChanged();
+            return;
+        }
         
         if (error != null)
         {
@@ -1324,7 +1350,7 @@
             ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt,
             AiVisionResultJson = bet.AiVisionResultJson, AiOutcomeResult = bet.AiOutcomeResult
         };
-        if (reviewingBetModel.Status == "Pending")
+        if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing")
         {
             reviewingBetModel.Odds = 0;
         }
@@ -1333,12 +1359,13 @@
         reviewErrorMessage = null; errorMessage = null;
         AiVisionResult = null;
         AiVisionError = null;
+        ParsedAiOutcome = null;
         
         if (!string.IsNullOrEmpty(reviewingBetModel.AiVisionResultJson))
         {
             try {
                 AiVisionResult = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(reviewingBetModel.AiVisionResultJson);
-                if (reviewingBetModel.Status == "Pending" && AiVisionResult != null)
+                if ((reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") && AiVisionResult != null)
                 {
                     if (reviewingBetModel.Odds == 0 && !string.IsNullOrEmpty(AiVisionResult.TotalOdds))
                     {
@@ -1363,11 +1390,10 @@
                         }
                     }
                 }
-            } catch { }
+            } catch (Exception ex) { AiVisionError = "Failed to parse AI Vision data: " + ex.Message; }
         }
 
-        ParsedAiOutcome = null;
-        if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult))
+        if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) && !reviewingBetModel.AiOutcomeResult.StartsWith("Error"))
         {
             try {
                 ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
@@ -1784,14 +1810,18 @@
                     badgeClass = "bg-secondary text-light";
                     emoji = "➖";
                     displayStatus = "Void";
-                } else if (lowerStatus.Contains("not completed") || lowerStatus.Contains("live")) {
+                } else if (lowerStatus.Contains("in progress") || lowerStatus.Contains("live") || lowerStatus.Contains("not completed")) {
                     badgeClass = "bg-warning text-dark";
                     emoji = "⏱️";
-                    displayStatus = "Not Completed";
-                } else if (lowerStatus.Contains("pending") || lowerStatus.Contains("awaiting")) {
+                    displayStatus = "In Progress";
+                } else if (lowerStatus.Contains("not started")) {
                     badgeClass = "bg-info text-dark";
-                    emoji = "⏳";
-                    displayStatus = "Awaiting Results";
+                    emoji = "📅";
+                    displayStatus = "Not Started";
+                } else if (lowerStatus.Contains("unknown")) {
+                    badgeClass = "bg-secondary text-light";
+                    emoji = "❓";
+                    displayStatus = "Unknown";
                 }
 
                 builder.OpenElement(0, "span");

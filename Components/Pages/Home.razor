@@ -684,7 +684,7 @@ else
                     UserId = userId,
                     UserName = userName,
                     ScreenshotUrl = blobClient.Uri.ToString(),
-                    Status = "Pending",
+                    Status = "Processing",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
                     Odds = 1.0m,
@@ -707,59 +707,75 @@ else
                     var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BettingApp.Data.ApplicationDbContext>>();
                     var discord = scope.ServiceProvider.GetRequiredService<BettingApp.Services.DiscordNotificationService>();
                     var hub = scope.ServiceProvider.GetRequiredService<IHubContext<BettingApp.Hubs.BetHub>>();
-
-                    foreach (var id in betIdsToProcess)
+                    var semaphore = new SemaphoreSlim(5);
+                    var tasks = betIdsToProcess.Select(async id =>
                     {
-                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Processing bet ID {id}\n");
-                        using var bgContext = dbFactory.CreateDbContext();
-                        var dbBet = await bgContext.Bets.FindAsync(id);
-                        if (dbBet != null && !string.IsNullOrEmpty(dbBet.ScreenshotUrl))
-                        {
-                            System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Calling AI Vision for URL {dbBet.ScreenshotUrl}\n");
-                            var (result, error) = await aiVision.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl);
-                            
-                            if (error != null)
-                            {
-                                System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI ERROR: {error}\n");
-                            }
-                            
-                            if (result != null)
-                            {
-                                System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI SUCCESS. Serializing result...\n");
-                                dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(result);
-                                
-                                // Auto-populate Stake and Odds right away so they appear in the Admin table!
-                                if (!string.IsNullOrEmpty(result.TotalOdds))
+                        await semaphore.WaitAsync();
+                        try {
+                            BettingApp.Services.AiVisionService.ProcessingAutoReadBetIds.TryAdd(id, true);
+                            try {
+                                System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Processing bet ID {id}\n");
+                                using var bgContext = dbFactory.CreateDbContext();
+                                var dbBet = await bgContext.Bets.FindAsync(id);
+                                if (dbBet != null && !string.IsNullOrEmpty(dbBet.ScreenshotUrl))
                                 {
-                                    var cleanOdds = result.TotalOdds.Replace(",", ".");
-                                    if (decimal.TryParse(cleanOdds, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal odds))
+                                    System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Calling AI Vision for URL {dbBet.ScreenshotUrl}\n");
+                                    var (result, error) = await aiVision.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl);
+                                    
+                                    if (error != null)
                                     {
-                                        dbBet.Odds = Math.Floor(odds / 0.05m) * 0.05m;
+                                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI ERROR: {error}\n");
+                                    }
+                                    
+                                    if (result != null)
+                                    {
+                                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI SUCCESS. Serializing result...\n");
+                                        dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(result);
+                                        
+                                        // Auto-populate Stake and Odds right away so they appear in the Admin table!
+                                        if (!string.IsNullOrEmpty(result.TotalOdds))
+                                        {
+                                            var cleanOdds = result.TotalOdds.Replace(",", ".");
+                                            if (decimal.TryParse(cleanOdds, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal odds))
+                                            {
+                                                dbBet.Odds = Math.Floor(odds / 0.05m) * 0.05m;
+                                            }
+                                        }
+                                        if (!string.IsNullOrEmpty(result.Stake))
+                                        {
+                                            var rawStake = result.Stake.Trim().ToLower();
+                                            int multiplier = 1;
+                                            if (rawStake.EndsWith("k")) multiplier = 1000;
+                                            else if (rawStake.EndsWith("m")) multiplier = 1000000;
+                                            
+                                            var cleanStake = new string(rawStake.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray());
+                                            cleanStake = cleanStake.Replace(",", ".");
+                                            if (decimal.TryParse(cleanStake, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal stakeDecimal))
+                                            {
+                                                dbBet.AmountNOK = (int)(stakeDecimal * multiplier);
+                                            }
+                                        }
+                                        // End of populating results
                                     }
                                 }
-                                if (!string.IsNullOrEmpty(result.Stake))
-                                {
-                                    var rawStake = result.Stake.Trim().ToLower();
-                                    int multiplier = 1;
-                                    if (rawStake.EndsWith("k"))
-                                    {
-                                        multiplier = 1000;
-                                        rawStake = rawStake.Substring(0, rawStake.Length - 1);
-                                    }
-                                    if (decimal.TryParse(rawStake.Replace(",", "."), out var parsedStake))
-                                    {
-                                        dbBet.AmountNOK = (int)(parsedStake * multiplier);
-                                    }
+                                if (dbBet != null) {
+                                    dbBet.Status = "Pending";
+                                    await bgContext.SaveChangesAsync();
+                                    System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Saved to DB (Pending) and broadcasted SignalR.\n");
+                                    
+                                    await hub.Clients.All.SendAsync("ReceiveBetUpdate", dbBet.Id);
+                                    await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+                                    await discord.NotifyAdminNewPickAsync(dbBet);
                                 }
-
-                                await bgContext.SaveChangesAsync();
-                                await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-                                System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Saved to DB and broadcasted SignalR.\n");
+                            } finally {
+                                BettingApp.Services.AiVisionService.ProcessingAutoReadBetIds.TryRemove(id, out _);
                             }
-                            await discord.NotifyAdminNewPickAsync(dbBet);
+                        } finally {
+                            semaphore.Release();
                         }
-                    }
-                } catch (Exception ex) { 
+                    });
+                    await Task.WhenAll(tasks);
+                } catch (Exception ex) {  
                     System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] EXCEPTION: {ex}\n");
                 }
             });
@@ -792,7 +808,7 @@ else
 
     private async Task CancelBet(Bet bet)
     {
-        if (bet.Status != "Pending") return;
+        if (bet.Status != "Pending" && bet.Status != "Processing") return;
         
         try
         {
@@ -800,7 +816,7 @@ else
             var dbBet = await context.Bets.FindAsync(bet.Id);
             var dbUser = await context.Users.FindAsync(userId);
             
-            if (dbBet != null && dbBet.UserId == userId && dbBet.Status == "Pending")
+            if (dbBet != null && dbBet.UserId == userId && (dbBet.Status == "Pending" || dbBet.Status == "Processing"))
             {
                 // Logic for refunding stake if it was set (should only happen for Approved bets usually, 
                 // but safety check for legacy/admin edge cases)
@@ -833,6 +849,7 @@ else
     {
         return bet.Status switch
         {
+            "Processing" => ("Processing", "bg-warning text-dark"),
             "Pending" => ("Pending", "bg-warning text-dark"),
             "Approved" => ("Approved", "bg-primary"),
             "Rejected" => ("Rejected", "bg-danger"),
@@ -846,13 +863,13 @@ else
 
     private string GetAmountDisplay(Bet bet)
     {
-        if (bet.Status == "Pending" || bet.Status == "Cancelled") return "-";
+        if (bet.Status == "Pending" || bet.Status == "Processing" || bet.Status == "Cancelled") return "-";
         return (bet.AmountNOK?.ToString("N0") ?? "0") + " kr";
     }
 
     private string GetOddsDisplay(Bet bet)
     {
-        if (bet.Status == "Pending" || bet.Status == "Cancelled") return "-";
+        if (bet.Status == "Pending" || bet.Status == "Processing" || bet.Status == "Cancelled") return "-";
         return bet.Odds.ToString("N2");
     }
 

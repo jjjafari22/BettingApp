@@ -67,6 +67,8 @@ namespace BettingApp.Services
 
     public class AiVisionService
     {
+        public static System.Collections.Concurrent.ConcurrentDictionary<int, bool> ProcessingAutoReadBetIds { get; } = new();
+        
         private readonly HttpClient _httpClient;
         private readonly string? _apiKey;
 
@@ -103,7 +105,7 @@ namespace BettingApp.Services
                              "5) legs: an array of objects representing each individual bet, containing: " +
                              "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST use the official, native spelling of the team names, INCLUDING proper diacritics/special characters, even if the screenshot omits them! (e.g. you MUST output 'Beşiktaş' instead of 'Besiktas', and 'Bodø/Glimt' instead of 'Bodo/Glimt'). This is required for our database to find the match. " +
                              "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! " +
-                             "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop (like scoring, cards, assists), you MUST include the exact condition in the selection (e.g. 'Marcus Rashford - Will Score', 'Erling Haaland - Over 1.5 Shots', 'Bukayo Saka - Yes'). Do NOT just write the player's name! Translate to English if necessary. " +
+                             "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop (like scoring, cards, assists), you MUST include the exact condition in the selection (e.g. 'Marcus Rashford - Will Score', 'Erling Haaland - Over 1.5 Shots', 'Bukayo Saka - Yes'). Do NOT just write the player's name! Translate to English if necessary. CRITICAL FOR POWER SUB: If there is a label indicating 'Power Sub', 'Substitute', or similar on the bet, you MUST append '(Power Sub)' to the selection text so the outcome checker knows it applies to substitutes as well! " +
                              "   - odds (e.g. '1.95'). " +
                              "Return ONLY a raw JSON object with keys: bookmaker, isCombo, totalOdds, stake, legs. Do not include markdown blocks like ```json.";
 
@@ -229,7 +231,8 @@ namespace BettingApp.Services
                              $"Please search the web to find the final result for each match (leg) listed in the bet.\n" +
                              $"CRITICAL DATE CHECK: The bet was placed on {betPlacedAt:yyyy-MM-dd}. You MUST ensure you are looking at the match that occurred ON OR IMMEDIATELY AFTER this date! Do NOT look at older historic games between these two teams. Verify the date of the match results you find.\n" +
                              $"CRITICAL FOR STATS AND SCORES: You MUST differentiate between Half-Time (HT) and Full-Time (FT) results! If the market specifies '1st Half' or 'Half Time', you must check the half-time stats. Otherwise, you MUST use the FINAL FULL-TIME (FT) score and stats! Double check that the stats you are pulling are for the FULL match and not just the first half. Pay attention to which team is Home and Away to get the score order correct.\n" +
-                             $"CRITICAL FOR CORNERS, CARDS, AND PLAYER PROPS: These specific statistics are notoriously difficult to find accurately in standard Google snippets. You MUST explicitly verify these stats on highly reliable sources like UEFA, FIFA, Flashscore, Sofascore, ESPN, or BBC. Do NOT guess or hallucinate stats from unrelated summaries! If you cannot find the EXACT definitive final count for corners or cards, mark the bet as 'UNKNOWN / AWAITING RESULTS' rather than guessing a wrong number.\n" +
+                             $"CRITICAL FOR CORNERS, CARDS, AND PLAYER PROPS: These specific statistics are notoriously difficult to find accurately in standard Google snippets. You MUST explicitly verify these stats on highly reliable sources like UEFA, FIFA, Flashscore, Sofascore, ESPN, or BBC. Do NOT guess or hallucinate stats from unrelated summaries! If you cannot find the EXACT definitive final count for corners or cards, mark the bet as 'UNKNOWN' rather than guessing a wrong number.\n" +
+                             $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)', it means the bet transfers to the substitute! If the named player is substituted off, the stats of the player who comes on for them MUST be added to their total! You must find who was substituted on for that player and combine their stats to determine the outcome.\n" +
                              $"Check if the matches are finished, live, or not started. Determine if the overall bet was Won, Lost, or Void based on the results.\n" +
                              $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
                              $"CRITICAL FOR COMBO BETS: Evaluate each leg COMPLETELY INDEPENDENTLY! Even if multiple legs are for the same match, you MUST write a unique, specific 'stats' reasoning for EACH leg based on its specific Market and Selection. Do NOT copy and paste the same stats reasoning across multiple legs. For example, if Leg 1 is a Goalscorer and Leg 2 is a Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.\n" +
@@ -237,10 +240,11 @@ namespace BettingApp.Services
                              $"- 'MATCH FINISHED - WON' (if all legs have finished and won)\n" +
                              $"- 'MATCH FINISHED - LOST' (if any leg has finished and lost, even if other legs are pending)\n" +
                              $"- 'MATCH FINISHED - VOID' (if the bet was voided)\n" +
-                             $"- 'MATCH NOT COMPLETED' (if any leg has not started yet, or is currently in progress/live, and no leg has definitively lost yet!)\n" +
-                             $"- 'UNKNOWN / AWAITING RESULTS' (if the match is finished but the specific prop result cannot be found yet)\n" +
+                             $"- 'MATCH NOT STARTED' (if the match has not started yet, and no leg has definitively lost)\n" +
+                             $"- 'MATCH IN PROGRESS' (if the match is currently in progress/live, and no leg has definitively lost yet)\n" +
+                             $"- 'UNKNOWN' (if the match is finished but the specific prop result cannot be found yet)\n" +
                              $"Return a strictly formatted JSON object with the following schema:\n" +
-                             $"{{ \"overallStatus\": \"MATCH NOT COMPLETED\", \"fullAnalysis\": \"Your detailed reasoning formatted with \n line breaks...\", \"legs\": [ {{ \"match\": \"Team A vs Team B\", \"outcome\": \"Won / Lost / Void / Pending\", \"stats\": \"e.g. 12 corners, or Match starts in 2 hours.\" }} ] }}\n" +
+                             $"{{ \"overallStatus\": \"MATCH IN PROGRESS\", \"fullAnalysis\": \"Your detailed reasoning formatted with \n line breaks...\", \"legs\": [ {{ \"match\": \"Team A vs Team B\", \"outcome\": \"Won / Lost / Void / Pending\", \"stats\": \"e.g. 12 corners, or Match starts in 2 hours.\" }} ] }}\n" +
                              $"Return ONLY valid JSON. Do not include markdown code blocks.";
 
                 var payload = new
