@@ -216,16 +216,16 @@
                                     } else {
                                         <div class="fw-bold mb-2"><i class="bi bi-check-circle-fill me-1"></i> AI Extraction Successful:</div>
                                         <div class="mb-2">
-                                            <strong>Bookmaker:</strong> @AiVisionResult.Bookmaker <br/>
-                                            <strong>Is Combo:</strong> @AiVisionResult.IsCombo <br/>
-                                            <strong>Stake:</strong> @AiVisionResult.Stake <br/>
-                                            <strong>Total Odds:</strong> @AiVisionResult.TotalOdds
+                                            <strong>Bookmaker:</strong> @AiVisionResult!.Bookmaker <br/>
+                                            <strong>Is Combo:</strong> @AiVisionResult!.IsCombo <br/>
+                                            <strong>Stake:</strong> @AiVisionResult!.Stake <br/>
+                                            <strong>Total Odds:</strong> @AiVisionResult!.TotalOdds
                                         </div>
-                                        @if (AiVisionResult.Legs != null)
+                                        @if (AiVisionResult!.Legs != null)
                                         {
-                                            @for (int i = 0; i < AiVisionResult.Legs.Count; i++)
+                                            @for (int i = 0; i < AiVisionResult!.Legs.Count; i++)
                                             {
-                                                var leg = AiVisionResult.Legs[i];
+                                                var leg = AiVisionResult!.Legs[i];
                                                 var matchingOutcome = (ParsedAiOutcome?.Legs?.Count > i) ? ParsedAiOutcome.Legs[i] : ParsedAiOutcome?.Legs?.FirstOrDefault(l => l.Match == leg.Match);
                                                 bool isActive = (leg == ActiveLookupLeg);
                                                 <div class="card mb-1 @(isActive ? "border-primary shadow" : "shadow-sm border-0")">
@@ -1212,11 +1212,9 @@
 
     private string KambiSearchQuery = "";
     private string? KambiTestOutput = null;
-    private bool IsTestingKambi = false;
 
     private async Task TestKambi()
     {
-        IsTestingKambi = true;
         KambiTestOutput = "Fetching Events...";
         StateHasChanged();
         
@@ -1256,8 +1254,6 @@
                 }
             }
         }
-        
-        IsTestingKambi = false;
         StateHasChanged();
     }
 
