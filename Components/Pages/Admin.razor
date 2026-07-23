@@ -972,6 +972,7 @@
         ConfirmingOutcomeBetIds.Add(currentBet.Id);
         if (reviewingBetModel.Id == currentBet.Id) reviewErrorMessage = null;
         StateHasChanged();
+        try { await reviewModalRef.FocusAsync(); } catch { }
 
         // 1. If we don't have the AI extraction yet, we must read the image first!
         if (string.IsNullOrEmpty(currentBet.AiVisionResultJson))
@@ -1037,6 +1038,7 @@
         }
 
         ConfirmingOutcomeBetIds.Remove(currentBet.Id);
+        shouldFocusReviewModal = true;
         StateHasChanged();
     }
 
@@ -1050,6 +1052,7 @@
         ActiveLookupLeg = null;
         AiVisionError = null;
         StateHasChanged();
+        try { await reviewModalRef.FocusAsync(); } catch { }
 
         var (result, error) = await AiVision.ExtractBetSlipDataAsync(reviewingBetModel.ScreenshotUrl);
         
@@ -1132,6 +1135,7 @@
             }
         }
 
+        shouldFocusReviewModal = true;
         StateHasChanged();
     }
 
