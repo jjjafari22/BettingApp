@@ -121,7 +121,7 @@
         <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
             <div class="modal-content review-modal-content" @ontouchstart="HandleTouchStart" @ontouchend="HandleTouchEnd">
                 <div class="modal-header py-2 flex-shrink-0">
-                    <div class="d-flex align-items-center w-100 overflow-hidden">
+                    <div class="d-flex align-items-center w-100">
                  
                         <h5 class="modal-title fs-6 text-truncate me-2 flex-grow-1">
                             <span class="badge @GetStatusBadgeClass(reviewingBetModel.Status) me-2">@reviewingBetModel.Status</span>
@@ -129,6 +129,21 @@
                           
                             <span class="text-muted ms-2 fw-normal">@(userLookup.TryGetValue(reviewingBetModel.UserId, out var u3) && !string.IsNullOrEmpty(u3.DiscordName) ? u3.DiscordName : reviewingBetModel.UserName)</span>
                         </h5>
+                        <div class="dropdown me-2 flex-shrink-0" style="position: relative;">
+                            <button class="btn btn-sm btn-outline-secondary border-0" type="button" @onclick="ToggleModalDropdown" @onclick:stopPropagation="true">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            @if (showModalDropdown)
+                            {
+                                <ul class="dropdown-menu dropdown-menu-end shadow show" style="display:block; position:absolute; right: 0; z-index: 9999; margin-top: 5px;">
+                                    <li>
+                                        <button class="dropdown-item" @onclick="ExecuteAutoReadFromDropdown">
+                                            <i class="bi bi-robot me-2 text-warning"></i> Re-run AI Auto-Read
+                                        </button>
+                                    </li>
+                                </ul>
+                            }
+                        </div>
                         <button type="button" class="btn-close flex-shrink-0" @onclick="CancelReview"></button>
                     </div>
                 </div>
@@ -671,6 +686,20 @@
     private int approvedPage = 1;
     private int completedPage = 1;
     private int pageSize = 25;
+    
+    private bool showModalDropdown = false;
+    
+    private void ToggleModalDropdown()
+    {
+        showModalDropdown = !showModalDropdown;
+        StateHasChanged();
+    }
+    
+    private async Task ExecuteAutoReadFromDropdown()
+    {
+        showModalDropdown = false;
+        await AnalyzeImageAsync();
+    }
     
     private string completedStatusFilter = "All";
     private string completedSearchBetId = "";
