@@ -44,8 +44,8 @@ namespace BettingApp.Services
                     _logger.LogError(ex, "Error in BetMonitoringService loop");
                 }
 
-                // Wait 5 minutes before the next check
-                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                // Wait 1 minute before the next check
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             }
         }
 
