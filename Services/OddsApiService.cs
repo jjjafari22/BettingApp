@@ -215,9 +215,9 @@ public class OddsApiService
 
 
 
-    public async Task<BettingApp.Models.OddsPapiSearchResult?> SearchOddsComparisonAsync(string teamName)
+    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName)
     {
-        if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return null;
+        if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return (null, "API Key is missing or team name is empty.");
 
         try
         {
@@ -288,7 +288,7 @@ public class OddsApiService
             if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
             {
                 var fResp = await _httpClient.GetAsync(fixturesUrl);
-                if (!fResp.IsSuccessStatusCode) return null;
+                if (!fResp.IsSuccessStatusCode) return (null, $"Fixtures API returned status {fResp.StatusCode}");
                 
                 fJson = await fResp.Content.ReadAsStringAsync();
                 _cache.Set($"OddspapiFixtures_{fromDate}", fJson, TimeSpan.FromHours(1));
@@ -296,7 +296,7 @@ public class OddsApiService
             
             using var doc = JsonDocument.Parse(fJson ?? "[]");
             
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return (null, "Fixtures API returned invalid JSON format.");
 
             string? fixtureId = null;
             string matchName = "";
@@ -341,7 +341,7 @@ public class OddsApiService
                 }
             }
 
-            if (!bestMatches.Any()) return null;
+            if (!bestMatches.Any()) return (null, $"No matching fixtures found for '{teamName}' in the next 7 days.");
             
             var bestFixture = bestMatches.OrderByDescending(m => m.score).First().fixture;
             
@@ -377,7 +377,7 @@ public class OddsApiService
             {
                 await Task.Delay(1000); // Wait 1s
                 oResp = await _httpClient.GetAsync(oddsUrl);
-                if (!oResp.IsSuccessStatusCode) return null;
+                if (!oResp.IsSuccessStatusCode) return (null, $"Odds API returned status {oResp.StatusCode}");
             }
 
             var oJson = await oResp.Content.ReadAsStringAsync();
@@ -448,12 +448,12 @@ public class OddsApiService
             // Sort markets by name
             result.Markets.Sort((a, b) => a.MarketName.CompareTo(b.MarketName));
 
-            return result;
+            return (result, null);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Exception in SearchOddsComparisonAsync: {ex.Message}");
-            return null;
+            return (null, $"Exception: {ex.Message}");
         }
     }
 }

@@ -1338,11 +1338,11 @@
         SelectedPapiMarketId = "";
         StateHasChanged();
 
-        var result = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam);
+        var (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam);
         
         if (result == null)
         {
-            OddsLookupErrorMessage = "No OddsPapi matches found for that team, or error occurred.";
+            OddsLookupErrorMessage = error ?? "No OddsPapi matches found for that team, or error occurred.";
         }
         else
         {
