@@ -107,7 +107,7 @@ public class OddsApiService
                 {
                     if (fixture.TryGetProperty("fixtureId", out var fid))
                     {
-                        bestFixtureId = fid.GetString() ?? "";
+                        bestFixtureId = fid.ToString();
                         bestFixture = fixture;
                         break;
                     }
@@ -156,16 +156,16 @@ public class OddsApiService
         return false;
     }
 
-    public async Task<DateTime?> GetEarliestMatchStartTimeAsync(string extractedBetDataJson, DateTime betPlacedAt)
+    public async Task<(DateTime? EarliestStartTime, string? UpdatedJson)> GetEarliestMatchStartTimeAsync(string extractedBetDataJson, DateTime betPlacedAt)
     {
-        if (string.IsNullOrEmpty(_apiKey)) return null;
+        if (string.IsNullOrEmpty(_apiKey)) return (null, null);
 
         try
         {
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var extractionResult = JsonSerializer.Deserialize<AiVisionExtractionResult>(extractedBetDataJson, options);
             
-            if (extractionResult?.Legs == null || !extractionResult.Legs.Any()) return null;
+            if (extractionResult?.Legs == null || !extractionResult.Legs.Any()) return (null, null);
 
             DateTime? earliest = null;
             var uniqueMatches = extractionResult.Legs.Select(l => l.Match).Distinct();
@@ -189,6 +189,11 @@ public class OddsApiService
                                     {
                                         earliest = parsedDt;
                                     }
+
+                                    foreach (var leg in extractionResult.Legs.Where(l => l.Match == matchName))
+                                    {
+                                        leg.StartTime = parsedDt;
+                                    }
                                 }
                             }
                         }
@@ -198,12 +203,13 @@ public class OddsApiService
                 await Task.Delay(500); // Respect rate limit
             }
 
-            return earliest;
+            string updatedJson = JsonSerializer.Serialize(extractionResult, options);
+            return (earliest, updatedJson);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Exception in GetEarliestMatchStartTimeAsync: {ex.Message}");
-            return null;
+            return (null, null);
         }
     }
 
@@ -239,15 +245,17 @@ public class OddsApiService
             if (!string.IsNullOrEmpty(mJson) && mJson != "[]")
             {
                 using var mDoc = JsonDocument.Parse(mJson);
-                foreach (var m in mDoc.RootElement.EnumerateArray())
+                if (mDoc.RootElement.ValueKind == JsonValueKind.Array)
                 {
-                    var mId = m.GetProperty("marketId").GetRawText();
-                    var baseName = m.TryGetProperty("marketName", out var mn) ? mn.GetString() ?? "Unknown" : "Unknown";
-                    
-                    rawMarketIdToBaseName[mId] = baseName;
-                    
-                    if (!baseMarketDict.ContainsKey(baseName))
+                    foreach (var m in mDoc.RootElement.EnumerateArray())
                     {
+                        var mId = m.GetProperty("marketId").ToString();
+                        var baseName = m.TryGetProperty("marketName", out var mn) ? mn.GetString() ?? "Unknown" : "Unknown";
+                        
+                        rawMarketIdToBaseName[mId] = baseName;
+                        
+                        if (!baseMarketDict.ContainsKey(baseName))
+                        {
                         baseMarketDict[baseName] = new BettingApp.Models.OddsPapiMarket { MarketId = baseName, MarketName = baseName };
                     }
                     
@@ -263,17 +271,18 @@ public class OddsApiService
                     {
                         foreach (var o in outcomes.EnumerateArray())
                         {
-                            var oId = o.GetProperty("outcomeId").GetRawText();
+                            var oId = o.GetProperty("outcomeId").ToString();
                             var oName = o.TryGetProperty("outcomeName", out var on) ? on.GetString() ?? "" : "";
                             baseMarketObj.OutcomeNames[oId] = oName + handicapSuffix;
                         }
                     }
                 }
+                }
             }
 
             // 2. Find Fixture
             string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
-            string toDate = DateTime.UtcNow.AddDays(7).ToString("yyyy-MM-dd");
+            string toDate = DateTime.UtcNow.AddDays(6).ToString("yyyy-MM-dd");
             var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId=10&from={fromDate}&to={toDate}";
             
             if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
@@ -287,6 +296,8 @@ public class OddsApiService
             
             using var doc = JsonDocument.Parse(fJson ?? "[]");
             
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+
             string? fixtureId = null;
             string matchName = "";
             DateTime startTime = DateTime.MinValue;
@@ -334,7 +345,7 @@ public class OddsApiService
             
             var bestFixture = bestMatches.OrderByDescending(m => m.score).First().fixture;
             
-            fixtureId = bestFixture.GetProperty("fixtureId").GetString() ?? "";
+            fixtureId = bestFixture.GetProperty("fixtureId").ToString();
             string finalP1 = bestFixture.TryGetProperty("participant1Name", out var fp1) ? (fp1.GetString() ?? "") : "";
             string finalP2 = bestFixture.TryGetProperty("participant2Name", out var fp2) ? (fp2.GetString() ?? "") : "";
             matchName = $"{finalP1} vs {finalP2}";

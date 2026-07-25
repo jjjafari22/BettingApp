@@ -54,6 +54,28 @@ namespace BettingApp.Services
                             eventId = ExtractEventId(fallbackDoc, homeTeam, awayTeam, betPlacedAt);
                         }
                     }
+
+                    // Fallback 2: Sometimes the home team has prefixes like "FK " and FotMob search completely fails, but the away team works perfectly!
+                    if (string.IsNullOrEmpty(eventId) && !string.IsNullOrEmpty(awayTeam))
+                    {
+                        string cleanAwayTeam = awayTeam;
+                        var dateMatch = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (dateMatch.Success)
+                        {
+                            cleanAwayTeam = awayTeam.Substring(0, dateMatch.Index).Trim();
+                        }
+                        
+                        string longestAway = cleanAwayTeam.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? cleanAwayTeam.Split(' ')[0];
+                        if (longestAway.Length >= 3)
+                        {
+                            string fallbackQuery = Uri.EscapeDataString(longestAway);
+                            searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
+                            string fallbackJson = await _httpClient.GetStringAsync(searchUrl);
+                            
+                            using var fallbackDoc = System.Text.Json.JsonDocument.Parse(fallbackJson);
+                            eventId = ExtractEventId(fallbackDoc, homeTeam, awayTeam, betPlacedAt);
+                        }
+                    }
                 }
 
                 if (string.IsNullOrEmpty(eventId))
@@ -138,18 +160,19 @@ namespace BettingApp.Services
                 string optionHomeName = payload.TryGetProperty("homeName", out var h) ? h.GetString() ?? "" : "";
                 string optionAwayName = payload.TryGetProperty("awayName", out var a) ? a.GetString() ?? "" : "";
                 string text = option.GetProperty("text").GetString() ?? "";
+                string normalizedText = NormalizeText(text);
 
                 bool queryIsWomen = homeTeam.Contains("women", StringComparison.OrdinalIgnoreCase) || homeTeam.Contains("(w)", StringComparison.OrdinalIgnoreCase) || homeTeam.Contains("femenil", StringComparison.OrdinalIgnoreCase);
                 bool optionIsWomen = text.Contains("women", StringComparison.OrdinalIgnoreCase) || text.Contains("(w)", StringComparison.OrdinalIgnoreCase) || text.Contains("femenil", StringComparison.OrdinalIgnoreCase);
 
                 var homeTeamTokens = homeTeam.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries)
-                                             .Where(w => w.Length >= 3).ToArray();
-                if (homeTeamTokens.Length == 0 && !string.IsNullOrEmpty(homeTeam)) homeTeamTokens = new[] { homeTeam };
+                                             .Where(w => w.Length >= 3).Select(NormalizeText).ToArray();
+                if (homeTeamTokens.Length == 0 && !string.IsNullOrEmpty(homeTeam)) homeTeamTokens = new[] { NormalizeText(homeTeam) };
 
                 bool homeMatch = false;
                 foreach (var token in homeTeamTokens)
                 {
-                    if (text.Contains(token, StringComparison.OrdinalIgnoreCase))
+                    if (normalizedText.Contains(token, StringComparison.OrdinalIgnoreCase))
                     {
                         homeMatch = true;
                         break;
@@ -159,9 +182,10 @@ namespace BettingApp.Services
                 bool awayTeamMatch = string.IsNullOrEmpty(awayTeam);
                 if (!awayTeamMatch)
                 {
-                    foreach (var token in awayTeamTokens)
+                    var normalizedAwayTokens = awayTeamTokens.Select(NormalizeText).ToArray();
+                    foreach (var token in normalizedAwayTokens)
                     {
-                        if (text.Contains(token, StringComparison.OrdinalIgnoreCase))
+                        if (normalizedText.Contains(token, StringComparison.OrdinalIgnoreCase))
                         {
                             awayTeamMatch = true;
                             break;
@@ -247,6 +271,24 @@ namespace BettingApp.Services
             }
 
             return bestId;
+        }
+        private string NormalizeText(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            return text.ToLowerInvariant()
+                       .Replace("ø", "o")
+                       .Replace("å", "a")
+                       .Replace("æ", "ae")
+                       .Replace("ä", "a")
+                       .Replace("ö", "o")
+                       .Replace("ü", "u")
+                       .Replace("é", "e")
+                       .Replace("è", "e")
+                       .Replace("á", "a")
+                       .Replace("í", "i")
+                       .Replace("ó", "o")
+                       .Replace("ú", "u")
+                       .Replace("ñ", "n");
         }
     }
 }

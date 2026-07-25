@@ -1366,12 +1366,14 @@
                         {
                             dbBet.MatchStartTime = result.StartTime;
                             reviewingBetModel.MatchStartTime = result.StartTime;
+                            if (originalBetModel != null) originalBetModel.MatchStartTime = result.StartTime;
                         }
                         
                         if (AiVisionResult != null)
                         {
                             dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(AiVisionResult);
                             reviewingBetModel.AiVisionResultJson = dbBet.AiVisionResultJson;
+                            if (originalBetModel != null) originalBetModel.AiVisionResultJson = dbBet.AiVisionResultJson;
                         }
                         
                         await context.SaveChangesAsync();
@@ -1824,12 +1826,17 @@
                     _ = Task.Run(async () => {
                         try 
                         {
-                            var startTime = await OddsApi.GetEarliestMatchStartTimeAsync(json, placedAt);
+                            var (startTime, updatedJson) = await OddsApi.GetEarliestMatchStartTimeAsync(json, placedAt);
                             
                             using var bgContext = DbFactory.CreateDbContext();
                             var b = await bgContext.Bets.FindAsync(betId);
                             if (b != null && b.Status == "Approved")
                             {
+                                if (updatedJson != null)
+                                {
+                                    b.AiVisionResultJson = updatedJson;
+                                }
+
                                 if (startTime.HasValue)
                                 {
                                     b.MatchStartTime = startTime;
