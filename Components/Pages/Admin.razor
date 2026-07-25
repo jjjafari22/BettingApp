@@ -2047,7 +2047,14 @@
             var now = DateTime.UtcNow;
             if (bet.MatchStartTime.HasValue && bet.MatchStartTime.Value > now)
             {
-                <span class="badge bg-warning text-dark shadow-sm" title="Match hasn't started yet"><i class="bi bi-clock me-1"></i> Next check at @ToUserLocal(bet.NextCheckTime.Value).ToString("g")</span>
+                <div class="d-flex flex-column align-items-start gap-1" title="Match hasn't started yet">
+                    <span class="badge bg-warning text-dark shadow-sm">
+                        <i class="bi bi-calendar-event me-1"></i> Starts @ToUserLocal(bet.MatchStartTime.Value).ToString("g")
+                    </span>
+                    <span class="badge bg-light text-dark border" style="font-size: 0.65em;">
+                        <i class="bi bi-arrow-repeat me-1"></i> Check: @ToUserLocal(bet.NextCheckTime.Value).ToString("g")
+                    </span>
+                </div>
             }
             else if (bet.NextCheckTime.Value <= now)
             {
@@ -2055,7 +2062,14 @@
             }
             else 
             {
-                <span class="badge bg-success shadow-sm"><i class="bi bi-activity me-1"></i> Match Started</span>
+                <div class="d-flex flex-column align-items-start gap-1" title="Match is in progress">
+                    <span class="badge bg-success shadow-sm">
+                        <i class="bi bi-activity me-1"></i> Live
+                    </span>
+                    <span class="badge bg-light text-dark border" style="font-size: 0.65em;">
+                        <i class="bi bi-arrow-repeat me-1"></i> Check: @ToUserLocal(bet.NextCheckTime.Value).ToString("g")
+                    </span>
+                </div>
             }
         }
     };
