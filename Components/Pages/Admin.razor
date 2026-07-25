@@ -241,6 +241,8 @@
                                         else if (statusLower.Contains("unknown")) badgeClass = "badge text-bg-secondary";
                                         
                                         <span class="@badgeClass fs-6">@ParsedAiOutcome.OverallStatus</span>
+                                    } else if (reviewingBetModel.AiOutcomeResult.StartsWith("Error") || reviewingBetModel.AiOutcomeResult.StartsWith("Exception")) {
+                                        <div class="alert alert-danger mb-0 p-2 text-wrap" style="word-break: break-all;"><i class="bi bi-exclamation-triangle-fill me-1"></i> @reviewingBetModel.AiOutcomeResult</div>
                                     } else {
                                         <span>Check complete (legacy format)</span>
                                     }
@@ -831,6 +833,7 @@
     private HubConnection? hubConnection;
     private string? currentAdminName;
     private Bet? reviewingBetModel;
+    private System.Timers.Timer? uiRefreshTimer;
     private Bet? originalBetModel;
     private string? reviewErrorMessage;
     private decimal currentReviewUserFreeBalance = 0;
@@ -1066,6 +1069,11 @@
              try
             {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                
+                uiRefreshTimer = new System.Timers.Timer(15000); // 15 seconds
+                uiRefreshTimer.Elapsed += (s, e) => InvokeAsync(StateHasChanged);
+                uiRefreshTimer.Start();
+                
                 StateHasChanged(); 
             }
             catch (Exception ex) { Console.WriteLine($"Timezone error: {ex.Message}"); }
@@ -1452,6 +1460,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        uiRefreshTimer?.Dispose();
         if (hubConnection is not null) { await hubConnection.DisposeAsync(); }
     }
 
@@ -1551,7 +1560,7 @@
             } catch (Exception ex) { AiVisionError = "Failed to parse AI Vision data: " + ex.Message; }
         }
 
-        if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) && !reviewingBetModel.AiOutcomeResult.StartsWith("Error"))
+        if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) && !reviewingBetModel.AiOutcomeResult.StartsWith("Error") && !reviewingBetModel.AiOutcomeResult.StartsWith("Exception"))
         {
             try {
                 ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
@@ -2035,7 +2044,7 @@
             }
             else if (bet.NextCheckTime.Value <= now)
             {
-                <span class="badge bg-danger shadow-sm"><span class="pulse-dot bg-white rounded-circle d-inline-block me-1" style="width: 6px; height: 6px;"></span> Check ongoing</span>
+                <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>
             }
             else 
             {

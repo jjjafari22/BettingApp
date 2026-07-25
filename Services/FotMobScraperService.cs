@@ -35,23 +35,24 @@ namespace BettingApp.Services
                 {
                     searchDoc.RootElement.TryGetProperty("matchSuggest", out var matchSuggests);
 
-                    // Fallback: If full home team fails (e.g. "Stjarnan Garðabær"), try searching just the first word ("Stjarnan")
-                    if (matchSuggests.ValueKind == System.Text.Json.JsonValueKind.Undefined || matchSuggests.GetArrayLength() == 0)
+                    if (matchSuggests.ValueKind != System.Text.Json.JsonValueKind.Undefined && matchSuggests.GetArrayLength() > 0)
                     {
-                        string firstWord = homeTeam.Split(' ').FirstOrDefault(w => w.Length > 2) ?? homeTeam.Split(' ')[0];
-                        if (firstWord != homeTeam)
+                        eventId = ExtractEventId(searchDoc, homeTeam, awayTeam, betPlacedAt);
+                    }
+
+                    // Fallback: If full home team fails or returned only invalid matches (like women's teams), try searching the most significant word (longest word).
+                    if (string.IsNullOrEmpty(eventId))
+                    {
+                        string longestWord = homeTeam.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? homeTeam.Split(' ')[0];
+                        if (longestWord != homeTeam && longestWord.Length >= 3)
                         {
-                            string fallbackQuery = Uri.EscapeDataString(firstWord);
+                            string fallbackQuery = Uri.EscapeDataString(longestWord);
                             searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
                             string fallbackJson = await _httpClient.GetStringAsync(searchUrl);
                             
                             using var fallbackDoc = System.Text.Json.JsonDocument.Parse(fallbackJson);
                             eventId = ExtractEventId(fallbackDoc, homeTeam, awayTeam, betPlacedAt);
                         }
-                    }
-                    else
-                    {
-                        eventId = ExtractEventId(searchDoc, homeTeam, awayTeam, betPlacedAt);
                     }
                 }
 

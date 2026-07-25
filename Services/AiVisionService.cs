@@ -373,9 +373,12 @@ namespace BettingApp.Services
 
                 if (!string.IsNullOrEmpty(text))
                 {
-                    if (text.StartsWith("```json")) text = text.Substring(7);
-                    if (text.StartsWith("```")) text = text.Substring(3);
-                    if (text.EndsWith("```")) text = text.Substring(0, text.Length - 3);
+                    int startIndex = text.IndexOf('{');
+                    int endIndex = text.LastIndexOf('}');
+                    if (startIndex >= 0 && endIndex >= startIndex)
+                    {
+                        text = text.Substring(startIndex, endIndex - startIndex + 1);
+                    }
                 }
 
                 return text?.Trim();

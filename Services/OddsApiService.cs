@@ -70,8 +70,8 @@ public class OddsApiService
                 string p1Name = fixture.TryGetProperty("participant1Name", out var p1n) ? p1n.GetString() ?? "" : "";
                 string p2Name = fixture.TryGetProperty("participant2Name", out var p2n) ? p2n.GetString() ?? "" : "";
 
-                bool team1MatchesP1 = p1Name.Contains(homeTeam, StringComparison.OrdinalIgnoreCase) || homeTeam.Contains(p1Name, StringComparison.OrdinalIgnoreCase);
-                bool team1MatchesP2 = p2Name.Contains(homeTeam, StringComparison.OrdinalIgnoreCase) || homeTeam.Contains(p2Name, StringComparison.OrdinalIgnoreCase);
+                bool team1MatchesP1 = IsNameMatch(p1Name, homeTeam);
+                bool team1MatchesP2 = IsNameMatch(p2Name, homeTeam);
 
                 bool isMatch = false;
 
@@ -80,7 +80,7 @@ public class OddsApiService
                     bool team2MatchesP2 = awayTeamTokens.Length == 0;
                     foreach (var token in awayTeamTokens)
                     {
-                        if (p2Name.Contains(token, StringComparison.OrdinalIgnoreCase))
+                        if (IsNameMatch(p2Name, token))
                         {
                             team2MatchesP2 = true;
                             break;
@@ -94,7 +94,7 @@ public class OddsApiService
                     bool team2MatchesP1 = awayTeamTokens.Length == 0;
                     foreach (var token in awayTeamTokens)
                     {
-                        if (p1Name.Contains(token, StringComparison.OrdinalIgnoreCase))
+                        if (IsNameMatch(p1Name, token))
                         {
                             team2MatchesP1 = true;
                             break;
@@ -120,14 +120,10 @@ public class OddsApiService
                 return "{\"error\": \"Match not found in Oddspapi fixtures\"}";
             }
 
-            var scoresUrl = $"https://api.oddspapi.io/v4/scores?apiKey={_apiKey}&fixtureId={bestFixtureId}";
-            var scoresResponse = await _httpClient.GetAsync(scoresUrl);
-            var scoresJson = await scoresResponse.Content.ReadAsStringAsync();
-            
             string startTime = bestFixture.TryGetProperty("startTime", out var st) ? (st.GetString() ?? "Unknown") : "Unknown";
             string status = bestFixture.TryGetProperty("statusName", out var sn) ? (sn.GetString() ?? "Unknown") : "Unknown";
             
-            return $"{{\"OddsPapiFixtureInfo\": {{\"status\": \"{status}\", \"startTime\": \"{startTime}\"}}, \"ScoresData\": {scoresJson}}}";
+            return $"{{\"OddsPapiFixtureInfo\": {{\"status\": \"{status}\", \"startTime\": \"{startTime}\"}}}}";
         }
         catch (Exception ex)
         {
@@ -138,15 +134,26 @@ public class OddsApiService
 
     private string NormalizeTeamName(string name)
     {
+        // Removed destructive normalization so we can test variants in IsNameMatch
         if (string.IsNullOrEmpty(name)) return name;
+        return name;
+    }
+
+    private bool IsNameMatch(string apiName, string searchName)
+    {
+        if (string.IsNullOrEmpty(searchName) || string.IsNullOrEmpty(apiName)) return false;
         
-        return name
-            .Replace("å", "aa").Replace("Å", "Aa")
-            .Replace("ø", "oe").Replace("Ø", "Oe")
-            .Replace("æ", "ae").Replace("Æ", "Ae")
-            .Replace("ö", "oe").Replace("Ö", "Oe")
-            .Replace("ä", "ae").Replace("Ä", "Ae")
-            .Replace("ü", "ue").Replace("Ü", "Ue");
+        if (apiName.Contains(searchName, StringComparison.OrdinalIgnoreCase) || searchName.Contains(apiName, StringComparison.OrdinalIgnoreCase)) return true;
+        
+        string v1 = searchName.Replace("ø", "o").Replace("Ø", "O").Replace("æ", "ae").Replace("Æ", "Ae").Replace("å", "aa").Replace("Å", "Aa");
+        string apiv1 = apiName.Replace("ø", "o").Replace("Ø", "O").Replace("æ", "ae").Replace("Æ", "Ae").Replace("å", "aa").Replace("Å", "Aa");
+        if (apiv1.Contains(v1, StringComparison.OrdinalIgnoreCase) || v1.Contains(apiv1, StringComparison.OrdinalIgnoreCase)) return true;
+
+        string v2 = searchName.Replace("ø", "oe").Replace("Ø", "Oe").Replace("æ", "a").Replace("Æ", "A").Replace("å", "a").Replace("Å", "A");
+        string apiv2 = apiName.Replace("ø", "oe").Replace("Ø", "Oe").Replace("æ", "a").Replace("Æ", "A").Replace("å", "a").Replace("Å", "A");
+        if (apiv2.Contains(v2, StringComparison.OrdinalIgnoreCase) || v2.Contains(apiv2, StringComparison.OrdinalIgnoreCase)) return true;
+        
+        return false;
     }
 
     public async Task<DateTime?> GetEarliestMatchStartTimeAsync(string extractedBetDataJson, DateTime betPlacedAt)
@@ -287,22 +294,19 @@ public class OddsApiService
             string cleanTeamName = teamName.Replace(" vs ", " ", StringComparison.OrdinalIgnoreCase).Replace(" v ", " ", StringComparison.OrdinalIgnoreCase);
             var searchTokens = cleanTeamName.Split(new[] { ' ', '-', '.' }, StringSplitOptions.RemoveEmptyEntries)
                                        .Where(w => w.Length >= 3 && !w.Equals("the", StringComparison.OrdinalIgnoreCase) && !w.Equals("and", StringComparison.OrdinalIgnoreCase))
-                                       .Select(w => w.Replace("ø", "o").Replace("Ø", "O").Replace("æ", "ae").Replace("å", "aa").ToLowerInvariant())
                                        .ToList();
                                        
-            string normalizedTeamName = teamName.Replace("ø", "o").Replace("Ø", "O").Replace("æ", "ae").Replace("å", "aa").ToLowerInvariant();
-
             var bestMatches = new List<(JsonElement fixture, int score)>();
 
             foreach (var f in doc.RootElement.EnumerateArray())
             {
-                string p1 = f.TryGetProperty("participant1Name", out var p1n) ? (p1n.GetString() ?? "").ToLowerInvariant() : "";
-                string p2 = f.TryGetProperty("participant2Name", out var p2n) ? (p2n.GetString() ?? "").ToLowerInvariant() : "";
+                string p1 = f.TryGetProperty("participant1Name", out var p1n) ? (p1n.GetString() ?? "") : "";
+                string p2 = f.TryGetProperty("participant2Name", out var p2n) ? (p2n.GetString() ?? "") : "";
                 
                 int score = 0;
                 
                 // Exact substring match gives high score
-                if (p1.Contains(normalizedTeamName) || p2.Contains(normalizedTeamName))
+                if (IsNameMatch(p1, teamName) || IsNameMatch(p2, teamName))
                 {
                     score += 100;
                 }
@@ -310,12 +314,11 @@ public class OddsApiService
                 // Token matches
                 foreach (var token in searchTokens)
                 {
-                    if (p1.Contains(token)) score += 10;
-                    if (p2.Contains(token)) score += 10;
+                    if (IsNameMatch(p1, token) || IsNameMatch(p2, token)) score += 10;
                     
                     // Special case for Copenhagen/Kobenhavn/København
-                    if ((token.Contains("kobenhavn") || token.Contains("copenhagen")) && 
-                        (p1.Contains("copenhagen") || p1.Contains("kobenhavn") || p2.Contains("copenhagen") || p2.Contains("kobenhavn")))
+                    if ((token.Contains("kobenhavn", StringComparison.OrdinalIgnoreCase) || token.Contains("copenhagen", StringComparison.OrdinalIgnoreCase)) && 
+                        (IsNameMatch(p1, "copenhagen") || IsNameMatch(p2, "copenhagen")))
                     {
                         score += 20;
                     }
