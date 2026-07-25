@@ -42,6 +42,9 @@ namespace BettingApp.Services
 
         [JsonPropertyName("odds")]
         public string Odds { get; set; } = "";
+        
+        [JsonPropertyName("startTime")]
+        public DateTime? StartTime { get; set; }
     }
 
     public class AiOutcomeLegResult
@@ -74,11 +77,13 @@ namespace BettingApp.Services
         
         private readonly HttpClient _httpClient;
         private readonly string? _apiKey;
+        private readonly OddsApiService _oddsApi;
 
-        public AiVisionService(HttpClient httpClient, IConfiguration config)
+        public AiVisionService(HttpClient httpClient, IConfiguration config, OddsApiService oddsApi)
         {
             _httpClient = httpClient;
             _apiKey = config["GeminiApiKey"];
+            _oddsApi = oddsApi;
         }
 
         public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl)
@@ -106,7 +111,7 @@ namespace BettingApp.Services
                              "3) totalOdds (the final combined odds of the slip, if visible). " +
                              "4) stake (the amount bet, e.g. '100', '1000'). CRITICAL: Often the user will manually draw or write their stake over the image with a digital pen. You MUST look for manual handwritten digits over the image indicating the stake and prioritize that over printed text! " +
                              "5) legs: an array of objects representing each individual bet, containing: " +
-                             "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST use the official, native spelling of the team names, INCLUDING proper diacritics/special characters, even if the screenshot omits them! (e.g. you MUST output 'Beşiktaş' instead of 'Besiktas', and 'Bodø/Glimt' instead of 'Bodo/Glimt'). This is required for our database to find the match. " +
+                             "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST translate the team names into their standard, globally recognized English names (e.g. you MUST output 'FC Copenhagen' instead of 'FC København', and 'Bayern Munich' instead of 'Bayern München'). This is required for our Odds API to find the match. " +
                              "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! " +
                              "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! " +
                              "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or icons near the bet (e.g., 'Power Sub', 'Early Payout', 'Super Boost'). If you see any, add them to this array! " +
@@ -244,12 +249,12 @@ namespace BettingApp.Services
             {
                 var prompt = $"You are a sports betting expert. Here is the JSON data of a bet slip that was placed at {betPlacedAt:yyyy-MM-dd HH:mm}.\n" +
                              $"{extractedBetDataJson}\n\n" +
-                             $"Please search the web to find the final result for each match (leg) listed in the bet.\n" +
-                             $"CRITICAL DATE CHECK: The bet was placed on {betPlacedAt:yyyy-MM-dd}. You MUST ensure you are looking at the match that occurred ON OR IMMEDIATELY AFTER this date! Do NOT look at older historic games between these two teams. Verify the date of the match results you find.\n" +
+                             $"Please determine the final result for each match (leg) listed in the bet based strictly on the provided OddsPapi data.\n" +
+                             $"CRITICAL DATE CHECK: The bet was uploaded to our system on {betPlacedAt:yyyy-MM-dd}. The OddsPapi JSON attached (if any) represents the correct match found within a few days of this upload date. You MUST use the fixture provided in the OddsPapi JSON, even if its start time is slightly before the upload date (e.g. if the user uploaded the slip a day late or is testing old bets). Do not reject the provided OddsPapi fixture!\n" +
+                             $"CRITICAL FOR ODDSPAPI VERIFICATION: In the `fullAnalysis` field, the VERY FIRST line MUST explicitly state whether OddsPapi data was successfully provided and what it contained. E.g., 'OddsPapi Status: Match found, but no scores available yet' or 'OddsPapi Status: Scores found (1-0)'. If OddsPapi returned an error like 'No scores found' or 'NOT_FOUND', you MUST explicitly state that. If OddsPapi lacks data (e.g., corners are missing or no scores found), do NOT guess or hallucinate stats. You must strictly use the data provided.\n" +
                              $"CRITICAL FOR STATS AND SCORES: You MUST differentiate between Half-Time (HT) and Full-Time (FT) results! If the market specifies '1st Half' or 'Half Time', you must check the half-time stats. Otherwise, you MUST use the FINAL FULL-TIME (FT) score and stats! Double check that the stats you are pulling are for the FULL match and not just the first half. Pay attention to which team is Home and Away to get the score order correct.\n" +
-                             $"CRITICAL FOR CORNERS, CARDS, AND PLAYER PROPS: These specific statistics are notoriously difficult to find accurately in standard Google snippets. You MUST ALWAYS follow this two-step verification process: First, check a primary source (Sofascore OR Flashscore, do not check both as they use the same Opta data). Second, you MUST ALWAYS cross-reference the result with a secondary non-Opta source (ESPN OR the official league website). If both sources match, the result is verified. If you absolutely cannot find detailed stats on an approved secondary source because it is a smaller match, you MUST mark the outcome as 'UNKNOWN'. Do NOT use unapproved random websites as your secondary source! Do NOT guess or hallucinate stats from unrelated summaries! If the match is FINISHED but you cannot find the EXACT definitive final count on these approved sources, mark the bet as 'UNKNOWN'. Note: Do NOT use UNKNOWN if the match simply hasn't started yet!\n" +
-                             $"CRITICAL FOR SEARCH SNIPPETS: You only have access to Google Search snippets. You DO NOT have a web scraper! If the exact number of corners/cards is NOT explicitly written in the text of the search snippet, you CANNOT guess it by just linking the Flashscore URL. If the snippet does not contain the exact stat, you MUST mark the outcome as 'UNKNOWN'. Do NOT hallucinate data just because you found the match page URL.\n" +
-                             $"CRITICAL FOR SOURCES: For every match, you MUST include the EXACT URL links of BOTH the primary and secondary websites you used to verify the stats directly in the 'stats' field or 'fullAnalysis' field so the admin can verify it! Never claim 'according to ESPN' without providing the link!\n" +
+                             $"CRITICAL FOR SCREENSHOTS: I will attach the RAW JSON statistics fetched directly from the Oddspapi API for the matches in this bet slip if available. You MUST carefully parse this JSON to find the exact scores for the specific teams requested in the bet legs! This JSON data is your absolute primary source of truth. If the API only provides basic scores (and not detailed stats like corners/cards) and you cannot determine the outcome based purely on the provided JSON, mark the leg as 'UNKNOWN' or 'Pending'. Do NOT search the web for missing stats.\n" +
+                             $"CRITICAL FOR SOURCES: For every match, if you found the data in the attached JSON, explicitly state 'Verified via provided Oddspapi JSON' in the 'stats' field or 'fullAnalysis'.\n" +
                              $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)', it means the bet transfers to the substitute! If the named player is substituted off, the stats of the player who comes on for them MUST be added to their total! You must find who was substituted on for that player and combine their stats to determine the outcome.\n" +
                              $"Check if the matches are finished, live, or not started. Determine if the overall bet was Won, Lost, or Void based on the results.\n" +
                              $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
@@ -265,15 +270,40 @@ namespace BettingApp.Services
                              $"{{ \"overallStatus\": \"MATCH IN PROGRESS\", \"fullAnalysis\": \"Your detailed reasoning formatted with \n line breaks...\", \"legs\": [ {{ \"match\": \"Team A vs Team B\", \"outcome\": \"Won / Lost / Void / Pending\", \"stats\": \"e.g. 12 corners, or Match starts in 2 hours.\" }} ] }}\n" +
                              $"Return ONLY valid JSON. Do not include markdown code blocks.";
 
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var extractionResult = JsonSerializer.Deserialize<AiVisionExtractionResult>(extractedBetDataJson, options);
+                
+                var partsList = new List<object>
+                {
+                    new { text = prompt }
+                };
+
+                if (extractionResult?.Legs != null)
+                {
+                    var groupedLegs = extractionResult.Legs.GroupBy(l => l.Match);
+                    foreach (var group in groupedLegs)
+                    {
+                        string matchName = group.Key;
+                        
+                        var rawJson = await _oddsApi.GetMatchScoreJsonAsync(matchName, betPlacedAt);
+                        if (!string.IsNullOrEmpty(rawJson))
+                        {
+                            partsList.Add(new
+                            {
+                                text = $"=== ODDSPAPI RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n========================="
+                            });
+                        }
+                        
+                        // Add a small delay to avoid Oddspapi rate limits on combo bets
+                        await Task.Delay(1000);
+                    }
+                }
+
                 var payload = new
                 {
                     contents = new[]
                     {
-                        new { parts = new[] { new { text = prompt } } }
-                    },
-                    tools = new[]
-                    {
-                        new { google_search = new object() }
+                        new { parts = partsList.ToArray() }
                     }
                 };
 

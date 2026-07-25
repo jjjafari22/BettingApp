@@ -503,3 +503,4 @@ __azurite_db*
 *.json.swp**/DataProtection-Keys/
 AzuriteConfig
 BettingApp.db
+scratch/

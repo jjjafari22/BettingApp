@@ -38,6 +38,13 @@
         window.getBrowserTimeZoneOffset = function() {
             return new Date().getTimezoneOffset();
         };
+        
+        window.scrollToElementId = function(elementId) {
+            var element = document.getElementById(elementId);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        };
     </script>
     
     <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>

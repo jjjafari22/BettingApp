@@ -15,7 +15,7 @@
 @inject IJSRuntime JSRuntime
 @inject BettingApp.Services.DialogService DialogService
 @inject OddsApiService OddsApi
-@inject KambiScraperService KambiScraper
+@inject AiVisionService AiVision
 @inject AiVisionService AiVision
 @inject MarketMappingService MarketMapper
 @attribute [Authorize]
@@ -271,7 +271,11 @@
                                                 bool isActive = (leg == ActiveLookupLeg);
                                                 <div class="card mb-1 @(isActive ? "border-primary shadow" : "shadow-sm border-0")">
                                                     <div class="card-body py-1 px-2" style="font-family: monospace; font-size: 0.85em;">
-                                                        Match: @leg.Match <br/>
+                                                        Match: @leg.Match 
+                                                        @if (leg.StartTime != null) {
+                                                            <span class="text-primary ms-1">(Starts: @ToUserLocal(leg.StartTime.Value).ToString("g"))</span>
+                                                        }
+                                                        <br/>
                                                         Market: @leg.Market <br/>
                                                         Selection: @leg.Selection <br/>
                                                         Odds: @leg.Odds <br/>
@@ -324,55 +328,71 @@
                                             </div>
                                         }
                                         <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light text-muted fw-bold"><i class="bi bi-robot"></i> Unibet/Kambi</span>
+                                            <span class="input-group-text bg-light text-muted fw-bold"><i class="bi bi-search"></i> OddsPapi Lookup</span>
                                             <input type="text" class="form-control" placeholder="Search team (e.g. Arsenal)..." @bind="OddsSearchTeam" @onkeydown="@(e => { if (e.Key == "Enter") _ = SearchOdds(); })" />
                                             <button class="btn btn-primary" @onclick="() => SearchOdds()" disabled="@IsSearchingOdds">
                                                 @if(IsSearchingOdds) { <span class="spinner-border spinner-border-sm"></span> } else { <i class="bi bi-search"></i> }
                                             </button>
                                         </div>
                                         
-                                        @if (SelectedKambiEvent != null && AllKambiMarkets != null)
+                                        @if (PapiSearchResult != null)
                                         {
                                             <div class="alert alert-info py-1 px-2 mb-2 small fw-bold">
-                                                <i class="bi bi-calendar-event me-1"></i> @SelectedKambiEvent.Name <span class="text-muted fw-normal ms-2">(@SelectedKambiEvent.Start.ToLocalTime().ToString("g"))</span>
+                                                <i class="bi bi-calendar-event me-1"></i> @PapiSearchResult.MatchName <span class="text-muted fw-normal ms-2">(@PapiSearchResult.StartTime.ToLocalTime().ToString("g"))</span>
+                                                @if (PapiSearchResult.IsLive) {
+                                                    <span class="badge bg-danger ms-2 shadow-sm"><span class="pulse-dot bg-white rounded-circle d-inline-block me-1" style="width: 6px; height: 6px;"></span> LIVE ODDS</span>
+                                                }
                                             </div>
 
                                             <div class="mb-2">
-                                                <select class="form-select form-select-sm fw-bold" @bind="SelectedKambiCategory">
-                                                    @foreach (var cat in AvailableMarketCategories)
+                                                <select class="form-select form-select-sm fw-bold" @bind="SelectedPapiMarketId">
+                                                    @foreach (var m in PapiSearchResult.Markets)
                                                     {
-                                                        <option value="@cat">@cat</option>
+                                                        <option value="@m.MarketId">@m.MarketName</option>
                                                     }
                                                 </select>
                                             </div>
 
                                             <div class="table-responsive" style="max-height: 250px;">
                                                 <table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size: 0.8rem;">
-                                                    <thead class="table-light">
+                                                    <thead class="table-light sticky-top" style="z-index: 1;">
                                                         <tr>
                                                             <th class="text-start">Outcome</th>
-                                                            <th>Odds</th>
+                                                            <th>Unibet</th>
+                                                            <th>Coolbet</th>
+                                                            <th>Bet365</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        @foreach (var market in AllKambiMarkets.Where(m => m.Criterion.EnglishLabel == SelectedKambiCategory))
+                                                        @if (!string.IsNullOrEmpty(SelectedPapiMarketId) && PapiSearchResult.BookmakerOdds.TryGetValue(SelectedPapiMarketId, out var bookies))
                                                         {
-                                                            @foreach (var outcome in market.Outcomes)
+                                                            var selectedMarket = PapiSearchResult.Markets.FirstOrDefault(m => m.MarketId == SelectedPapiMarketId);
+                                                            var outcomes = selectedMarket?.OutcomeNames ?? new Dictionary<string, string>();
+                                                            
+                                                            @foreach (var kvp in outcomes)
                                                             {
-                                                                <tr>
-                                                                    <td class="text-start fw-bold">
-                                                                        @if (!string.IsNullOrEmpty(outcome.Participant)) {
-                                                                            <span class="text-primary me-1">@outcome.Participant -</span>
+                                                                var oId = kvp.Key;
+                                                                var oName = kvp.Value;
+                                                                bool isMatch = ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection) && oName.Equals(ActiveLookupLeg.Selection, StringComparison.OrdinalIgnoreCase);
+                                                                
+                                                                <tr id="@(isMatch ? "highlighted-odds-row" : "")" class="@(isMatch ? "table-warning" : "")">
+                                                                    <td class="text-start fw-bold @(isMatch ? "text-dark" : "")">
+                                                                        @if (isMatch)
+                                                                        {
+                                                                            <i class="bi bi-star-fill text-warning me-1"></i>
                                                                         }
-                                                                        @outcome.EnglishLabel 
-                                                                        @if (outcome.DecimalLine.HasValue) { <span class="badge bg-secondary ms-1">@outcome.DecimalLine</span> }
+                                                                        @oName
                                                                     </td>
-                                                                    <td class="fw-bold text-primary">@outcome.DecimalOdds.ToString("0.00")</td>
+                                                                    <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
+                                                                        @(bookies.TryGetValue("unibet", out var u) && u.TryGetValue(oId, out double up) ? up.ToString("0.00") : "-")
+                                                                    </td>
+                                                                    <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
+                                                                        @(bookies.TryGetValue("coolbet", out var c) && c.TryGetValue(oId, out double cp) ? cp.ToString("0.00") : "-")
+                                                                    </td>
+                                                                    <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
+                                                                        @(bookies.TryGetValue("bet365", out var b) && b.TryGetValue(oId, out double bp) ? bp.ToString("0.00") : "-")
+                                                                    </td>
                                                                 </tr>
-                                                            }
-                                                            <!-- Divider if there are multiple sub-markets under the same category -->
-                                                            @if (AllKambiMarkets.Count(m => m.Criterion.EnglishLabel == SelectedKambiCategory) > 1) {
-                                                                <tr style="height:4px; background-color: #f8f9fa;"><td colspan="2" class="p-0 border-0"></td></tr>
                                                             }
                                                         }
                                                     </tbody>
@@ -1009,14 +1029,10 @@
 
     private bool ShowOddsLookup = false;
     private bool IsSearchingOdds = false;
-    private string OddsSearchTeam = "";
+    private string OddsSearchTeam = "";    // OddsPapi UI State
+    private BettingApp.Models.OddsPapiSearchResult? PapiSearchResult = null;
+    private string SelectedPapiMarketId = "";
     
-    // Kambi UI State
-    private BettingApp.Services.KambiEvent? SelectedKambiEvent = null;
-    private List<BettingApp.Services.KambiBetOffer>? AllKambiMarkets = null;
-    private List<string> AvailableMarketCategories = new();
-    private string SelectedKambiCategory = "";
-
     // AI Vision State
     private HashSet<int> AnalyzingImageBetIds = new();
     private BettingApp.Services.AiVisionExtractionResult? AiVisionResult = null;
@@ -1228,138 +1244,135 @@
     private async Task SearchOdds(string? preSelectCategory = null)
     {
         if (string.IsNullOrWhiteSpace(OddsSearchTeam)) return;
+        
+        preSelectCategory ??= ActiveLookupLeg?.Market;
 
         IsSearchingOdds = true;
         OddsLookupErrorMessage = null;
         OddsLookupWarningMessage = null;
-        SelectedKambiEvent = null;
-        AllKambiMarkets = null;
-        AvailableMarketCategories.Clear();
-        SelectedKambiCategory = "";
+        PapiSearchResult = null;
+        SelectedPapiMarketId = "";
         StateHasChanged();
 
-        var (events, error) = await KambiScraper.SearchEventsAsync(OddsSearchTeam);
+        var result = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam);
         
-        if (error != null)
+        if (result == null)
         {
-            OddsLookupErrorMessage = error;
-        }
-        else if (events.Any())
-        {
-            SelectedKambiEvent = events.First();
-            
-            var (markets, marketError) = await KambiScraper.GetEventMarketsAsync(SelectedKambiEvent.Id);
-            if (marketError != null)
-            {
-                OddsLookupErrorMessage = marketError;
-            }
-            else
-            {
-                AllKambiMarkets = markets;
-                AvailableMarketCategories = markets
-                    .Select(m => m.Criterion.EnglishLabel)
-                    .Where(l => !string.IsNullOrEmpty(l))
-                    .Distinct()
-                    .OrderBy(l => l)
-                    .ToList();
-                    
-                if (!string.IsNullOrEmpty(preSelectCategory))
-                {
-                    // 1. Normalize the market name using our dictionary
-                    var normalizedTarget = MarketMapper.NormalizeMarketName(preSelectCategory);
-
-                    // 2. Generic robust match: ignore spaces, punctuation, casing, and plurals/possessives
-                    var simplify = (string s) => 
-                    {
-                        var clean = s.ToLowerInvariant()
-                                     .Replace("players", "player")
-                                     .Replace("player's", "player")
-                                     .Replace("shots", "shot")
-                                     .Replace("cards", "card")
-                                     .Replace("goals", "goal")
-                                     .Replace("corners", "corner");
-                        return new string(clean.Where(char.IsLetterOrDigit).ToArray());
-                    };
-                    var simplifiedTarget = simplify(normalizedTarget);
-
-                    var bestMatch = AvailableMarketCategories.FirstOrDefault(c => 
-                        simplify(c) == simplifiedTarget || 
-                        simplify(c).Contains(simplifiedTarget) ||
-                        simplifiedTarget.Contains(simplify(c)));
-                    if (bestMatch != null) 
-                    {
-                        SelectedKambiCategory = bestMatch;
-                    }
-                    else
-                    {
-                        OddsLookupWarningMessage = $"AI requested market '{preSelectCategory}', but Kambi doesn't offer it for this game.";
-                    }
-                }
-                
-                // Fallbacks if no preSelectCategory or fuzzy match failed
-                if (string.IsNullOrEmpty(SelectedKambiCategory))
-                {
-                    if (AvailableMarketCategories.Contains("Full Time")) SelectedKambiCategory = "Full Time";
-                    else if (AvailableMarketCategories.Contains("Match Odds")) SelectedKambiCategory = "Match Odds";
-                    else SelectedKambiCategory = AvailableMarketCategories.FirstOrDefault() ?? "";
-                }
-            }
+            OddsLookupErrorMessage = "No OddsPapi matches found for that team, or error occurred.";
         }
         else
         {
-            OddsLookupErrorMessage = "No Kambi matches found for that team.";
+            PapiSearchResult = result;
+            
+            // Save the start time to the DB right away so we don't have to query AI for it later!
+            if (reviewingBetModel != null && result.StartTime > DateTime.MinValue)
+            {
+                if (ActiveLookupLeg != null) 
+                {
+                    ActiveLookupLeg.StartTime = result.StartTime;
+                }
+                
+                try
+                {
+                    using var context = DbFactory.CreateDbContext();
+                    var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
+                    if (dbBet != null)
+                    {
+                        if (reviewingBetModel.MatchStartTime == null || result.StartTime < reviewingBetModel.MatchStartTime)
+                        {
+                            dbBet.MatchStartTime = result.StartTime;
+                            reviewingBetModel.MatchStartTime = result.StartTime;
+                        }
+                        
+                        if (AiVisionResult != null)
+                        {
+                            dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(AiVisionResult);
+                            reviewingBetModel.AiVisionResultJson = dbBet.AiVisionResultJson;
+                        }
+                        
+                        await context.SaveChangesAsync();
+                    }
+                }
+                catch { /* Best effort */ }
+            }
+
+            if (result.Markets.Count == 0)
+            {
+                OddsLookupWarningMessage = "Match found, but OddsPapi returned 0 markets for Unibet, Coolbet, and Bet365.";
+            }
+            else if (!string.IsNullOrEmpty(preSelectCategory))
+            {
+                var normalizedTarget = MarketMapper.NormalizeMarketName(preSelectCategory, ActiveLookupLeg?.Match);
+                
+                // Simple fuzzy matching against OddsPapi MarketName
+                var simplify = (string s) => 
+                {
+                    var clean = s.ToLowerInvariant()
+                                 .Replace("players", "player")
+                                 .Replace("player's", "player")
+                                 .Replace("shots", "shot")
+                                 .Replace("cards", "card")
+                                 .Replace("goals", "goal")
+                                 .Replace("corners", "corner");
+                    return new string(clean.Where(char.IsLetterOrDigit).ToArray());
+                };
+                
+                var simplifiedTarget = simplify(normalizedTarget);
+                
+                // 1. Try exact match first
+                var bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == simplifiedTarget);
+                
+                // 2. Fallback to contains match if no exact match is found
+                if (bestMatch == null)
+                {
+                    bestMatch = result.Markets.FirstOrDefault(m => 
+                        simplify(m.MarketName).Contains(simplifiedTarget) ||
+                        simplifiedTarget.Contains(simplify(m.MarketName)));
+                }
+                    
+                if (bestMatch != null)
+                {
+                    SelectedPapiMarketId = bestMatch.MarketId;
+                }
+                else
+                {
+                    OddsLookupWarningMessage = $"AI requested market '{preSelectCategory}', but OddsPapi doesn't offer it.";
+                }
+            }
+            
+            if (string.IsNullOrEmpty(SelectedPapiMarketId))
+            {
+                // Try to find a standard market
+                var ftMatch = result.Markets.FirstOrDefault(m => m.MarketName.Contains("1x2", StringComparison.OrdinalIgnoreCase) || m.MarketName.Contains("Full Time", StringComparison.OrdinalIgnoreCase));
+                if (ftMatch != null)
+                {
+                    SelectedPapiMarketId = ftMatch.MarketId;
+                }
+                else
+                {
+                    SelectedPapiMarketId = result.Markets.FirstOrDefault()?.MarketId ?? "";
+                }
+            }
         }
 
         IsSearchingOdds = false;
         StateHasChanged();
-    }
-
-    private string KambiSearchQuery = "";
-    private string? KambiTestOutput = null;
-
-    private async Task TestKambi()
-    {
-        KambiTestOutput = "Fetching Events...";
-        StateHasChanged();
         
-        var (results, error) = await KambiScraper.SearchEventsAsync(KambiSearchQuery);
-        if (error != null) 
+        if (ActiveLookupLeg != null && !string.IsNullOrEmpty(SelectedPapiMarketId))
         {
-            KambiTestOutput = error;
-        } 
-        else 
-        {
-            KambiTestOutput = $"Success! Found {results.Count} events.";
-            if (results.Any()) {
-                var firstEvent = results.First();
-                KambiTestOutput += $"\nFirst event: {firstEvent.Name} ({firstEvent.Start})";
-                
-                KambiTestOutput += $"\n\nFetching Deep Markets for {firstEvent.Name}...";
-                StateHasChanged();
-
-                var (markets, marketError) = await KambiScraper.GetEventMarketsAsync(firstEvent.Id);
-                
-                if (marketError != null)
-                {
-                    KambiTestOutput += $"\nMarket Error: {marketError}";
-                }
-                else
-                {
-                    KambiTestOutput += $"\nFound {markets.Count} total markets!";
-                    
-                    // Group by market type and just show the counts of available markets
-                    var grouped = markets.GroupBy(m => m.Criterion.EnglishLabel).OrderByDescending(g => g.Count());
-                    
-                    KambiTestOutput += "\n\nAvailable Markets:";
-                    foreach(var g in grouped)
-                    {
-                        KambiTestOutput += $"\n- {g.Key} ({g.Count()} variants)";
-                    }
-                }
-            }
+            // Give DOM a tiny moment to render the new table rows, then scroll
+            _ = Task.Run(async () => {
+                await Task.Delay(100);
+                await InvokeAsync(async () => {
+                    try {
+                        await JSRuntime.InvokeVoidAsync("scrollToElementId", "highlighted-odds-row");
+                    } catch { }
+                });
+            });
         }
-        StateHasChanged();
     }
+
+
 
     public async ValueTask DisposeAsync()
     {
@@ -1725,41 +1738,50 @@
                 Details = $"Bet ID: {bet.Id}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Payout: {dbBet.PotentialPayout:N0}"
             });
 
-            if (newStatus == "Approved" && !string.IsNullOrEmpty(dbBet.AiVisionResultJson) && dbBet.MatchStartTime == null)
+            if (newStatus == "Approved" && !string.IsNullOrEmpty(dbBet.AiVisionResultJson))
             {
-                var betId = dbBet.Id;
-                var json = dbBet.AiVisionResultJson;
-                var placedAt = dbBet.CreatedAt;
-                
-                _ = Task.Run(async () => {
-                    try 
-                    {
-                        var startTime = await AiVision.ExtractMatchStartTimeAsync(json, placedAt);
-                        
-                        using var bgContext = DbFactory.CreateDbContext();
-                        var b = await bgContext.Bets.FindAsync(betId);
-                        if (b != null && b.Status == "Approved")
+                if (dbBet.MatchStartTime == null)
+                {
+                    var betId = dbBet.Id;
+                    var json = dbBet.AiVisionResultJson;
+                    var placedAt = dbBet.CreatedAt;
+                    
+                    _ = Task.Run(async () => {
+                        try 
                         {
-                            if (startTime.HasValue)
+                            var startTime = await OddsApi.GetEarliestMatchStartTimeAsync(json, placedAt);
+                            
+                            using var bgContext = DbFactory.CreateDbContext();
+                            var b = await bgContext.Bets.FindAsync(betId);
+                            if (b != null && b.Status == "Approved")
                             {
-                                b.MatchStartTime = startTime;
-                                var twoHoursAfter = startTime.Value.AddHours(2);
-                                b.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
+                                if (startTime.HasValue)
+                                {
+                                    b.MatchStartTime = startTime;
+                                    var twoHoursAfter = startTime.Value.AddHours(2);
+                                    b.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
+                                }
+                                else
+                                {
+                                    // Fallback if AI fails: schedule check immediately
+                                    b.NextCheckTime = DateTime.UtcNow;
+                                }
+                                await bgContext.SaveChangesAsync();
+                                await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
                             }
-                            else
-                            {
-                                // Fallback if AI fails: schedule check immediately
-                                b.NextCheckTime = DateTime.UtcNow;
-                            }
-                            await bgContext.SaveChangesAsync();
-                            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error extracting start time: {ex.Message}");
-                    }
-                });
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error background AI check: {ex}");
+                        }
+                    });
+                }
+                else
+                {
+                    // MatchStartTime was already populated by OddsApi, just set NextCheckTime!
+                    var twoHoursAfter = dbBet.MatchStartTime.Value.AddHours(2);
+                    dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
+                }
             }
 
             await context.SaveChangesAsync();
@@ -1882,14 +1904,7 @@
 
     private RenderFragment GetAiOutcomeBadge(string? outcomeResult) => builder =>
     {
-        if (string.IsNullOrEmpty(outcomeResult))
-        {
-            builder.OpenElement(0, "span");
-            builder.AddAttribute(1, "class", "badge bg-secondary bg-opacity-75 text-light fw-normal");
-            builder.AddContent(2, "⏳ Pending");
-            builder.CloseElement();
-            return;
-        }
+        if (string.IsNullOrEmpty(outcomeResult)) return;
 
         try
         {
@@ -1901,50 +1916,31 @@
             {
                 var lowerStatus = parsed.OverallStatus.ToLower();
                 
-                var badgeClass = "bg-secondary text-light";
-                var emoji = "➖";
-                var displayStatus = "Unknown";
-                
                 if (lowerStatus.Contains("won")) {
-                    badgeClass = "bg-success text-light";
-                    emoji = "✅";
-                    displayStatus = "Won";
+                    builder.OpenElement(0, "span");
+                    builder.AddAttribute(1, "class", "badge bg-success text-light shadow-sm");
+                    builder.AddContent(2, "✅ Won");
+                    builder.CloseElement();
                 } else if (lowerStatus.Contains("lost")) {
-                    badgeClass = "bg-danger text-light";
-                    emoji = "❌";
-                    displayStatus = "Lost";
+                    builder.OpenElement(0, "span");
+                    builder.AddAttribute(1, "class", "badge bg-danger text-light shadow-sm");
+                    builder.AddContent(2, "❌ Lost");
+                    builder.CloseElement();
                 } else if (lowerStatus.Contains("void")) {
-                    badgeClass = "bg-secondary text-light";
-                    emoji = "➖";
-                    displayStatus = "Void";
-                } else if (lowerStatus.Contains("in progress") || lowerStatus.Contains("live") || lowerStatus.Contains("not completed")) {
-                    badgeClass = "bg-warning text-dark";
-                    emoji = "⏱️";
-                    displayStatus = "In Progress";
-                } else if (lowerStatus.Contains("not started") || lowerStatus.Contains("pending")) {
-                    badgeClass = "bg-info text-dark";
-                    emoji = "📅";
-                    displayStatus = "Not Started";
-                } else if (lowerStatus.Contains("unknown")) {
-                    badgeClass = "bg-secondary text-light";
-                    emoji = "❓";
-                    displayStatus = "Unknown";
+                    builder.OpenElement(0, "span");
+                    builder.AddAttribute(1, "class", "badge bg-secondary text-light shadow-sm");
+                    builder.AddContent(2, "➖ Void");
+                    builder.CloseElement();
+                } else if (lowerStatus.Contains("unknown") || lowerStatus.Contains("not sure")) {
+                    builder.OpenElement(0, "span");
+                    builder.AddAttribute(1, "class", "badge bg-warning text-dark shadow-sm");
+                    builder.AddContent(2, "❓ Not Sure");
+                    builder.CloseElement();
                 }
-
-                builder.OpenElement(0, "span");
-                builder.AddAttribute(1, "class", $"badge {badgeClass} shadow-sm");
-                builder.AddContent(2, $"{emoji} {displayStatus}");
-                builder.CloseElement();
                 return;
             }
         }
         catch { }
-
-        // Fallback for old raw string format
-        builder.OpenElement(0, "span");
-        builder.AddAttribute(1, "class", "badge bg-info text-dark shadow-sm");
-        builder.AddContent(2, "🤖 Checked");
-        builder.CloseElement();
     };
 
     private RenderFragment GetMonitoringStatusBadge(Bet bet) => __builder =>
@@ -1957,7 +1953,7 @@
         {
             if (bet.MatchStartTime == null)
             {
-                <span class="badge bg-secondary shadow-sm"><i class="bi bi-hourglass me-1"></i> Pending</span>
+                <span class="badge bg-secondary shadow-sm"><span class="spinner-grow spinner-grow-sm me-1" role="status" aria-hidden="true"></span> Scheduling...</span>
             }
             else
             {
@@ -1969,15 +1965,15 @@
             var now = DateTime.UtcNow;
             if (bet.MatchStartTime.HasValue && bet.MatchStartTime.Value > now)
             {
-                <span class="badge bg-warning text-dark shadow-sm" title="Match hasn't started yet"><i class="bi bi-calendar-event me-1"></i> Starts @ToUserLocal(bet.MatchStartTime.Value).ToString("g")</span>
+                <span class="badge bg-warning text-dark shadow-sm" title="Match hasn't started yet"><i class="bi bi-clock me-1"></i> Next check at @ToUserLocal(bet.NextCheckTime.Value).ToString("g")</span>
             }
             else if (bet.NextCheckTime.Value <= now)
             {
-                <span class="badge bg-danger shadow-sm"><span class="pulse-dot bg-white rounded-circle d-inline-block me-1" style="width: 6px; height: 6px;"></span> Live Check</span>
+                <span class="badge bg-danger shadow-sm"><span class="pulse-dot bg-white rounded-circle d-inline-block me-1" style="width: 6px; height: 6px;"></span> Check ongoing</span>
             }
             else 
             {
-                <span class="badge bg-primary shadow-sm"><i class="bi bi-clock me-1"></i> Check @ToUserLocal(bet.NextCheckTime.Value).ToString("g")</span>
+                <span class="badge bg-success shadow-sm"><i class="bi bi-activity me-1"></i> Match Started</span>
             }
         }
     };

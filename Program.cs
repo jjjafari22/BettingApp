@@ -28,6 +28,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Components.Server.CircuitOptions
 });
 // -----------------------------------------------------
 
+builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 builder.Services.AddHealthChecks();
 
