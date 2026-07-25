@@ -138,6 +138,23 @@ namespace BettingApp.Services
                 string optionAwayName = payload.TryGetProperty("awayName", out var a) ? a.GetString() ?? "" : "";
                 string text = option.GetProperty("text").GetString() ?? "";
 
+                bool queryIsWomen = homeTeam.Contains("women", StringComparison.OrdinalIgnoreCase) || homeTeam.Contains("(w)", StringComparison.OrdinalIgnoreCase) || homeTeam.Contains("femenil", StringComparison.OrdinalIgnoreCase);
+                bool optionIsWomen = text.Contains("women", StringComparison.OrdinalIgnoreCase) || text.Contains("(w)", StringComparison.OrdinalIgnoreCase) || text.Contains("femenil", StringComparison.OrdinalIgnoreCase);
+
+                var homeTeamTokens = homeTeam.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries)
+                                             .Where(w => w.Length >= 3).ToArray();
+                if (homeTeamTokens.Length == 0 && !string.IsNullOrEmpty(homeTeam)) homeTeamTokens = new[] { homeTeam };
+
+                bool homeMatch = false;
+                foreach (var token in homeTeamTokens)
+                {
+                    if (text.Contains(token, StringComparison.OrdinalIgnoreCase))
+                    {
+                        homeMatch = true;
+                        break;
+                    }
+                }
+
                 bool awayTeamMatch = string.IsNullOrEmpty(awayTeam);
                 if (!awayTeamMatch)
                 {
@@ -151,12 +168,17 @@ namespace BettingApp.Services
                     }
                 }
 
-                if (!awayTeamMatch)
+                if (!homeMatch || !awayTeamMatch)
                 {
-                    continue; // Must contain at least one away team keyword
+                    continue; // Must contain at least one token from BOTH home and away teams!
                 }
 
                 int score = 0;
+                
+                if (queryIsWomen != optionIsWomen) 
+                {
+                    score -= 50; // Heavy penalty for gender mismatch!
+                }
                 
                 // Score 10 points if the Home/Away order strictly matches our expected order!
                 if (optionHomeName.Contains(homeTeam, StringComparison.OrdinalIgnoreCase) || homeTeam.Contains(optionHomeName, StringComparison.OrdinalIgnoreCase))
@@ -177,12 +199,34 @@ namespace BettingApp.Services
                 }
 
                 // Parse match date to prioritize the closest match (e.g. Leg 1 vs Leg 2)
-                if (betPlacedAt.HasValue && payload.TryGetProperty("matchDate", out var matchDateElement))
+                if (payload.TryGetProperty("matchDate", out var matchDateElement))
                 {
                     if (DateTime.TryParse(matchDateElement.GetString(), out DateTime matchDate))
                     {
-                        // Calculate absolute time difference between bet placed and match date
-                        TimeSpan diff = (matchDate - betPlacedAt.Value).Duration();
+                        DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
+                        
+                        // If the awayTeam string contains "(Starts: 24.Jul 20:00)", extract the date!
+                        var dateMatch = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (dateMatch.Success && DateTime.TryParse(dateMatch.Groups[1].Value, out DateTime parsedTarget))
+                        {
+                            // if it parsed successfully without a year, it might be in the past or future.
+                            // We can just use it if it's within a few months of betPlacedAt
+                            targetDate = parsedTarget;
+                            if (betPlacedAt.HasValue && Math.Abs((targetDate - betPlacedAt.Value).TotalDays) > 180)
+                            {
+                                // Fix year wrap-around
+                                targetDate = targetDate.AddYears(targetDate < betPlacedAt.Value ? 1 : -1);
+                            }
+                        }
+
+                        // Calculate absolute time difference between target date and match date
+                        TimeSpan diff = (matchDate - targetDate).Duration();
+                        
+                        // Strict threshold: If the match is more than 3 days apart from our target date, reject it!
+                        if (diff.TotalDays > 3)
+                        {
+                            continue;
+                        }
                         
                         if (score > bestScore || (score == bestScore && diff < smallestTimeDiff))
                         {
