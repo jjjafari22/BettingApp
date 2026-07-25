@@ -306,8 +306,10 @@
 
                    <div class="review-controls-container" @key="reviewingBetModel.Id">
                         <div class="container-fluid p-0">
-                            <!-- ODDS LOOKUP WIDGET -->
-                            <div class="card mb-3 shadow-sm border-0">
+                            @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing")
+                            {
+                                <!-- ODDS LOOKUP WIDGET -->
+                                <div class="card mb-3 shadow-sm border-0">
                                 <div class="card-header bg-secondary text-white py-1 px-2 small fw-bold" @onclick="ToggleOddsLookup" style="cursor: pointer;">
                                     <i class="bi bi-search me-1"></i> Quick Odds Lookup 
                                     <i class="bi bi-chevron-@(ShowOddsLookup ? "up" : "down") float-end"></i>
@@ -403,6 +405,7 @@
                                 }
                             </div>
                             <!-- END ODDS LOOKUP WIDGET -->
+                            }
                             
                            <div class="row g-2 mb-3">
                                  <div class="col-3">
@@ -1209,11 +1212,8 @@
             } 
             catch { }
             
-            // Auto-fill the Kambi search for the FIRST leg to save time!
-            if (result.Legs != null && result.Legs.Any())
-            {
-                SearchOddsForLeg(result.Legs.First());
-            }
+            // We explicitly do NOT auto-search odds here to prevent unnecessary API calls 
+            // and background logs on startup. Only lookup odds when manually triggered!
         }
 
         shouldFocusReviewModal = true;

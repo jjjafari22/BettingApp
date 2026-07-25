@@ -77,13 +77,13 @@ namespace BettingApp.Services
         
         private readonly HttpClient _httpClient;
         private readonly string? _apiKey;
-        private readonly OddsApiService _oddsApi;
+        private readonly FotMobScraperService _fotMob;
 
-        public AiVisionService(HttpClient httpClient, IConfiguration config, OddsApiService oddsApi)
+        public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob)
         {
             _httpClient = httpClient;
             _apiKey = config["GeminiApiKey"];
-            _oddsApi = oddsApi;
+            _fotMob = fotMob;
         }
 
         public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl)
@@ -249,12 +249,13 @@ namespace BettingApp.Services
             {
                 var prompt = $"You are a sports betting expert. Here is the JSON data of a bet slip that was placed at {betPlacedAt:yyyy-MM-dd HH:mm}.\n" +
                              $"{extractedBetDataJson}\n\n" +
-                             $"Please determine the final result for each match (leg) listed in the bet based strictly on the provided OddsPapi data.\n" +
-                             $"CRITICAL DATE CHECK: The bet was uploaded to our system on {betPlacedAt:yyyy-MM-dd}. The OddsPapi JSON attached (if any) represents the correct match found within a few days of this upload date. You MUST use the fixture provided in the OddsPapi JSON, even if its start time is slightly before the upload date (e.g. if the user uploaded the slip a day late or is testing old bets). Do not reject the provided OddsPapi fixture!\n" +
-                             $"CRITICAL FOR ODDSPAPI VERIFICATION: In the `fullAnalysis` field, the VERY FIRST line MUST explicitly state whether OddsPapi data was successfully provided and what it contained. E.g., 'OddsPapi Status: Match found, but no scores available yet' or 'OddsPapi Status: Scores found (1-0)'. If OddsPapi returned an error like 'No scores found' or 'NOT_FOUND', you MUST explicitly state that. If OddsPapi lacks data (e.g., corners are missing or no scores found), do NOT guess or hallucinate stats. You must strictly use the data provided.\n" +
+                             $"Please determine the final result for each match (leg) listed in the bet based strictly on the provided FotMob data.\n" +
+                             $"CRITICAL DATE CHECK: The bet was uploaded to our system on {betPlacedAt:yyyy-MM-dd}. The FotMob JSON attached (if any) represents the correct match found within a few days of this upload date. You MUST use the fixture provided in the FotMob JSON, even if its start time is slightly before the upload date (e.g. if the user uploaded the slip a day late or is testing old bets). Do not reject the provided FotMob fixture!\n" +
+                             $"CRITICAL FOR FOTMOB VERIFICATION: In the `fullAnalysis` field, the VERY FIRST line MUST explicitly state whether FotMob data was successfully provided and what it contained. E.g., 'FotMob Status: Match found, but no scores available yet' or 'FotMob Status: Scores found (1-0)'. If FotMob returned an error like 'No scores found' or 'NOT_FOUND', you MUST explicitly state that. If FotMob lacks data (e.g., corners are missing or no scores found), do NOT guess or hallucinate stats. You must strictly use the data provided.\n" +
                              $"CRITICAL FOR STATS AND SCORES: You MUST differentiate between Half-Time (HT) and Full-Time (FT) results! If the market specifies '1st Half' or 'Half Time', you must check the half-time stats. Otherwise, you MUST use the FINAL FULL-TIME (FT) score and stats! Double check that the stats you are pulling are for the FULL match and not just the first half. Pay attention to which team is Home and Away to get the score order correct.\n" +
-                             $"CRITICAL FOR SCREENSHOTS: I will attach the RAW JSON statistics fetched directly from the Oddspapi API for the matches in this bet slip if available. You MUST carefully parse this JSON to find the exact scores for the specific teams requested in the bet legs! This JSON data is your absolute primary source of truth. If the API only provides basic scores (and not detailed stats like corners/cards) and you cannot determine the outcome based purely on the provided JSON, mark the leg as 'UNKNOWN' or 'Pending'. Do NOT search the web for missing stats.\n" +
-                             $"CRITICAL FOR SOURCES: For every match, if you found the data in the attached JSON, explicitly state 'Verified via provided Oddspapi JSON' in the 'stats' field or 'fullAnalysis'.\n" +
+                             $"CRITICAL FOR SCREENSHOTS: I will attach the RAW JSON statistics fetched directly from the FotMob API for the matches in this bet slip if available. You MUST carefully parse this JSON to find the exact scores for the specific teams requested in the bet legs! This JSON data is your absolute primary source of truth.\n" +
+                             $"CRITICAL FOR FALLBACK: If the API only provides basic scores (and not detailed stats like corners/cards), OR if there is no FotMob JSON provided at all for a match, you are EQUIPPED WITH A GOOGLE SEARCH TOOL. You MUST use Google Search to find the final missing result (e.g. check ESPN, Flashscore, or official league sites). Do not guess or hallucinate stats. If you still cannot find it online, mark the leg as 'UNKNOWN' or 'Pending'.\n" +
+                             $"CRITICAL FOR SOURCES: For every match, explicitly state 'Verified via provided FotMob JSON' or 'Verified via Google Search' in the 'stats' field or 'fullAnalysis'.\n" +
                              $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)', it means the bet transfers to the substitute! If the named player is substituted off, the stats of the player who comes on for them MUST be added to their total! You must find who was substituted on for that player and combine their stats to determine the outcome.\n" +
                              $"Check if the matches are finished, live, or not started. Determine if the overall bet was Won, Lost, or Void based on the results.\n" +
                              $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
@@ -285,12 +286,12 @@ namespace BettingApp.Services
                     {
                         string matchName = group.Key;
                         
-                        var rawJson = await _oddsApi.GetMatchScoreJsonAsync(matchName, betPlacedAt);
+                        var rawJson = await _fotMob.GetMatchStatsJsonAsync(matchName, betPlacedAt);
                         if (!string.IsNullOrEmpty(rawJson))
                         {
                             partsList.Add(new
                             {
-                                text = $"=== ODDSPAPI RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n========================="
+                                text = $"=== FOTMOB RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n========================="
                             });
                         }
                         
@@ -304,6 +305,10 @@ namespace BettingApp.Services
                     contents = new[]
                     {
                         new { parts = partsList.ToArray() }
+                    },
+                    tools = new[]
+                    {
+                        new { googleSearch = new { } }
                     }
                 };
 
