@@ -109,11 +109,24 @@ public class OddsApiService
             string matchName = "";
             DateTime startTime = DateTime.MinValue;
 
-            string cleanTeamName = teamName.Replace(" vs ", " ", StringComparison.OrdinalIgnoreCase).Replace(" v ", " ", StringComparison.OrdinalIgnoreCase);
-            var searchTokens = cleanTeamName.Split(new[] { ' ', '-', '.' }, StringSplitOptions.RemoveEmptyEntries)
-                                       .Where(w => w.Length >= 3 && !w.Equals("the", StringComparison.OrdinalIgnoreCase) && !w.Equals("and", StringComparison.OrdinalIgnoreCase))
-                                       .ToList();
-                                       
+            string[] split = teamName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+            string homeTeam = split[0].Trim();
+            string awayTeam = split.Length > 1 ? split[1].Trim() : "";
+
+            var dateMatch = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (dateMatch.Success)
+            {
+                awayTeam = awayTeam.Substring(0, dateMatch.Index).Trim();
+            }
+
+            var homeTokens = homeTeam.Split(new[] { ' ', '-', '.' }, StringSplitOptions.RemoveEmptyEntries)
+                                     .Where(w => w.Length >= 3 && !w.Equals("the", StringComparison.OrdinalIgnoreCase)).ToList();
+            var awayTokens = awayTeam.Split(new[] { ' ', '-', '.' }, StringSplitOptions.RemoveEmptyEntries)
+                                     .Where(w => w.Length >= 3 && !w.Equals("the", StringComparison.OrdinalIgnoreCase)).ToList();
+
+            if (!homeTokens.Any()) homeTokens.Add(homeTeam);
+            if (!awayTokens.Any() && !string.IsNullOrEmpty(awayTeam)) awayTokens.Add(awayTeam);
+
             var bestMatches = new List<(JsonElement fixture, int score)>();
 
             foreach (var f in doc.RootElement.EnumerateArray())
@@ -121,20 +134,24 @@ public class OddsApiService
                 string p1 = f.TryGetProperty("participant1Name", out var p1n) ? (p1n.GetString() ?? "") : "";
                 string p2 = f.TryGetProperty("participant2Name", out var p2n) ? (p2n.GetString() ?? "") : "";
                 
+                bool homeMatch = homeTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
+                bool awayMatch = string.IsNullOrEmpty(awayTeam) || awayTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
+
+                // Strict rule: Must match at least one token from BOTH sides!
+                if (!homeMatch || !awayMatch)
+                {
+                    continue; 
+                }
+
                 int score = 0;
                 
-                // Exact substring match gives high score
-                if (IsNameMatch(p1, teamName) || IsNameMatch(p2, teamName))
-                {
-                    score += 100;
-                }
-                
-                // Token matches
-                foreach (var token in searchTokens)
+                if (IsNameMatch(p1, homeTeam) || IsNameMatch(p2, homeTeam)) score += 50;
+                if (!string.IsNullOrEmpty(awayTeam) && (IsNameMatch(p1, awayTeam) || IsNameMatch(p2, awayTeam))) score += 50;
+
+                foreach (var token in homeTokens.Concat(awayTokens))
                 {
                     if (IsNameMatch(p1, token) || IsNameMatch(p2, token)) score += 10;
                     
-                    // Special case for Copenhagen/Kobenhavn/København
                     if ((token.Contains("kobenhavn", StringComparison.OrdinalIgnoreCase) || token.Contains("copenhagen", StringComparison.OrdinalIgnoreCase)) && 
                         (IsNameMatch(p1, "copenhagen") || IsNameMatch(p2, "copenhagen")))
                     {
