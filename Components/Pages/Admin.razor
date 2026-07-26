@@ -1819,48 +1819,12 @@
             {
                 if (dbBet.MatchStartTime == null)
                 {
-                    var betId = dbBet.Id;
-                    var json = dbBet.AiVisionResultJson;
-                    var placedAt = dbBet.CreatedAt;
-                    
-                    _ = Task.Run(async () => {
-                        try 
-                        {
-                            var (startTime, updatedJson) = await OddsApi.GetEarliestMatchStartTimeAsync(json, placedAt);
-                            
-                            using var bgContext = DbFactory.CreateDbContext();
-                            var b = await bgContext.Bets.FindAsync(betId);
-                            if (b != null && b.Status == "Approved")
-                            {
-                                if (updatedJson != null)
-                                {
-                                    b.AiVisionResultJson = updatedJson;
-                                }
-
-                                if (startTime.HasValue)
-                                {
-                                    b.MatchStartTime = startTime;
-                                    var twoHoursAfter = startTime.Value.AddHours(2);
-                                    b.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
-                                }
-                                else
-                                {
-                                    // Fallback if AI fails: schedule check immediately
-                                    b.NextCheckTime = DateTime.UtcNow;
-                                }
-                                await bgContext.SaveChangesAsync();
-                                await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"Error background AI check: {ex}");
-                        }
-                    });
+                    // Fallback to AI scheduling immediately to save OddsPapi API credits
+                    dbBet.NextCheckTime = DateTime.UtcNow;
                 }
                 else
                 {
-                    // MatchStartTime was already populated by OddsApi, just set NextCheckTime!
+                    // MatchStartTime was already populated manually via Odds Lookup, just set NextCheckTime!
                     var twoHoursAfter = dbBet.MatchStartTime.Value.AddHours(2);
                     dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
                 }
@@ -2033,13 +1997,13 @@
         }
         else if (bet.NextCheckTime == null)
         {
-            if (bet.MatchStartTime == null)
+            if (bet.AiOutcomeResult != null && bet.AiOutcomeResult.Contains("MATCH FINISHED"))
             {
-                <span class="badge bg-secondary shadow-sm"><span class="spinner-grow spinner-grow-sm me-1" role="status" aria-hidden="true"></span> Scheduling...</span>
+                <span class="badge bg-secondary shadow-sm"><i class="bi bi-stop-circle me-1"></i> Stopped</span>
             }
             else
             {
-                <span class="badge bg-secondary shadow-sm"><i class="bi bi-stop-circle me-1"></i> Stopped</span>
+                <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>
             }
         }
         else
@@ -2052,7 +2016,7 @@
                         <i class="bi bi-calendar-event me-1"></i> Starts @ToUserLocal(bet.MatchStartTime.Value).ToString("g")
                     </span>
                     <span class="badge bg-light text-dark border" style="font-size: 0.65em;">
-                        <i class="bi bi-arrow-repeat me-1"></i> Check: @ToUserLocal(bet.NextCheckTime.Value).ToString("g")
+                        Next Check: @ToUserLocal(bet.NextCheckTime.Value).ToString("g")
                     </span>
                 </div>
             }
@@ -2067,7 +2031,7 @@
                         <i class="bi bi-activity me-1"></i> Live
                     </span>
                     <span class="badge bg-light text-dark border" style="font-size: 0.65em;">
-                        <i class="bi bi-arrow-repeat me-1"></i> Check: @ToUserLocal(bet.NextCheckTime.Value).ToString("g")
+                        Next Check: @ToUserLocal(bet.NextCheckTime.Value).ToString("g")
                     </span>
                 </div>
             }

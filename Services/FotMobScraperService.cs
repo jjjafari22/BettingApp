@@ -247,8 +247,8 @@ namespace BettingApp.Services
                         // Calculate absolute time difference between target date and match date
                         TimeSpan diff = (matchDate - targetDate).Duration();
                         
-                        // Strict threshold: If the match is more than 3 days apart from our target date, reject it!
-                        if (diff.TotalDays > 3)
+                        // Strict threshold: If the match is more than 14 days apart from our target date, reject it!
+                        if (diff.TotalDays > 14)
                         {
                             continue;
                         }

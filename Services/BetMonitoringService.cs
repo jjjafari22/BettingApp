@@ -94,8 +94,29 @@ namespace BettingApp.Services
                             }
                             else 
                             {
-                                // Match is still running or unknown, check again in 60 minutes
-                                dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                                // Match is still running or unknown.
+                                // First check if the AI provided a precise kickoff time (e.g. OddsPapi failed earlier)
+                                if (doc.RootElement.TryGetProperty("matchStartTimeIso", out var startTimeElement) && 
+                                    !string.IsNullOrEmpty(startTimeElement.GetString()))
+                                {
+                                    if (DateTime.TryParse(startTimeElement.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsedStart))
+                                    {
+                                        dbBet.MatchStartTime = parsedStart;
+                                        
+                                        // If game hasn't started yet or just started, sleep until 2 hours after kickoff
+                                        var nextCheck = parsedStart.AddHours(2);
+                                        dbBet.NextCheckTime = nextCheck <= DateTime.UtcNow ? DateTime.UtcNow.AddMinutes(60) : nextCheck;
+                                    }
+                                    else
+                                    {
+                                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                                    }
+                                }
+                                else
+                                {
+                                    // Fallback: check again in 60 minutes
+                                    dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                                }
                             }
                         }
                     }
