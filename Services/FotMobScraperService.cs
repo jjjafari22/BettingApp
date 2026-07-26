@@ -79,6 +79,100 @@ namespace BettingApp.Services
                     }
                 }
 
+                // Fallback 3: Deep dive into Team Fixtures! (Because apigw suggest only returns top 3-4 matches, hiding older or pre-season friendlies)
+                if (string.IsNullOrEmpty(eventId))
+                {
+                    // Collect team IDs from our previous searches!
+                    var teamIdsToDeepSearch = new System.Collections.Generic.HashSet<string>();
+                    
+                    async Task TryCollectTeamIds(string query)
+                    {
+                        if (string.IsNullOrEmpty(query) || query.Length < 3) return;
+                        try {
+                            string qUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(query)}";
+                            string qJson = await _httpClient.GetStringAsync(qUrl);
+                            using var qDoc = System.Text.Json.JsonDocument.Parse(qJson);
+                            if (qDoc.RootElement.TryGetProperty("teamSuggest", out var teamSuggest) && teamSuggest.GetArrayLength() > 0)
+                            {
+                                if (teamSuggest[0].TryGetProperty("options", out var options))
+                                {
+                                    foreach (var opt in options.EnumerateArray())
+                                    {
+                                        if (opt.TryGetProperty("payload", out var payload) && payload.TryGetProperty("id", out var tid))
+                                        {
+                                            string idStr = tid.ValueKind == System.Text.Json.JsonValueKind.Number ? tid.GetInt32().ToString() : tid.GetString() ?? "";
+                                            if (!string.IsNullOrEmpty(idStr)) teamIdsToDeepSearch.Add(idStr);
+                                        }
+                                    }
+                                }
+                            }
+                        } catch { }
+                    }
+
+                    await TryCollectTeamIds(homeTeam);
+                    await TryCollectTeamIds(awayTeam);
+                    
+                    string longestHome = homeTeam.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
+                    string cleanAway = awayTeam;
+                    var dm = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (dm.Success) cleanAway = awayTeam.Substring(0, dm.Index).Trim();
+                    string longestAway = cleanAway.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
+                    
+                    await TryCollectTeamIds(longestHome);
+                    await TryCollectTeamIds(longestAway);
+
+                    // Now for each team ID, fetch their full fixture list!
+                    foreach (var teamId in teamIdsToDeepSearch)
+                    {
+                        try 
+                        {
+                            string html = await _httpClient.GetStringAsync($"https://www.fotmob.com/teams/{teamId}/overview/team");
+                            var regexMatch = System.Text.RegularExpressions.Regex.Match(html, @"<script id=""__NEXT_DATA__"" type=""application/json"">(.*?)</script>");
+                            if (regexMatch.Success)
+                            {
+                                using var doc = System.Text.Json.JsonDocument.Parse(regexMatch.Groups[1].Value);
+                                var fallback = doc.RootElement.GetProperty("props").GetProperty("pageProps").GetProperty("fallback");
+                                var teamData = fallback.GetProperty($"team-{teamId}");
+                                var fixtures = teamData.GetProperty("fixtures").GetProperty("allFixtures").GetProperty("fixtures");
+                                
+                                foreach (var f in fixtures.EnumerateArray())
+                                {
+                                    string id = "";
+                                    if (f.TryGetProperty("id", out var idProp))
+                                    {
+                                        id = idProp.ValueKind == System.Text.Json.JsonValueKind.Number ? idProp.GetInt32().ToString() : idProp.GetString() ?? "";
+                                    }
+                                    
+                                    string homeName = f.TryGetProperty("home", out var h) && h.TryGetProperty("name", out var hn) ? hn.GetString() ?? "" : "";
+                                    string awayName = f.TryGetProperty("away", out var a) && a.TryGetProperty("name", out var an) ? an.GetString() ?? "" : "";
+                                    
+                                    // Check if this fixture matches our target match!
+                                    var homeTokens = homeTeam.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 3).Select(NormalizeText).ToArray();
+                                    var awayTokens = cleanAway.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 3).Select(NormalizeText).ToArray();
+                                    
+                                    if (homeTokens.Length == 0) homeTokens = new[] { NormalizeText(homeTeam) };
+                                    if (awayTokens.Length == 0 && !string.IsNullOrEmpty(cleanAway)) awayTokens = new[] { NormalizeText(cleanAway) };
+                                    
+                                    string normFixtureHome = NormalizeText(homeName);
+                                    string normFixtureAway = NormalizeText(awayName);
+
+                                    bool match1 = homeTokens.Any(t => FuzzyMatch(t, normFixtureHome)) && (awayTokens.Length == 0 || awayTokens.Any(t => FuzzyMatch(t, normFixtureAway)));
+                                    bool match2 = homeTokens.Any(t => FuzzyMatch(t, normFixtureAway)) && (awayTokens.Length == 0 || awayTokens.Any(t => FuzzyMatch(t, normFixtureHome)));
+
+                                    if (match1 || match2)
+                                    {
+                                        eventId = id;
+                                        break; // Found it!
+                                    }
+                                }
+                            }
+                        } 
+                        catch { }
+                        
+                        if (!string.IsNullOrEmpty(eventId)) break; // Found it, stop searching teams!
+                    }
+                }
+
                 if (string.IsNullOrEmpty(eventId))
                 {
                     Console.WriteLine($"{betLabel} FotMob: Could not find match against {awayTeam} for {homeTeam}");
@@ -275,21 +369,36 @@ namespace BettingApp.Services
         }
         private string NormalizeText(string text)
         {
-            if (string.IsNullOrEmpty(text)) return text;
-            return text.ToLowerInvariant()
-                       .Replace("ø", "o")
-                       .Replace("å", "a")
-                       .Replace("æ", "ae")
-                       .Replace("ä", "a")
-                       .Replace("ö", "o")
-                       .Replace("ü", "u")
-                       .Replace("é", "e")
-                       .Replace("è", "e")
-                       .Replace("á", "a")
-                       .Replace("í", "i")
-                       .Replace("ó", "o")
-                       .Replace("ú", "u")
-                       .Replace("ñ", "n");
+            if (string.IsNullOrEmpty(text)) return "";
+            var normalized = text.Normalize(System.Text.NormalizationForm.FormD);
+            var sb = new System.Text.StringBuilder();
+            foreach (var c in normalized)
+            {
+                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                {
+                    sb.Append(c);
+                }
+            }
+            return sb.ToString().ToLowerInvariant();
+        }
+
+        private bool FuzzyMatch(string token, string fixtureName)
+        {
+            if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(fixtureName)) return false;
+            if (fixtureName.Contains(token)) return true;
+            if (token.Contains(fixtureName)) return true;
+            
+            // Check if any word in fixtureName shares the first 4 chars with token
+            if (token.Length >= 4)
+            {
+                string prefix = token.Substring(0, 4);
+                var fixtureTokens = fixtureName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var ft in fixtureTokens)
+                {
+                    if (ft.Length >= 4 && ft.StartsWith(prefix)) return true;
+                }
+            }
+            return false;
         }
     }
 }
