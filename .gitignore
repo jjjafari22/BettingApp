@@ -496,6 +496,7 @@ betting.db.zip
 Data/betting.db
 
 # Azurite (Local Azure Storage Emulator)
+.azurite/
 __blobstorage__/
 __queuestorage__/
 __tablestorage__/
