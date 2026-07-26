@@ -176,7 +176,7 @@ namespace BettingApp.Services
 
                 if (string.IsNullOrEmpty(eventId))
                 {
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Could not find match against {awayTeam} for {homeTeam}");
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Could not find match '{matchName}'");
                     return null;
                 }
 
