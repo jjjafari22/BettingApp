@@ -86,8 +86,13 @@ namespace BettingApp.Services
                         var doc = JsonDocument.Parse(result);
                         if (doc.RootElement.TryGetProperty("overallStatus", out var statusElement))
                         {
-                            var status = statusElement.GetString();
-                            if (status == "MATCH FINISHED - WON" || status == "MATCH FINISHED - LOST" || status == "MATCH FINISHED - VOID")
+                            var status = statusElement.GetString()?.Trim().ToUpperInvariant() ?? "";
+                            var isFinished = 
+                                status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
+                                status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
+                                status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID";
+
+                            if (isFinished)
                             {
                                 // Match is finished, stop checking
                                 dbBet.NextCheckTime = null;

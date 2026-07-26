@@ -446,11 +446,12 @@
                                <!-- Mobile Image Toggle Button -->
                                @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
                                    <button class="btn btn-primary d-lg-none shadow-lg rounded-circle d-flex align-items-center justify-content-center border-0" 
-                                           style="position: absolute; right: 15px; top: -55px; width: 45px; height: 45px; z-index: 1050; opacity: 0.95; user-select: none;"
+                                           style="position: absolute; right: 15px; top: -55px; width: 45px; height: 45px; z-index: 1050; opacity: 0.95; user-select: none; -webkit-touch-callout: none; touch-action: none;"
                                            @onpointerdown="() => showMobileScreenshot = true" 
                                            @onpointerup="() => showMobileScreenshot = false" 
                                            @onpointerout="() => showMobileScreenshot = false" 
-                                           @onpointercancel="() => showMobileScreenshot = false">
+                                           @onpointercancel="() => showMobileScreenshot = false"
+                                           @oncontextmenu="() => {}" @oncontextmenu:preventDefault="true">
                                        <i class="bi bi-image fs-5"></i>
                                    </button>
                                    
@@ -2104,7 +2105,23 @@
         }
         else if (bet.NextCheckTime == null)
         {
-            if (bet.AiOutcomeResult != null && bet.AiOutcomeResult.Contains("MATCH FINISHED"))
+            bool isFinished = false;
+            if (!string.IsNullOrEmpty(bet.AiOutcomeResult))
+            {
+                try {
+                    var doc = System.Text.Json.JsonDocument.Parse(bet.AiOutcomeResult);
+                    if (doc.RootElement.TryGetProperty("overallStatus", out var statusProp))
+                    {
+                        var status = statusProp.GetString()?.Trim().ToUpperInvariant() ?? "";
+                        isFinished = 
+                            status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
+                            status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
+                            status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID";
+                    }
+                } catch { }
+            }
+
+            if (isFinished)
             {
                 <span class="badge bg-secondary shadow-sm"><i class="bi bi-stop-circle me-1"></i> Stopped</span>
             }
