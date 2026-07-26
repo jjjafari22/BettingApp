@@ -156,6 +156,19 @@
                                             <i class="bi bi-robot me-2 text-warning"></i> Re-run AI Auto-Read
                                         </button>
                                     </li>
+                                    @if (reviewContext == "Approved" || reviewContext == "Completed")
+                                    {
+                                        <li>
+                                            <button class="dropdown-item" @onclick="ExecuteCheckOutcomeFromDropdown" disabled="@ConfirmingOutcomeBetIds.Contains(reviewingBetModel.Id)">
+                                                @if (ConfirmingOutcomeBetIds.Contains(reviewingBetModel.Id)) {
+                                                    <span class="spinner-border spinner-border-sm me-2 text-info" role="status" aria-hidden="true"></span>
+                                                    <span>Checking...</span>
+                                                } else {
+                                                    <i class="bi bi-robot me-2 text-info"></i> @(string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) ? "Check Outcome" : "Re-Check Outcome")
+                                                }
+                                            </button>
+                                        </li>
+                                    }
                                     @if (reviewContext == "Completed")
                                     {
                                         <li>
@@ -796,6 +809,12 @@
     {
         showModalDropdown = false;
         await AnalyzeImageAsync();
+    }
+
+    private async Task ExecuteCheckOutcomeFromDropdown()
+    {
+        showModalDropdown = false;
+        await ConfirmOutcomeAsync();
     }
 
     private async Task ToggleAdminOverride()
@@ -1602,6 +1621,7 @@
             reviewingBetModel.Odds = 0;
         }
 
+        showModalDropdown = false;
         modalSuccessMessage = null;
         reviewErrorMessage = null; errorMessage = null;
         AiVisionResult = null;
