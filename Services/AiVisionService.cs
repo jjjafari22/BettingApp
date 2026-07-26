@@ -241,12 +241,14 @@ namespace BettingApp.Services
             }
         }
 
-        public async Task<string?> ConfirmOutcomeAsync(string extractedBetDataJson, DateTime betPlacedAt)
+        public async Task<string?> ConfirmOutcomeAsync(string extractedBetDataJson, DateTime betPlacedAt, int? betId = null)
         {
             if (string.IsNullOrEmpty(_apiKey)) return "Error: Gemini API key missing.";
 
             try
             {
+                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
+
                 var prompt = $"You are a sports betting expert. Here is the JSON data of a bet slip that was placed at {betPlacedAt:yyyy-MM-dd HH:mm}.\n" +
                              $"{extractedBetDataJson}\n\n" +
                              $"Please determine the final result for each match (leg) listed in the bet based strictly on the provided FotMob data.\n" +
@@ -288,7 +290,7 @@ namespace BettingApp.Services
                     {
                         string matchName = group.Key;
                         
-                        var rawJson = await _fotMob.GetMatchStatsJsonAsync(matchName, betPlacedAt);
+                        var rawJson = await _fotMob.GetMatchStatsJsonAsync(matchName, betPlacedAt, betId);
                         if (!string.IsNullOrEmpty(rawJson))
                         {
                             partsList.Add(new
@@ -383,7 +385,30 @@ namespace BettingApp.Services
                     }
                 }
 
-                return text?.Trim();
+                string? finalJson = text?.Trim();
+                if (!string.IsNullOrEmpty(finalJson))
+                {
+                    try
+                    {
+                        using var resultDoc = JsonDocument.Parse(finalJson);
+                        string localBetLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
+                        
+                        string status = resultDoc.RootElement.TryGetProperty("overallStatus", out var os) ? os.GetString() ?? "UNKNOWN" : "UNKNOWN";
+                        bool hasStartTime = resultDoc.RootElement.TryGetProperty("matchStartTimeIso", out var ms) && !string.IsNullOrEmpty(ms.GetString());
+                        
+                        if (status == "MATCH NOT STARTED" && hasStartTime)
+                        {
+                            Console.WriteLine($"{localBetLabel} AI: Found start time via Google Search -> {ms.GetString()}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"{localBetLabel} AI: Checked outcome -> Status: {status}");
+                        }
+                    }
+                    catch { } // ignore parsing errors for logging
+                }
+
+                return finalJson;
             }
             catch (Exception ex)
             {

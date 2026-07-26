@@ -14,10 +14,11 @@ namespace BettingApp.Services
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
         }
 
-        public async Task<string?> GetMatchStatsJsonAsync(string matchName, DateTime? betPlacedAt = null)
+        public async Task<string?> GetMatchStatsJsonAsync(string matchName, DateTime? betPlacedAt = null, int? betId = null)
         {
             try
             {
+                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
                 // 1. Clean the match name and extract Home Team for robust searching
                 string[] split = matchName.Split(new[] { " vs ", " - ", " v " }, StringSplitOptions.None);
                 string homeTeam = split[0].Trim();
@@ -80,11 +81,11 @@ namespace BettingApp.Services
 
                 if (string.IsNullOrEmpty(eventId))
                 {
-                    Console.WriteLine($"Could not find match against {awayTeam} in FotMob search results for {homeTeam}");
+                    Console.WriteLine($"{betLabel} FotMob: Could not find match against {awayTeam} for {homeTeam}");
                     return null;
                 }
 
-                Console.WriteLine($"Found FotMob Match ID {eventId} for {matchName}");
+                Console.WriteLine($"{betLabel} FotMob: Found Match ID {eventId} for {matchName}");
 
                 // 2. Fetch Match HTML
                 string matchHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/match/{eventId}");

@@ -16,206 +16,10 @@ public class OddsApiService
         _cache = cache;
     }
 
-    public async Task<string?> GetMatchScoreJsonAsync(string matchName, DateTime betPlacedAt)
-    {
-        if (string.IsNullOrEmpty(_apiKey)) return null;
-
-        try
-        {
-            string[] split = matchName.Split(new[] { " vs ", " - ", " v " }, StringSplitOptions.None);
-            string homeTeam = NormalizeTeamName(split[0].Trim());
-            string awayTeam = split.Length > 1 ? NormalizeTeamName(split[1].Trim()) : "";
-
-            var awayTeamTokens = string.IsNullOrEmpty(awayTeam) ? Array.Empty<string>() : 
-                awayTeam.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Where(w => w.Length >= 3)
-                        .ToArray();
-
-            if (awayTeamTokens.Length == 0 && !string.IsNullOrEmpty(awayTeam))
-            {
-                awayTeamTokens = new[] { awayTeam };
-            }
-
-            string fromDate = betPlacedAt.AddDays(-3).ToString("yyyy-MM-dd");
-            string toDate = betPlacedAt.AddDays(4).ToString("yyyy-MM-dd");
-
-            // We include sportId=10 (Soccer) because without it, the API limits date ranges to 2 days.
-            var searchUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId=10&from={fromDate}&to={toDate}";
-            
-            if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? json))
-            {
-                var response = await _httpClient.GetAsync(searchUrl);
-                if (!response.IsSuccessStatusCode)
-                {
-                    Console.WriteLine($"Oddspapi Fixtures Error: {response.StatusCode}");
-                    return null;
-                }
-
-                json = await response.Content.ReadAsStringAsync();
-                _cache.Set($"OddspapiFixtures_{fromDate}", json, TimeSpan.FromHours(1));
-            }
-            using var doc = JsonDocument.Parse(json ?? "[]");
-            
-            if (doc.RootElement.ValueKind != JsonValueKind.Array)
-            {
-                Console.WriteLine($"Oddspapi fixtures returned non-array: {json}");
-                return "{\"error\": \"Oddspapi fixtures did not return an array. Possible rate limit or API error.\"}";
-            }
-
-            string? bestFixtureId = null;
-            JsonElement bestFixture = default;
-            
-            foreach (var fixture in doc.RootElement.EnumerateArray())
-            {
-                string p1Name = fixture.TryGetProperty("participant1Name", out var p1n) ? p1n.GetString() ?? "" : "";
-                string p2Name = fixture.TryGetProperty("participant2Name", out var p2n) ? p2n.GetString() ?? "" : "";
-
-                bool team1MatchesP1 = IsNameMatch(p1Name, homeTeam);
-                bool team1MatchesP2 = IsNameMatch(p2Name, homeTeam);
-
-                bool isMatch = false;
-
-                if (team1MatchesP1)
-                {
-                    bool team2MatchesP2 = awayTeamTokens.Length == 0;
-                    foreach (var token in awayTeamTokens)
-                    {
-                        if (IsNameMatch(p2Name, token))
-                        {
-                            team2MatchesP2 = true;
-                            break;
-                        }
-                    }
-                    if (team2MatchesP2) isMatch = true;
-                }
-
-                if (!isMatch && team1MatchesP2)
-                {
-                    bool team2MatchesP1 = awayTeamTokens.Length == 0;
-                    foreach (var token in awayTeamTokens)
-                    {
-                        if (IsNameMatch(p1Name, token))
-                        {
-                            team2MatchesP1 = true;
-                            break;
-                        }
-                    }
-                    if (team2MatchesP1) isMatch = true;
-                }
-
-                if (isMatch)
-                {
-                    if (fixture.TryGetProperty("fixtureId", out var fid))
-                    {
-                        bestFixtureId = fid.ToString();
-                        bestFixture = fixture;
-                        break;
-                    }
-                }
-            }
-
-            if (string.IsNullOrEmpty(bestFixtureId))
-            {
-                Console.WriteLine($"Could not find match {matchName} in Oddspapi fixtures");
-                return "{\"error\": \"Match not found in Oddspapi fixtures\"}";
-            }
-
-            string startTime = bestFixture.TryGetProperty("startTime", out var st) ? (st.GetString() ?? "Unknown") : "Unknown";
-            string status = bestFixture.TryGetProperty("statusName", out var sn) ? (sn.GetString() ?? "Unknown") : "Unknown";
-            
-            return $"{{\"OddsPapiFixtureInfo\": {{\"status\": \"{status}\", \"startTime\": \"{startTime}\"}}}}";
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Exception in GetMatchScoreJsonAsync: {ex.Message}");
-            return null;
-        }
-    }
-
-    private string NormalizeTeamName(string name)
-    {
-        // Removed destructive normalization so we can test variants in IsNameMatch
-        if (string.IsNullOrEmpty(name)) return name;
-        return name;
-    }
-
-    private bool IsNameMatch(string apiName, string searchName)
-    {
-        if (string.IsNullOrEmpty(searchName) || string.IsNullOrEmpty(apiName)) return false;
-        
-        if (apiName.Contains(searchName, StringComparison.OrdinalIgnoreCase) || searchName.Contains(apiName, StringComparison.OrdinalIgnoreCase)) return true;
-        
-        string v1 = searchName.Replace("ø", "o").Replace("Ø", "O").Replace("æ", "ae").Replace("Æ", "Ae").Replace("å", "aa").Replace("Å", "Aa");
-        string apiv1 = apiName.Replace("ø", "o").Replace("Ø", "O").Replace("æ", "ae").Replace("Æ", "Ae").Replace("å", "aa").Replace("Å", "Aa");
-        if (apiv1.Contains(v1, StringComparison.OrdinalIgnoreCase) || v1.Contains(apiv1, StringComparison.OrdinalIgnoreCase)) return true;
-
-        string v2 = searchName.Replace("ø", "oe").Replace("Ø", "Oe").Replace("æ", "a").Replace("Æ", "A").Replace("å", "a").Replace("Å", "A");
-        string apiv2 = apiName.Replace("ø", "oe").Replace("Ø", "Oe").Replace("æ", "a").Replace("Æ", "A").Replace("å", "a").Replace("Å", "A");
-        if (apiv2.Contains(v2, StringComparison.OrdinalIgnoreCase) || v2.Contains(apiv2, StringComparison.OrdinalIgnoreCase)) return true;
-        
-        return false;
-    }
-
-    public async Task<(DateTime? EarliestStartTime, string? UpdatedJson)> GetEarliestMatchStartTimeAsync(string extractedBetDataJson, DateTime betPlacedAt)
-    {
-        if (string.IsNullOrEmpty(_apiKey)) return (null, null);
-
-        try
-        {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var extractionResult = JsonSerializer.Deserialize<AiVisionExtractionResult>(extractedBetDataJson, options);
-            
-            if (extractionResult?.Legs == null || !extractionResult.Legs.Any()) return (null, null);
-
-            DateTime? earliest = null;
-            var uniqueMatches = extractionResult.Legs.Select(l => l.Match).Distinct();
-
-            foreach (var matchName in uniqueMatches)
-            {
-                var rawJson = await GetMatchScoreJsonAsync(matchName, betPlacedAt);
-                if (!string.IsNullOrEmpty(rawJson) && rawJson.Contains("\"startTime\":"))
-                {
-                    try 
-                    {
-                        using var doc = JsonDocument.Parse(rawJson);
-                        if (doc.RootElement.TryGetProperty("OddsPapiFixtureInfo", out var info))
-                        {
-                            if (info.TryGetProperty("startTime", out var st))
-                            {
-                                var stStr = st.GetString();
-                                if (DateTime.TryParse(stStr, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsedDt))
-                                {
-                                    if (earliest == null || parsedDt < earliest)
-                                    {
-                                        earliest = parsedDt;
-                                    }
-
-                                    foreach (var leg in extractionResult.Legs.Where(l => l.Match == matchName))
-                                    {
-                                        leg.StartTime = parsedDt;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-                }
-                await Task.Delay(500); // Respect rate limit
-            }
-
-            string updatedJson = JsonSerializer.Serialize(extractionResult, options);
-            return (earliest, updatedJson);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Exception in GetEarliestMatchStartTimeAsync: {ex.Message}");
-            return (null, null);
-        }
-    }
 
 
 
-    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName)
+    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null)
     {
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return (null, "API Key is missing or team name is empty.");
 
@@ -287,6 +91,9 @@ public class OddsApiService
             
             if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
             {
+                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Manual Lookup]";
+                Console.WriteLine($"{betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
+
                 var fResp = await _httpClient.GetAsync(fixturesUrl);
                 if (!fResp.IsSuccessStatusCode) return (null, $"Fixtures API returned status {fResp.StatusCode}");
                 
@@ -455,5 +262,32 @@ public class OddsApiService
             Console.WriteLine($"Exception in SearchOddsComparisonAsync: {ex.Message}");
             return (null, $"Exception: {ex.Message}");
         }
+    }
+
+    private bool IsNameMatch(string source, string target)
+    {
+        if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(target)) return false;
+        
+        // Remove common diacritics / normalize
+        string normalizedSource = NormalizeTeamName(source);
+        string normalizedTarget = NormalizeTeamName(target);
+        
+        return normalizedSource.Contains(normalizedTarget, StringComparison.OrdinalIgnoreCase) || 
+               normalizedTarget.Contains(normalizedSource, StringComparison.OrdinalIgnoreCase);
+    }
+    
+    private string NormalizeTeamName(string name)
+    {
+        return name.ToLowerInvariant()
+                   .Replace(" fc", "")
+                   .Replace("fk ", "")
+                   .Replace(" united", "")
+                   .Replace(" city", "")
+                   .Replace("cf ", "")
+                   .Replace(" cd", "")
+                   .Replace("bk ", "")
+                   .Replace(" (w)", "")
+                   .Replace(" women", "")
+                   .Trim();
     }
 }

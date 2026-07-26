@@ -1338,7 +1338,7 @@
         SelectedPapiMarketId = "";
         StateHasChanged();
 
-        var (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam);
+        var (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
         
         if (result == null)
         {

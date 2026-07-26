@@ -66,8 +66,7 @@ namespace BettingApp.Services
 
                 if (string.IsNullOrEmpty(bet.AiVisionResultJson)) continue;
 
-                _logger.LogInformation($"Checking outcome for bet #{bet.Id}");
-                string? result = await _aiVisionService.ConfirmOutcomeAsync(bet.AiVisionResultJson, bet.CreatedAt);
+                string? result = await _aiVisionService.ConfirmOutcomeAsync(bet.AiVisionResultJson, bet.CreatedAt, bet.Id);
                 
                 // Refresh bet from DB in case it was modified
                 var dbBet = await context.Bets.FindAsync(bet.Id);
