@@ -182,7 +182,7 @@
                         <!-- Left Column: Image -->
                         <div class="col-lg-6 position-relative bg-dark d-none d-lg-flex flex-column desktop-left-col" style="min-height: 400px; max-height: 100%;">
                             <div class="desktop-image-area position-relative p-2 d-flex align-items-center justify-content-center overflow-hidden">
-                                @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
+                                @if (!string.IsNullOrEmpty(reviewingBetModel!.ScreenshotUrl)) {
                                     <img src="@GetScreenshotUrl(reviewingBetModel.ScreenshotUrl)" class="img-fluid rounded shadow" style="max-height: 100%; max-width: 100%; object-fit: contain;" alt="Bet Screenshot" />
                                 } else {
                                     <div class="text-white-50 fst-italic text-center">
