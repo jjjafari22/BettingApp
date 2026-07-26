@@ -60,6 +60,7 @@ namespace BettingApp.Services
                 .Where(b => b.Status == "Approved" && b.NextCheckTime.HasValue && b.NextCheckTime.Value <= DateTime.UtcNow)
                 .ToListAsync(stoppingToken);
 
+            bool anyUpdates = false;
             foreach (var bet in dueBets)
             {
                 if (stoppingToken.IsCancellationRequested) break;
@@ -127,8 +128,12 @@ namespace BettingApp.Services
                 }
 
                 await context.SaveChangesAsync(stoppingToken);
-                
-                // Notify UI about the update
+                anyUpdates = true;
+            }
+            
+            if (anyUpdates)
+            {
+                // Notify UI about the update once for all bets
                 var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<BetHub>>();
                 await hubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
             }
