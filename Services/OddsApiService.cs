@@ -147,6 +147,10 @@ public class OddsApiService
                 
                 if (IsNameMatch(p1, homeTeam) || IsNameMatch(p2, homeTeam)) score += 50;
                 if (!string.IsNullOrEmpty(awayTeam) && (IsNameMatch(p1, awayTeam) || IsNameMatch(p2, awayTeam))) score += 50;
+                
+                // Huge bonus for exact match to differentiate "Team" from "Team 2"
+                if (IsExactMatch(p1, homeTeam) || IsExactMatch(p2, homeTeam)) score += 100;
+                if (!string.IsNullOrEmpty(awayTeam) && (IsExactMatch(p1, awayTeam) || IsExactMatch(p2, awayTeam))) score += 100;
 
                 foreach (var token in homeTokens.Concat(awayTokens))
                 {
@@ -297,6 +301,12 @@ public class OddsApiService
         
         return normalizedSource.Contains(normalizedTarget, StringComparison.OrdinalIgnoreCase) || 
                normalizedTarget.Contains(normalizedSource, StringComparison.OrdinalIgnoreCase);
+    }
+    
+    private bool IsExactMatch(string source, string target)
+    {
+        if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(target)) return false;
+        return NormalizeTeamName(source).Equals(NormalizeTeamName(target), StringComparison.OrdinalIgnoreCase);
     }
     
     private string NormalizeTeamName(string name)

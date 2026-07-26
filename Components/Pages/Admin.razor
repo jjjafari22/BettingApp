@@ -1407,10 +1407,7 @@
         ActiveLookupLeg = leg;
         if (string.IsNullOrEmpty(leg.Match)) return;
         
-        var homeTeam = leg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None)[0];
-        var homeWords = homeTeam.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        
-        OddsSearchTeam = string.Join(" ", homeWords.Take(2));
+        OddsSearchTeam = leg.Match;
         ShowOddsLookup = true;
         _ = SearchOdds(leg.Market);
     }
