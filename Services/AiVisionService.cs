@@ -64,6 +64,10 @@ namespace BettingApp.Services
         [JsonPropertyName("overallStatus")]
         public string OverallStatus { get; set; } = "";
         
+        [JsonPropertyName("matchStartTimeIso")]
+        public string? MatchStartTimeIso { get; set; }
+        
+        
         [JsonPropertyName("fullAnalysis")]
         public string FullAnalysis { get; set; } = "";
         
