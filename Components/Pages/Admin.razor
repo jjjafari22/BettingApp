@@ -1325,9 +1325,8 @@
                         reviewingBetModel.Odds = Math.Floor(odds / 0.05m) * 0.05m;
                     }
                 }
-            }
 
-            if (!string.IsNullOrEmpty(result.Stake))
+                if (!string.IsNullOrEmpty(result.Stake))
             {
                 var rawStake = result.Stake.Trim().ToLower();
                 
@@ -1370,8 +1369,9 @@
                 }
             } 
             catch { }
-            
-            // We explicitly do NOT auto-search odds here to prevent unnecessary API calls 
+        }
+
+        // We explicitly do NOT auto-search odds here to prevent unnecessary API calls 
             // and background logs on startup. Only lookup odds when manually triggered!
         }
         finally
