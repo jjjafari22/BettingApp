@@ -175,11 +175,11 @@ namespace BettingApp.Services
 
                 if (string.IsNullOrEmpty(eventId))
                 {
-                    Console.WriteLine($"{betLabel} FotMob: Could not find match against {awayTeam} for {homeTeam}");
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Could not find match against {awayTeam} for {homeTeam}");
                     return null;
                 }
 
-                Console.WriteLine($"{betLabel} FotMob: Found Match ID {eventId} for {matchName}");
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Found Match ID {eventId} for {matchName}");
 
                 // 2. Fetch Match HTML
                 string matchHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/match/{eventId}");
@@ -222,7 +222,7 @@ namespace BettingApp.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error scraping JSON for {matchName}: {ex.Message}");
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] Error scraping JSON for {matchName}: {ex.Message}");
                 return null;
             }
         }

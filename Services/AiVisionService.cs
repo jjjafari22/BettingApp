@@ -398,11 +398,11 @@ namespace BettingApp.Services
                         
                         if (status == "MATCH NOT STARTED" && hasStartTime)
                         {
-                            Console.WriteLine($"{localBetLabel} AI: Found start time via Google Search -> {ms.GetString()}");
+                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {localBetLabel} AI: Found start time via Google Search -> {ms.GetString()}");
                         }
                         else
                         {
-                            Console.WriteLine($"{localBetLabel} AI: Checked outcome -> Status: {status}");
+                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {localBetLabel} AI: Checked outcome -> Status: {status}");
                         }
                     }
                     catch { } // ignore parsing errors for logging

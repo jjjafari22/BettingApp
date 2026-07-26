@@ -92,7 +92,7 @@ public class OddsApiService
             if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
             {
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Manual Lookup]";
-                Console.WriteLine($"{betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
 
                 var fResp = await _httpClient.GetAsync(fixturesUrl);
                 if (!fResp.IsSuccessStatusCode) return (null, $"Fixtures API returned status {fResp.StatusCode}");
@@ -259,7 +259,7 @@ public class OddsApiService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Exception in SearchOddsComparisonAsync: {ex.Message}");
+            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] Exception in SearchOddsComparisonAsync: {ex.Message}");
             return (null, $"Exception: {ex.Message}");
         }
     }
