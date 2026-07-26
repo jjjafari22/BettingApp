@@ -25,6 +25,7 @@ public class OddsApiService
 
         try
         {
+            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Manual Lookup]";
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             
             // 1. Get markets metadata to map IDs to Names
@@ -91,7 +92,6 @@ public class OddsApiService
             
             if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
             {
-                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Manual Lookup]";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
 
                 var fResp = await _httpClient.GetAsync(fixturesUrl);
@@ -148,7 +148,11 @@ public class OddsApiService
                 }
             }
 
-            if (!bestMatches.Any()) return (null, $"No matching fixtures found for '{teamName}' in the next 7 days.");
+            if (!bestMatches.Any()) 
+            {
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} OddsPapi: Could not find match against '{teamName}'");
+                return (null, $"No matching fixtures found for '{teamName}' in the next 7 days.");
+            }
             
             var bestFixture = bestMatches.OrderByDescending(m => m.score).First().fixture;
             
@@ -156,6 +160,8 @@ public class OddsApiService
             string finalP1 = bestFixture.TryGetProperty("participant1Name", out var fp1) ? (fp1.GetString() ?? "") : "";
             string finalP2 = bestFixture.TryGetProperty("participant2Name", out var fp2) ? (fp2.GetString() ?? "") : "";
             matchName = $"{finalP1} vs {finalP2}";
+
+            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} OddsPapi: Found Match ID {fixtureId} for {matchName}");
             
             if (bestFixture.TryGetProperty("startTime", out var st))
             {
