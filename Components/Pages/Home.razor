@@ -764,7 +764,7 @@ else
                                     System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Saved to DB (Pending) and broadcasted SignalR.\n");
                                     
                                     await hub.Clients.All.SendAsync("ReceiveBetUpdate", dbBet.Id);
-                                    await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+                                    await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {dbBet.UserName}");
                                     await discord.NotifyAdminNewPickAsync(dbBet);
                                 }
                             } finally {
@@ -779,11 +779,6 @@ else
                     System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] EXCEPTION: {ex}\n");
                 }
             });
-
-            var msg = betsToNotify.Count == 1 
-                ? $"New pick submitted by {userName}" 
-                : $"{betsToNotify.Count} new picks submitted by {userName}";
-            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", msg);
 
             SuccessMessage = betsToNotify.Count == 1 
                 ? "Pick successfully sent for approval." 
