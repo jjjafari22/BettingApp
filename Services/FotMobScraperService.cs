@@ -198,6 +198,22 @@ namespace BettingApp.Services
                         {
                             var trimmedData = new System.Collections.Generic.Dictionary<string, object>();
 
+                            if (pageProps.TryGetProperty("general", out var general))
+                            {
+                                var trimmedGeneral = new System.Collections.Generic.Dictionary<string, object>();
+                                if (general.TryGetProperty("matchTimeUTC", out var mTime)) trimmedGeneral["matchTimeUTC"] = mTime;
+                                if (general.TryGetProperty("started", out var st)) trimmedGeneral["started"] = st;
+                                if (general.TryGetProperty("finished", out var fin)) trimmedGeneral["finished"] = fin;
+                                trimmedData["general"] = trimmedGeneral;
+                            }
+
+                            if (pageProps.TryGetProperty("header", out var header))
+                            {
+                                var trimmedHeader = new System.Collections.Generic.Dictionary<string, object>();
+                                if (header.TryGetProperty("status", out var stat)) trimmedHeader["status"] = stat;
+                                trimmedData["header"] = trimmedHeader;
+                            }
+
                             if (content.TryGetProperty("matchFacts", out var matchFacts))
                             {
                                 var trimmedFacts = new System.Collections.Generic.Dictionary<string, object>();
