@@ -270,7 +270,7 @@ namespace BettingApp.Services
                              $"- 'MATCH NOT STARTED' (if the match has not started yet, and no leg has definitively lost. Do NOT use 'BET PENDING' or other variations!)\n" +
                              $"- 'MATCH IN PROGRESS' (if the match is currently in progress/live, and no leg has definitively lost yet)\n" +
                              $"- 'UNKNOWN' (if the match is finished but the specific prop result cannot be found yet)\n" +
-                             $"CRITICAL FOR SCHEDULING: If the match has NOT STARTED, you MUST use Google Search to find its exact kickoff time and return it in ISO 8601 format in the `matchStartTimeIso` field (e.g. \"2026-07-25T19:00:00Z\"). Ensure you convert the time to UTC!\n" +
+                             $"CRITICAL FOR SCHEDULING: If the match has NOT STARTED, you must determine its exact kickoff time in UTC. If the kickoff time is ALREADY clearly stated in the bet slip data (e.g. 'Starts: 28.Jul 11:00'), you MUST parse it directly and DO NOT use Google Search. Only use Google Search if the start time is missing. Return it in ISO 8601 format in the `matchStartTimeIso` field (e.g. \"2026-07-25T19:00:00Z\").\n" +
                              $"Return a strictly formatted JSON object with the following schema:\n" +
                              $"{{ \"overallStatus\": \"MATCH NOT STARTED\", \"matchStartTimeIso\": \"2026-07-25T19:00:00Z\", \"fullAnalysis\": \"Your detailed reasoning formatted with \n line breaks...\", \"legs\": [ {{ \"match\": \"Team A vs Team B\", \"outcome\": \"Won / Lost / Void / Pending\", \"stats\": \"e.g. 12 corners, or Match starts in 2 hours.\" }} ] }}\n" +
                              $"Return ONLY valid JSON. Do not include markdown code blocks.";

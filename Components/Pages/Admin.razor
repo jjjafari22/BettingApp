@@ -1176,7 +1176,7 @@
         }
 
         // 2. We now have the JSON payload for the legs. Ask Gemini to search Google for the outcome.
-        var outcome = await AiVision.ConfirmOutcomeAsync(currentBet.AiVisionResultJson, currentBet.CreatedAt);
+        var outcome = await AiVision.ConfirmOutcomeAsync(currentBet.AiVisionResultJson, currentBet.CreatedAt, currentBet.Id);
         
         if (!string.IsNullOrEmpty(outcome) && !outcome.StartsWith("Error") && !outcome.StartsWith("Exception"))
         {
