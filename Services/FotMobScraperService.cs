@@ -148,8 +148,8 @@ namespace BettingApp.Services
                                     string awayName = f.TryGetProperty("away", out var a) && a.TryGetProperty("name", out var an) ? an.GetString() ?? "" : "";
                                     
                                     // Check if this fixture matches our target match!
-                                    var homeTokens = homeTeam.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 3).Select(NormalizeText).ToArray();
-                                    var awayTokens = cleanAway.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 3).Select(NormalizeText).ToArray();
+                                    var homeTokens = homeTeam.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2 && !IsGenericPrefix(w)).Select(NormalizeText).ToArray();
+                                    var awayTokens = cleanAway.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2 && !IsGenericPrefix(w)).Select(NormalizeText).ToArray();
                                     
                                     if (homeTokens.Length == 0) homeTokens = new[] { NormalizeText(homeTeam) };
                                     if (awayTokens.Length == 0 && !string.IsNullOrEmpty(cleanAway)) awayTokens = new[] { NormalizeText(cleanAway) };
@@ -256,7 +256,7 @@ namespace BettingApp.Services
 
             var awayTeamTokens = string.IsNullOrEmpty(awayTeam) ? new string[0] : 
                 awayTeam.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Where(w => w.Length >= 3)
+                        .Where(w => w.Length >= 2 && !IsGenericPrefix(w))
                         .ToArray();
 
             if (awayTeamTokens.Length == 0 && !string.IsNullOrEmpty(awayTeam))
@@ -280,7 +280,7 @@ namespace BettingApp.Services
                 bool optionIsWomen = text.Contains("women", StringComparison.OrdinalIgnoreCase) || text.Contains("(w)", StringComparison.OrdinalIgnoreCase) || text.Contains("femenil", StringComparison.OrdinalIgnoreCase);
 
                 var homeTeamTokens = homeTeam.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries)
-                                             .Where(w => w.Length >= 3).Select(NormalizeText).ToArray();
+                                             .Where(w => w.Length >= 2 && !IsGenericPrefix(w)).Select(NormalizeText).ToArray();
                 if (homeTeamTokens.Length == 0 && !string.IsNullOrEmpty(homeTeam)) homeTeamTokens = new[] { NormalizeText(homeTeam) };
 
                 bool homeMatch = false;
@@ -398,7 +398,16 @@ namespace BettingApp.Services
                     sb.Append(c);
                 }
             }
-            return sb.ToString().ToLowerInvariant();
+            string result = sb.ToString().ToLowerInvariant();
+            
+            // Map common nordic and german characters that don't decompose to ascii equivalents
+            result = result.Replace("ø", "o").Replace("æ", "ae").Replace("å", "a")
+                           .Replace("ö", "o").Replace("ä", "a").Replace("ü", "u");
+                           
+            // Map common english translated team names to local names
+            result = result.Replace("copenhagen", "kobenhavn");
+            
+            return result;
         }
 
         private bool FuzzyMatch(string token, string fixtureName)
@@ -418,6 +427,13 @@ namespace BettingApp.Services
                 }
             }
             return false;
+        }
+
+        private bool IsGenericPrefix(string word)
+        {
+            if (string.IsNullOrEmpty(word)) return true;
+            string w = word.ToLowerInvariant();
+            return w == "fc" || w == "fk" || w == "bk" || w == "if" || w == "il" || w == "ik" || w == "ff" || w == "gf" || w == "cd" || w == "cf";
         }
     }
 }
