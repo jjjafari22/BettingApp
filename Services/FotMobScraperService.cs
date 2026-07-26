@@ -96,7 +96,7 @@ namespace BettingApp.Services
                             {
                                 if (teamSuggest[0].TryGetProperty("options", out var options))
                                 {
-                                    foreach (var opt in options.EnumerateArray())
+                                    foreach (var opt in options.EnumerateArray().Take(2))
                                     {
                                         if (opt.TryGetProperty("payload", out var payload) && payload.TryGetProperty("id", out var tid))
                                         {
@@ -109,17 +109,18 @@ namespace BettingApp.Services
                         } catch { }
                     }
 
-                    await TryCollectTeamIds(homeTeam);
-                    await TryCollectTeamIds(awayTeam);
-                    
                     string longestHome = homeTeam.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
                     string cleanAway = awayTeam;
                     var dm = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (dm.Success) cleanAway = awayTeam.Substring(0, dm.Index).Trim();
                     string longestAway = cleanAway.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
-                    
-                    await TryCollectTeamIds(longestHome);
-                    await TryCollectTeamIds(longestAway);
+
+                    await Task.WhenAll(
+                        TryCollectTeamIds(homeTeam),
+                        TryCollectTeamIds(awayTeam),
+                        TryCollectTeamIds(longestHome),
+                        TryCollectTeamIds(longestAway)
+                    );
 
                     // Now for each team ID, fetch their full fixture list!
                     foreach (var teamId in teamIdsToDeepSearch)
@@ -231,7 +232,9 @@ namespace BettingApp.Services
                     } 
                     catch { }
                     
-                    return match.Groups[1].Value; // fallback to full payload if parsing fails
+                    // Fallback to a truncated payload to prevent crashing the AI with 170k+ characters
+                    string rawString = match.Groups[1].Value;
+                    return rawString.Length > 5000 ? rawString.Substring(0, 5000) + "...[TRUNCATED]" : rawString;
                 }
 
                 return null;
