@@ -391,8 +391,8 @@
                                                     <thead class="table-light sticky-top" style="z-index: 1;">
                                                         <tr>
                                                             <th class="text-start">Outcome</th>
-                                                            <th>Unibet</th>
-                                                            <th>Coolbet</th>
+                                                            <th>Unibet SE</th>
+                                                            <th>Betsson</th>
                                                             <th>Bet365</th>
                                                         </tr>
                                                     </thead>
@@ -406,7 +406,32 @@
                                                             {
                                                                 var oId = kvp.Key;
                                                                 var oName = kvp.Value;
-                                                                bool isMatch = ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection) && oName.Equals(ActiveLookupLeg.Selection, StringComparison.OrdinalIgnoreCase);
+                                                                bool isMatch = false;
+                                                                if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
+                                                                {
+                                                                    string hcPart = "";
+                                                                    int hcStart = oName.IndexOf('(');
+                                                                    if (hcStart != -1) hcPart = oName.Substring(hcStart).Trim();
+                                                                    
+                                                                    bool hcMatches = string.IsNullOrEmpty(hcPart) || 
+                                                                                     (!string.IsNullOrEmpty(ActiveLookupLeg.Market) && ActiveLookupLeg.Market.Contains(hcPart, StringComparison.OrdinalIgnoreCase)) ||
+                                                                                     ActiveLookupLeg.Selection.Contains(hcPart, StringComparison.OrdinalIgnoreCase);
+
+                                                                    if (hcMatches)
+                                                                    {
+                                                                        if (oName.Equals(ActiveLookupLeg.Selection, StringComparison.OrdinalIgnoreCase)) isMatch = true;
+                                                                        else if (ActiveLookupLeg.Match != null)
+                                                                        {
+                                                                            var split = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                                                                            if (split.Length >= 2)
+                                                                            {
+                                                                                if ((oName == "1" || oName.StartsWith("1 ")) && ActiveLookupLeg.Selection.Contains(split[0].Trim(), StringComparison.OrdinalIgnoreCase)) isMatch = true;
+                                                                                else if ((oName == "2" || oName.StartsWith("2 ")) && ActiveLookupLeg.Selection.Contains(split[1].Trim(), StringComparison.OrdinalIgnoreCase)) isMatch = true;
+                                                                                else if ((oName.Equals("X", StringComparison.OrdinalIgnoreCase) || oName.StartsWith("X ", StringComparison.OrdinalIgnoreCase)) && ActiveLookupLeg.Selection.Contains("Draw", StringComparison.OrdinalIgnoreCase)) isMatch = true;
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
                                                                 
                                                                 <tr id="@(isMatch ? "highlighted-odds-row" : "")" class="@(isMatch ? "table-warning" : "")">
                                                                     <td class="text-start fw-bold @(isMatch ? "text-dark" : "")">
@@ -417,13 +442,13 @@
                                                                         @oName
                                                                     </td>
                                                                     <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
-                                                                        @(bookies.TryGetValue("unibet", out var u) && u.TryGetValue(oId, out double up) ? up.ToString("0.00") : "-")
+                                                                        @(bookies.TryGetValue("unibet.se", out var u) && u.TryGetValue(oName, out double up) ? up.ToString("0.00") : "-")
                                                                     </td>
                                                                     <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
-                                                                        @(bookies.TryGetValue("coolbet", out var c) && c.TryGetValue(oId, out double cp) ? cp.ToString("0.00") : "-")
+                                                                        @(bookies.TryGetValue("betsson", out var c) && c.TryGetValue(oName, out double cp) ? cp.ToString("0.00") : "-")
                                                                     </td>
                                                                     <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
-                                                                        @(bookies.TryGetValue("bet365", out var b) && b.TryGetValue(oId, out double bp) ? bp.ToString("0.00") : "-")
+                                                                        @(bookies.TryGetValue("bet365", out var b) && b.TryGetValue(oName, out double bp) ? bp.ToString("0.00") : "-")
                                                                     </td>
                                                                 </tr>
                                                             }
@@ -1480,7 +1505,7 @@
 
             if (result.Markets.Count == 0)
             {
-                OddsLookupWarningMessage = "Match found, but OddsPapi returned 0 markets for Unibet, Coolbet, and Bet365.";
+                OddsLookupWarningMessage = "Match found, but OddsPapi returned 0 markets for Unibet SE, Betsson, and Bet365.";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
             }
             else if (!string.IsNullOrEmpty(preSelectCategory))

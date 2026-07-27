@@ -57,30 +57,45 @@ public class OddsApiService
                         var mId = m.GetProperty("marketId").ToString();
                         var baseName = m.TryGetProperty("marketName", out var mn) ? mn.GetString() ?? "Unknown" : "Unknown";
                         
+                        string handicapSuffix = "";
+                        if (m.TryGetProperty("handicap", out var hc))
+                        {
+                            if (hc.ValueKind == JsonValueKind.Number) handicapSuffix = $" ({hc.GetDouble()})";
+                            else if (hc.ValueKind == JsonValueKind.String) handicapSuffix = $" ({hc.GetString()})";
+                        }
+                        
+                        if (baseName.Contains("European Handicap", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = baseName.Replace("European Handicap", "3-Way Handicap", StringComparison.OrdinalIgnoreCase);
+                            
+                            if (handicapSuffix.StartsWith(" (-") && handicapSuffix.EndsWith(")"))
+                            {
+                                handicapSuffix = $" (0-{handicapSuffix.Substring(3, handicapSuffix.Length - 4)})";
+                            }
+                            else if (handicapSuffix.StartsWith(" (") && handicapSuffix.EndsWith(")") && !handicapSuffix.Contains("-"))
+                            {
+                                handicapSuffix = $" ({handicapSuffix.Substring(2, handicapSuffix.Length - 3)}-0)";
+                            }
+                        }
+                        
                         rawMarketIdToBaseName[mId] = baseName;
                         
                         if (!baseMarketDict.ContainsKey(baseName))
                         {
-                        baseMarketDict[baseName] = new BettingApp.Models.OddsPapiMarket { MarketId = baseName, MarketName = baseName };
-                    }
-                    
-                    var baseMarketObj = baseMarketDict[baseName];
-                    
-                    string handicapSuffix = "";
-                    if (m.TryGetProperty("handicap", out var hc) && hc.ValueKind == JsonValueKind.Number)
-                    {
-                        handicapSuffix = $" {hc.GetDouble()}";
-                    }
-                    
-                    if (m.TryGetProperty("outcomes", out var outcomes))
-                    {
-                        foreach (var o in outcomes.EnumerateArray())
-                        {
-                            var oId = o.GetProperty("outcomeId").ToString();
-                            var oName = o.TryGetProperty("outcomeName", out var on) ? on.GetString() ?? "" : "";
-                            baseMarketObj.OutcomeNames[oId] = oName + handicapSuffix;
+                            baseMarketDict[baseName] = new BettingApp.Models.OddsPapiMarket { MarketId = baseName, MarketName = baseName };
                         }
-                    }
+                    
+                        var baseMarketObj = baseMarketDict[baseName];
+                        
+                        if (m.TryGetProperty("outcomes", out var outcomes))
+                        {
+                            foreach (var o in outcomes.EnumerateArray())
+                            {
+                                var oId = o.GetProperty("outcomeId").ToString();
+                                var oName = o.TryGetProperty("outcomeName", out var on) ? on.GetString() ?? "" : "";
+                                baseMarketObj.OutcomeNames[oId] = oName + handicapSuffix;
+                            }
+                        }
                 }
                 }
             }
@@ -202,8 +217,8 @@ public class OddsApiService
                 }
             }
 
-            // 3. Fetch Odds for Unibet, Coolbet, Bet365
-            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet,coolbet,bet365";
+            // 3. Fetch Odds for Unibet SE, Betsson, Bet365
+            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365";
             var oResp = await _httpClient.GetAsync(oddsUrl);
             
             // Retry once if rate limited
@@ -262,13 +277,19 @@ public class OddsApiService
                                 foreach (var outcome in outcomes.EnumerateObject())
                                 {
                                     var oId = outcome.Name;
+                                    string oName = oId;
+                                    if (baseMarketDict.TryGetValue(baseName, out var bmObj) && bmObj.OutcomeNames.TryGetValue(oId, out var mappedName))
+                                    {
+                                        oName = mappedName;
+                                    }
+
                                     if (outcome.Value.TryGetProperty("players", out var players))
                                     {
                                         if (players.TryGetProperty("0", out var playerZero))
                                         {
                                             if (playerZero.TryGetProperty("price", out var price))
                                             {
-                                                result.BookmakerOdds[baseName][bmName][oId] = price.GetDouble();
+                                                result.BookmakerOdds[baseName][bmName][oName] = price.GetDouble();
                                             }
                                         }
                                     }
@@ -279,7 +300,11 @@ public class OddsApiService
                 }
             }
             
-            // Sort markets by name
+            // Deduplicate outcome names and sort markets by name
+            foreach (var market in result.Markets)
+            {
+                market.OutcomeNames = market.OutcomeNames.GroupBy(x => x.Value).Select(g => g.First()).ToDictionary(x => x.Key, x => x.Value);
+            }
             result.Markets.Sort((a, b) => a.MarketName.CompareTo(b.MarketName));
 
             return (result, null);
@@ -311,7 +336,23 @@ public class OddsApiService
     
     private string NormalizeTeamName(string name)
     {
-        return name.ToLowerInvariant()
+        if (string.IsNullOrEmpty(name)) return "";
+        
+        string normalizedString = name.Normalize(System.Text.NormalizationForm.FormD);
+        var stringBuilder = new System.Text.StringBuilder(capacity: normalizedString.Length);
+
+        for (int i = 0; i < normalizedString.Length; i++)
+        {
+            char c = normalizedString[i];
+            var unicodeCategory = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+            if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                stringBuilder.Append(c);
+            }
+        }
+        
+        return stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC)
+                   .ToLowerInvariant()
                    .Replace(" fc", "")
                    .Replace("fk ", "")
                    .Replace(" united", "")
