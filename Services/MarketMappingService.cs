@@ -11,6 +11,7 @@ namespace BettingApp.Services
         private readonly Dictionary<string, string> _marketAliases = new(StringComparer.OrdinalIgnoreCase)
         {
             // Example mappings (AI Output -> Kambi Category)
+            { "Asian Over/Under", "Over Under Full Time" },
             { "1. Half: Goals Handicap", "Half Time Handicap" },
             { "Yellow Cards: Total", "Total Cards" },
             { "Total Goals", "Over Under Full Time" },
