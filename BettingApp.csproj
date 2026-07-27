@@ -7,6 +7,7 @@
     <UserSecretsId>aspnet-BettingApp-4a8a64cd-f902-4d72-a4a3-d311110b2a5b</UserSecretsId>
     <NoWarn>$(NoWarn);BL0008</NoWarn>
     <ServerGarbageCollection>false</ServerGarbageCollection>
+    <InvariantGlobalization>false</InvariantGlobalization>
     <DefaultItemExcludes>$(DefaultItemExcludes);scratch\**</DefaultItemExcludes>
   </PropertyGroup>
 
