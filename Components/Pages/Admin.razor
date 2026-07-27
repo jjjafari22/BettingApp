@@ -1438,6 +1438,7 @@
         if (result == null)
         {
             OddsLookupErrorMessage = error ?? "No OddsPapi matches found for that team, or error occurred.";
+            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupErrorMessage}");
         }
         else
         {
@@ -1480,6 +1481,7 @@
             if (result.Markets.Count == 0)
             {
                 OddsLookupWarningMessage = "Match found, but OddsPapi returned 0 markets for Unibet, Coolbet, and Bet365.";
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage}");
             }
             else if (!string.IsNullOrEmpty(preSelectCategory))
             {
@@ -1517,7 +1519,8 @@
                 }
                 else
                 {
-                    OddsLookupWarningMessage = $"AI requested market '{preSelectCategory}', but OddsPapi doesn't offer it.";
+                    OddsLookupWarningMessage = $"The betslip is for '{preSelectCategory}', but OddsPapi doesn't offer it for this match.";
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage}");
                 }
             }
             
