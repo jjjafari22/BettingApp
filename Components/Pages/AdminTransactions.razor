@@ -46,7 +46,7 @@
                         <th>Date (Local)</th>
                         <th>Date (Norway)</th>
                         <th>Discord Username</th>
-                        <th>Last Name</th>
+                        <th>Full Name</th>
                         <th>Payment Method</th>
                         <th>Amount</th>
                         <th>Actions</th>
@@ -63,7 +63,7 @@
                             <td>@ToUserLocal(w.Date).ToString("g")</td>
                             <td>@TimeHelpers.GetNorwayTime(w.Date).ToString("g")</td>
                             <td>@(userLookup.TryGetValue(w.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : w.UserName)</td>
-                            <td>@(userLookup.TryGetValue(w.UserId, out var u2) ? u2.LastName : "")</td>
+                            <td>@(userLookup.TryGetValue(w.UserId, out var u2) ? $"{u2.FirstName} {u2.LastName}".Trim() : "")</td>
                             <td>
                                 @w.Platform
                                 @if(!string.IsNullOrEmpty(w.PaymentDetails)) {
@@ -274,7 +274,7 @@
             <tr>
                 <th class="text-nowrap">Last Updated</th>
                 <th>Discord Username</th>
-                <th>Last Name</th>
+                <th>Full Name</th>
                 <th>Type</th>
                 <th>Payment Method</th>
                 <th>Amount</th>
@@ -287,7 +287,7 @@
                 <tr>
                     <td class="text-nowrap">@ToUserLocal(t.UpdatedAt).ToString("g")</td>
                     <td>@(userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName)</td>
-                    <td>@(userLookup.TryGetValue(t.UserId, out var u2) ? u2.LastName : "")</td>
+                    <td>@(userLookup.TryGetValue(t.UserId, out var u2) ? $"{u2.FirstName} {u2.LastName}".Trim() : "")</td>
                     <td>
                          @if (t.Type == "Deposit")
                         {
@@ -351,7 +351,7 @@
     private List<Transaction> allTransactions = new();
     private List<Transaction> pendingWithdrawals = new();
     
-    private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
+    private Dictionary<string, (string DiscordName, string FirstName, string LastName)> userLookup = new();
     private Transaction newTrans = new() { Type = "Deposit", Platform = "PayPal", Date = DateTime.UtcNow, Status = "Completed" };
     private int? adminAddAmount; 
     
@@ -393,9 +393,9 @@
         if (missingIds.Any())
         {
             using var context = DbFactory.CreateDbContext();
-            var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.LastName }).ToListAsync();
+            var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.FirstName, u.LastName }).ToListAsync();
             foreach(var u in users) {
-                userLookup[u.Id] = (u.DiscordUsername ?? "", u.LastName ?? "");
+                userLookup[u.Id] = (u.DiscordUsername ?? "", u.FirstName ?? "", u.LastName ?? "");
             }
         }
     }
