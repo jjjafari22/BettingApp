@@ -60,8 +60,8 @@ public class OddsApiService
                         string handicapSuffix = "";
                         if (m.TryGetProperty("handicap", out var hc))
                         {
-                            if (hc.ValueKind == JsonValueKind.Number) handicapSuffix = $" ({hc.GetDouble()})";
-                            else if (hc.ValueKind == JsonValueKind.String) handicapSuffix = $" ({hc.GetString()})";
+                            if (hc.ValueKind == JsonValueKind.Number && hc.GetDouble() != 0) handicapSuffix = $" ({hc.GetDouble()})";
+                            else if (hc.ValueKind == JsonValueKind.String && hc.GetString() != "0") handicapSuffix = $" ({hc.GetString()})";
                         }
                         
                         if (baseName.Contains("European Handicap", StringComparison.OrdinalIgnoreCase))
@@ -213,6 +213,11 @@ public class OddsApiService
                 int statusId = sid.GetInt32();
                 if (statusId > 0 && statusId != 3)
                 {
+                    isLive = true;
+                }
+                else if (statusId == 0 && startTime <= DateTime.UtcNow)
+                {
+                    // OddsPapi may be slow to update statusId to 1; if it's past start time and still 0 (pre-game), treat as live
                     isLive = true;
                 }
             }

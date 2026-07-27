@@ -409,18 +409,25 @@
                                                                 bool isMatch = false;
                                                                 if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
                                                                 {
-                                                                    string hcPart = "";
-                                                                    int hcStart = oName.IndexOf('(');
-                                                                    if (hcStart != -1) hcPart = oName.Substring(hcStart).Trim();
+                                                                    string normOName = oName.Replace(" ", "").Replace("(", "").Replace(")", "").ToLower();
+                                                                    string normSel = ActiveLookupLeg.Selection.Replace(" ", "").Replace("(", "").Replace(")", "").ToLower();
                                                                     
-                                                                    bool hcMatches = string.IsNullOrEmpty(hcPart) || 
-                                                                                     (!string.IsNullOrEmpty(ActiveLookupLeg.Market) && ActiveLookupLeg.Market.Contains(hcPart, StringComparison.OrdinalIgnoreCase)) ||
-                                                                                     ActiveLookupLeg.Selection.Contains(hcPart, StringComparison.OrdinalIgnoreCase);
-
-                                                                    if (hcMatches)
+                                                                    if (normOName == normSel)
                                                                     {
-                                                                        if (oName.Equals(ActiveLookupLeg.Selection, StringComparison.OrdinalIgnoreCase)) isMatch = true;
-                                                                        else if (ActiveLookupLeg.Match != null)
+                                                                        isMatch = true;
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        string hcPart = "";
+                                                                        int hcStart = oName.IndexOf('(');
+                                                                        if (hcStart != -1) hcPart = oName.Substring(hcStart).Trim();
+                                                                        
+                                                                        string rawHc = hcPart.Replace("(", "").Replace(")", "").Trim();
+                                                                        bool hcMatches = string.IsNullOrEmpty(hcPart) || 
+                                                                                         (!string.IsNullOrEmpty(ActiveLookupLeg.Market) && ActiveLookupLeg.Market.Replace(" ", "").Replace("(", "").Replace(")", "").Contains(rawHc, StringComparison.OrdinalIgnoreCase)) ||
+                                                                                         normSel.Contains(rawHc, StringComparison.OrdinalIgnoreCase);
+
+                                                                        if (hcMatches && ActiveLookupLeg.Match != null)
                                                                         {
                                                                             var split = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
                                                                             if (split.Length >= 2)
