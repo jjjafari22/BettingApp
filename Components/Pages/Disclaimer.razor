@@ -4,30 +4,135 @@
 
 <PageTitle>Disclaimer & Policies - Castle of Happiness</PageTitle>
 
-<div class="container mt-4 mb-5">
+<style>
+    .card {
+        scroll-margin-top: 100px;
+        transition: box-shadow 0.3s ease, border-color 0.3s ease;
+    }
+    .card:target {
+        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.4) !important;
+        border-color: #0d6efd !important;
+        background-color: #f8faff;
+        animation: highlightPulse 2s ease-out;
+    }
+    @@keyframes highlightPulse {
+        0% { background-color: #e7f1ff; }
+        100% { background-color: #f8faff; }
+    }
+    .section-link {
+        cursor: pointer;
+    }
+    html {
+        scroll-behavior: smooth;
+    }
+    @@keyframes fadeOut {
+        0% { opacity: 1; }
+        80% { opacity: 1; }
+        100% { opacity: 0; display: none; }
+    }
+</style>
+
+<script>
+    function copySectionLink(fragment) {
+        const url = window.location.origin + '/disclaimer#' + fragment;
+        
+        // Copy to clipboard
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(url).catch(err => console.error('Failed to copy', err));
+        } else {
+            const textArea = document.createElement("textarea");
+            textArea.value = url;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-999999px";
+            textArea.style.top = "-999999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Fallback copy failed', err);
+            }
+            textArea.remove();
+        }
+
+        // Show Toast instantly via JS
+        let toast = document.getElementById('copy-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'copy-toast';
+            toast.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-4 z-3 shadow';
+            toast.style.pointerEvents = 'none';
+            toast.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Copied to clipboard';
+            document.body.appendChild(toast);
+        }
+        
+        // Reset animation to allow multiple rapid clicks
+        toast.style.animation = 'none';
+        toast.offsetHeight; /* trigger reflow */
+        toast.style.animation = 'fadeOut 3s forwards';
+    }
+</script>
+
+<div class="container mt-4 mb-5 position-relative">
     <h1 class="mb-4">Disclaimer & Policies</h1>
 
-    <div class="card shadow-sm mb-4">
+    <div id="general-rules" class="card shadow-sm mb-4">
         <div class="card-body">
-            <h4 class="card-title">General Betting Rules</h4>
+            <h4 class="card-title d-flex align-items-center">
+                General Betting Rules
+                <span class="ms-2 text-primary section-link fs-5" onclick="copySectionLink('general-rules')" title="Copy direct link to this section">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+            </h4>
             <p class="card-text">
                 Castle of Happiness is powered by Kambi. All wagers are settled in accordance with the Kambi Sportsbook General Betting Rules.
             </p>
         </div>
     </div>
-
-    <div class="card shadow-sm mb-4">
+    
+    <div id="live-betting" class="card shadow-sm mb-4">
         <div class="card-body">
-            <h4 class="card-title">Outcome Corrections & Adjustments</h4>
+            <h4 class="card-title d-flex align-items-center">
+                Live Betting & Odds Changes
+                <span class="ms-2 text-primary section-link fs-5" onclick="copySectionLink('live-betting')" title="Copy direct link to this section">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+            </h4>
+            <div class="alert alert-warning mt-3 mb-3" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i> <strong>Important:</strong> Before sending in your live bet, write <strong>"Live?"</strong> in your Discord channel and await a message back from an admin to ensure that we are available to accept it.
+            </div>
+            <p class="card-text">
+                When placing a live bet, you may cancel it at any time <strong>before</strong> it is accepted by us. Once accepted, the bet is final and stands as is.
+            </p>
+            <p class="card-text mt-2">
+                Odds fluctuate rapidly during live games. If a game event causes the odds to increase or decrease while your bet is pending, it is <strong>your responsibility</strong> to cancel the bet if you no longer want the odds you originally submitted.
+            </p>
+        </div>
+    </div>
+
+    <div id="outcome-corrections" class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h4 class="card-title d-flex align-items-center">
+                Outcome Corrections & Adjustments
+                <span class="ms-2 text-primary section-link fs-5" onclick="copySectionLink('outcome-corrections')" title="Copy direct link to this section">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+            </h4>
             <p class="card-text">
                 While we strive for perfect accuracy through a combination of automated extraction and manual administrative review, errors can occasionally occur. Castle of Happiness reserves the right to retroactively correct and update the final outcome of any settled bet for up to 30 days following its completion, should it be determined that the initial settlement or manual review was incorrect.
             </p>
         </div>
     </div>
 
-    <div class="card shadow-sm mb-4">
+    <div id="odds-adjustment" class="card shadow-sm mb-4">
         <div class="card-body">
-            <h4 class="card-title">Odds Adjustment Policy</h4>
+            <h4 class="card-title d-flex align-items-center">
+                Odds Adjustment Policy
+                <span class="ms-2 text-primary section-link fs-5" onclick="copySectionLink('odds-adjustment')" title="Copy direct link to this section">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+            </h4>
             <p class="card-text">
                 To ensure we provide the fastest possible service and maintain access to the best market rates, Castle of Happiness rounds all odds down to the nearest 0.05 increment. This prevents delays caused by minor, real-time market fluctuations.
             </p>
@@ -37,9 +142,14 @@
         </div>
     </div>
 
-    <div class="card shadow-sm mb-4">
+    <div id="free-bet-policy" class="card shadow-sm mb-4">
         <div class="card-body">
-            <h4 class="card-title">Free Bet Policy</h4>
+            <h4 class="card-title d-flex align-items-center">
+                Free Bet Policy
+                <span class="ms-2 text-primary section-link fs-5" onclick="copySectionLink('free-bet-policy')" title="Copy direct link to this section">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+            </h4>
             <p class="card-text">
                 Free Bets are awarded as "Net Free Bets". This means that when a wager is placed using a Free Bet, only the net winnings (total return minus the original Free Bet stake) will be credited to your account balance if the bet wins. The original Free Bet stake is not returned.
             </p>
@@ -49,9 +159,14 @@
         </div>
     </div>
 
-    <div class="card shadow-sm mb-4">
+    <div id="referral-program" class="card shadow-sm mb-4">
         <div class="card-body">
-            <h4 class="card-title">Referral Program Rules</h4>
+            <h4 class="card-title d-flex align-items-center">
+                Referral Program Rules
+                <span class="ms-2 text-primary section-link fs-5" onclick="copySectionLink('referral-program')" title="Copy direct link to this section">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+            </h4>
             <p class="card-text">
                 We reward players who bring active, genuine friends to our platform. To protect against bonus abuse, Free Bets (FB) earned through referrals are subject to the following validation conditions before they can be fully credited or cashed out:
             </p>
@@ -75,18 +190,28 @@
         </div>
     </div>
 
-    <div class="card shadow-sm mb-4">
+    <div id="settlement-days" class="card shadow-sm mb-4">
         <div class="card-body">
-            <h4 class="card-title">Settlement Days</h4>
+            <h4 class="card-title d-flex align-items-center">
+                Settlement Days
+                <span class="ms-2 text-primary section-link fs-5" onclick="copySectionLink('settlement-days')" title="Copy direct link to this section">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+            </h4>
             <p class="card-text">
                 On settlement days, you must settle your account based on your current Balance, even if you have unsettled bets. We run our settlement process just after 23:59 on Sunday evenings. Whatever your Balance is at that time determines what you owe. Even if you have a bet that settles on Monday, you must pay your full negative Balance as it stood on Sunday at 23:59.
             </p>
         </div>
     </div>
 
-    <div class="card shadow-sm">
+    <div id="withdrawal-policy" class="card shadow-sm mb-5">
         <div class="card-body">
-            <h4 class="card-title">Withdrawal Policy</h4>
+            <h4 class="card-title d-flex align-items-center">
+                Withdrawal Policy
+                <span class="ms-2 text-primary section-link fs-5" onclick="copySectionLink('withdrawal-policy')" title="Copy direct link to this section">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+            </h4>
             <p class="card-text">
                 To receive your payout on Monday, your withdrawal request must be submitted before kl. 23:59 on Sunday. Any requests placed after 23:59 on Sunday will not be paid out on Monday, and you will have to wait until the settlement on the following Monday.
             </p>
