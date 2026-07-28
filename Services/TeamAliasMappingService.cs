@@ -12,7 +12,8 @@ namespace BettingApp.Services
             { "kuopion palloseura", "kups" },
             { "st georgen", "san giorgio" },
             { "asc st georgen", "san giorgio" },
-            { "sudtirol", "fc sudtirol" }
+            { "sudtirol", "fc sudtirol" },
+            { "heart of midlothian", "hearts" }
         };
 
         public string ApplyTeamAliases(string normalizedTeamName)

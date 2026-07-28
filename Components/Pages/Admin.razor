@@ -381,7 +381,17 @@
                                                 <select class="form-select form-select-sm fw-bold" @bind="SelectedPapiMarketId">
                                                     @foreach (var m in PapiSearchResult.Markets)
                                                     {
-                                                        <option value="@m.MarketId">@m.MarketName</option>
+                                                        string displayMarketName = m.MarketName.Replace("Over Under", "Over/Under", StringComparison.OrdinalIgnoreCase);
+                                                        if (!string.IsNullOrEmpty(PapiSearchResult.MatchName))
+                                                        {
+                                                            var matchSplit = PapiSearchResult.MatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                                                            if (matchSplit.Length >= 2)
+                                                            {
+                                                                displayMarketName = displayMarketName.Replace("Team 1", $"[{matchSplit[0].Trim()}]", StringComparison.OrdinalIgnoreCase);
+                                                                displayMarketName = displayMarketName.Replace("Team 2", $"[{matchSplit[1].Trim()}]", StringComparison.OrdinalIgnoreCase);
+                                                            }
+                                                        }
+                                                        <option value="@m.MarketId">@displayMarketName</option>
                                                     }
                                                 </select>
                                             </div>
@@ -409,8 +419,8 @@
                                                                 bool isMatch = false;
                                                                 if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
                                                                 {
-                                                                    string normOName = oName.Replace(" ", "").Replace("(", "").Replace(")", "").ToLower();
-                                                                    string normSel = ActiveLookupLeg.Selection.Replace(" ", "").Replace("(", "").Replace(")", "").ToLower();
+                                                                    string normOName = System.Text.RegularExpressions.Regex.Replace(oName.Replace(" ", "").Replace("(", "").Replace(")", "").ToLower(), @"\.0+(?!\d)", "");
+                                                                    string normSel = System.Text.RegularExpressions.Regex.Replace(ActiveLookupLeg.Selection.Replace(" ", "").Replace("(", "").Replace(")", "").ToLower(), @"\.0+(?!\d)", "");
                                                                     
                                                                     if (normOName == normSel)
                                                                     {
@@ -1571,7 +1581,8 @@
                                  .Replace("shots", "shot")
                                  .Replace("cards", "card")
                                  .Replace("goals", "goal")
-                                 .Replace("corners", "corner");
+                                 .Replace("corners", "corner")
+                                 .Replace("halves", "half");
                     return new string(clean.Where(char.IsLetterOrDigit).ToArray());
                 };
                 

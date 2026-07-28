@@ -33,6 +33,13 @@ namespace BettingApp.Services
 
             var clean = rawMarketName.Trim();
             
+            // Detect if the market explicitly specifies a half
+            string halfSuffix = "";
+            if (clean.Contains("1st Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("First Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("1. Half", StringComparison.OrdinalIgnoreCase))
+                halfSuffix = " First Half";
+            else if (clean.Contains("2nd Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("Second Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("2. Half", StringComparison.OrdinalIgnoreCase))
+                halfSuffix = " Second Half";
+
             // Handle Team Specific Markets dynamically if matchName is provided
             if (!string.IsNullOrWhiteSpace(matchName))
             {
@@ -46,22 +53,43 @@ namespace BettingApp.Services
                     if (clean.Contains("Corners", StringComparison.OrdinalIgnoreCase))
                     {
                         if (clean.Contains(team1, StringComparison.OrdinalIgnoreCase) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
-                            return "Corners - Over Under Team 1";
+                            return "Corners - Over Under Team 1" + halfSuffix;
                         if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
-                            return "Corners - Over Under Team 2";
+                            return "Corners - Over Under Team 2" + halfSuffix;
                         
                         // Otherwise, generic corners
                         if (clean.StartsWith("Total Corners", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Corners", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (!string.IsNullOrEmpty(halfSuffix)) return "Corners - Over Under" + halfSuffix;
                             return "Corners - Over Under Full Time";
+                        }
                     }
 
                     // Goals Team 1/2
                     if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goals", StringComparison.OrdinalIgnoreCase))
                     {
                         if (clean.Contains(team1, StringComparison.OrdinalIgnoreCase) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
-                            return "Over Under Team 1";
+                            return "Over Under Team 1" + halfSuffix;
                         if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
-                            return "Over Under Team 2";
+                            return "Over Under Team 2" + halfSuffix;
+                    }
+
+                    // To Win At Least One Half
+                    if (clean.Contains("To Win At Least One Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("To Win Either Half", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (clean.Contains(team1, StringComparison.OrdinalIgnoreCase) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
+                            return "Team 1 To Win Either Halves";
+                        if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
+                            return "Team 2 To Win Either Halves";
+                    }
+
+                    // To Win Both Halves
+                    if (clean.Contains("To Win Both Halves", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (clean.Contains(team1, StringComparison.OrdinalIgnoreCase) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
+                            return "Team 1 to win both halves";
+                        if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
+                            return "Team 2 to win both halves";
                     }
                 }
             }
