@@ -102,7 +102,7 @@ public class OddsApiService
 
             // 2. Find Fixture
             string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
-            string toDate = DateTime.UtcNow.AddDays(6).ToString("yyyy-MM-dd");
+            string toDate = DateTime.UtcNow.AddDays(8).ToString("yyyy-MM-dd");
             var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId=10&from={fromDate}&to={toDate}";
             
             if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
@@ -152,8 +152,9 @@ public class OddsApiService
                 bool homeMatch = homeTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
                 bool awayMatch = string.IsNullOrEmpty(awayTeam) || awayTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
 
-                // Strict rule: Must match at least one token from BOTH sides!
-                if (!homeMatch || !awayMatch)
+                // Relaxed rule: Must match at least one token from AT LEAST ONE side!
+                // This prevents dropping matches where one team has a drastically different name (e.g. Italian vs German names for the same club).
+                if (!homeMatch && !awayMatch)
                 {
                     continue; 
                 }
@@ -358,6 +359,13 @@ public class OddsApiService
         
         return stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC)
                    .ToLowerInvariant()
+                   .Replace("kuopion palloseura", "kups")
+                   .Replace("ø", "o")
+                   .Replace("æ", "a")
+                   .Replace("å", "a")
+                   .Replace("oe", "o")
+                   .Replace("ae", "a")
+                   .Replace("aa", "a")
                    .Replace(" fc", "")
                    .Replace("fk ", "")
                    .Replace(" united", "")

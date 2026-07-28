@@ -432,9 +432,21 @@
                                                                             var split = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
                                                                             if (split.Length >= 2)
                                                                             {
-                                                                                if ((oName == "1" || oName.StartsWith("1 ")) && ActiveLookupLeg.Selection.Contains(split[0].Trim(), StringComparison.OrdinalIgnoreCase)) isMatch = true;
-                                                                                else if ((oName == "2" || oName.StartsWith("2 ")) && ActiveLookupLeg.Selection.Contains(split[1].Trim(), StringComparison.OrdinalIgnoreCase)) isMatch = true;
+                                                                                string t1 = split[0].Trim();
+                                                                                string t2 = split[1].Trim();
+
+                                                                                if ((oName == "1" || oName.StartsWith("1 ")) && ActiveLookupLeg.Selection.Contains(t1, StringComparison.OrdinalIgnoreCase)) isMatch = true;
+                                                                                else if ((oName == "2" || oName.StartsWith("2 ")) && ActiveLookupLeg.Selection.Contains(t2, StringComparison.OrdinalIgnoreCase)) isMatch = true;
                                                                                 else if ((oName.Equals("X", StringComparison.OrdinalIgnoreCase) || oName.StartsWith("X ", StringComparison.OrdinalIgnoreCase)) && ActiveLookupLeg.Selection.Contains("Draw", StringComparison.OrdinalIgnoreCase)) isMatch = true;
+
+                                                                                if (!isMatch && oName.Contains("/") && oName.Length <= 5)
+                                                                                {
+                                                                                    string expectedSelection = oName.Replace("1", t1).Replace("2", t2).Replace("X", "Draw").Replace("x", "Draw");
+                                                                                    if (ActiveLookupLeg.Selection.Replace(" ", "").Equals(expectedSelection.Replace(" ", ""), StringComparison.OrdinalIgnoreCase))
+                                                                                    {
+                                                                                        isMatch = true;
+                                                                                    }
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
