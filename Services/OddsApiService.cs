@@ -8,12 +8,14 @@ public class OddsApiService
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly IMemoryCache _cache;
+    private readonly TeamAliasMappingService _teamAliasMappingService;
 
-    public OddsApiService(HttpClient httpClient, IConfiguration config, IMemoryCache cache)
+    public OddsApiService(HttpClient httpClient, IConfiguration config, IMemoryCache cache, TeamAliasMappingService teamAliasMappingService)
     {
         _httpClient = httpClient;
         _apiKey = config["OddsApi:ApiKey"] ?? "";
         _cache = cache;
+        _teamAliasMappingService = teamAliasMappingService;
     }
 
 
@@ -356,10 +358,12 @@ public class OddsApiService
             }
         }
         
-        return stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC)
-                   .ToLowerInvariant()
-                   .Replace("kuopion palloseura", "kups")
-                   .Replace("ø", "o")
+        string result = stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC)
+                   .ToLowerInvariant();
+                   
+        result = _teamAliasMappingService.ApplyTeamAliases(result);
+
+        return result.Replace("ø", "o")
                    .Replace("æ", "a")
                    .Replace("å", "a")
                    .Replace("oe", "o")

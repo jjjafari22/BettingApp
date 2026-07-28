@@ -423,9 +423,40 @@
                                                                         if (hcStart != -1) hcPart = oName.Substring(hcStart).Trim();
                                                                         
                                                                         string rawHc = hcPart.Replace("(", "").Replace(")", "").Trim();
-                                                                        bool hcMatches = string.IsNullOrEmpty(hcPart) || 
-                                                                                         (!string.IsNullOrEmpty(ActiveLookupLeg.Market) && ActiveLookupLeg.Market.Replace(" ", "").Replace("(", "").Replace(")", "").Contains(rawHc, StringComparison.OrdinalIgnoreCase)) ||
-                                                                                         normSel.Contains(rawHc, StringComparison.OrdinalIgnoreCase);
+                                                                        bool hcMatches = false;
+                                                                        
+                                                                        string? expectedHcStr = null;
+                                                                        var hcSplit = ActiveLookupLeg.Match != null ? ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None) : new string[0];
+                                                                        if (hcSplit.Length >= 2)
+                                                                        {
+                                                                            var hcMatch = System.Text.RegularExpressions.Regex.Match(ActiveLookupLeg.Selection, @"([+-])\s*(\d+(?:\.\d+)?)");
+                                                                            if (hcMatch.Success)
+                                                                            {
+                                                                                string sign = hcMatch.Groups[1].Value;
+                                                                                double val = double.Parse(hcMatch.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+                                                                                int hVal = (int)Math.Truncate(val);
+                                                                                
+                                                                                if (hVal > 0)
+                                                                                {
+                                                                                    bool isT1 = ActiveLookupLeg.Selection.Contains(hcSplit[0].Trim(), StringComparison.OrdinalIgnoreCase);
+                                                                                    bool isT2 = ActiveLookupLeg.Selection.Contains(hcSplit[1].Trim(), StringComparison.OrdinalIgnoreCase);
+                                                                                    
+                                                                                    if (isT1) expectedHcStr = sign == "-" ? $"0-{hVal}" : $"{hVal}-0";
+                                                                                    else if (isT2) expectedHcStr = sign == "-" ? $"{hVal}-0" : $"0-{hVal}";
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        if (expectedHcStr != null)
+                                                                        {
+                                                                            hcMatches = string.Equals(rawHc, expectedHcStr, StringComparison.OrdinalIgnoreCase);
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            hcMatches = string.IsNullOrEmpty(hcPart) || 
+                                                                                        (!string.IsNullOrEmpty(ActiveLookupLeg.Market) && ActiveLookupLeg.Market.Replace(" ", "").Replace("(", "").Replace(")", "").Contains(rawHc, StringComparison.OrdinalIgnoreCase)) ||
+                                                                                        normSel.Contains(rawHc, StringComparison.OrdinalIgnoreCase);
+                                                                        }
 
                                                                         if (hcMatches && ActiveLookupLeg.Match != null)
                                                                         {
@@ -1555,6 +1586,17 @@
                     bestMatch = result.Markets.FirstOrDefault(m => 
                         simplify(m.MarketName).Contains(simplifiedTarget) ||
                         simplifiedTarget.Contains(simplify(m.MarketName)));
+                }
+
+                // 3. Fallback for Asian Handicap -> 3-Way Handicap if actual Asian Handicap doesn't exist
+                if (bestMatch == null && (simplifiedTarget.Contains("asianhandicap") || simplifiedTarget.Contains("handicap") || simplifiedTarget.StartsWith("handicap")))
+                {
+                    string fallbackTarget = (simplifiedTarget.Contains("1half") || simplifiedTarget.Contains("firsthalf") || simplifiedTarget.Contains("halftime")) 
+                        ? simplify("Half Time Handicap") 
+                        : simplify("3-Way Handicap");
+                        
+                    bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == fallbackTarget) ?? 
+                                result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(fallbackTarget));
                 }
                     
                 if (bestMatch != null)

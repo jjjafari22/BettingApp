@@ -50,6 +50,7 @@ builder.Services.AddHttpClient<Bet365ScraperService>();
 builder.Services.AddHttpClient<AiVisionService>();
 builder.Services.AddHttpClient<FotMobScraperService>();
 builder.Services.AddSingleton<MarketMappingService>();
+builder.Services.AddSingleton<TeamAliasMappingService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();
 builder.Services.AddHostedService<PendingBetsNotificationService>();
 builder.Services.AddHostedService<BetMonitoringService>();
