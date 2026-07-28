@@ -32,56 +32,7 @@
     }
 </style>
 
-<script>
-    window.copySectionLink = function(fragment) {
-        // This runs directly in the user's browser, so window.location.origin will ALWAYS be exactly what they see in their address bar
-        // If they are on https://castleofhappiness.com, it will copy https://castleofhappiness.com
-        // If you test locally, it will naturally copy localhost.
-        const url = window.location.origin + '/disclaimer#' + fragment;
-        
-        // Copy to clipboard
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(url).catch(err => console.error('Failed to copy', err));
-        } else {
-            const textArea = document.createElement("textarea");
-            textArea.value = url;
-            textArea.style.position = "fixed";
-            textArea.style.left = "-999999px";
-            textArea.style.top = "-999999px";
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {
-                document.execCommand('copy');
-            } catch (err) {
-                console.error('Fallback copy failed', err);
-            }
-            textArea.remove();
-        }
 
-        // Show Toast instantly via JS (Avoids Blazor CSS Scoping issues in PROD)
-        let toast = document.getElementById('copy-toast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'copy-toast';
-            toast.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-4 z-3 shadow';
-            toast.style.pointerEvents = 'none';
-            toast.style.transition = 'opacity 0.3s ease-in-out';
-            toast.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Copied to clipboard';
-            document.body.appendChild(toast);
-        }
-        
-        // Reset and show
-        toast.style.opacity = '1';
-        toast.style.display = 'block';
-        
-        if (window.copyToastTimeout) clearTimeout(window.copyToastTimeout);
-        window.copyToastTimeout = setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => toast.style.display = 'none', 300);
-        }, 2500);
-    };
-</script>
 
 <div class="container mt-4 mb-5 position-relative">
     <h1 class="mb-4">Disclaimer & Policies</h1>

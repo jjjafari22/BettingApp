@@ -45,6 +45,49 @@
                 element.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         };
+
+        window.copySectionLink = function(fragment) {
+            const url = window.location.origin + '/disclaimer#' + fragment;
+            
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(url).catch(err => console.error('Failed to copy', err));
+            } else {
+                const textArea = document.createElement("textarea");
+                textArea.value = url;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-999999px";
+                textArea.style.top = "-999999px";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                } catch (err) {
+                    console.error('Fallback copy failed', err);
+                }
+                textArea.remove();
+            }
+
+            let toast = document.getElementById('copy-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'copy-toast';
+                toast.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-4 z-3 shadow';
+                toast.style.pointerEvents = 'none';
+                toast.style.transition = 'opacity 0.3s ease-in-out';
+                toast.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Copied to clipboard';
+                document.body.appendChild(toast);
+            }
+            
+            toast.style.opacity = '1';
+            toast.style.display = 'block';
+            
+            if (window.copyToastTimeout) clearTimeout(window.copyToastTimeout);
+            window.copyToastTimeout = setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.style.display = 'none', 300);
+            }, 2500);
+        };
     </script>
     
     <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>
