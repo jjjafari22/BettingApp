@@ -152,9 +152,8 @@ public class OddsApiService
                 bool homeMatch = homeTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
                 bool awayMatch = string.IsNullOrEmpty(awayTeam) || awayTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
 
-                // Relaxed rule: Must match at least one token from AT LEAST ONE side!
-                // This prevents dropping matches where one team has a drastically different name (e.g. Italian vs German names for the same club).
-                if (!homeMatch && !awayMatch)
+                // Strict rule: Must match at least one token from BOTH sides!
+                if (!homeMatch || !awayMatch)
                 {
                     continue; 
                 }
