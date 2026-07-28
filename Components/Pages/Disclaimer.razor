@@ -33,7 +33,10 @@
 </style>
 
 <script>
-    function copySectionLink(fragment) {
+    window.copySectionLink = function(fragment) {
+        // This runs directly in the user's browser, so window.location.origin will ALWAYS be exactly what they see in their address bar
+        // If they are on https://castleofhappiness.com, it will copy https://castleofhappiness.com
+        // If you test locally, it will naturally copy localhost.
         const url = window.location.origin + '/disclaimer#' + fragment;
         
         // Copy to clipboard
@@ -56,22 +59,28 @@
             textArea.remove();
         }
 
-        // Show Toast instantly via JS
+        // Show Toast instantly via JS (Avoids Blazor CSS Scoping issues in PROD)
         let toast = document.getElementById('copy-toast');
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'copy-toast';
             toast.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-4 z-3 shadow';
             toast.style.pointerEvents = 'none';
+            toast.style.transition = 'opacity 0.3s ease-in-out';
             toast.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Copied to clipboard';
             document.body.appendChild(toast);
         }
         
-        // Reset animation to allow multiple rapid clicks
-        toast.style.animation = 'none';
-        toast.offsetHeight; /* trigger reflow */
-        toast.style.animation = 'fadeOut 3s forwards';
-    }
+        // Reset and show
+        toast.style.opacity = '1';
+        toast.style.display = 'block';
+        
+        if (window.copyToastTimeout) clearTimeout(window.copyToastTimeout);
+        window.copyToastTimeout = setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.style.display = 'none', 300);
+        }, 2500);
+    };
 </script>
 
 <div class="container mt-4 mb-5 position-relative">
