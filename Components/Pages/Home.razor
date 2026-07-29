@@ -725,6 +725,7 @@ else
                                     if (error != null)
                                     {
                                         System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI ERROR: {error}\n");
+                                        dbBet.AiVisionError = error;
                                     }
                                     
                                     if (result != null)

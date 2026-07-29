@@ -250,6 +250,12 @@
                                     <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
                                 </div>
                             }
+                            @if (!string.IsNullOrEmpty(reviewingBetModel.AiVisionError)) {
+                                <div class="alert alert-warning alert-dismissible fade show shadow-sm mb-3" role="alert">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i> <strong>AI Auto-Read Error:</strong> @reviewingBetModel.AiVisionError
+                                    <button type="button" class="btn-close" @onclick="() => reviewingBetModel.AiVisionError = null"></button>
+                                </div>
+                            }
                             @if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult)) {
                                 <div class="alert alert-info alert-dismissible fade show shadow-sm mb-3" role="alert">
                                     @if (ParsedAiOutcome != null) {
@@ -1314,7 +1320,20 @@
                 var (result, error) = await AiVision.ExtractBetSlipDataAsync(currentBet.ScreenshotUrl);
                 if (error != null)
                 {
-                    if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = $"Failed to extract bet data: {error}";
+                    if (reviewingBetModel?.Id == currentBet.Id) 
+                    {
+                        reviewErrorMessage = $"Failed to extract bet data: {error}";
+                        reviewingBetModel.AiVisionError = error;
+                    }
+                    currentBet.AiVisionError = error;
+                    if (currentOriginal != null) currentOriginal.AiVisionError = error;
+                    using var errContext = DbFactory.CreateDbContext();
+                    var errBet = await errContext.Bets.FindAsync(currentBet.Id);
+                    if (errBet != null)
+                    {
+                        errBet.AiVisionError = error;
+                        await errContext.SaveChangesAsync();
+                    }
                     return;
                 }
                 
@@ -1418,6 +1437,22 @@
             if (error != null)
             {
                 AiVisionError = error;
+                reviewingBetModel.AiVisionError = error;
+                try 
+                {
+                    using var context = DbFactory.CreateDbContext();
+                    var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
+                    if (dbBet != null)
+                    {
+                        dbBet.AiVisionError = error;
+                        await context.SaveChangesAsync();
+                    }
+                    if (originalBetModel != null)
+                    {
+                        originalBetModel.AiVisionError = error;
+                    }
+                } 
+                catch { }
             }
             else if (result != null)
             {
