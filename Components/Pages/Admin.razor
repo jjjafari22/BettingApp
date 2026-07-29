@@ -419,8 +419,8 @@
                                                                 bool isMatch = false;
                                                                 if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
                                                                 {
-                                                                    string normOName = System.Text.RegularExpressions.Regex.Replace(oName.Replace(" ", "").Replace("(", "").Replace(")", "").ToLower(), @"\.0+(?!\d)", "");
-                                                                    string normSel = System.Text.RegularExpressions.Regex.Replace(ActiveLookupLeg.Selection.Replace(" ", "").Replace("(", "").Replace(")", "").ToLower(), @"\.0+(?!\d)", "");
+                                                                    string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(oName).Replace(" ", "").Replace("(", "").Replace(")", "").ToLowerInvariant(), @"\.0+(?!\d)", "");
+                                                                    string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).Replace(" ", "").Replace("(", "").Replace(")", "").ToLowerInvariant(), @"\.0+(?!\d)", "");
                                                                     
                                                                     if (normOName == normSel)
                                                                     {
@@ -475,15 +475,18 @@
                                                                             {
                                                                                 string t1 = split[0].Trim();
                                                                                 string t2 = split[1].Trim();
+                                                                                string normT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(t1);
+                                                                                string normT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(t2);
+                                                                                string normSelDia = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection);
 
-                                                                                if ((oName == "1" || oName.StartsWith("1 ")) && ActiveLookupLeg.Selection.Contains(t1, StringComparison.OrdinalIgnoreCase)) isMatch = true;
-                                                                                else if ((oName == "2" || oName.StartsWith("2 ")) && ActiveLookupLeg.Selection.Contains(t2, StringComparison.OrdinalIgnoreCase)) isMatch = true;
-                                                                                else if ((oName.Equals("X", StringComparison.OrdinalIgnoreCase) || oName.StartsWith("X ", StringComparison.OrdinalIgnoreCase)) && ActiveLookupLeg.Selection.Contains("Draw", StringComparison.OrdinalIgnoreCase)) isMatch = true;
+                                                                                if ((oName == "1" || oName.StartsWith("1 ")) && normSelDia.Contains(normT1, StringComparison.OrdinalIgnoreCase)) isMatch = true;
+                                                                                else if ((oName == "2" || oName.StartsWith("2 ")) && normSelDia.Contains(normT2, StringComparison.OrdinalIgnoreCase)) isMatch = true;
+                                                                                else if ((oName.Equals("X", StringComparison.OrdinalIgnoreCase) || oName.StartsWith("X ", StringComparison.OrdinalIgnoreCase)) && normSelDia.Contains("Draw", StringComparison.OrdinalIgnoreCase)) isMatch = true;
 
                                                                                 if (!isMatch && oName.Contains("/") && oName.Length <= 5)
                                                                                 {
-                                                                                    string expectedSelection = oName.Replace("1", t1).Replace("2", t2).Replace("X", "Draw").Replace("x", "Draw");
-                                                                                    if (ActiveLookupLeg.Selection.Replace(" ", "").Equals(expectedSelection.Replace(" ", ""), StringComparison.OrdinalIgnoreCase))
+                                                                                    string expectedSelection = oName.Replace("1", normT1).Replace("2", normT2).Replace("X", "Draw").Replace("x", "Draw");
+                                                                                    if (normSelDia.Replace(" ", "").Equals(expectedSelection.Replace(" ", ""), StringComparison.OrdinalIgnoreCase))
                                                                                     {
                                                                                         isMatch = true;
                                                                                     }

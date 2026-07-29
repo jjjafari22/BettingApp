@@ -345,21 +345,7 @@ public class OddsApiService
     {
         if (string.IsNullOrEmpty(name)) return "";
         
-        string normalizedString = name.Normalize(System.Text.NormalizationForm.FormD);
-        var stringBuilder = new System.Text.StringBuilder(capacity: normalizedString.Length);
-
-        for (int i = 0; i < normalizedString.Length; i++)
-        {
-            char c = normalizedString[i];
-            var unicodeCategory = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
-            if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
-            {
-                stringBuilder.Append(c);
-            }
-        }
-        
-        string result = stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC)
-                   .ToLowerInvariant();
+        string result = TeamAliasMappingService.RemoveDiacritics(name).ToLowerInvariant();
                    
         result = _teamAliasMappingService.ApplyTeamAliases(result);
 

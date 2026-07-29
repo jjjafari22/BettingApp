@@ -5,6 +5,22 @@ namespace BettingApp.Services
 {
     public class TeamAliasMappingService
     {
+        public static string RemoveDiacritics(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return text;
+            var normalizedString = text.Normalize(System.Text.NormalizationForm.FormD);
+            var stringBuilder = new System.Text.StringBuilder(capacity: normalizedString.Length);
+            foreach (var c in normalizedString)
+            {
+                var unicodeCategory = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+                if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
+                {
+                    stringBuilder.Append(c);
+                }
+            }
+            return stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC);
+        }
+
         // Maps alternative/bilingual team names to their standard API format.
         // We use string replacement so "Kuopion Palloseura U21" becomes "Kups U21".
         private readonly Dictionary<string, string> _teamAliases = new(StringComparer.OrdinalIgnoreCase)
