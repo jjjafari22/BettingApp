@@ -1638,19 +1638,39 @@
                 }
 
                 // 3. Fallback for Asian Handicap -> 3-Way Handicap if actual Asian Handicap doesn't exist
+                bool didFallback = false;
                 if (bestMatch == null && (simplifiedTarget.Contains("asianhandicap") || simplifiedTarget.Contains("handicap") || simplifiedTarget.StartsWith("handicap")))
                 {
-                    string fallbackTarget = (simplifiedTarget.Contains("1half") || simplifiedTarget.Contains("firsthalf") || simplifiedTarget.Contains("halftime")) 
-                        ? simplify("Half Time Handicap") 
-                        : simplify("3-Way Handicap");
-                        
-                    bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == fallbackTarget) ?? 
-                                result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(fallbackTarget));
+                    didFallback = true;
+                    if (simplifiedTarget.Contains("corner"))
+                    {
+                        string fallbackTarget = (simplifiedTarget.Contains("1half") || simplifiedTarget.Contains("firsthalf") || simplifiedTarget.Contains("halftime")) 
+                            ? simplify("1st Half Corners") 
+                            : simplify("Corners");
+                            
+                        bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == fallbackTarget) ?? 
+                                    result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(fallbackTarget));
+                    }
+                    else
+                    {
+                        string fallbackTarget = (simplifiedTarget.Contains("1half") || simplifiedTarget.Contains("firsthalf") || simplifiedTarget.Contains("halftime")) 
+                            ? simplify("Half Time Handicap") 
+                            : simplify("3-Way Handicap");
+                            
+                        bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == fallbackTarget) ?? 
+                                    result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(fallbackTarget));
+                    }
                 }
                     
                 if (bestMatch != null)
                 {
                     SelectedPapiMarketId = bestMatch.MarketId;
+                    
+                    if (didFallback || simplify(bestMatch.MarketName) != simplifiedTarget)
+                    {
+                        OddsLookupWarningMessage = $"OddsPapi doesn't offer '{preSelectCategory}'. Showing '{bestMatch.MarketName}' instead.";
+                        Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
+                    }
                 }
                 else
                 {
