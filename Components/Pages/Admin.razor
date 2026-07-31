@@ -430,7 +430,7 @@
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        @if (!string.IsNullOrEmpty(SelectedPapiMarketId) && PapiSearchResult.BookmakerOdds.TryGetValue(SelectedPapiMarketId, out var bookies))
+                                                        @if (!string.IsNullOrEmpty(SelectedPapiMarketId) && PapiSearchResult!.BookmakerOdds.TryGetValue(SelectedPapiMarketId, out var bookies))
                                                         {
                                                             var selectedMarket = PapiSearchResult.Markets.FirstOrDefault(m => m.MarketId == SelectedPapiMarketId);
                                                             var outcomes = selectedMarket?.OutcomeNames ?? new Dictionary<string, string>();
