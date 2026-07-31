@@ -49,6 +49,7 @@ builder.Services.AddHttpClient<KambiScraperService>();
 builder.Services.AddHttpClient<Bet365ScraperService>();
 builder.Services.AddHttpClient<AiVisionService>();
 builder.Services.AddHttpClient<FotMobScraperService>();
+builder.Services.AddScoped<SportsGameOddsService>();
 builder.Services.AddSingleton<MarketMappingService>();
 builder.Services.AddSingleton<TeamAliasMappingService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();

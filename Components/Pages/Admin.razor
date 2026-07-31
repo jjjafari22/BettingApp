@@ -15,6 +15,7 @@
 @inject IJSRuntime JSRuntime
 @inject BettingApp.Services.DialogService DialogService
 @inject OddsApiService OddsApi
+@inject SportsGameOddsService SgoApi
 @inject AiVisionService AiVision
 @inject AiVisionService AiVision
 @inject MarketMappingService MarketMapper
@@ -367,7 +368,10 @@
                                             </div>
                                         }
                                         <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light text-muted fw-bold"><i class="bi bi-search"></i> OddsPapi Lookup</span>
+                                            <select class="form-select form-select-sm fw-bold bg-light" style="max-width: 150px;" @bind="SelectedOddsProvider">
+                                                <option value="oddspapi">OddsPapi</option>
+                                                <option value="sgo">SportsGameOdds</option>
+                                            </select>
                                             <input type="text" class="form-control" placeholder="Search team (e.g. Arsenal)..." @bind="OddsSearchTeam" @onkeydown="@(e => { if (e.Key == "Enter") _ = SearchOdds(); })" />
                                             <button class="btn btn-primary" @onclick="() => SearchOdds()" disabled="@IsSearchingOdds">
                                                 @if(IsSearchingOdds) { <span class="spinner-border spinner-border-sm"></span> } else { <i class="bi bi-search"></i> }
@@ -1543,6 +1547,8 @@
         ShowOddsLookup = !ShowOddsLookup;
     }
 
+    private string SelectedOddsProvider { get; set; } = "oddspapi";
+
     private async Task SearchOdds(string? preSelectCategory = null)
     {
         if (string.IsNullOrWhiteSpace(OddsSearchTeam)) return;
@@ -1556,7 +1562,17 @@
         SelectedPapiMarketId = "";
         StateHasChanged();
 
-        var (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
+        BettingApp.Models.OddsPapiSearchResult? result;
+        string? error;
+        
+        if (SelectedOddsProvider == "sgo")
+        {
+            (result, error) = await SgoApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
+        }
+        else
+        {
+            (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
+        }
         
         if (result == null)
         {
