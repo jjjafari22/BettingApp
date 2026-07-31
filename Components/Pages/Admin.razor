@@ -251,12 +251,7 @@
                                     <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
                                 </div>
                             }
-                            @if (!string.IsNullOrEmpty(reviewingBetModel.AiVisionError)) {
-                                <div class="alert alert-warning alert-dismissible fade show shadow-sm mb-3" role="alert">
-                                    <i class="bi bi-exclamation-triangle-fill me-1"></i> <strong>AI Auto-Read Error:</strong> @reviewingBetModel.AiVisionError
-                                    <button type="button" class="btn-close" @onclick="() => reviewingBetModel.AiVisionError = null"></button>
-                                </div>
-                            }
+
                             @if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult)) {
                                 <div class="alert alert-info alert-dismissible fade show shadow-sm mb-3" role="alert">
                                     @if (ParsedAiOutcome != null) {
@@ -1786,7 +1781,8 @@
             AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, 
             FreeBetAmount = bet.FreeBetAmount,
             ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt,
-            AiVisionResultJson = bet.AiVisionResultJson, AiOutcomeResult = bet.AiOutcomeResult
+            AiVisionResultJson = bet.AiVisionResultJson, AiOutcomeResult = bet.AiOutcomeResult,
+            AiVisionError = bet.AiVisionError
         };
         if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing")
         {
@@ -1797,7 +1793,7 @@
         modalSuccessMessage = null;
         reviewErrorMessage = null; errorMessage = null;
         AiVisionResult = null;
-        AiVisionError = null;
+        AiVisionError = bet.AiVisionError;
         ParsedAiOutcome = null;
         
         if (!string.IsNullOrEmpty(reviewingBetModel.AiVisionResultJson))

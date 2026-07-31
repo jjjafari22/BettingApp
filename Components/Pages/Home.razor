@@ -725,6 +725,7 @@ else
                                     if (error != null)
                                     {
                                         System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI ERROR: {error}\n");
+                                        Console.WriteLine($"[AiVisionService] AI Auto-Read failed for bet #{id}: {error}");
                                         dbBet.AiVisionError = error;
                                     }
                                     
@@ -778,6 +779,7 @@ else
                     await Task.WhenAll(tasks);
                 } catch (Exception ex) {  
                     System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] EXCEPTION: {ex}\n");
+                    Console.WriteLine($"[AiVisionService] Exception in background processing: {ex}");
                 }
             });
 

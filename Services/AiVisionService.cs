@@ -193,12 +193,34 @@ namespace BettingApp.Services
 
                 // 4. Call Gemini API with resolved model
                 var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
-                var response = await _httpClient.PostAsync(apiUrl, requestContent);
-                var responseString = await response.Content.ReadAsStringAsync();
-
-                if (!response.IsSuccessStatusCode)
+                
+                HttpResponseMessage? response = null;
+                string responseString = "";
+                int maxRetries = 3;
+                
+                for (int attempt = 0; attempt < maxRetries; attempt++)
                 {
-                    return (null, $"Gemini API Error: {response.StatusCode}\nResolved Model: {resolvedModel}\nDetails: {responseString}");
+                    var loopRequestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                    response = await _httpClient.PostAsync(apiUrl, loopRequestContent);
+                    responseString = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode)
+                        break;
+                        
+                    if (response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable || response.StatusCode == (System.Net.HttpStatusCode)429)
+                    {
+                        if (attempt < maxRetries - 1)
+                        {
+                            await Task.Delay(2000 * (int)Math.Pow(2, attempt)); // 2s, 4s...
+                            continue;
+                        }
+                    }
+                    break;
+                }
+
+                if (response == null || !response.IsSuccessStatusCode)
+                {
+                    return (null, $"Gemini API Error: {response?.StatusCode}\nResolved Model: {resolvedModel}\nDetails: {responseString}");
                 }
 
                 // 4. Parse the response
