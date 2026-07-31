@@ -1576,6 +1576,7 @@
         if (reviewingBetModel == null || string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) return;
         
         var capturingBetId = reviewingBetModel.Id;
+        var capturingScreenshot = reviewingBetModel.ScreenshotUrl;
         AnalyzingImageBetIds.Add(capturingBetId);
         AiVisionResult = null;
         ActiveLookupLeg = null;
@@ -1585,92 +1586,83 @@
 
         try
         {
-            var (result, error) = await AiVision.ExtractBetSlipDataAsync(reviewingBetModel.ScreenshotUrl);
+            var (result, error) = await AiVision.ExtractBetSlipDataAsync(capturingScreenshot);
             
-            // If the user navigated to another bet while processing, discard the result for the UI
-            if (reviewingBetModel == null || reviewingBetModel.Id != capturingBetId) {
-                return;
-            }
+            bool isModalOpenForThisBet = reviewingBetModel != null && reviewingBetModel.Id == capturingBetId;
+            var listModel = pendingBets.FirstOrDefault(b => b.Id == capturingBetId) ?? approvedBets.FirstOrDefault(b => b.Id == capturingBetId) ?? completedBets.FirstOrDefault(b => b.Id == capturingBetId);
             
             if (error != null)
             {
-                AiVisionError = error;
-                reviewingBetModel.AiVisionError = error;
+                if (isModalOpenForThisBet)
+                {
+                    AiVisionError = error;
+                    reviewingBetModel!.AiVisionError = error;
+                }
+                if (listModel != null) listModel.AiVisionError = error;
+                
                 try 
                 {
                     using var context = DbFactory.CreateDbContext();
-                    var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
+                    var dbBet = await context.Bets.FindAsync(capturingBetId);
                     if (dbBet != null)
                     {
                         dbBet.AiVisionError = error;
                         await context.SaveChangesAsync();
-                    }
-                    if (originalBetModel != null)
-                    {
-                        originalBetModel.AiVisionError = error;
                     }
                 } 
                 catch { }
             }
             else if (result != null)
             {
-                AiVisionResult = result;
+                var json = System.Text.Json.JsonSerializer.Serialize(result);
                 
-                if (!string.IsNullOrEmpty(result.TotalOdds))
+                if (isModalOpenForThisBet)
                 {
-                    // Try parsing with both comma and dot for safety
-                    var cleanOdds = result.TotalOdds.Replace(",", ".");
-                    if (decimal.TryParse(cleanOdds, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal odds))
+                    AiVisionResult = result;
+                    reviewingBetModel!.AiVisionResultJson = json;
+                    reviewingBetModel.AiVisionError = null;
+                    AiVisionError = null;
+                    
+                    if (!string.IsNullOrEmpty(result.TotalOdds))
                     {
-                        // Round down to the nearest 0.05
-                        reviewingBetModel.Odds = Math.Floor(odds / 0.05m) * 0.05m;
+                        var cleanOdds = result.TotalOdds.Replace(",", ".");
+                        if (decimal.TryParse(cleanOdds, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal odds))
+                        {
+                            reviewingBetModel.Odds = Math.Floor(odds / 0.05m) * 0.05m;
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(result.Stake))
+                    {
+                        var rawStake = result.Stake.Trim().ToLower();
+                        int multiplier = rawStake.EndsWith("k") ? 1000 : (rawStake.EndsWith("m") ? 1000000 : 1);
+                        var cleanStake = new string(rawStake.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray()).Replace(",", ".");
+                        if (decimal.TryParse(cleanStake, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal stakeDecimal))
+                        {
+                            reviewingBetModel.AmountNOK = (int)(stakeDecimal * multiplier);
+                        }
                     }
                 }
-
-                if (!string.IsNullOrEmpty(result.Stake))
-            {
-                var rawStake = result.Stake.Trim().ToLower();
                 
-                int multiplier = 1;
-                if (rawStake.EndsWith("k"))
+                if (listModel != null)
                 {
-                    multiplier = 1000;
+                    listModel.AiVisionResultJson = json;
+                    listModel.AiVisionError = null;
                 }
-                else if (rawStake.EndsWith("m"))
+                
+                try 
                 {
-                    multiplier = 1000000;
-                }
-
-                var cleanStake = new string(rawStake.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray());
-                cleanStake = cleanStake.Replace(",", "."); // Handle European decimals
-
-                if (decimal.TryParse(cleanStake, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal stakeDecimal))
-                {
-                    reviewingBetModel.AmountNOK = (int)(stakeDecimal * multiplier);
-                }
+                    using var context = DbFactory.CreateDbContext();
+                    var dbBet = await context.Bets.FindAsync(capturingBetId);
+                    if (dbBet != null)
+                    {
+                        dbBet.AiVisionResultJson = json;
+                        dbBet.AiVisionError = null;
+                        await context.SaveChangesAsync();
+                    }
+                } 
+                catch { }
             }
-            
-            // Save to database so we don't need to re-read it later
-            try 
-            {
-                var json = System.Text.Json.JsonSerializer.Serialize(result);
-                reviewingBetModel.AiVisionResultJson = json;
-                using var context = DbFactory.CreateDbContext();
-                var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
-                if (dbBet != null)
-                {
-                    dbBet.AiVisionResultJson = json;
-                    await context.SaveChangesAsync();
-                }
-                
-                // Also update the original object in the lists so UI doesn't lose it on navigation
-                if (originalBetModel != null)
-                {
-                    originalBetModel.AiVisionResultJson = json;
-                }
-            } 
-            catch { }
-        }
 
         // We explicitly do NOT auto-search odds here to prevent unnecessary API calls 
             // and background logs on startup. Only lookup odds when manually triggered!
