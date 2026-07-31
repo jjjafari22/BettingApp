@@ -154,10 +154,28 @@ public class OddsApiService
                 bool homeMatch = homeTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
                 bool awayMatch = string.IsNullOrEmpty(awayTeam) || awayTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
 
+                bool homeExact = IsExactMatch(p1, homeTeam) || IsExactMatch(p2, homeTeam);
+                bool awayExact = !string.IsNullOrEmpty(awayTeam) && (IsExactMatch(p1, awayTeam) || IsExactMatch(p2, awayTeam));
+
                 // Strict rule: Must match at least one token from BOTH sides!
                 if (!homeMatch || !awayMatch)
                 {
-                    continue; 
+                    if (!homeMatch && awayMatch)
+                    {
+                        bool p1IsAway = IsNameMatch(p1, awayTeam) || awayTokens.Any(t => IsNameMatch(p1, t));
+                        string otherTeam = p1IsAway ? p2 : p1;
+                        if (ComputeLevenshteinDistance(NormalizeTeamName(otherTeam), NormalizeTeamName(homeTeam)) > 3) continue;
+                    }
+                    else if (!awayMatch && homeMatch)
+                    {
+                        bool p1IsHome = IsNameMatch(p1, homeTeam) || homeTokens.Any(t => IsNameMatch(p1, t));
+                        string otherTeam = p1IsHome ? p2 : p1;
+                        if (ComputeLevenshteinDistance(NormalizeTeamName(otherTeam), NormalizeTeamName(awayTeam)) > 3) continue;
+                    }
+                    else
+                    {
+                        continue; 
+                    }
                 }
 
                 int score = 0;
@@ -349,21 +367,47 @@ public class OddsApiService
                    
         result = _teamAliasMappingService.ApplyTeamAliases(result);
 
-        return result.Replace("ø", "o")
+        result = result.Replace("ø", "o")
                    .Replace("æ", "a")
                    .Replace("å", "a")
                    .Replace("oe", "o")
                    .Replace("ae", "a")
                    .Replace("aa", "a")
-                   .Replace(" fc", "")
-                   .Replace("fk ", "")
-                   .Replace(" united", "")
-                   .Replace(" city", "")
-                   .Replace("cf ", "")
-                   .Replace(" cd", "")
-                   .Replace("bk ", "")
                    .Replace(" (w)", "")
-                   .Replace(" women", "")
-                   .Trim();
+                   .Replace("-", " ");
+                   
+        var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
+        { 
+            "fc", "fk", "united", "city", "cf", "cd", "bk", "women", "sc", "ec" 
+        };
+        
+        var words = result.Split(new[] { ' ', '.' }, StringSplitOptions.RemoveEmptyEntries)
+                          .Where(w => !stopWords.Contains(w));
+                          
+        return string.Join(" ", words).Trim();
+    }
+    
+    private int ComputeLevenshteinDistance(string s, string t)
+    {
+        if (string.IsNullOrEmpty(s)) return string.IsNullOrEmpty(t) ? 0 : t.Length;
+        if (string.IsNullOrEmpty(t)) return s.Length;
+
+        int[] v0 = new int[t.Length + 1];
+        int[] v1 = new int[t.Length + 1];
+
+        for (int i = 0; i < v0.Length; i++) v0[i] = i;
+
+        for (int i = 0; i < s.Length; i++)
+        {
+            v1[0] = i + 1;
+            for (int j = 0; j < t.Length; j++)
+            {
+                int cost = (s[i] == t[j]) ? 0 : 1;
+                v1[j + 1] = Math.Min(Math.Min(v1[j] + 1, v0[j + 1] + 1), v0[j] + cost);
+            }
+            for (int j = 0; j < v0.Length; j++) v0[j] = v1[j];
+        }
+
+        return v1[t.Length];
     }
 }
