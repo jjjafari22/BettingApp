@@ -668,14 +668,35 @@
                                                                         }
                                                                         @displayOName
                                                                     </td>
-                                                                    <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
-                                                                        @(bookies.TryGetValue("unibet.se", out var u) && u.TryGetValue(oName, out double up) ? up.ToString("0.00") : "-")
+                                                                    <td class="@(isMatch ? "text-dark" : "text-primary")">
+                                                                        @if (bookies.TryGetValue("unibet.se", out var u) && u.TryGetValue(oName, out var ud)) {
+                                                                            <div class="fw-bold">@ud.Price.ToString("0.00")</div>
+                                                                            @if (ud.ChangedAt.HasValue) {
+                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ud.ChangedAt.Value.ToLocalTime().ToString("MM-dd HH:mm")</div>
+                                                                            }
+                                                                        } else {
+                                                                            <div class="fw-bold">-</div>
+                                                                        }
                                                                     </td>
-                                                                    <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
-                                                                        @(bookies.TryGetValue("betsson", out var c) && c.TryGetValue(oName, out double cp) ? cp.ToString("0.00") : "-")
+                                                                    <td class="@(isMatch ? "text-dark" : "text-primary")">
+                                                                        @if (bookies.TryGetValue("betsson", out var c) && c.TryGetValue(oName, out var cd)) {
+                                                                            <div class="fw-bold">@cd.Price.ToString("0.00")</div>
+                                                                            @if (cd.ChangedAt.HasValue) {
+                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@cd.ChangedAt.Value.ToLocalTime().ToString("MM-dd HH:mm")</div>
+                                                                            }
+                                                                        } else {
+                                                                            <div class="fw-bold">-</div>
+                                                                        }
                                                                     </td>
-                                                                    <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
-                                                                        @(bookies.TryGetValue("bet365", out var b) && b.TryGetValue(oName, out double bp) ? bp.ToString("0.00") : "-")
+                                                                    <td class="@(isMatch ? "text-dark" : "text-primary")">
+                                                                        @if (bookies.TryGetValue("bet365", out var b) && b.TryGetValue(oName, out var bd)) {
+                                                                            <div class="fw-bold">@bd.Price.ToString("0.00")</div>
+                                                                            @if (bd.ChangedAt.HasValue) {
+                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@bd.ChangedAt.Value.ToLocalTime().ToString("MM-dd HH:mm")</div>
+                                                                            }
+                                                                        } else {
+                                                                            <div class="fw-bold">-</div>
+                                                                        }
                                                                     </td>
                                                                 </tr>
                                                             }

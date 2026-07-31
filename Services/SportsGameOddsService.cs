@@ -204,7 +204,7 @@ public class SportsGameOddsService
                         var mObj = new OddsPapiMarket { MarketId = marketName, MarketName = marketName };
                         baseMarketDict[marketName] = mObj;
                         result.Markets.Add(mObj);
-                        result.BookmakerOdds[marketName] = new Dictionary<string, Dictionary<string, double>>(StringComparer.OrdinalIgnoreCase);
+                        result.BookmakerOdds[marketName] = new Dictionary<string, Dictionary<string, BettingApp.Models.OddsData>>(StringComparer.OrdinalIgnoreCase);
                     }
 
                     baseMarketDict[marketName].OutcomeNames[outcomeName] = outcomeName;
@@ -219,7 +219,7 @@ public class SportsGameOddsService
 
                             if (!result.BookmakerOdds[marketName].ContainsKey(bmName))
                             {
-                                result.BookmakerOdds[marketName][bmName] = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+                                result.BookmakerOdds[marketName][bmName] = new Dictionary<string, BettingApp.Models.OddsData>(StringComparer.OrdinalIgnoreCase);
                             }
 
                             if (bmProperty.Value.TryGetProperty("odds", out var priceNode))
@@ -228,7 +228,7 @@ public class SportsGameOddsService
                                 double decimalPrice = ConvertAmericanToDecimal(americanOdds);
                                 if (decimalPrice > 0)
                                 {
-                                    result.BookmakerOdds[marketName][bmName][outcomeName] = decimalPrice;
+                                    result.BookmakerOdds[marketName][bmName][outcomeName] = new BettingApp.Models.OddsData { Price = decimalPrice };
                                 }
                             }
                         }

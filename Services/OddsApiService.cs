@@ -281,7 +281,7 @@ public class OddsApiService
                             // Initialize market dict if not exist
                             if (!result.BookmakerOdds.ContainsKey(baseName))
                             {
-                                result.BookmakerOdds[baseName] = new Dictionary<string, Dictionary<string, double>>(StringComparer.OrdinalIgnoreCase);
+                                result.BookmakerOdds[baseName] = new Dictionary<string, Dictionary<string, BettingApp.Models.OddsData>>(StringComparer.OrdinalIgnoreCase);
                                 if (baseMarketDict.TryGetValue(baseName, out var mObj))
                                 {
                                     result.Markets.Add(mObj);
@@ -294,7 +294,7 @@ public class OddsApiService
                             
                             if (!result.BookmakerOdds[baseName].ContainsKey(bmName))
                             {
-                                result.BookmakerOdds[baseName][bmName] = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+                                result.BookmakerOdds[baseName][bmName] = new Dictionary<string, BettingApp.Models.OddsData>(StringComparer.OrdinalIgnoreCase);
                             }
 
                             if (market.Value.TryGetProperty("outcomes", out var outcomes))
@@ -314,7 +314,15 @@ public class OddsApiService
                                         {
                                             if (playerZero.TryGetProperty("price", out var price))
                                             {
-                                                result.BookmakerOdds[baseName][bmName][oName] = price.GetDouble();
+                                                var oddsData = new BettingApp.Models.OddsData { Price = price.GetDouble() };
+                                                if (playerZero.TryGetProperty("changedAt", out var changedAtProp) && changedAtProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                {
+                                                    if (DateTime.TryParse(changedAtProp.GetString(), out var changedAt))
+                                                    {
+                                                        oddsData.ChangedAt = changedAt;
+                                                    }
+                                                }
+                                                result.BookmakerOdds[baseName][bmName][oName] = oddsData;
                                             }
                                         }
                                     }

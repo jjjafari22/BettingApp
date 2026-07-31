@@ -11,6 +11,12 @@ public class OddsPapiMarket
     public Dictionary<string, string> OutcomeNames { get; set; } = new();
 }
 
+public class OddsData
+{
+    public double Price { get; set; }
+    public DateTime? ChangedAt { get; set; }
+}
+
 public class OddsPapiSearchResult
 {
     public string MatchName { get; set; } = "";
@@ -20,6 +26,6 @@ public class OddsPapiSearchResult
     // List of all markets found for this match
     public List<OddsPapiMarket> Markets { get; set; } = new();
     
-    // MarketId -> (Bookmaker -> (OutcomeId -> Price))
-    public Dictionary<string, Dictionary<string, Dictionary<string, double>>> BookmakerOdds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    // MarketId -> (Bookmaker -> (OutcomeName -> OddsData))
+    public Dictionary<string, Dictionary<string, Dictionary<string, OddsData>>> BookmakerOdds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
