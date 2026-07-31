@@ -24,7 +24,11 @@ namespace BettingApp.Services
             { "Match Odds", "Full Time Result" },
             { "1x2", "Full Time Result" },
             { "Match Result", "Full Time Result" },
-            { "Match Result (1X2)", "Full Time Result" }
+            { "Match Result (1X2)", "Full Time Result" },
+            { "1st Half Result", "First Half Result" },
+            { "1. Half Result", "First Half Result" },
+            { "Half Time Result", "First Half Result" },
+            { "1st Half 1x2", "First Half Result" }
         };
 
         public string NormalizeMarketName(string rawMarketName, string? matchName = null)
