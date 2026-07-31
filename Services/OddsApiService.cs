@@ -270,6 +270,15 @@ public class OddsApiService
                 {
                     var bmName = bookmaker.Name;
                     
+                    if (bookmaker.Value.TryGetProperty("fixturePath", out var fixturePathProp) && fixturePathProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var url = fixturePathProp.GetString();
+                        if (!string.IsNullOrEmpty(url))
+                        {
+                            result.BookmakerUrls[bmName] = url;
+                        }
+                    }
+                    
                     if (bookmaker.Value.TryGetProperty("markets", out var markets))
                     {
                         foreach (var market in markets.EnumerateObject())

@@ -28,4 +28,7 @@ public class OddsPapiSearchResult
     
     // MarketId -> (Bookmaker -> (OutcomeName -> OddsData))
     public Dictionary<string, Dictionary<string, Dictionary<string, OddsData>>> BookmakerOdds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // Bookmaker -> URL to the match
+    public Dictionary<string, string> BookmakerUrls { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

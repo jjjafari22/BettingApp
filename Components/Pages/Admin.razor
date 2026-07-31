@@ -406,9 +406,27 @@
                                                     <thead class="table-light sticky-top" style="z-index: 1;">
                                                         <tr>
                                                             <th class="text-start">Outcome</th>
-                                                            <th>Unibet SE</th>
-                                                            <th>Betsson</th>
-                                                            <th>Bet365</th>
+                                                            <th>
+                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("unibet.se", out var unibetUrl)) {
+                                                                    <a href="@unibetUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Unibet">Unibet SE <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                } else {
+                                                                    <span>Unibet SE</span>
+                                                                }
+                                                            </th>
+                                                            <th>
+                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("betsson", out var betssonUrl)) {
+                                                                    <a href="@betssonUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Betsson">Betsson <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                } else {
+                                                                    <span>Betsson</span>
+                                                                }
+                                                            </th>
+                                                            <th>
+                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("bet365", out var bet365Url)) {
+                                                                    <a href="@bet365Url" target="_blank" class="text-decoration-none text-dark" title="Open match in Bet365">Bet365 <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                } else {
+                                                                    <span>Bet365</span>
+                                                                }
+                                                            </th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
