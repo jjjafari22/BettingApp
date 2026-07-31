@@ -421,81 +421,240 @@
                                                             {
                                                                 var oId = kvp.Key;
                                                                 var oName = kvp.Value;
+                                                                string displayOName = oName;
+                                                                if (PapiSearchResult != null && !string.IsNullOrEmpty(PapiSearchResult.MatchName))
+                                                                {
+                                                                    var matchSplit = PapiSearchResult.MatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                                                                    if (matchSplit.Length >= 2)
+                                                                    {
+                                                                        string t1 = matchSplit[0].Trim();
+                                                                        string t2 = matchSplit[1].Trim();
+                                                                        
+                                                                        if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Match))
+                                                                        {
+                                                                            var aiMatchSplit = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                                                                            if (aiMatchSplit.Length >= 2)
+                                                                            {
+                                                                                t1 = aiMatchSplit[0].Split('(')[0].Trim();
+                                                                                t2 = aiMatchSplit[1].Split('(')[0].Trim();
+                                                                            }
+                                                                        }
+                                                                        
+                                                                        var hcMatch = System.Text.RegularExpressions.Regex.Match(displayOName, @"^(1|X|x|2)\s*\(([^)]+)\)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                                                        if (hcMatch.Success)
+                                                                        {
+                                                                            string teamSel = hcMatch.Groups[1].Value.ToUpperInvariant();
+                                                                            string hcStr = hcMatch.Groups[2].Value.Trim();
+                                                                            
+                                                                            double t1Hc = 0;
+                                                                            double t2Hc = 0;
+                                                                            bool validHc = false;
+                                                                            
+                                                                            if (hcStr.Contains("-") && hcStr.Length > 2)
+                                                                            {
+                                                                                var parts = hcStr.Split('-');
+                                                                                if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                                                                {
+                                                                                    t1Hc = p1 - p2;
+                                                                                    t2Hc = p2 - p1;
+                                                                                    validHc = true;
+                                                                                }
+                                                                            }
+                                                                            else if (hcStr.Contains(":"))
+                                                                            {
+                                                                                var parts = hcStr.Split(':');
+                                                                                if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                                                                {
+                                                                                    t1Hc = p1 - p2;
+                                                                                    t2Hc = p2 - p1;
+                                                                                    validHc = true;
+                                                                                }
+                                                                            }
+                                                                            else if (double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                                                                            {
+                                                                                t1Hc = val;
+                                                                                t2Hc = -val;
+                                                                                validHc = true;
+                                                                            }
+                                                                            
+                                                                            if (validHc)
+                                                                            {
+                                                                                if (teamSel == "1") displayOName = $"{t1} {(t1Hc > 0 ? "+" : "")}{t1Hc}";
+                                                                                else if (teamSel == "2") displayOName = $"{t2} {(t2Hc > 0 ? "+" : "")}{t2Hc}";
+                                                                                else if (teamSel == "X") displayOName = $"Draw ({(t1Hc > 0 ? "+" : "")}{t1Hc})";
+                                                                            }
+                                                                        }
+                                                                        
+                                                                        if (!hcMatch.Success || (!displayOName.Contains(t1) && !displayOName.Contains(t2) && !displayOName.Contains("Draw")))
+                                                                        {
+                                                                            if (displayOName == "1") displayOName = t1;
+                                                                            else if (displayOName.StartsWith("1 ")) displayOName = t1 + displayOName.Substring(1);
+                                                                            
+                                                                            if (displayOName == "2") displayOName = t2;
+                                                                            else if (displayOName.StartsWith("2 ")) displayOName = t2 + displayOName.Substring(1);
+                                                                            
+                                                                            displayOName = displayOName.Replace("1/", $"{t1}/").Replace("/1", $"/{t1}");
+                                                                            displayOName = displayOName.Replace("2/", $"{t2}/").Replace("/2", $"/{t2}");
+                                                                            displayOName = displayOName.Replace("X", "Draw").Replace("x", "Draw");
+                                                                        }
+                                                                    }
+                                                                }
+
                                                                 bool isMatch = false;
                                                                 if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
                                                                 {
-                                                                    string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(oName).Replace(" ", "").Replace("(", "").Replace(")", "").ToLowerInvariant(), @"\.0+(?!\d)", "");
-                                                                    string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).Replace(" ", "").Replace("(", "").Replace(")", "").ToLowerInvariant(), @"\.0+(?!\d)", "");
+                                                                    bool logicallyMatched = false;
+                                                                    if (ActiveLookupLeg.Match != null)
+                                                                    {
+                                                                        var hcSplit = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                                                                        if (hcSplit.Length >= 2)
+                                                                        {
+                                                                            string normSelRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).ToLowerInvariant();
+                                                                            string normT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[0].Split('(')[0].Trim()).ToLowerInvariant();
+                                                                            string normT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[1].Split('(')[0].Trim()).ToLowerInvariant();
+                                                                            
+                                                                            string aiTarget = "";
+                                                                            string htftTarget = "";
+                                                                            
+                                                                            if (normSelRaw.Contains(" / ") || normSelRaw.Contains(" - "))
+                                                                            {
+                                                                                var htftSplit = normSelRaw.Split(new[] { " / ", " - " }, StringSplitOptions.RemoveEmptyEntries);
+                                                                                if (htftSplit.Length == 2)
+                                                                                {
+                                                                                    string ht = htftSplit[0].Trim();
+                                                                                    string ft = htftSplit[1].Trim();
+                                                                                    string htCode = ht.Contains(normT1) ? "1" : (ht.Contains(normT2) ? "2" : (ht.Contains("draw") || ht.Contains("tie") ? "X" : ""));
+                                                                                    string ftCode = ft.Contains(normT1) ? "1" : (ft.Contains(normT2) ? "2" : (ft.Contains("draw") || ft.Contains("tie") ? "X" : ""));
+                                                                                    if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
+                                                                                    {
+                                                                                        htftTarget = $"{htCode}/{ftCode}";
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                            
+                                                                            if (string.IsNullOrEmpty(htftTarget))
+                                                                            {
+                                                                                if (normSelRaw.Contains(normT1) && normSelRaw.Contains(normT2)) aiTarget = "12";
+                                                                                else if (normSelRaw.Contains(normT1) && (normSelRaw.Contains("draw") || normSelRaw.Contains("tie"))) aiTarget = "1X";
+                                                                                else if (normSelRaw.Contains(normT2) && (normSelRaw.Contains("draw") || normSelRaw.Contains("tie"))) aiTarget = "X2";
+                                                                                else if (normSelRaw.Contains(normT1)) aiTarget = "1";
+                                                                                else if (normSelRaw.Contains(normT2)) aiTarget = "2";
+                                                                                else if (normSelRaw.Contains("draw") || normSelRaw.Contains("tie")) aiTarget = "X";
+                                                                            }
+                                                                            
+                                                                            if (!string.IsNullOrEmpty(htftTarget) && string.Equals(oName, htftTarget, StringComparison.OrdinalIgnoreCase))
+                                                                            {
+                                                                                logicallyMatched = true;
+                                                                            }
+                                                                            else if (!string.IsNullOrEmpty(aiTarget))
+                                                                            {
+                                                                                var basicHcMatch = System.Text.RegularExpressions.Regex.Match(oName, @"^(1|X|x|2|1X|X2|12)(?:\s*\(([^)]+)\))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                                                                if (basicHcMatch.Success)
+                                                                                {
+                                                                                    string opTarget = basicHcMatch.Groups[1].Value.ToUpperInvariant();
+                                                                                    if (aiTarget == opTarget)
+                                                                                    {
+                                                                                        string hcStr = basicHcMatch.Groups[2].Value.Trim();
+                                                                                        double? opHc = null;
+                                                                                        if (!string.IsNullOrEmpty(hcStr))
+                                                                                        {
+                                                                                            if (hcStr.Contains("-") && hcStr.Length > 2)
+                                                                                            {
+                                                                                                var parts = hcStr.Split('-');
+                                                                                                if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                                                                                {
+                                                                                                    opHc = opTarget == "1" ? (p1 - p2) : (opTarget == "2" ? (p2 - p1) : (p1 - p2));
+                                                                                                }
+                                                                                            }
+                                                                                            else if (hcStr.Contains(":"))
+                                                                                            {
+                                                                                                var parts = hcStr.Split(':');
+                                                                                                if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                                                                                {
+                                                                                                    opHc = opTarget == "1" ? (p1 - p2) : (opTarget == "2" ? (p2 - p1) : (p1 - p2));
+                                                                                                }
+                                                                                            }
+                                                                                            else if (double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                                                                                            {
+                                                                                                opHc = opTarget == "1" ? val : (opTarget == "2" ? -val : val);
+                                                                                            }
+                                                                                        }
+                                                                                        
+                                                                                        double? aiHc = null;
+                                                                                        var aiHcRegex = new System.Text.RegularExpressions.Regex(@"([+-]\d+(?:\.\d+)?)$");
+                                                                                        var aiHcMatch = aiHcRegex.Match(normSelRaw.Replace(" ", ""));
+                                                                                        if (aiHcMatch.Success && double.TryParse(aiHcMatch.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedAiHc))
+                                                                                        {
+                                                                                            aiHc = parsedAiHc;
+                                                                                        }
+                                                                                        
+                                                                                        if (opHc.HasValue && aiHc.HasValue && Math.Abs(opHc.Value - aiHc.Value) < 0.001) logicallyMatched = true;
+                                                                                        else if (!opHc.HasValue && !aiHc.HasValue) logicallyMatched = true;
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
                                                                     
-                                                                    if (normOName == normSel)
+                                                                    if (logicallyMatched)
                                                                     {
                                                                         isMatch = true;
                                                                     }
                                                                     else
                                                                     {
-                                                                        string hcPart = "";
-                                                                        int hcStart = oName.IndexOf('(');
-                                                                        if (hcStart != -1) hcPart = oName.Substring(hcStart).Trim();
+                                                                        string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayOName).Replace(" ", "").Replace("(", "").Replace(")", "").ToLowerInvariant(), @"\.0+(?!\d)", "");
+                                                                        string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).Replace(" ", "").Replace("(", "").Replace(")", "").ToLowerInvariant(), @"\.0+(?!\d)", "").Replace("tie", "draw");
                                                                         
-                                                                        string rawHc = hcPart.Replace("(", "").Replace(")", "").Trim();
-                                                                        bool hcMatches = false;
-                                                                        
-                                                                        string? expectedHcStr = null;
-                                                                        var hcSplit = ActiveLookupLeg.Match != null ? ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None) : new string[0];
-                                                                        if (hcSplit.Length >= 2)
+                                                                        if (normOName == normSel)
                                                                         {
-                                                                            var hcMatch = System.Text.RegularExpressions.Regex.Match(ActiveLookupLeg.Selection, @"([+-])\s*(\d+(?:\.\d+)?)");
-                                                                            if (hcMatch.Success)
-                                                                            {
-                                                                                string sign = hcMatch.Groups[1].Value;
-                                                                                double val = double.Parse(hcMatch.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
-                                                                                int hVal = (int)Math.Truncate(val);
-                                                                                
-                                                                                if (hVal > 0)
-                                                                                {
-                                                                                    bool isT1 = ActiveLookupLeg.Selection.Contains(hcSplit[0].Trim(), StringComparison.OrdinalIgnoreCase);
-                                                                                    bool isT2 = ActiveLookupLeg.Selection.Contains(hcSplit[1].Trim(), StringComparison.OrdinalIgnoreCase);
-                                                                                    
-                                                                                    if (isT1) expectedHcStr = sign == "-" ? $"0-{hVal}" : $"{hVal}-0";
-                                                                                    else if (isT2) expectedHcStr = sign == "-" ? $"{hVal}-0" : $"0-{hVal}";
-                                                                                }
-                                                                            }
-                                                                        }
-
-                                                                        if (expectedHcStr != null)
-                                                                        {
-                                                                            hcMatches = string.Equals(rawHc, expectedHcStr, StringComparison.OrdinalIgnoreCase);
+                                                                            isMatch = true;
                                                                         }
                                                                         else
                                                                         {
-                                                                            hcMatches = string.IsNullOrEmpty(hcPart) || 
-                                                                                        (!string.IsNullOrEmpty(ActiveLookupLeg.Market) && ActiveLookupLeg.Market.Replace(" ", "").Replace("(", "").Replace(")", "").Contains(rawHc, StringComparison.OrdinalIgnoreCase)) ||
-                                                                                        normSel.Contains(rawHc, StringComparison.OrdinalIgnoreCase);
-                                                                        }
-
-                                                                        if (hcMatches && ActiveLookupLeg.Match != null)
+                                                                            var hcRegex = new System.Text.RegularExpressions.Regex(@"([+-]\d+(?:\.\d+)?)$");
+                                                                        var matchOName = hcRegex.Match(normOName);
+                                                                        var matchSel = hcRegex.Match(normSel);
+                                                                        
+                                                                        if (matchOName.Success && matchSel.Success)
                                                                         {
-                                                                            var split = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
-                                                                            if (split.Length >= 2)
+                                                                            if (matchOName.Value == matchSel.Value)
                                                                             {
-                                                                                string t1 = split[0].Trim();
-                                                                                string t2 = split[1].Trim();
-                                                                                string normT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(t1);
-                                                                                string normT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(t2);
-                                                                                string normSelDia = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection);
-
-                                                                                if ((oName == "1" || oName.StartsWith("1 ")) && normSelDia.Contains(normT1, StringComparison.OrdinalIgnoreCase)) isMatch = true;
-                                                                                else if ((oName == "2" || oName.StartsWith("2 ")) && normSelDia.Contains(normT2, StringComparison.OrdinalIgnoreCase)) isMatch = true;
-                                                                                else if ((oName.Equals("X", StringComparison.OrdinalIgnoreCase) || oName.StartsWith("X ", StringComparison.OrdinalIgnoreCase)) && normSelDia.Contains("Draw", StringComparison.OrdinalIgnoreCase)) isMatch = true;
-
-                                                                                if (!isMatch && oName.Contains("/") && oName.Length <= 5)
+                                                                                string teamOName = normOName.Substring(0, matchOName.Index);
+                                                                                string teamSel = normSel.Substring(0, matchSel.Index);
+                                                                                
+                                                                                if (!string.IsNullOrEmpty(teamOName) && !string.IsNullOrEmpty(teamSel) && 
+                                                                                    (teamOName.Contains(teamSel) || teamSel.Contains(teamOName)))
                                                                                 {
-                                                                                    string expectedSelection = oName.Replace("1", normT1).Replace("2", normT2).Replace("X", "Draw").Replace("x", "Draw");
-                                                                                    if (normSelDia.Replace(" ", "").Equals(expectedSelection.Replace(" ", ""), StringComparison.OrdinalIgnoreCase))
+                                                                                    isMatch = true;
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                        else if (!matchOName.Success && !matchSel.Success)
+                                                                        {
+                                                                            var numRegex = new System.Text.RegularExpressions.Regex(@"(\d+(?:\.\d+)?)$");
+                                                                            var numOName = numRegex.Match(normOName);
+                                                                            var numSel = numRegex.Match(normSel);
+                                                                            
+                                                                            if (numOName.Success && numSel.Success)
+                                                                            {
+                                                                                if (numOName.Value == numSel.Value)
+                                                                                {
+                                                                                    string baseOName = normOName.Substring(0, numOName.Index);
+                                                                                    string baseSel = normSel.Substring(0, numSel.Index);
+                                                                                    if (!string.IsNullOrEmpty(baseOName) && !string.IsNullOrEmpty(baseSel) && 
+                                                                                        (baseOName.Contains(baseSel) || baseSel.Contains(baseOName)))
                                                                                     {
                                                                                         isMatch = true;
                                                                                     }
                                                                                 }
+                                                                            }
+                                                                            else if (!numOName.Success && !numSel.Success)
+                                                                            {
+                                                                                if (normOName.Contains(normSel) || normSel.Contains(normOName))
+                                                                                {
+                                                                                    isMatch = true;
+                                                                                }
+                                                                            }
                                                                             }
                                                                         }
                                                                     }
@@ -507,7 +666,7 @@
                                                                         {
                                                                             <i class="bi bi-star-fill text-warning me-1"></i>
                                                                         }
-                                                                        @oName
+                                                                        @displayOName
                                                                     </td>
                                                                     <td class="fw-bold @(isMatch ? "text-dark" : "text-primary")">
                                                                         @(bookies.TryGetValue("unibet.se", out var u) && u.TryGetValue(oName, out double up) ? up.ToString("0.00") : "-")
@@ -1672,12 +1831,39 @@
                                     result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(fallbackTarget));
                     }
                 }
+                
+                bool isCanonicalTranslation = false;
+                // 4. Fallback for Team Total Goals -> Over/Under [Team]
+                if (bestMatch == null && simplifiedTarget.Contains("teamtotalgoal"))
+                {
+                    if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Match) && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
+                    {
+                        var hcSplit = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                        if (hcSplit.Length >= 2)
+                        {
+                            string normSelRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).ToLowerInvariant();
+                            string normT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[0].Split('(')[0].Trim()).ToLowerInvariant();
+                            string normT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[1].Split('(')[0].Trim()).ToLowerInvariant();
+                            
+                            string expectedTeamMarket = "";
+                            if (normSelRaw.Contains(normT1)) expectedTeamMarket = simplify("Over Under Team 1");
+                            else if (normSelRaw.Contains(normT2)) expectedTeamMarket = simplify("Over Under Team 2");
+                            
+                            if (!string.IsNullOrEmpty(expectedTeamMarket))
+                            {
+                                bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == expectedTeamMarket) ?? 
+                                            result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(expectedTeamMarket));
+                                if (bestMatch != null) isCanonicalTranslation = true;
+                            }
+                        }
+                    }
+                }
                     
                 if (bestMatch != null)
                 {
                     SelectedPapiMarketId = bestMatch.MarketId;
                     
-                    if (didFallback || simplify(bestMatch.MarketName) != simplifiedTarget)
+                    if (!isCanonicalTranslation && (didFallback || (!simplifiedTarget.StartsWith(simplify(bestMatch.MarketName)) && simplify(bestMatch.MarketName) != simplifiedTarget)))
                     {
                         OddsLookupWarningMessage = $"OddsPapi doesn't offer '{preSelectCategory}'. Showing '{bestMatch.MarketName}' instead.";
                         Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
