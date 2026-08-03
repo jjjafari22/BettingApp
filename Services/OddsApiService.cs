@@ -242,8 +242,8 @@ public class OddsApiService
                 }
             }
 
-            // 3. Fetch Odds for Unibet SE, Betsson, Bet365
-            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365";
+            // 3. Fetch Odds for Unibet SE, Coolbet, Bet365
+            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,coolbet,bet365";
             var oResp = await _httpClient.GetAsync(oddsUrl);
             
             // Retry once if rate limited
