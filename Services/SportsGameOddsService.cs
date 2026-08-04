@@ -291,14 +291,6 @@ public class SportsGameOddsService
     
     private string NormalizeTeamName(string name)
     {
-        if (string.IsNullOrEmpty(name)) return "";
-        
-        string result = TeamAliasMappingService.RemoveDiacritics(name).ToLowerInvariant();
-        result = _teamAliasMappingService.ApplyTeamAliases(result);
-
-        return result.Replace("ø", "o").Replace("æ", "a").Replace("å", "a").Replace("oe", "o")
-                   .Replace("ae", "a").Replace("aa", "a").Replace(" fc", "").Replace("fk ", "")
-                   .Replace(" united", "").Replace(" city", "").Replace("cf ", "").Replace(" cd", "")
-                   .Replace("bk ", "").Replace(" (w)", "").Replace(" women", "").Trim();
+        return _teamAliasMappingService.NormalizeTeamName(name, removeStopWords: true);
     }
 }

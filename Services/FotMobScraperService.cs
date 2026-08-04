@@ -7,10 +7,12 @@ namespace BettingApp.Services
     public class FotMobScraperService
     {
         private readonly HttpClient _httpClient;
+        private readonly TeamAliasMappingService _teamAliasMapper;
 
-        public FotMobScraperService(HttpClient httpClient)
+        public FotMobScraperService(HttpClient httpClient, TeamAliasMappingService teamAliasMapper)
         {
             _httpClient = httpClient;
+            _teamAliasMapper = teamAliasMapper;
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
         }
 
@@ -21,8 +23,8 @@ namespace BettingApp.Services
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
                 // 1. Clean the match name and extract Home Team for robust searching
                 string[] split = matchName.Split(new[] { " vs ", " - ", " v " }, StringSplitOptions.None);
-                string homeTeam = split[0].Trim();
-                string awayTeam = split.Length > 1 ? split[1].Trim() : "";
+                string homeTeam = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: false);
+                string awayTeam = split.Length > 1 ? _teamAliasMapper.NormalizeTeamName(split[1].Trim(), removeStopWords: false) : "";
                 
                 string matchQuery = Uri.EscapeDataString(homeTeam); // Search only home team to guarantee results
                 

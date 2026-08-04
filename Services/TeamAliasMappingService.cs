@@ -29,7 +29,8 @@ namespace BettingApp.Services
             { "st georgen", "san giorgio" },
             { "asc st georgen", "san giorgio" },
             { "sudtirol", "fc sudtirol" },
-            { "heart of midlothian", "hearts" }
+            { "heart of midlothian", "hearts" },
+            { "os turn", "os" }
         };
 
         public string ApplyTeamAliases(string normalizedTeamName)
@@ -44,6 +45,41 @@ namespace BettingApp.Services
             }
             
             return result;
+        }
+
+        public string NormalizeTeamName(string name, bool removeStopWords = true)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            
+            string result = RemoveDiacritics(name).ToLowerInvariant();
+                       
+            result = ApplyTeamAliases(result);
+
+            result = result.Replace("ø", "o")
+                       .Replace("æ", "a")
+                       .Replace("å", "a")
+                       .Replace("oe", "o")
+                       .Replace("ae", "a")
+                       .Replace("aa", "a")
+                       .Replace(" (w)", "")
+                       .Replace("-", " ");
+                       
+            if (removeStopWords)
+            {
+                var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
+                { 
+                    "fc", "fk", "united", "city", "cf", "cd", "bk", "women", "sc", "ec" 
+                };
+                
+                var words = System.Linq.Enumerable.Where(
+                    result.Split(new[] { ' ', '.' }, StringSplitOptions.RemoveEmptyEntries),
+                    w => !stopWords.Contains(w)
+                );
+                                  
+                return string.Join(" ", words).Trim();
+            }
+            
+            return result.Trim();
         }
     }
 }

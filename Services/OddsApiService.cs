@@ -378,30 +378,7 @@ public class OddsApiService
     
     private string NormalizeTeamName(string name)
     {
-        if (string.IsNullOrEmpty(name)) return "";
-        
-        string result = TeamAliasMappingService.RemoveDiacritics(name).ToLowerInvariant();
-                   
-        result = _teamAliasMappingService.ApplyTeamAliases(result);
-
-        result = result.Replace("ø", "o")
-                   .Replace("æ", "a")
-                   .Replace("å", "a")
-                   .Replace("oe", "o")
-                   .Replace("ae", "a")
-                   .Replace("aa", "a")
-                   .Replace(" (w)", "")
-                   .Replace("-", " ");
-                   
-        var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
-        { 
-            "fc", "fk", "united", "city", "cf", "cd", "bk", "women", "sc", "ec" 
-        };
-        
-        var words = result.Split(new[] { ' ', '.' }, StringSplitOptions.RemoveEmptyEntries)
-                          .Where(w => !stopWords.Contains(w));
-                          
-        return string.Join(" ", words).Trim();
+        return _teamAliasMappingService.NormalizeTeamName(name, removeStopWords: true);
     }
     
     private int ComputeLevenshteinDistance(string s, string t)
