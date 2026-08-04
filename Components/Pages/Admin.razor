@@ -1413,10 +1413,14 @@
             query = query.Where(b => b.AiOutcomeResult != null 
                 && b.AiOutcomeResult != ""
                 && b.AiOutcomeResult != "Admin Override"
+                && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void")
                 && (
-                    (b.Status == "Won" && !b.AiOutcomeResult.Contains("WON")) ||
-                    (b.Status == "Lost" && !b.AiOutcomeResult.Contains("LOST")) ||
-                    (b.Status == "Void" && !b.AiOutcomeResult.Contains("VOID"))
+                    (b.Status == "Won" && !b.AiOutcomeResult.ToLower().Contains("won")) ||
+                    (b.Status == "Lost" && !b.AiOutcomeResult.ToLower().Contains("lost")) ||
+                    (b.Status == "Void" && !b.AiOutcomeResult.ToLower().Contains("void")) ||
+                    b.AiOutcomeResult.ToLower().Contains("unknown") ||
+                    b.AiOutcomeResult.ToLower().Contains("not sure") ||
+                    b.AiOutcomeResult.ToLower().Contains("pending")
                 ));
         }
         else if (showOnlyAdminOverride)
