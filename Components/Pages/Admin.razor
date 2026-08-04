@@ -1415,12 +1415,9 @@
                 && b.AiOutcomeResult != "Admin Override"
                 && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void")
                 && (
-                    (b.Status == "Won" && !b.AiOutcomeResult.ToLower().Contains("won")) ||
-                    (b.Status == "Lost" && !b.AiOutcomeResult.ToLower().Contains("lost")) ||
-                    (b.Status == "Void" && !b.AiOutcomeResult.ToLower().Contains("void")) ||
-                    b.AiOutcomeResult.ToLower().Contains("unknown") ||
-                    b.AiOutcomeResult.ToLower().Contains("not sure") ||
-                    b.AiOutcomeResult.ToLower().Contains("pending")
+                    (b.Status == "Won" && !b.AiOutcomeResult.Contains("MATCH FINISHED - WON") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"WON\"") && b.AiOutcomeResult != "WON") ||
+                    (b.Status == "Lost" && !b.AiOutcomeResult.Contains("MATCH FINISHED - LOST") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"LOST\"") && b.AiOutcomeResult != "LOST") ||
+                    (b.Status == "Void" && !b.AiOutcomeResult.Contains("MATCH FINISHED - VOID") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"VOID\"") && b.AiOutcomeResult != "VOID")
                 ));
         }
         else if (showOnlyAdminOverride)
