@@ -115,7 +115,7 @@ public class OddsApiService
                 if (!fResp.IsSuccessStatusCode) return (null, $"Fixtures API returned status {fResp.StatusCode}");
                 
                 fJson = await fResp.Content.ReadAsStringAsync();
-                _cache.Set($"OddspapiFixtures_{fromDate}", fJson, TimeSpan.FromHours(1));
+                _cache.Set($"OddspapiFixtures_{fromDate}", fJson, TimeSpan.FromHours(6));
             }
             
             using var doc = JsonDocument.Parse(fJson ?? "[]");
@@ -333,7 +333,7 @@ public class OddsApiService
                                                 }
 
                                                 string finalOName = oName;
-                                                string pName = "";
+                                                string? pName = "";
                                                 if (playerProp.Value.TryGetProperty("playerName", out var pNameProp) && pNameProp.ValueKind == System.Text.Json.JsonValueKind.String)
                                                 {
                                                     pName = pNameProp.GetString();
