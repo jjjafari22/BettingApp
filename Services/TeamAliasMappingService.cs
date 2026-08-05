@@ -30,7 +30,8 @@ namespace BettingApp.Services
             { "asc st georgen", "san giorgio" },
             { "sudtirol", "fc sudtirol" },
             { "heart of midlothian", "hearts" },
-            { "os turn", "os" }
+            { "os turn", "os" },
+            { "red star belgrade", "crvena zvezda" }
         };
 
         public string ApplyTeamAliases(string normalizedTeamName)
