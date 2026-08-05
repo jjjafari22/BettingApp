@@ -414,10 +414,10 @@
                                                                 }
                                                             </th>
                                                             <th>
-                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("coolbet", out var coolbetUrl)) {
-                                                                    <a href="@coolbetUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Coolbet">Coolbet <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("betsson", out var betssonUrl)) {
+                                                                    <a href="@betssonUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Betsson">Betsson <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
                                                                 } else {
-                                                                    <span>Coolbet</span>
+                                                                    <span>Betsson</span>
                                                                 }
                                                             </th>
                                                             <th>
@@ -697,7 +697,7 @@
                                                                         }
                                                                     </td>
                                                                     <td class="@(isMatch ? "text-dark" : "text-primary")">
-                                                                        @if (bookies.TryGetValue("coolbet", out var c) && c.TryGetValue(oName, out var cd)) {
+                                                                        @if (bookies.TryGetValue("betsson", out var c) && c.TryGetValue(oName, out var cd)) {
                                                                             <div class="fw-bold">@cd.Price.ToString("0.00")</div>
                                                                             @if (cd.ChangedAt.HasValue) {
                                                                                 <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@cd.ChangedAt.Value.ToLocalTime().ToString("MM-dd HH:mm")</div>
@@ -1836,7 +1836,7 @@
 
             if (result.Markets.Count == 0)
             {
-                OddsLookupWarningMessage = "Match found, but OddsPapi returned 0 markets for Unibet SE, Coolbet, and Bet365.";
+                OddsLookupWarningMessage = "Match found, but OddsPapi returned 0 markets for Unibet SE, Betsson, and Bet365.";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
             }
             else if (!string.IsNullOrEmpty(preSelectCategory))

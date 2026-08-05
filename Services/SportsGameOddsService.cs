@@ -211,7 +211,7 @@ public class SportsGameOddsService
 
                     if (odd.TryGetProperty("byBookmaker", out var byBookmakerNode))
                     {
-                        var allowedBookmakers = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "coolbet", "bet365", "unibet", "pinnacle" };
+                        var allowedBookmakers = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "betsson", "bet365", "unibet", "pinnacle" };
                         foreach (var bmProperty in byBookmakerNode.EnumerateObject())
                         {
                             string bmName = bmProperty.Name;
