@@ -26,14 +26,18 @@
         padding: 16px;
         font-family: 'gg sans', 'Noto Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }
-    .discord-preview h2 {
+    .discord-preview h1,
+    .discord-preview h2,
+    .discord-preview h3 {
         color: #ffffff;
-        font-size: 1.5rem;
         font-weight: 700;
-        margin-top: 0;
+        margin-top: 0.5rem;
         margin-bottom: 8px;
     }
-    .discord-preview p {
+    .discord-preview h1 { font-size: 1.75rem; }
+    .discord-preview h2 { font-size: 1.5rem; }
+    .discord-preview h3 { font-size: 1.25rem; }
+    .discord-preview .message-body {
         margin: 0;
         white-space: pre-wrap;
     }
@@ -229,7 +233,7 @@ else
                         {
                             <h2>@broadcastTitle</h2>
                         }
-                        <p>@((MarkupString)ParseDiscordMarkdown(broadcastMessage))</p>
+                        <div class="message-body">@((MarkupString)ParseDiscordMarkdown(broadcastMessage))</div>
                         @if (uploadedFiles.Any())
                         {
                             <div class="mt-2 p-2 rounded" style="background-color: #2b2d31; border: 1px solid #1e1f22;">
@@ -536,6 +540,14 @@ else
         
         // Escape HTML to prevent XSS in the preview
         var html = System.Net.WebUtility.HtmlEncode(text);
+
+        // Headers
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^###\s+(.+)$", "<h3>$1</h3>", System.Text.RegularExpressions.RegexOptions.Multiline);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^##\s+(.+)$", "<h2>$1</h2>", System.Text.RegularExpressions.RegexOptions.Multiline);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^#\s+(.+)$", "<h1>$1</h1>", System.Text.RegularExpressions.RegexOptions.Multiline);
+
+        // Bullet points (Unordered Lists)
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^[\-\*]\s+(.+)$", "<span style=\"display:list-item; margin-left: 1.5rem;\">$1</span>", System.Text.RegularExpressions.RegexOptions.Multiline);
 
         // Bold **text**
         html = System.Text.RegularExpressions.Regex.Replace(html, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
