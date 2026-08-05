@@ -274,9 +274,13 @@
                                                                                                             <span class="input-group-text" style="width: 70px;">Vipps</span>
                                                                                                             <input type="text" class="form-control" @bind="dest.Vipps" @bind:event="oninput" @bind:after="() => row.GenerateText()" />
                                                                                                         </div>
-                                                                                                        <div class="input-group input-group-sm">
+                                                                                                        <div class="input-group input-group-sm mb-1">
                                                                                                             <span class="input-group-text" style="width: 70px;">Revolut</span>
                                                                                                             <input type="text" class="form-control" @bind="dest.Revolut" @bind:event="oninput" @bind:after="() => row.GenerateText()" />
+                                                                                                        </div>
+                                                                                                        <div class="input-group input-group-sm">
+                                                                                                            <span class="input-group-text" style="width: 70px;">Annet</span>
+                                                                                                            <input type="text" class="form-control" @bind="dest.Other" @bind:event="oninput" @bind:after="() => row.GenerateText()" />
                                                                                                         </div>
                                                                                                     </div>
                                                                                                 </div>
@@ -450,6 +454,7 @@
                 var methods = new List<string>();
                 if (!string.IsNullOrWhiteSpace(dest.Vipps)) methods.Add($"- **Vipps:** `{dest.Vipps.Trim()}`");
                 if (!string.IsNullOrWhiteSpace(dest.Revolut)) methods.Add($"- **Revolut:** `{dest.Revolut.Trim()}`");
+                if (!string.IsNullOrWhiteSpace(dest.Other)) methods.Add($"- **Annet:** `{dest.Other.Trim()}`");
                 
                 if (methods.Any())
                 {
@@ -473,6 +478,7 @@
         public decimal Amount { get; set; }
         public string Vipps { get; set; } = "";
         public string Revolut { get; set; } = "";
+        public string Other { get; set; } = "";
         public bool IsCastle { get; set; } = false;
         public string SelectedCowId { get; set; } = "";
     }
@@ -725,14 +731,20 @@
             if (!string.IsNullOrEmpty(ins.PaymentDetails))
             {
                 var parts = ins.PaymentDetails.Split(new[] { " / ", " | " }, StringSplitOptions.RemoveEmptyEntries);
+                var otherParts = new List<string>();
                 foreach (var part in parts)
                 {
                     if (part.Trim().StartsWith("Vipps:", StringComparison.OrdinalIgnoreCase))
                         dest.Vipps = part.Replace("Vipps:", "", StringComparison.OrdinalIgnoreCase).Trim();
                     else if (part.Trim().StartsWith("Revolut:", StringComparison.OrdinalIgnoreCase))
                         dest.Revolut = part.Replace("Revolut:", "", StringComparison.OrdinalIgnoreCase).Trim();
+                    else if (!string.IsNullOrWhiteSpace(part))
+                        otherParts.Add(part.Trim());
                 }
-                if (string.IsNullOrEmpty(dest.Vipps) && string.IsNullOrEmpty(dest.Revolut)) dest.Vipps = ins.PaymentDetails;
+                if (otherParts.Any())
+                {
+                    dest.Other = string.Join(" / ", otherParts);
+                }
             }
             dict[ins.FromUser].Destinations.Add(dest);
         }
