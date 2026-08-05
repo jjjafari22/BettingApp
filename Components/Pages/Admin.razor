@@ -600,7 +600,7 @@
                                                                                         
                                                                                         double? aiHc = null;
                                                                                         var aiHcRegex = new System.Text.RegularExpressions.Regex(@"([+-]\d+(?:\.\d+)?)$");
-                                                                                        var aiHcMatch = aiHcRegex.Match(normSelRaw.Replace(" ", ""));
+                                                                                        var aiHcMatch = aiHcRegex.Match(normSelRaw.Replace(" ", "").Replace("(", "").Replace(")", ""));
                                                                                         if (aiHcMatch.Success && double.TryParse(aiHcMatch.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedAiHc))
                                                                                         {
                                                                                             aiHc = parsedAiHc;
@@ -620,8 +620,8 @@
                                                                     }
                                                                     else
                                                                     {
-                                                                        string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayOName).Replace(" ", "").Replace("(", "").Replace(")", "").ToLowerInvariant(), @"\.0+(?!\d)", "");
-                                                                        string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).Replace(" ", "").Replace("(", "").Replace(")", "").ToLowerInvariant(), @"\.0+(?!\d)", "").Replace("tie", "draw");
+                                                                        string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayOName).ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
+                                                                        string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "").Replace("tie", "draw");
                                                                         
                                                                         if (normOName == normSel)
                                                                         {

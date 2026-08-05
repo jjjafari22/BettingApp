@@ -23,7 +23,7 @@ namespace BettingApp.Services
 
         // Maps alternative/bilingual team names to their standard API format.
         // We use string replacement so "Kuopion Palloseura U21" becomes "Kups U21".
-        private readonly Dictionary<string, string> _teamAliases = new(StringComparer.OrdinalIgnoreCase)
+        private static readonly Dictionary<string, string> _teamAliases = new(StringComparer.OrdinalIgnoreCase)
         {
             { "kuopion palloseura", "kups" },
             { "st georgen", "san giorgio" },
@@ -31,10 +31,11 @@ namespace BettingApp.Services
             { "sudtirol", "fc sudtirol" },
             { "heart of midlothian", "hearts" },
             { "os turn", "os" },
-            { "red star belgrade", "crvena zvezda" }
+            { "red star belgrade", "crvena zvezda" },
+            { "ois", "orgryte is" }
         };
 
-        public string ApplyTeamAliases(string normalizedTeamName)
+        public static string ApplyTeamAliases(string normalizedTeamName)
         {
             if (string.IsNullOrWhiteSpace(normalizedTeamName)) return normalizedTeamName;
 
