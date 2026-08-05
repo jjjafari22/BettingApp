@@ -319,19 +319,54 @@ public class OddsApiService
 
                                     if (outcome.Value.TryGetProperty("players", out var players))
                                     {
-                                        if (players.TryGetProperty("0", out var playerZero))
+                                        foreach (var playerProp in players.EnumerateObject())
                                         {
-                                            if (playerZero.TryGetProperty("price", out var price))
+                                            if (playerProp.Value.TryGetProperty("price", out var price))
                                             {
                                                 var oddsData = new BettingApp.Models.OddsData { Price = price.GetDouble() };
-                                                if (playerZero.TryGetProperty("changedAt", out var changedAtProp) && changedAtProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                if (playerProp.Value.TryGetProperty("changedAt", out var changedAtProp) && changedAtProp.ValueKind == System.Text.Json.JsonValueKind.String)
                                                 {
                                                     if (DateTime.TryParse(changedAtProp.GetString(), out var changedAt))
                                                     {
                                                         oddsData.ChangedAt = changedAt;
                                                     }
                                                 }
-                                                result.BookmakerOdds[baseName][bmName][oName] = oddsData;
+
+                                                string finalOName = oName;
+                                                string pName = "";
+                                                if (playerProp.Value.TryGetProperty("playerName", out var pNameProp) && pNameProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                {
+                                                    pName = pNameProp.GetString();
+                                                }
+                                                else if (playerProp.Value.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                {
+                                                    pName = nameProp.GetString();
+                                                }
+                                                else if (playerProp.Value.TryGetProperty("participantName", out var partNameProp) && partNameProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                {
+                                                    pName = partNameProp.GetString();
+                                                }
+
+                                                if (!string.IsNullOrWhiteSpace(pName))
+                                                {
+                                                    finalOName = $"{oName} ({pName})";
+                                                }
+
+                                                result.BookmakerOdds[baseName][bmName][finalOName] = oddsData;
+                                                
+                                                // Also make sure to add it to OutcomeNames so it shows up in UI tables
+                                                if (baseMarketDict.TryGetValue(baseName, out var baseMarketObj) && !baseMarketObj.OutcomeNames.ContainsKey(finalOName))
+                                                {
+                                                    baseMarketObj.OutcomeNames[finalOName] = finalOName;
+                                                }
+                                                else if (!baseMarketDict.TryGetValue(baseName, out _) && !result.Markets.Any(m => m.MarketName == baseName && m.OutcomeNames.ContainsKey(finalOName)))
+                                                {
+                                                    var marketObj = result.Markets.FirstOrDefault(m => m.MarketName == baseName);
+                                                    if (marketObj != null && !marketObj.OutcomeNames.ContainsKey(finalOName))
+                                                    {
+                                                        marketObj.OutcomeNames[finalOName] = finalOName;
+                                                    }
+                                                }
                                             }
                                         }
                                     }
