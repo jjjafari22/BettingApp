@@ -47,7 +47,10 @@ builder.Services.AddScoped<DialogService>();
 builder.Services.AddHttpClient<OddsApiService>();
 builder.Services.AddHttpClient<KambiScraperService>();
 builder.Services.AddHttpClient<Bet365ScraperService>();
-builder.Services.AddHttpClient<AiVisionService>();
+builder.Services.AddHttpClient<AiVisionService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(300); // 5 minutes for LLM processing
+});
 builder.Services.AddHttpClient<FotMobScraperService>();
 builder.Services.AddScoped<SportsGameOddsService>();
 builder.Services.AddSingleton<MarketMappingService>();

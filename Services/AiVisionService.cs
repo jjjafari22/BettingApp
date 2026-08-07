@@ -194,31 +194,10 @@ namespace BettingApp.Services
                 // 4. Call Gemini API with resolved model
                 var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
                 
-                HttpResponseMessage? response = null;
-                string responseString = "";
-                int maxRetries = 3;
-                
-                for (int attempt = 0; attempt < maxRetries; attempt++)
-                {
-                    var loopRequestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-                    response = await _httpClient.PostAsync(apiUrl, loopRequestContent);
-                    responseString = await response.Content.ReadAsStringAsync();
+                var response = await SendWithRetryAsync(apiUrl, jsonPayload);
+                string responseString = await response.Content.ReadAsStringAsync();
 
-                    if (response.IsSuccessStatusCode)
-                        break;
-                        
-                    if (response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable || response.StatusCode == (System.Net.HttpStatusCode)429)
-                    {
-                        if (attempt < maxRetries - 1)
-                        {
-                            await Task.Delay(2000 * (int)Math.Pow(2, attempt)); // 2s, 4s...
-                            continue;
-                        }
-                    }
-                    break;
-                }
-
-                if (response == null || !response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
                     return (null, $"Gemini API Error: {response?.StatusCode}\nResolved Model: {resolvedModel}\nDetails: {responseString}");
                 }
@@ -344,7 +323,6 @@ namespace BettingApp.Services
                 };
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
-                var requestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
                 
                 // Auto-resolve the best available Flash model
                 var modelsUrl = $"https://generativelanguage.googleapis.com/v1beta/models?key={_apiKey}";
@@ -387,7 +365,7 @@ namespace BettingApp.Services
 
                 var url = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
                 
-                var response = await _httpClient.PostAsync(url, requestContent);
+                var response = await SendWithRetryAsync(url, jsonPayload);
                 if (!response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync();
@@ -462,7 +440,6 @@ namespace BettingApp.Services
                 };
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
-                var requestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
                 
                 // Auto-resolve the best available Flash model
                 var modelsUrl = $"https://generativelanguage.googleapis.com/v1beta/models?key={_apiKey}";
@@ -504,7 +481,7 @@ namespace BettingApp.Services
                 }
 
                 var url = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
-                var response = await _httpClient.PostAsync(url, requestContent);
+                var response = await SendWithRetryAsync(url, jsonPayload);
                 
                 if (!response.IsSuccessStatusCode) return null;
 
@@ -535,6 +512,38 @@ namespace BettingApp.Services
             {
                 return null;
             }
+        }
+        private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload)
+        {
+            int maxRetries = 3;
+            for (int i = 0; i < maxRetries; i++)
+            {
+                try
+                {
+                    var requestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                    var response = await _httpClient.PostAsync(url, requestContent);
+                    
+                    if (response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable || response.StatusCode == (System.Net.HttpStatusCode)429)
+                    {
+                        if (i < maxRetries - 1)
+                        {
+                            await Task.Delay(2000 * (i + 1));
+                            continue;
+                        }
+                    }
+                    return response;
+                }
+                catch (TaskCanceledException)
+                {
+                    if (i < maxRetries - 1)
+                    {
+                        await Task.Delay(2000 * (i + 1));
+                        continue;
+                    }
+                    throw;
+                }
+            }
+            throw new Exception("Max retries exceeded.");
         }
     }
 }
