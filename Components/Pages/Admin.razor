@@ -1607,13 +1607,19 @@
 
                     if (parsedData != null)
                     {
-                        if (parsedData.OverallStatus == "MATCH NOT STARTED" && DateTime.TryParse(parsedData.MatchStartTimeIso, out DateTime st))
+                        var status = parsedData.OverallStatus?.Trim().ToUpperInvariant() ?? "";
+                        var isFinished = 
+                            status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
+                            status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
+                            status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID";
+
+                        if (status == "MATCH NOT STARTED" && DateTime.TryParse(parsedData.MatchStartTimeIso, out DateTime st))
                         {
                             dbBet.MatchStartTime = st;
                             var twoHoursAfter = st.AddHours(2);
                             dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
                         }
-                        else if (parsedData.OverallStatus != "MATCH FINISHED")
+                        else if (!isFinished)
                         {
                             dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
                         }
@@ -2343,6 +2349,11 @@
                     var twoHoursAfter = dbBet.MatchStartTime.Value.AddHours(2);
                     dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
                 }
+            }
+            else if (newStatus != "Approved" && newStatus != "Pending")
+            {
+                dbBet.NextCheckTime = null;
+                bet.NextCheckTime = null;
             }
 
             await context.SaveChangesAsync();
