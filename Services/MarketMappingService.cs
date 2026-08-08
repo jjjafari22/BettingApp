@@ -77,6 +77,9 @@ namespace BettingApp.Services
                             return "Over Under Team 1" + halfSuffix;
                         if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
                             return "Over Under Team 2" + halfSuffix;
+                            
+                        // Otherwise, generic total goals for the match
+                        if (!string.IsNullOrEmpty(halfSuffix)) return "Over Under" + halfSuffix;
                     }
 
                     // To Win At Least One Half

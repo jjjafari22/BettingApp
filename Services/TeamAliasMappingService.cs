@@ -32,7 +32,9 @@ namespace BettingApp.Services
             { "heart of midlothian", "hearts" },
             { "os turn", "os" },
             { "red star belgrade", "crvena zvezda" },
-            { "ois", "orgryte is" }
+            { "ois", "orgryte is" },
+            { "paphos", "pafos" },
+            { "grasshoppers", "grasshopper" }
         };
 
         public static string ApplyTeamAliases(string normalizedTeamName)
