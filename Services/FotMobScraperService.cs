@@ -136,7 +136,14 @@ namespace BettingApp.Services
                                 using var doc = System.Text.Json.JsonDocument.Parse(regexMatch.Groups[1].Value);
                                 var fallback = doc.RootElement.GetProperty("props").GetProperty("pageProps").GetProperty("fallback");
                                 var teamData = fallback.GetProperty($"team-{teamId}");
-                                var fixtures = teamData.GetProperty("fixtures").GetProperty("allFixtures").GetProperty("fixtures");
+                                var fixturesProp = teamData.GetProperty("fixtures");
+                                
+                                if (fixturesProp.ValueKind != System.Text.Json.JsonValueKind.Object || 
+                                    !fixturesProp.TryGetProperty("allFixtures", out var allFixtures) ||
+                                    !allFixtures.TryGetProperty("fixtures", out var fixtures))
+                                {
+                                    continue; // Skip if no fixtures exist for this team
+                                }
                                 
                                 foreach (var f in fixtures.EnumerateArray())
                                 {
