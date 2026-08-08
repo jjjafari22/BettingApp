@@ -90,7 +90,8 @@ namespace BettingApp.Services
                             var isFinished = 
                                 status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
                                 status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
-                                status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID";
+                                status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
+                                status == "UNKNOWN";
 
                             if (isFinished)
                             {
