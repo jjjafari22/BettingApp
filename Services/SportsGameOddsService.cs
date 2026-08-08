@@ -279,6 +279,8 @@ public class SportsGameOddsService
         string normalizedSource = NormalizeTeamName(source);
         string normalizedTarget = NormalizeTeamName(target);
         
+        if (string.IsNullOrEmpty(normalizedSource) || string.IsNullOrEmpty(normalizedTarget)) return false;
+        
         return normalizedSource.Contains(normalizedTarget, StringComparison.OrdinalIgnoreCase) || 
                normalizedTarget.Contains(normalizedSource, StringComparison.OrdinalIgnoreCase);
     }
