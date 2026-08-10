@@ -167,9 +167,8 @@ namespace BettingApp.Services
                                     string normFixtureAway = NormalizeText(awayName);
 
                                     bool match1 = homeTokens.Any(t => FuzzyMatch(t, normFixtureHome)) && (awayTokens.Length == 0 || awayTokens.Any(t => FuzzyMatch(t, normFixtureAway)));
-                                    bool match2 = homeTokens.Any(t => FuzzyMatch(t, normFixtureAway)) && (awayTokens.Length == 0 || awayTokens.Any(t => FuzzyMatch(t, normFixtureHome)));
 
-                                    if (match1 || match2)
+                                    if (match1)
                                     {
                                         eventId = id;
                                         break; // Found it!
@@ -203,8 +202,7 @@ namespace BettingApp.Services
                         using var ssrDoc = System.Text.Json.JsonDocument.Parse(match.Groups[1].Value);
                         var root = ssrDoc.RootElement;
                         if (root.TryGetProperty("props", out var props) &&
-                            props.TryGetProperty("pageProps", out var pageProps) &&
-                            pageProps.TryGetProperty("content", out var content))
+                            props.TryGetProperty("pageProps", out var pageProps))
                         {
                             var trimmedData = new System.Collections.Generic.Dictionary<string, object>();
 
@@ -224,16 +222,19 @@ namespace BettingApp.Services
                                 trimmedData["header"] = trimmedHeader;
                             }
 
-                            if (content.TryGetProperty("matchFacts", out var matchFacts))
+                            if (pageProps.TryGetProperty("content", out var content))
                             {
-                                var trimmedFacts = new System.Collections.Generic.Dictionary<string, object>();
-                                if (matchFacts.TryGetProperty("infoBox", out var infoBox)) trimmedFacts["infoBox"] = infoBox;
-                                if (matchFacts.TryGetProperty("events", out var events)) trimmedFacts["events"] = events;
-                                trimmedData["matchFacts"] = trimmedFacts;
-                            }
+                                if (content.TryGetProperty("matchFacts", out var matchFacts))
+                                {
+                                    var trimmedFacts = new System.Collections.Generic.Dictionary<string, object>();
+                                    if (matchFacts.TryGetProperty("infoBox", out var infoBox)) trimmedFacts["infoBox"] = infoBox;
+                                    if (matchFacts.TryGetProperty("events", out var events)) trimmedFacts["events"] = events;
+                                    trimmedData["matchFacts"] = trimmedFacts;
+                                }
 
-                            if (content.TryGetProperty("stats", out var stats)) trimmedData["stats"] = stats;
-                            if (content.TryGetProperty("playerStats", out var playerStats)) trimmedData["playerStats"] = playerStats;
+                                if (content.TryGetProperty("stats", out var stats)) trimmedData["stats"] = stats;
+                                if (content.TryGetProperty("playerStats", out var playerStats)) trimmedData["playerStats"] = playerStats;
+                            }
 
                             // Strip down the JSON to only the relevant stats to save massive amounts of tokens and prevent 503s!
                             return System.Text.Json.JsonSerializer.Serialize(trimmedData);
@@ -293,9 +294,10 @@ namespace BettingApp.Services
                 if (homeTeamTokens.Length == 0 && !string.IsNullOrEmpty(homeTeam)) homeTeamTokens = new[] { NormalizeText(homeTeam) };
 
                 bool homeMatch = false;
+                string normOptHome = NormalizeText(optionHomeName);
                 foreach (var token in homeTeamTokens)
                 {
-                    if (normalizedText.Contains(token, StringComparison.OrdinalIgnoreCase))
+                    if (FuzzyMatch(token, normOptHome))
                     {
                         homeMatch = true;
                         break;
@@ -305,10 +307,11 @@ namespace BettingApp.Services
                 bool awayTeamMatch = string.IsNullOrEmpty(awayTeam);
                 if (!awayTeamMatch)
                 {
+                    string normOptAway = NormalizeText(optionAwayName);
                     var normalizedAwayTokens = awayTeamTokens.Select(NormalizeText).ToArray();
                     foreach (var token in normalizedAwayTokens)
                     {
-                        if (normalizedText.Contains(token, StringComparison.OrdinalIgnoreCase))
+                        if (FuzzyMatch(token, normOptAway))
                         {
                             awayTeamMatch = true;
                             break;
@@ -318,7 +321,7 @@ namespace BettingApp.Services
 
                 if (!homeMatch || !awayTeamMatch)
                 {
-                    continue; // Must contain at least one token from BOTH home and away teams!
+                    continue; // MUST match the home team strictly to home, and away team strictly to away!
                 }
 
                 int score = 0;
@@ -326,24 +329,6 @@ namespace BettingApp.Services
                 if (queryIsWomen != optionIsWomen) 
                 {
                     score -= 50; // Heavy penalty for gender mismatch!
-                }
-                
-                // Score 10 points if the Home/Away order strictly matches our expected order!
-                if (optionHomeName.Contains(homeTeam, StringComparison.OrdinalIgnoreCase) || homeTeam.Contains(optionHomeName, StringComparison.OrdinalIgnoreCase))
-                {
-                    bool orderMatch = false;
-                    foreach (var token in awayTeamTokens)
-                    {
-                        if (optionAwayName.Contains(token, StringComparison.OrdinalIgnoreCase))
-                        {
-                            orderMatch = true;
-                            break;
-                        }
-                    }
-                    if (orderMatch)
-                    {
-                        score += 10;
-                    }
                 }
 
                 // Parse match date to prioritize the closest match (e.g. Leg 1 vs Leg 2)
@@ -370,8 +355,8 @@ namespace BettingApp.Services
                         // Calculate absolute time difference between target date and match date
                         TimeSpan diff = (matchDate - targetDate).Duration();
                         
-                        // Strict threshold: If the match is more than 14 days apart from our target date, reject it!
-                        if (diff.TotalDays > 14)
+                        // Strict threshold: If the match is more than 90 days apart from our target date, reject it!
+                        if (diff.TotalDays > 90)
                         {
                             continue;
                         }
@@ -410,7 +395,7 @@ namespace BettingApp.Services
             string result = sb.ToString().ToLowerInvariant();
             
             // Map common nordic and german characters that don't decompose to ascii equivalents
-            result = result.Replace("ø", "o").Replace("æ", "ae").Replace("å", "a")
+            result = result.Replace("ø", "o").Replace("æ", "a").Replace("å", "a")
                            .Replace("ö", "o").Replace("ä", "a").Replace("ü", "u");
                            
             // Map common english translated team names to local names
