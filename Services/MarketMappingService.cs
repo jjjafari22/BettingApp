@@ -29,6 +29,9 @@ namespace BettingApp.Services
             { "1. Half Result", "First Half Result" },
             { "Half Time Result", "First Half Result" },
             { "1st Half 1x2", "First Half Result" },
+            { "2nd Half Result", "Second Half Result" },
+            { "2. Half Result", "Second Half Result" },
+            { "2nd Half 1x2", "Second Half Result" },
             { "Correct Score", "Correct Score Full Time" }
         };
 
@@ -62,11 +65,11 @@ namespace BettingApp.Services
                         if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
                             return "Corners - Over Under Team 2" + halfSuffix;
                         
-                        // Otherwise, generic corners
-                        if (clean.StartsWith("Total Corners", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Corners", StringComparison.OrdinalIgnoreCase))
+                        // Otherwise, generic corners (checking for 'Total Corners', 'Corners', or 'Half Corners')
+                        if (clean.Contains("Total Corners", StringComparison.OrdinalIgnoreCase) || clean.Contains("Corners", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (!string.IsNullOrEmpty(halfSuffix)) return "Corners - Over Under" + halfSuffix;
-                            return "Corners - Over Under Full Time";
+                            if (!string.IsNullOrEmpty(halfSuffix)) return "Corners - Over/Under" + halfSuffix;
+                            return "Corners - Over/Under Full Time";
                         }
                     }
 
