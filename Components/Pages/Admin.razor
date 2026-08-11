@@ -1877,31 +1877,6 @@
                         simplifiedTarget.Contains(simplify(m.MarketName)));
                 }
 
-                // 3. Fallback for Asian Handicap -> 3-Way Handicap if actual Asian Handicap doesn't exist
-                bool didFallback = false;
-                if (bestMatch == null && (simplifiedTarget.Contains("asianhandicap") || simplifiedTarget.Contains("handicap") || simplifiedTarget.StartsWith("handicap")))
-                {
-                    didFallback = true;
-                    if (simplifiedTarget.Contains("corner"))
-                    {
-                        string fallbackTarget = (simplifiedTarget.Contains("1half") || simplifiedTarget.Contains("firsthalf") || simplifiedTarget.Contains("halftime")) 
-                            ? simplify("1st Half Corners") 
-                            : simplify("Corners");
-                            
-                        bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == fallbackTarget) ?? 
-                                    result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(fallbackTarget));
-                    }
-                    else
-                    {
-                        string fallbackTarget = (simplifiedTarget.Contains("1half") || simplifiedTarget.Contains("firsthalf") || simplifiedTarget.Contains("halftime")) 
-                            ? simplify("Half Time Handicap") 
-                            : simplify("3-Way Handicap");
-                            
-                        bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == fallbackTarget) ?? 
-                                    result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(fallbackTarget));
-                    }
-                }
-                
                 bool isCanonicalTranslation = false;
                 // 4. Fallback for Team Total Goals -> Over/Under [Team]
                 if (bestMatch == null && simplifiedTarget.Contains("teamtotalgoal"))
@@ -1933,7 +1908,7 @@
                 {
                     SelectedPapiMarketId = bestMatch.MarketId;
                     
-                    if (!isCanonicalTranslation && (didFallback || (!simplifiedTarget.StartsWith(simplify(bestMatch.MarketName)) && simplify(bestMatch.MarketName) != simplifiedTarget)))
+                    if (!isCanonicalTranslation && (!simplifiedTarget.StartsWith(simplify(bestMatch.MarketName)) && simplify(bestMatch.MarketName) != simplifiedTarget))
                     {
                         OddsLookupWarningMessage = $"OddsPapi doesn't offer '{preSelectCategory}'. Showing '{bestMatch.MarketName}' instead.";
                         Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
