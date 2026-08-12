@@ -19,7 +19,7 @@ namespace BettingApp.Services
             { "Total Goals 1", "Over Under Full Time" },
             { "Total Goals 3", "Over Under Full Time" },
             { "Total Goals 4", "Over Under Full Time" },
-            { "Player Shots on Target", "Player's shot on target" },
+            { "Player Shots on Target", "Player Shots On Goal (incl. overtime)|Player's shot on target" },
             { "Full Time", "Full Time Result" },
             { "Match Odds", "Full Time Result" },
             { "1x2", "Full Time Result" },
@@ -35,12 +35,16 @@ namespace BettingApp.Services
             { "Correct Score", "Correct Score Full Time" },
             { "Early Win", "2Up - Full Time Result" },
             { "Early Win (Anytime 2 Goal Lead)", "2Up - Full Time Result" },
-            { "Early Payout", "2Up - Full Time Result" }
+            { "Early Payout", "2Up - Full Time Result" },
+            { "Player to be Booked", "Player To Be Carded (incl. overtime)" },
+            { "Player To Receive A Card", "Player To Be Carded (incl. overtime)" },
+            { "Player Cards", "Player To Be Carded (incl. overtime)" },
+            { "Will/Will not get Booked", "Player To Be Carded (incl. overtime)" }
         };
 
-        public string NormalizeMarketName(string rawMarketName, string? matchName = null)
+        public List<string> NormalizeMarketName(string rawMarketName, string? matchName = null)
         {
-            if (string.IsNullOrWhiteSpace(rawMarketName)) return rawMarketName;
+            if (string.IsNullOrWhiteSpace(rawMarketName)) return new List<string> { rawMarketName };
 
             var clean = rawMarketName.Trim();
             
@@ -64,15 +68,15 @@ namespace BettingApp.Services
                     if (clean.Contains("Corners", StringComparison.OrdinalIgnoreCase))
                     {
                         if (clean.Contains(team1, StringComparison.OrdinalIgnoreCase) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
-                            return "Corners - Over Under Team 1" + halfSuffix;
+                            return new List<string> { "Corners - Over Under Team 1" + halfSuffix };
                         if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
-                            return "Corners - Over Under Team 2" + halfSuffix;
+                            return new List<string> { "Corners - Over Under Team 2" + halfSuffix };
                         
                         // Otherwise, generic corners (checking for 'Total Corners', 'Corners', or 'Half Corners')
                         if (clean.Contains("Total Corners", StringComparison.OrdinalIgnoreCase) || clean.Contains("Corners", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (!string.IsNullOrEmpty(halfSuffix)) return "Corners - Over/Under" + halfSuffix;
-                            return "Corners - Over/Under Full Time";
+                            if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Corners - Over/Under" + halfSuffix };
+                            return new List<string> { "Corners - Over/Under Full Time" };
                         }
                     }
 
@@ -80,30 +84,30 @@ namespace BettingApp.Services
                     if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goals", StringComparison.OrdinalIgnoreCase))
                     {
                         if (clean.Contains(team1, StringComparison.OrdinalIgnoreCase) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
-                            return "Over Under Team 1" + halfSuffix;
+                            return new List<string> { "Over Under Team 1" + halfSuffix };
                         if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
-                            return "Over Under Team 2" + halfSuffix;
+                            return new List<string> { "Over Under Team 2" + halfSuffix };
                             
                         // Otherwise, generic total goals for the match
-                        if (!string.IsNullOrEmpty(halfSuffix)) return "Over Under" + halfSuffix;
+                        if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Over Under" + halfSuffix };
                     }
 
                     // To Win At Least One Half
                     if (clean.Contains("To Win At Least One Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("To Win Either Half", StringComparison.OrdinalIgnoreCase))
                     {
                         if (clean.Contains(team1, StringComparison.OrdinalIgnoreCase) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
-                            return "Team 1 To Win Either Halves";
+                            return new List<string> { "Team 1 To Win Either Halves" };
                         if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
-                            return "Team 2 To Win Either Halves";
+                            return new List<string> { "Team 2 To Win Either Halves" };
                     }
 
                     // To Win Both Halves
                     if (clean.Contains("To Win Both Halves", StringComparison.OrdinalIgnoreCase))
                     {
                         if (clean.Contains(team1, StringComparison.OrdinalIgnoreCase) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
-                            return "Team 1 to win both halves";
+                            return new List<string> { "Team 1 to win both halves" };
                         if (clean.Contains(team2, StringComparison.OrdinalIgnoreCase) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
-                            return "Team 2 to win both halves";
+                            return new List<string> { "Team 2 to win both halves" };
                     }
                 }
             }
@@ -111,17 +115,21 @@ namespace BettingApp.Services
             // 1. Check if we have an explicit override for this issue
             if (_marketAliases.TryGetValue(clean, out var mapped))
             {
-                return mapped;
+                if (mapped.Contains('|'))
+                {
+                    return mapped.Split('|').Select(m => m.Trim()).ToList();
+                }
+                return new List<string> { mapped };
             }
 
             // Clean up common AI hallucinations where it appends numbers to Total Goals
             if (clean.StartsWith("Total Goals", StringComparison.OrdinalIgnoreCase))
             {
-                return "Over Under Full Time";
+                return new List<string> { "Over Under Full Time" };
             }
 
             // 2. Otherwise return what the AI gave us
-            return clean;
+            return new List<string> { clean };
         }
     }
 }

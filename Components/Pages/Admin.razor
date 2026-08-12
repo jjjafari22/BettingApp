@@ -668,11 +668,47 @@
                                                                             }
                                                                             else if (!numOName.Success && !numSel.Success)
                                                                             {
-                                                                                if (normOName.Contains(normSel) || normSel.Contains(normOName))
+                                                                                if (normOName.Contains(normSel))
                                                                                 {
                                                                                     isMatch = true;
                                                                                 }
+                                                                                else if (normSel.Contains(normOName))
+                                                                                {
+                                                                                    if (normOName.Length >= 4)
+                                                                                    {
+                                                                                        isMatch = true;
+                                                                                    }
+                                                                                    else
+                                                                                    {
+                                                                                        if (normSel.EndsWith("-" + normOName) || normSel.StartsWith(normOName + "-") || normSel.Contains("-" + normOName + "-"))
+                                                                                        {
+                                                                                            isMatch = true;
+                                                                                        }
+                                                                                    }
+                                                                                }
                                                                             }
+                                                                            }
+                                                                        }
+                                                                        
+                                                                        if (!isMatch)
+                                                                        {
+                                                                            var parenMatch = System.Text.RegularExpressions.Regex.Match(displayOName, @"\(([^,]+),\s*([^)]+)\)");
+                                                                            if (parenMatch.Success)
+                                                                            {
+                                                                                string lastName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
+                                                                                string firstName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[2].Value).ToLowerInvariant().Replace(" ", "");
+                                                                                
+                                                                                if (normSel.Contains(lastName) && normSel.Contains(firstName))
+                                                                                {
+                                                                                    string outcomePart = displayOName.Substring(0, parenMatch.Index).Trim();
+                                                                                    string normOutcomePart = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "");
+                                                                                    
+                                                                                    if (string.IsNullOrEmpty(normOutcomePart) || normSel.Contains(normOutcomePart) || 
+                                                                                        (normOutcomePart == "yes" && (normSel.Contains("tobebooked") || normSel.Contains("willgetbooked") || normSel.Contains("card"))))
+                                                                                    {
+                                                                                        isMatch = true;
+                                                                                    }
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
@@ -1848,7 +1884,7 @@
             }
             else if (!string.IsNullOrEmpty(preSelectCategory))
             {
-                var normalizedTarget = MarketMapper.NormalizeMarketName(preSelectCategory, ActiveLookupLeg?.Match);
+                var normalizedTargets = MarketMapper.NormalizeMarketName(preSelectCategory, ActiveLookupLeg?.Match);
                 
                 // Simple fuzzy matching against OddsPapi MarketName
                 var simplify = (string s) => 
@@ -1864,22 +1900,21 @@
                     return new string(clean.Where(char.IsLetterOrDigit).ToArray());
                 };
                 
-                var simplifiedTarget = simplify(normalizedTarget);
+                var simplifiedTargets = normalizedTargets.Select(t => simplify(t)).ToList();
                 
                 // 1. Try exact match first
-                var bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == simplifiedTarget);
+                var bestMatch = result.Markets.FirstOrDefault(m => simplifiedTargets.Contains(simplify(m.MarketName)));
                 
                 // 2. Fallback to contains match if no exact match is found
                 if (bestMatch == null)
                 {
                     bestMatch = result.Markets.FirstOrDefault(m => 
-                        simplify(m.MarketName).Contains(simplifiedTarget) ||
-                        simplifiedTarget.Contains(simplify(m.MarketName)));
+                        simplifiedTargets.Any(t => simplify(m.MarketName).Contains(t) || t.Contains(simplify(m.MarketName))));
                 }
 
                 bool isCanonicalTranslation = false;
                 // 4. Fallback for Team Total Goals -> Over/Under [Team]
-                if (bestMatch == null && simplifiedTarget.Contains("teamtotalgoal"))
+                if (bestMatch == null && simplifiedTargets.Any(t => t.Contains("teamtotalgoal")))
                 {
                     if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Match) && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
                     {
@@ -1908,7 +1943,7 @@
                 {
                     SelectedPapiMarketId = bestMatch.MarketId;
                     
-                    if (!isCanonicalTranslation && (!simplifiedTarget.StartsWith(simplify(bestMatch.MarketName)) && simplify(bestMatch.MarketName) != simplifiedTarget))
+                    if (!isCanonicalTranslation && !simplifiedTargets.Any(t => t.StartsWith(simplify(bestMatch.MarketName)) || simplify(bestMatch.MarketName) == t))
                     {
                         OddsLookupWarningMessage = $"OddsPapi doesn't offer '{preSelectCategory}'. Showing '{bestMatch.MarketName}' instead.";
                         Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
