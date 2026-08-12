@@ -128,6 +128,13 @@ namespace BettingApp.Services
                 return new List<string> { "Over Under Full Time" };
             }
 
+            // Strip off any trailing scores (like "0 - 1") for 3-Way Handicaps
+            if (clean.StartsWith("Handicap (3 Way)", StringComparison.OrdinalIgnoreCase) || 
+                clean.StartsWith("3-Way Handicap", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "3-Way Handicap" };
+            }
+
             // 2. Otherwise return what the AI gave us
             return new List<string> { clean };
         }
