@@ -37,7 +37,11 @@
     @@media (min-width: 992px) { 
         .action-btn { width: 80%; }
         .review-modal-content { max-height: 95vh; height: 95vh; margin: 0.5rem; }
-        .review-controls-container { padding: 0.75rem; }
+        .review-modal-body { flex-direction: row; overflow: hidden; }
+        .review-image-container { flex: 1; border-right: 1px solid #dee2e6; }
+        .review-controls-container { width: 280px; flex-shrink: 0; border-top: none; overflow-y: auto; height: 100%; box-shadow: -2px 0 10px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: center; }
+        .review-controls-container .row { flex-direction: column; align-items: center; }
+        .review-controls-container .col-4 { width: 100%; margin-bottom: 1.5rem; }
     }
 
     /* Landing Page Specific Styles */
