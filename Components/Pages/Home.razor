@@ -259,7 +259,7 @@ else
                                     </span>
                                 </div>
                             </div>
-                            @if (viewBetModel.Status == "Pending")
+                            @if (viewBetModel.Status == "Pending" || viewBetModel.Status == "Processing")
                             {
                                 <div class="d-grid">
                                     <button class="btn btn-outline-danger btn-lg fw-bold" @onclick="() => CancelBet(viewBetModel)">
@@ -765,13 +765,21 @@ else
                                     }
                                 }
                                 if (dbBet != null) {
-                                    dbBet.Status = "Pending";
-                                    await bgContext.SaveChangesAsync();
-                                    System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Saved to DB (Pending) and broadcasted SignalR.\n");
-                                    
-                                    await hub.Clients.All.SendAsync("ReceiveBetUpdate", dbBet.Id);
-                                    await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {dbBet.UserName}");
-                                    await discord.NotifyAdminNewPickAsync(dbBet);
+                                    var currentStatus = await bgContext.Bets.AsNoTracking().Where(b => b.Id == id).Select(b => b.Status).FirstOrDefaultAsync();
+                                    if (currentStatus != "Cancelled")
+                                    {
+                                        dbBet.Status = "Pending";
+                                        await bgContext.SaveChangesAsync();
+                                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Saved to DB (Pending) and broadcasted SignalR.\n");
+                                        
+                                        await hub.Clients.All.SendAsync("ReceiveBetUpdate", dbBet.Id);
+                                        await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {dbBet.UserName}");
+                                        await discord.NotifyAdminNewPickAsync(dbBet);
+                                    }
+                                    else
+                                    {
+                                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Bet #{id} was cancelled by user during AI reading. Aborting.\n");
+                                    }
                                 }
                             } finally {
                                 BettingApp.Services.AiVisionService.ProcessingAutoReadBetIds.TryRemove(id, out _);
