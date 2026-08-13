@@ -135,6 +135,12 @@ namespace BettingApp.Services
                 return new List<string> { "3-Way Handicap" };
             }
 
+            // Strip off any trailing scores (like "-1.0" or "(0-1)") for Asian Handicaps
+            if (clean.StartsWith("Asian Handicap", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Asian Handicap" };
+            }
+
             // 2. Otherwise return what the AI gave us
             return new List<string> { clean };
         }
