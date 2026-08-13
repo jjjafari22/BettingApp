@@ -724,7 +724,7 @@ else
                                 if (dbBet != null && !string.IsNullOrEmpty(dbBet.ScreenshotUrl))
                                 {
                                     System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Calling AI Vision for URL {dbBet.ScreenshotUrl}\n");
-                                    var (result, error) = await aiVision.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl);
+                                    var (result, error) = await aiVision.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl, id);
                                     
                                     if (error != null)
                                     {

@@ -90,7 +90,7 @@ namespace BettingApp.Services
             _fotMob = fotMob;
         }
 
-        public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl)
+        public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl, int? betId = null)
         {
             if (string.IsNullOrEmpty(_apiKey))
             {
@@ -147,58 +147,21 @@ namespace BettingApp.Services
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 var requestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
                 
-                // 3. Auto-resolve the best available Flash model
-                var modelsUrl = $"https://generativelanguage.googleapis.com/v1beta/models?key={_apiKey}";
-                var modelsResponse = await _httpClient.GetAsync(modelsUrl);
-                if (!modelsResponse.IsSuccessStatusCode) return (null, "Failed to fetch model list from Gemini.");
-                
-                var modelsJson = await modelsResponse.Content.ReadAsStringAsync();
-                using var modelsDoc = JsonDocument.Parse(modelsJson);
-                var resolvedModel = "gemini-1.5-flash"; // fallback
-                
-                double maxVersion = 0;
-                
-                foreach (var m in modelsDoc.RootElement.GetProperty("models").EnumerateArray())
-                {
-                    var name = m.GetProperty("name").GetString();
-                    // We want the standard flash model, not a TTS, text-only, or experimental preview variant.
-                    if (name != null && name.Contains("flash") && 
-                        !name.Contains("tts") && !name.Contains("text") && !name.Contains("preview") && !name.Contains("vision"))
-                    {
-                        bool supportsGenerate = false;
-                        if (m.TryGetProperty("supportedGenerationMethods", out var methods))
-                        {
-                            foreach (var method in methods.EnumerateArray())
-                            {
-                                if (method.GetString() == "generateContent") supportsGenerate = true;
-                            }
-                        }
-                        if (supportsGenerate)
-                        {
-                            // We prioritize the standard Flash model over Flash-Lite because it has vastly superior
-                            // multimodal reasoning, which is necessary for reading complex betting slips, combos, and handwriting.
-                            var match = System.Text.RegularExpressions.Regex.Match(name, @"gemini-(\d+\.\d+)-flash$");
-                            
-                            if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double version))
-                            {
-                                if (version > maxVersion)
-                                {
-                                    maxVersion = version;
-                                    resolvedModel = name.Replace("models/", "");
-                                }
-                            }
-                        }
-                    }
-                }
+                // 3. Auto-resolve the best available Flash model (N-2 logic)
+                var resolvedModel = await GetBestModelAsync();
 
                 // 4. Call Gemini API with resolved model
                 var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
                 
-                var response = await SendWithRetryAsync(apiUrl, jsonPayload);
+                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
+
+                var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel);
                 string responseString = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}AI ERROR: {response.StatusCode} - {responseString}");
                     return (null, $"Gemini API Error: {response?.StatusCode}\nResolved Model: {resolvedModel}\nDetails: {responseString}");
                 }
 
@@ -242,6 +205,8 @@ namespace BettingApp.Services
 
             catch (Exception ex)
             {
+                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}EXCEPTION in ExtractBetSlipDataAsync: {ex.Message}");
                 return (null, $"Exception: {ex.Message}");
             }
         }
@@ -327,48 +292,15 @@ namespace BettingApp.Services
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
-                // Auto-resolve the best available Flash model
-                var modelsUrl = $"https://generativelanguage.googleapis.com/v1beta/models?key={_apiKey}";
-                var modelsResponse = await _httpClient.GetAsync(modelsUrl);
-                if (!modelsResponse.IsSuccessStatusCode) return "Failed to fetch model list from Gemini.";
-                
-                var modelsJson = await modelsResponse.Content.ReadAsStringAsync();
-                using var modelsDoc = JsonDocument.Parse(modelsJson);
-                var resolvedModel = "gemini-1.5-flash"; // fallback
-                
-                double maxVersion = 0;
-                foreach (var m in modelsDoc.RootElement.GetProperty("models").EnumerateArray())
-                {
-                    var name = m.GetProperty("name").GetString();
-                    if (name != null && name.Contains("flash") && 
-                        !name.Contains("tts") && !name.Contains("text") && !name.Contains("preview") && !name.Contains("vision"))
-                    {
-                        bool supportsGenerate = false;
-                        if (m.TryGetProperty("supportedGenerationMethods", out var methods))
-                        {
-                            foreach (var method in methods.EnumerateArray())
-                            {
-                                if (method.GetString() == "generateContent") supportsGenerate = true;
-                            }
-                        }
-                        if (supportsGenerate)
-                        {
-                            var match = System.Text.RegularExpressions.Regex.Match(name, @"gemini-(\d+\.\d+)-flash$");
-                            if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double version))
-                            {
-                                if (version > maxVersion)
-                                {
-                                    maxVersion = version;
-                                    resolvedModel = name.Replace("models/", "");
-                                }
-                            }
-                        }
-                    }
-                }
+                // Auto-resolve the best available Flash model (N-2 logic)
+                var resolvedModel = await GetBestModelAsync();
 
                 var url = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
                 
-                var response = await SendWithRetryAsync(url, jsonPayload);
+                betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
+                
+                var response = await SendWithRetryAsync(url, jsonPayload, betLabel);
                 if (!response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync();
@@ -444,47 +376,14 @@ namespace BettingApp.Services
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
-                // Auto-resolve the best available Flash model
-                var modelsUrl = $"https://generativelanguage.googleapis.com/v1beta/models?key={_apiKey}";
-                var modelsResponse = await _httpClient.GetAsync(modelsUrl);
-                if (!modelsResponse.IsSuccessStatusCode) return null;
-                
-                var modelsJson = await modelsResponse.Content.ReadAsStringAsync();
-                using var modelsDoc = JsonDocument.Parse(modelsJson);
-                var resolvedModel = "gemini-1.5-flash"; // fallback
-                
-                double maxVersion = 0;
-                foreach (var m in modelsDoc.RootElement.GetProperty("models").EnumerateArray())
-                {
-                    var name = m.GetProperty("name").GetString();
-                    if (name != null && name.Contains("flash") && 
-                        !name.Contains("tts") && !name.Contains("text") && !name.Contains("preview") && !name.Contains("vision"))
-                    {
-                        bool supportsGenerate = false;
-                        if (m.TryGetProperty("supportedGenerationMethods", out var methods))
-                        {
-                            foreach (var method in methods.EnumerateArray())
-                            {
-                                if (method.GetString() == "generateContent") supportsGenerate = true;
-                            }
-                        }
-                        if (supportsGenerate)
-                        {
-                            var match = System.Text.RegularExpressions.Regex.Match(name, @"gemini-(\d+\.\d+)-flash$");
-                            if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double version))
-                            {
-                                if (version > maxVersion)
-                                {
-                                    maxVersion = version;
-                                    resolvedModel = name.Replace("models/", "");
-                                }
-                            }
-                        }
-                    }
-                }
+                // Auto-resolve the best available Flash model (N-2 logic)
+                var resolvedModel = await GetBestModelAsync();
 
                 var url = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
-                var response = await SendWithRetryAsync(url, jsonPayload);
+                string betLabel = "[Match Start Time] ";
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}calling Gemini (Model: {resolvedModel})...");
+                
+                var response = await SendWithRetryAsync(url, jsonPayload, betLabel);
                 
                 if (!response.IsSuccessStatusCode) return null;
 
@@ -516,7 +415,7 @@ namespace BettingApp.Services
                 return null;
             }
         }
-        private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload)
+        private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "")
         {
             int maxRetries = 3;
             for (int i = 0; i < maxRetries; i++)
@@ -530,6 +429,7 @@ namespace BettingApp.Services
                     {
                         if (i < maxRetries - 1)
                         {
+                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {logLabel}Gemini API returned {response.StatusCode}. Retrying in {2 * (i + 1)}s... (Attempt {i+1}/{maxRetries-1})");
                             await Task.Delay(2000 * (i + 1));
                             continue;
                         }
@@ -540,6 +440,7 @@ namespace BettingApp.Services
                 {
                     if (i < maxRetries - 1)
                     {
+                        Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {logLabel}Gemini API TaskCanceled (Timeout). Retrying in {2 * (i + 1)}s... (Attempt {i+1}/{maxRetries-1})");
                         await Task.Delay(2000 * (i + 1));
                         continue;
                     }
@@ -547,6 +448,76 @@ namespace BettingApp.Services
                 }
             }
             throw new Exception("Max retries exceeded.");
+        }
+
+        private async Task<string> GetBestModelAsync()
+        {
+            var resolvedModel = "gemini-1.5-flash"; // fallback
+            if (string.IsNullOrEmpty(_apiKey)) return resolvedModel;
+
+            try
+            {
+                var modelsUrl = $"https://generativelanguage.googleapis.com/v1beta/models?key={_apiKey}";
+                var modelsResponse = await _httpClient.GetAsync(modelsUrl);
+                if (!modelsResponse.IsSuccessStatusCode) return resolvedModel;
+                
+                var modelsJson = await modelsResponse.Content.ReadAsStringAsync();
+                using var modelsDoc = JsonDocument.Parse(modelsJson);
+                
+                var availableVersions = new List<(double Version, string Name)>();
+                
+                foreach (var m in modelsDoc.RootElement.GetProperty("models").EnumerateArray())
+                {
+                    var name = m.GetProperty("name").GetString();
+                    if (name != null && name.Contains("flash") && 
+                        !name.Contains("tts") && !name.Contains("text") && !name.Contains("preview") && !name.Contains("vision"))
+                    {
+                        bool supportsGenerate = false;
+                        if (m.TryGetProperty("supportedGenerationMethods", out var methods))
+                        {
+                            foreach (var method in methods.EnumerateArray())
+                            {
+                                if (method.GetString() == "generateContent") supportsGenerate = true;
+                            }
+                        }
+                        if (supportsGenerate)
+                        {
+                            var match = System.Text.RegularExpressions.Regex.Match(name, @"gemini-(\d+\.\d+)-flash$");
+                            if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double version))
+                            {
+                                availableVersions.Add((version, name.Replace("models/", "")));
+                            }
+                        }
+                    }
+                }
+
+                if (availableVersions.Any())
+                {
+                    // Sort descending (highest version first)
+                    var sorted = availableVersions.OrderByDescending(v => v.Version).ToList();
+                    
+                    if (sorted.Count >= 3)
+                    {
+                        // N-2 logic
+                        resolvedModel = sorted[2].Name;
+                    }
+                    else if (sorted.Count == 2)
+                    {
+                        // N-1 fallback
+                        resolvedModel = sorted[1].Name;
+                    }
+                    else
+                    {
+                        resolvedModel = sorted[0].Name;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore parsing errors and return fallback
+            }
+
+            return resolvedModel;
         }
     }
 }
