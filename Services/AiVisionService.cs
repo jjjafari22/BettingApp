@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using Google.Apis.Auth.OAuth2;
+using System.Net.Http.Headers;
 using Microsoft.Extensions.Configuration;
 
 namespace BettingApp.Services
@@ -82,19 +84,67 @@ namespace BettingApp.Services
         private readonly HttpClient _httpClient;
         private readonly string? _apiKey;
         private readonly FotMobScraperService _fotMob;
+        private readonly IConfiguration _config;
+        private static Google.Apis.Auth.OAuth2.GoogleCredential? _cachedCredential;
+        private static readonly object _credentialLock = new object();
+
+        private async Task<string> GetVertexAccessTokenAsync()
+        {
+            if (_cachedCredential == null)
+            {
+                lock (_credentialLock)
+                {
+                    if (_cachedCredential == null)
+                    {
+                        // 1. Try to get the JSON content directly from Azure Environment Variables
+                        string? jsonContent = _config["GOOGLE_CREDENTIALS_JSON"] ?? Environment.GetEnvironmentVariable("GOOGLE_CREDENTIALS_JSON");
+
+                        // 2. Fallback to local Mac path for development
+                        if (string.IsNullOrWhiteSpace(jsonContent))
+                        {
+                            var jsonPath = "/Users/jonasjafari/Projects/BettingApp/castle-gemini-6de5fef6d94f.json";
+                            if (System.IO.File.Exists(jsonPath))
+                            {
+                                jsonContent = System.IO.File.ReadAllText(jsonPath);
+                            }
+                            else
+                            {
+                                throw new Exception("Google Vertex AI credentials not found in env vars or local path!");
+                            }
+                        }
+
+                        // Azure sometimes escapes JSON when pasted into App Settings
+                        jsonContent = jsonContent.Trim();
+                        if (jsonContent.StartsWith("\"") && jsonContent.EndsWith("\""))
+                        {
+                            jsonContent = jsonContent.Substring(1, jsonContent.Length - 2);
+                            jsonContent = jsonContent.Replace("\\\"", "\"").Replace("\\n", "\n");
+                        }
+
+#pragma warning disable CS0618
+                        _cachedCredential = GoogleCredential.FromJson(jsonContent).CreateScoped("https://www.googleapis.com/auth/cloud-platform");
+#pragma warning restore CS0618
+                    }
+                }
+            }
+
+            return await ((Google.Apis.Auth.OAuth2.ITokenAccess)_cachedCredential).GetAccessTokenForRequestAsync();
+        }
 
         public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob)
         {
             _httpClient = httpClient;
+            _config = config;
             _apiKey = config["GeminiApiKey"];
             _fotMob = fotMob;
         }
 
         public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl, int? betId = null)
         {
-            if (string.IsNullOrEmpty(_apiKey))
+            var token = await GetVertexAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
             {
-                return (null, "GeminiApiKey is not configured in user-secrets.");
+                return (null, "Google Vertex Auth Token is missing or invalid. Check credentials.");
             }
 
             try
@@ -120,7 +170,7 @@ namespace BettingApp.Services
                              "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! " +
                              "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or icons near the bet (e.g., 'Power Sub', 'Early Payout', 'Super Boost'). If you see any, add them to this array! " +
                              "   - odds (e.g. '1.95'). " +
-                             "Return ONLY a raw JSON object with keys: bookmaker, isCombo, totalOdds, stake, legs. Do not include markdown blocks like ```json.";
+                             "Return ONLY a raw JSON object with keys: bookmaker, isCombo, totalOdds, stake, legs. Ensure ALL numeric values (like totalOdds, stake, and odds) are formatted as strings, but keep isCombo as a boolean. Do not include markdown blocks like ```json.";
 
                 var payload = new
                 {
@@ -128,30 +178,34 @@ namespace BettingApp.Services
                     {
                         new
                         {
+                            role = "user",
                             parts = new object[]
                             {
                                 new { text = prompt },
                                 new
                                 {
-                                    inline_data = new
+                                    inlineData = new
                                     {
-                                        mime_type = mimeType,
+                                        mimeType = mimeType,
                                         data = base64Image
                                     }
                                 }
                             }
                         }
+                    },
+                    generationConfig = new
+                    {
+                        responseMimeType = "application/json"
                     }
                 };
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
-                var requestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
                 
-                // 3. Auto-resolve the best available Flash model (N-2 logic)
-                var resolvedModel = await GetBestModelAsync();
+                // Hardcoded to the latest available Vertex AI enterprise model
+                var resolvedModel = "gemini-2.5-flash";
 
-                // 4. Call Gemini API with resolved model
-                var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
+                var apiUrl = $"https://us-central1-aiplatform.googleapis.com/v1/projects/castle-gemini/locations/us-central1/publishers/google/models/{resolvedModel}:generateContent";
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
@@ -213,7 +267,8 @@ namespace BettingApp.Services
 
         public async Task<string?> ConfirmOutcomeAsync(string extractedBetDataJson, DateTime betPlacedAt, int? betId = null)
         {
-            if (string.IsNullOrEmpty(_apiKey)) return "Error: Gemini API key missing.";
+            var token = await GetVertexAccessTokenAsync();
+            if (string.IsNullOrEmpty(token)) return "Error: Gemini Auth Token missing.";
 
             try
             {
@@ -234,7 +289,7 @@ namespace BettingApp.Services
                              $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)', it means the bet transfers to the substitute! If the named player is substituted off, the stats of the player who comes on for them MUST be added to their total! You must find who was substituted on for that player and combine their stats to determine the outcome.\n" +
                              $"Check if the matches are finished, live, or not started. Determine if the overall bet was Won, Lost, or Void based on the results.\n" +
                              $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
-                             $"CRITICAL FOR SPLIT ASIAN LINES (Half-Win / Half-Loss): If a bet features a split Asian line (e.g., '-0.5, -1.0', 'Over 2.0, 2.5', '2.25', '2.75') AND the final result causes one half of the bet to Win while the other half Voids (a Half-Win), OR one half to Lose while the other half Voids (a Half-Loss), you MUST mark the leg outcome as 'UNKNOWN'. Do NOT mark it as Won, Lost, or Void! You may only mark a split Asian line as 'Won' if BOTH halves win completely, or 'Lost' if BOTH halves lose completely. If the result is split/mixed, you must use 'UNKNOWN'.\n" +
+                             $"CRITICAL FOR SPLIT ASIAN LINES (Half-Win / Half-Loss): If a bet features a split Asian line (e.g., '-0.5, -1.0', 'Over 2.0, 2.5', '2.25', '2.75') AND the final result causes one half of the bet to Win while the other half Voids (a Half-Win), OR one half to Lose while the other half Voids (a Half-Loss), YOU MUST mark the leg outcome as 'UNKNOWN'. Do NOT mark it as Won, Lost, or Void! You may only mark a split Asian line as 'Won' if BOTH halves win completely, or 'Lost' if BOTH halves lose completely. If the result is split/mixed, you must use 'UNKNOWN'.\n" +
                              $"CRITICAL FOR COMBO BETS: Evaluate each leg COMPLETELY INDEPENDENTLY! Even if multiple legs are for the same match, you MUST write a unique, specific 'stats' reasoning for EACH leg based on its specific Market and Selection. Do NOT copy and paste the same stats reasoning across multiple legs. For example, if Leg 1 is a Goalscorer and Leg 2 is a Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.\n" +
                              $"CRITICAL FOR OVERALL STATUS: The 'overallStatus' field MUST be exactly one of the following strings:\n" +
                              $"- 'MATCH FINISHED - WON' (if all legs have finished and won)\n" +
@@ -273,7 +328,7 @@ namespace BettingApp.Services
                             });
                         }
                         
-                        // Add a small delay to avoid Oddspapi rate limits on combo bets
+                        // Add a small delay to avoid rate limits on combo bets
                         await Task.Delay(1000);
                     }
                 }
@@ -282,7 +337,7 @@ namespace BettingApp.Services
                 {
                     contents = new[]
                     {
-                        new { parts = partsList.ToArray() }
+                        new { role = "user", parts = partsList.ToArray() }
                     },
                     tools = new[]
                     {
@@ -292,10 +347,11 @@ namespace BettingApp.Services
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
-                // Auto-resolve the best available Flash model (N-2 logic)
-                var resolvedModel = await GetBestModelAsync();
+                // Hardcoded to the latest available Vertex AI enterprise model
+                var resolvedModel = "gemini-2.5-flash";
 
-                var url = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
+                var url = $"https://us-central1-aiplatform.googleapis.com/v1/projects/castle-gemini/locations/us-central1/publishers/google/models/{resolvedModel}:generateContent";
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 
                 betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
@@ -358,7 +414,8 @@ namespace BettingApp.Services
 
         public async Task<DateTime?> ExtractMatchStartTimeAsync(string extractedBetDataJson, DateTime betPlacedAt)
         {
-            if (string.IsNullOrEmpty(_apiKey)) return null;
+            var token = await GetVertexAccessTokenAsync();
+            if (string.IsNullOrEmpty(token)) return null;
 
             try
             {
@@ -370,16 +427,17 @@ namespace BettingApp.Services
 
                 var payload = new
                 {
-                    contents = new[] { new { parts = new[] { new { text = prompt } } } },
-                    tools = new[] { new { google_search = new object() } }
+                    contents = new[] { new { role = "user", parts = new[] { new { text = prompt } } } },
+                    tools = new[] { new { googleSearch = new object() } }
                 };
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
-                // Auto-resolve the best available Flash model (N-2 logic)
-                var resolvedModel = await GetBestModelAsync();
+                // Hardcoded to the latest available Vertex AI enterprise model
+                var resolvedModel = "gemini-2.5-flash";
 
-                var url = $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}";
+                var url = $"https://us-central1-aiplatform.googleapis.com/v1/projects/castle-gemini/locations/us-central1/publishers/google/models/{resolvedModel}:generateContent";
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 string betLabel = "[Match Start Time] ";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}calling Gemini (Model: {resolvedModel})...");
                 
@@ -450,79 +508,5 @@ namespace BettingApp.Services
             throw new Exception("Max retries exceeded.");
         }
 
-        private async Task<string> GetBestModelAsync()
-        {
-            var resolvedModel = "gemini-1.5-flash"; // fallback
-            if (string.IsNullOrEmpty(_apiKey)) return resolvedModel;
-
-            try
-            {
-                var modelsUrl = $"https://generativelanguage.googleapis.com/v1beta/models?key={_apiKey}";
-                var modelsResponse = await _httpClient.GetAsync(modelsUrl);
-                if (!modelsResponse.IsSuccessStatusCode) return resolvedModel;
-                
-                var modelsJson = await modelsResponse.Content.ReadAsStringAsync();
-                using var modelsDoc = JsonDocument.Parse(modelsJson);
-                
-                var availableVersions = new List<(double Version, string Name)>();
-                
-                foreach (var m in modelsDoc.RootElement.GetProperty("models").EnumerateArray())
-                {
-                    var name = m.GetProperty("name").GetString();
-                    if (name != null && name.Contains("flash") && 
-                        !name.Contains("tts") && !name.Contains("text") && !name.Contains("preview") && !name.Contains("vision"))
-                    {
-                        bool supportsGenerate = false;
-                        if (m.TryGetProperty("supportedGenerationMethods", out var methods))
-                        {
-                            foreach (var method in methods.EnumerateArray())
-                            {
-                                if (method.GetString() == "generateContent") supportsGenerate = true;
-                            }
-                        }
-                        if (supportsGenerate)
-                        {
-                            var match = System.Text.RegularExpressions.Regex.Match(name, @"gemini-(\d+\.\d+)-flash$");
-                            if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double version))
-                            {
-                                availableVersions.Add((version, name.Replace("models/", "")));
-                            }
-                        }
-                    }
-                }
-
-                if (availableVersions.Any())
-                {
-                    // Sort descending (highest version first)
-                    var sorted = availableVersions.OrderByDescending(v => v.Version).ToList();
-                    
-                    if (sorted.Count >= 4)
-                    {
-                        // N-3 logic
-                        resolvedModel = sorted[3].Name;
-                    }
-                    else if (sorted.Count == 3)
-                    {
-                        // N-2 fallback
-                        resolvedModel = sorted[2].Name;
-                    }
-                    else if (sorted.Count == 2)
-                    {
-                        // N-1 fallback
-                        resolvedModel = sorted[1].Name;
-                    }
-                    else
-                    {
-                        resolvedModel = sorted[0].Name;
-                    }
-                }
-            }
-            catch
-            {
-                // Ignore parsing errors and return fallback
-            }
-
-            return resolvedModel;
-        }
     }
 }

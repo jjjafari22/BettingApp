@@ -508,3 +508,7 @@ scratch/
 betting.db
 betting.db-shm
 betting.db-wal
+
+# Google Cloud Service Account Keys
+gen-lang-client*.json
+castle-gemini*.json

@@ -1139,10 +1139,10 @@
         await AnalyzeImageAsync();
     }
 
-    private async Task ExecuteCheckOutcomeFromDropdown()
+    private void ExecuteCheckOutcomeFromDropdown()
     {
         showModalDropdown = false;
-        await ConfirmOutcomeAsync();
+        ConfirmOutcomeAsync();
     }
 
     private async Task ToggleAdminOverride()
@@ -1559,7 +1559,7 @@
 
     private HashSet<int> ConfirmingOutcomeBetIds = new();
 
-    private async Task ConfirmOutcomeAsync()
+    private void ConfirmOutcomeAsync()
     {
         if (reviewingBetModel == null) return;
         
@@ -1569,120 +1569,138 @@
         ConfirmingOutcomeBetIds.Add(currentBet.Id);
         if (reviewingBetModel.Id == currentBet.Id) reviewErrorMessage = null;
         StateHasChanged();
-        try { await reviewModalRef.FocusAsync(); } catch { }
+        try { _ = reviewModalRef.FocusAsync(); } catch { }
 
-        try
+        _ = Task.Run(async () =>
         {
-            // 1. If we don't have the AI extraction yet, we must read the image first!
-            if (string.IsNullOrEmpty(currentBet.AiVisionResultJson))
+            try
             {
-                if (string.IsNullOrEmpty(currentBet.ScreenshotUrl))
+                // 1. If we don't have the AI extraction yet, we must read the image first!
+                if (string.IsNullOrEmpty(currentBet.AiVisionResultJson))
                 {
-                    if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = "No screenshot available to analyze.";
-                    return;
-                }
-
-                var (result, error) = await AiVision.ExtractBetSlipDataAsync(currentBet.ScreenshotUrl);
-                if (error != null)
-                {
-                    if (reviewingBetModel?.Id == currentBet.Id) 
+                    if (string.IsNullOrEmpty(currentBet.ScreenshotUrl))
                     {
-                        reviewErrorMessage = $"Failed to extract bet data: {error}";
-                        reviewingBetModel.AiVisionError = error;
-                    }
-                    currentBet.AiVisionError = error;
-                    if (currentOriginal != null) currentOriginal.AiVisionError = error;
-                    using var errContext = DbFactory.CreateDbContext();
-                    var errBet = await errContext.Bets.FindAsync(currentBet.Id);
-                    if (errBet != null)
-                    {
-                        errBet.AiVisionError = error;
-                        await errContext.SaveChangesAsync();
-                    }
-                    return;
-                }
-                
-                var json = System.Text.Json.JsonSerializer.Serialize(result);
-                currentBet.AiVisionResultJson = json;
-                if (currentOriginal != null) currentOriginal.AiVisionResultJson = json;
-                
-                using var context = DbFactory.CreateDbContext();
-                var dbBet = await context.Bets.FindAsync(currentBet.Id);
-                if (dbBet != null)
-                {
-                    dbBet.AiVisionResultJson = json;
-                    await context.SaveChangesAsync();
-                }
-            }
-
-            // 2. We now have the JSON payload for the legs. Ask Gemini to search Google for the outcome.
-            var outcome = await AiVision.ConfirmOutcomeAsync(currentBet.AiVisionResultJson, currentBet.CreatedAt, currentBet.Id);
-            
-            if (!string.IsNullOrEmpty(outcome) && !outcome.StartsWith("Error") && !outcome.StartsWith("Exception"))
-            {
-                currentBet.AiOutcomeResult = outcome;
-                if (currentOriginal != null) currentOriginal.AiOutcomeResult = outcome;
-                
-                BettingApp.Services.AiOutcomeResultData? parsedData = null;
-                try {
-                    parsedData = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
-                        outcome, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                    );
-                } catch { }
-
-                if (reviewingBetModel?.Id == currentBet.Id)
-                {
-                    ParsedAiOutcome = parsedData;
-                }
-
-                using var context = DbFactory.CreateDbContext();
-                var dbBet = await context.Bets.FindAsync(currentBet.Id);
-                if (dbBet != null)
-                {
-                    dbBet.AiOutcomeResult = outcome;
-
-                    if (parsedData != null)
-                    {
-                        var status = parsedData.OverallStatus?.Trim().ToUpperInvariant() ?? "";
-                        var isFinished = 
-                            status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
-                            status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
-                            status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
-                            status == "UNKNOWN";
-
-                        if (status == "MATCH NOT STARTED" && DateTime.TryParse(parsedData.MatchStartTimeIso, out DateTime st))
+                        await InvokeAsync(() =>
                         {
-                            dbBet.MatchStartTime = st;
-                            var twoHoursAfter = st.AddHours(2);
-                            dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
-                        }
-                        else if (!isFinished)
-                        {
-                            dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
-                        }
-                        else
-                        {
-                            dbBet.NextCheckTime = null; // Finished, no need to check
-                        }
-                        
-                        currentBet.MatchStartTime = dbBet.MatchStartTime;
-                        currentBet.NextCheckTime = dbBet.NextCheckTime;
+                            if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = "No screenshot available to analyze.";
+                        });
+                        return;
                     }
 
-                    await context.SaveChangesAsync();
+                    var (result, error) = await AiVision.ExtractBetSlipDataAsync(currentBet.ScreenshotUrl);
+                    if (error != null)
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            if (reviewingBetModel?.Id == currentBet.Id) 
+                            {
+                                reviewErrorMessage = $"Failed to extract bet data: {error}";
+                                reviewingBetModel.AiVisionError = error;
+                            }
+                            currentBet.AiVisionError = error;
+                            if (currentOriginal != null) currentOriginal.AiVisionError = error;
+                            using var errContext = DbFactory.CreateDbContext();
+                            var errBet = await errContext.Bets.FindAsync(currentBet.Id);
+                            if (errBet != null)
+                            {
+                                errBet.AiVisionError = error;
+                                await errContext.SaveChangesAsync();
+                            }
+                        });
+                        return;
+                    }
+                    
+                    var json = System.Text.Json.JsonSerializer.Serialize(result);
+                    currentBet.AiVisionResultJson = json;
+                    if (currentOriginal != null) currentOriginal.AiVisionResultJson = json;
+                    
+                    using var context = DbFactory.CreateDbContext();
+                    var dbBet = await context.Bets.FindAsync(currentBet.Id);
+                    if (dbBet != null)
+                    {
+                        dbBet.AiVisionResultJson = json;
+                        await context.SaveChangesAsync();
+                    }
+                }
+
+                // 2. We now have the JSON payload for the legs. Ask Gemini to search Google for the outcome.
+                var outcome = await AiVision.ConfirmOutcomeAsync(currentBet.AiVisionResultJson, currentBet.CreatedAt, currentBet.Id);
+                
+                if (!string.IsNullOrEmpty(outcome) && !outcome.StartsWith("Error") && !outcome.StartsWith("Exception"))
+                {
+                    currentBet.AiOutcomeResult = outcome;
+                    if (currentOriginal != null) currentOriginal.AiOutcomeResult = outcome;
+                    
+                    BettingApp.Services.AiOutcomeResultData? parsedData = null;
+                    try {
+                        parsedData = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
+                            outcome, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                        );
+                    } catch { }
+
+                    await InvokeAsync(async () =>
+                    {
+                        if (reviewingBetModel?.Id == currentBet.Id)
+                        {
+                            ParsedAiOutcome = parsedData;
+                        }
+
+                        using var context = DbFactory.CreateDbContext();
+                        var dbBet = await context.Bets.FindAsync(currentBet.Id);
+                        if (dbBet != null)
+                        {
+                            dbBet.AiOutcomeResult = outcome;
+
+                            if (parsedData != null)
+                            {
+                                var status = parsedData.OverallStatus?.Trim().ToUpperInvariant() ?? "";
+                                var isFinished = 
+                                    status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
+                                    status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
+                                    status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
+                                    status == "UNKNOWN";
+
+                                if (status == "MATCH NOT STARTED" && DateTime.TryParse(parsedData.MatchStartTimeIso, out DateTime st))
+                                {
+                                    dbBet.MatchStartTime = st;
+                                    var twoHoursAfter = st.AddHours(2);
+                                    dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
+                                }
+                                else if (!isFinished)
+                                {
+                                    dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                                }
+                                else
+                                {
+                                    dbBet.NextCheckTime = null; // Finished, no need to check
+                                }
+                                
+                                currentBet.MatchStartTime = dbBet.MatchStartTime;
+                                currentBet.NextCheckTime = dbBet.NextCheckTime;
+                            }
+
+                            await context.SaveChangesAsync();
+                        }
+                    });
+                }
+                else
+                {
+                    await InvokeAsync(() =>
+                    {
+                        if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = outcome ?? "Failed to check outcome.";
+                    });
                 }
             }
-            else
+            finally
             {
-                if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = outcome ?? "Failed to check outcome.";
+                await InvokeAsync(() =>
+                {
+                    ConfirmingOutcomeBetIds.Remove(currentBet.Id);
+                    shouldFocusReviewModal = true;
+                    StateHasChanged();
+                });
             }
-        }
-        finally
-        {
-            ConfirmingOutcomeBetIds.Remove(currentBet.Id);
-            shouldFocusReviewModal = true;
-            StateHasChanged();
-        }
+        });
     }
 
     private async Task AnalyzeImageAsync()

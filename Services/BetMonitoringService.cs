@@ -61,17 +61,18 @@ namespace BettingApp.Services
                 .ToListAsync(stoppingToken);
 
             bool anyUpdates = false;
-            foreach (var bet in dueBets)
-            {
-                if (stoppingToken.IsCancellationRequested) break;
 
-                if (string.IsNullOrEmpty(bet.AiVisionResultJson)) continue;
+            // Execute in parallel (up to 5 concurrent checks)
+            await Parallel.ForEachAsync(dueBets, new ParallelOptions { MaxDegreeOfParallelism = 5, CancellationToken = stoppingToken }, async (bet, ct) =>
+            {
+                if (string.IsNullOrEmpty(bet.AiVisionResultJson)) return;
 
                 string? result = await _aiVisionService.ConfirmOutcomeAsync(bet.AiVisionResultJson, bet.CreatedAt, bet.Id);
                 
-                // Refresh bet from DB in case it was modified
-                var dbBet = await context.Bets.FindAsync(bet.Id);
-                if (dbBet == null || dbBet.Status != "Approved") continue;
+                // Refresh bet from DB using a newly scoped context (since DbContext is not thread-safe)
+                using var taskContext = dbFactory.CreateDbContext();
+                var dbBet = await taskContext.Bets.FindAsync(new object[] { bet.Id }, ct);
+                if (dbBet == null || dbBet.Status != "Approved") return;
 
                 dbBet.AiOutcomeResult = result;
                 
@@ -133,9 +134,9 @@ namespace BettingApp.Services
                     dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
                 }
 
-                await context.SaveChangesAsync(stoppingToken);
+                await taskContext.SaveChangesAsync(ct);
                 anyUpdates = true;
-            }
+            });
             
             if (anyUpdates)
             {
