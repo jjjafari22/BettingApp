@@ -496,9 +496,14 @@ namespace BettingApp.Services
                     // Sort descending (highest version first)
                     var sorted = availableVersions.OrderByDescending(v => v.Version).ToList();
                     
-                    if (sorted.Count >= 3)
+                    if (sorted.Count >= 4)
                     {
-                        // N-2 logic
+                        // N-3 logic
+                        resolvedModel = sorted[3].Name;
+                    }
+                    else if (sorted.Count == 3)
+                    {
+                        // N-2 fallback
                         resolvedModel = sorted[2].Name;
                     }
                     else if (sorted.Count == 2)
