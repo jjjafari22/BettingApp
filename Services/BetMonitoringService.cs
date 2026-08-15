@@ -65,15 +65,37 @@ namespace BettingApp.Services
             // Execute in parallel (up to 5 concurrent checks)
             await Parallel.ForEachAsync(dueBets, new ParallelOptions { MaxDegreeOfParallelism = 5, CancellationToken = stoppingToken }, async (bet, ct) =>
             {
-                if (string.IsNullOrEmpty(bet.AiVisionResultJson)) return;
-
-                string? result = await _aiVisionService.ConfirmOutcomeAsync(bet.AiVisionResultJson, bet.CreatedAt, bet.Id);
-                
                 // Refresh bet from DB using a newly scoped context (since DbContext is not thread-safe)
                 using var taskContext = dbFactory.CreateDbContext();
                 var dbBet = await taskContext.Bets.FindAsync(new object[] { bet.Id }, ct);
                 if (dbBet == null || dbBet.Status != "Approved") return;
 
+                if (string.IsNullOrEmpty(dbBet.AiVisionResultJson))
+                {
+                    if (string.IsNullOrEmpty(dbBet.ScreenshotUrl)) return;
+                    
+                    var (extractionResult, error) = await _aiVisionService.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl, dbBet.Id);
+                    if (error != null)
+                    {
+                        dbBet.AiVisionError = error;
+                        // Use the standard check outcome scheduling interval if extraction fails
+                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                        await taskContext.SaveChangesAsync(ct);
+                        return;
+                    }
+                    
+                    if (extractionResult != null)
+                    {
+                        dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(extractionResult);
+                        dbBet.AiVisionError = null;
+                        await taskContext.SaveChangesAsync(ct);
+                    }
+                }
+
+                if (string.IsNullOrEmpty(dbBet.AiVisionResultJson)) return;
+
+                string? result = await _aiVisionService.ConfirmOutcomeAsync(dbBet.AiVisionResultJson, dbBet.CreatedAt, dbBet.Id);
+                
                 dbBet.AiOutcomeResult = result;
                 
                 try 

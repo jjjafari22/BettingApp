@@ -236,6 +236,16 @@ namespace BettingApp.Services
                     if (textResponse.EndsWith("```")) textResponse = textResponse.Substring(0, textResponse.Length - 3);
 
                     textResponse = textResponse.Trim();
+                    
+                    if (!string.IsNullOrEmpty(textResponse))
+                    {
+                        int startIndex = textResponse.IndexOf('{');
+                        int endIndex = textResponse.LastIndexOf('}');
+                        if (startIndex >= 0 && endIndex >= startIndex)
+                        {
+                            textResponse = textResponse.Substring(startIndex, endIndex - startIndex + 1);
+                        }
+                    }
 
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                     var result = JsonSerializer.Deserialize<AiVisionExtractionResult>(textResponse, options);
