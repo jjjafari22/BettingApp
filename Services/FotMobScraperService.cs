@@ -228,16 +228,21 @@ namespace BettingApp.Services
                                 {
                                     var trimmedFacts = new System.Collections.Generic.Dictionary<string, object>();
                                     if (matchFacts.TryGetProperty("infoBox", out var infoBox)) trimmedFacts["infoBox"] = infoBox;
-                                    if (matchFacts.TryGetProperty("events", out var events)) trimmedFacts["events"] = events;
+                                    if (matchFacts.TryGetProperty("events", out var events)) 
+                                    {
+                                        trimmedFacts["events"] = FlattenEvents(events);
+                                    }
                                     trimmedData["matchFacts"] = trimmedFacts;
                                 }
 
-                                if (content.TryGetProperty("stats", out var stats)) trimmedData["stats"] = stats;
+                                if (content.TryGetProperty("stats", out var stats)) 
+                                {
+                                    trimmedData["stats"] = FlattenMatchStats(stats);
+                                }
                                 
                                 if (content.TryGetProperty("playerStats", out var playerStats)) 
                                 {
-                                    var pruned = PruneJson(playerStats);
-                                    if (pruned != null) trimmedData["playerStats"] = pruned;
+                                    trimmedData["playerStats"] = FlattenPlayerStats(playerStats);
                                 }
                             }
 
@@ -261,41 +266,107 @@ namespace BettingApp.Services
             }
         }
 
-        private object? PruneJson(System.Text.Json.JsonElement element)
+        private object FlattenEvents(System.Text.Json.JsonElement eventsObj)
         {
-            if (element.ValueKind == System.Text.Json.JsonValueKind.Object)
+            var flatEvents = new System.Collections.Generic.List<object>();
+            try 
             {
-                var dict = new System.Collections.Generic.Dictionary<string, object?>();
-                foreach (var prop in element.EnumerateObject())
+                if (eventsObj.ValueKind == System.Text.Json.JsonValueKind.Object && eventsObj.TryGetProperty("events", out var eventsArr))
                 {
-                    var name = prop.Name.ToLowerInvariant();
-                    // Strip out massive spatial tracking arrays
-                    if (name == "shotmap" || name == "heatmap" || name == "events" || name == "coordinates" || name == "path" || name == "zones") 
-                        continue;
-                    
-                    var child = PruneJson(prop.Value);
-                    if (child != null) dict[prop.Name] = child;
+                    foreach (var ev in eventsArr.EnumerateArray())
+                    {
+                        var dict = new System.Collections.Generic.Dictionary<string, object>();
+                        if (ev.TryGetProperty("timeStr", out var time)) dict["time"] = time.ToString() ?? "";
+                        if (ev.TryGetProperty("type", out var type)) dict["type"] = type.GetString() ?? "";
+                        if (ev.TryGetProperty("nameStr", out var name)) dict["name"] = name.GetString() ?? "";
+                        
+                        if (ev.TryGetProperty("card", out var card)) dict["card"] = card.GetString() ?? "";
+                        if (ev.TryGetProperty("goalDescription", out var gDesc)) dict["desc"] = gDesc.GetString() ?? "";
+                        
+                        flatEvents.Add(dict);
+                    }
                 }
-                return dict;
             }
-            else if (element.ValueKind == System.Text.Json.JsonValueKind.Array)
+            catch { }
+            return flatEvents;
+        }
+
+        private object FlattenMatchStats(System.Text.Json.JsonElement statsObj)
+        {
+            var flatStats = new System.Collections.Generic.Dictionary<string, object>();
+            try 
             {
-                // If the array is massive, it's likely raw telemetry data. Cap it to prevent bloat.
-                if (element.GetArrayLength() > 30) return null;
-                
-                var list = new System.Collections.Generic.List<object?>();
-                foreach (var item in element.EnumerateArray())
+                if (statsObj.TryGetProperty("Periods", out var periods) && periods.TryGetProperty("All", out var all) && all.TryGetProperty("stats", out var statsArr))
                 {
-                    var child = PruneJson(item);
-                    if (child != null) list.Add(child);
+                    foreach (var category in statsArr.EnumerateArray())
+                    {
+                        if (category.TryGetProperty("stats", out var innerStats))
+                        {
+                            foreach (var stat in innerStats.EnumerateArray())
+                            {
+                                string title = stat.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
+                                if (string.IsNullOrEmpty(title)) continue;
+                                
+                                if (stat.TryGetProperty("stats", out var s) && s.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                {
+                                    var vals = new System.Collections.Generic.List<string>();
+                                    foreach (var v in s.EnumerateArray()) vals.Add(v.ToString());
+                                    flatStats[title] = vals;
+                                }
+                            }
+                        }
+                    }
                 }
-                return list.Count > 0 ? list : null;
             }
-            else
+            catch { }
+            return flatStats;
+        }
+
+        private object FlattenPlayerStats(System.Text.Json.JsonElement playerStatsElement)
+        {
+            var flatStats = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, object>>();
+            
+            try 
             {
-                var val = element.ToString();
-                return string.IsNullOrEmpty(val) ? null : val;
+                if (playerStatsElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    foreach (var playerProp in playerStatsElement.EnumerateObject())
+                    {
+                        var playerObj = playerProp.Value;
+                        if (playerObj.ValueKind == System.Text.Json.JsonValueKind.Object)
+                        {
+                            string playerName = playerObj.TryGetProperty("name", out var n) ? n.GetString() ?? playerProp.Name : playerProp.Name;
+                            var pStats = new System.Collections.Generic.Dictionary<string, object>();
+                            
+                            if (playerObj.TryGetProperty("stats", out var statsArr) && statsArr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                            {
+                                foreach (var category in statsArr.EnumerateArray())
+                                {
+                                    if (category.TryGetProperty("stats", out var innerStats) && innerStats.ValueKind == System.Text.Json.JsonValueKind.Object)
+                                    {
+                                        foreach (var statProp in innerStats.EnumerateObject())
+                                        {
+                                            string statName = statProp.Name;
+                                            if (statProp.Value.TryGetProperty("stat", out var statVal) && statVal.TryGetProperty("value", out var val))
+                                            {
+                                                if (val.ValueKind == System.Text.Json.JsonValueKind.Number)
+                                                    pStats[statName] = val.GetDouble();
+                                                else if (val.ValueKind == System.Text.Json.JsonValueKind.String)
+                                                    pStats[statName] = val.GetString();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (pStats.Count > 0)
+                                flatStats[playerName] = pStats;
+                        }
+                    }
+                }
             }
+            catch { }
+            
+            return flatStats;
         }
 
         private string? ExtractEventId(System.Text.Json.JsonDocument doc, string homeTeam, string awayTeam, DateTime? betPlacedAt)
