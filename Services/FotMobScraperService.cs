@@ -246,6 +246,14 @@ namespace BettingApp.Services
                                 }
                             }
 
+                            if (trimmedData.TryGetValue("general", out var genObj) && genObj is System.Collections.Generic.Dictionary<string, object> genDict)
+                            {
+                                if (genDict.TryGetValue("started", out var startedObj) && startedObj is System.Text.Json.JsonElement stElem && stElem.ValueKind == System.Text.Json.JsonValueKind.False)
+                                {
+                                    trimmedData["WARNING"] = "THIS MATCH HAS NOT STARTED YET! THERE ARE NO STATS. DO NOT SEARCH GOOGLE FOR STATS! MARK AS PENDING.";
+                                }
+                            }
+
                             // Strip down the JSON to only the relevant stats to save massive amounts of tokens and prevent 503s!
                             return System.Text.Json.JsonSerializer.Serialize(trimmedData);
                         }
@@ -540,7 +548,7 @@ namespace BettingApp.Services
         {
             if (string.IsNullOrEmpty(word)) return true;
             string w = word.ToLowerInvariant();
-            return w == "fc" || w == "fk" || w == "bk" || w == "if" || w == "il" || w == "ik" || w == "ff" || w == "gf" || w == "cd" || w == "cf";
+            return w == "fc" || w == "fk" || w == "bk" || w == "if" || w == "il" || w == "ik" || w == "ff" || w == "gf" || w == "cd" || w == "cf" || w == "sc" || w == "ac" || w == "afc" || w == "rc" || w == "city" || w == "united" || w == "club" || w == "real" || w == "de" || w == "la";
         }
     }
 }
