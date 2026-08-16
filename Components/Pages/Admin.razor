@@ -1445,16 +1445,19 @@
 
         if (showOnlyMismatch)
         {
-            // If AI Mismatch is toggled, ignore the 5 individual status filters and show all mismatches
-            query = query.Where(b => b.AiOutcomeResult != null 
-                && b.AiOutcomeResult != ""
-                && b.AiOutcomeResult != "Admin Override"
-                && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void")
-                && (
-                    (b.Status == "Won" && !b.AiOutcomeResult.Contains("MATCH FINISHED - WON") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"WON\"") && b.AiOutcomeResult != "WON") ||
-                    (b.Status == "Lost" && !b.AiOutcomeResult.Contains("MATCH FINISHED - LOST") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"LOST\"") && b.AiOutcomeResult != "LOST") ||
-                    (b.Status == "Void" && !b.AiOutcomeResult.Contains("MATCH FINISHED - VOID") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"VOID\"") && b.AiOutcomeResult != "VOID")
-                ));
+            // Evaluate complex text matching locally to avoid massive 20-second PostgreSQL LIKE query table scans
+            var allCompleted = await context.Bets
+                .Where(b => b.AiOutcomeResult != null && b.AiOutcomeResult != "" && b.AiOutcomeResult != "Admin Override" && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void"))
+                .Select(b => new { b.Id, b.Status, b.AiOutcomeResult })
+                .ToListAsync();
+
+            var mismatchedIds = allCompleted.Where(b => 
+                (b.Status == "Won" && !b.AiOutcomeResult!.Contains("MATCH FINISHED - WON") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"WON\"") && b.AiOutcomeResult != "WON") ||
+                (b.Status == "Lost" && !b.AiOutcomeResult!.Contains("MATCH FINISHED - LOST") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"LOST\"") && b.AiOutcomeResult != "LOST") ||
+                (b.Status == "Void" && !b.AiOutcomeResult!.Contains("MATCH FINISHED - VOID") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"VOID\"") && b.AiOutcomeResult != "VOID")
+            ).Select(b => b.Id).ToList();
+
+            query = query.Where(b => mismatchedIds.Contains(b.Id));
         }
         else if (showOnlyAdminOverride)
         {
