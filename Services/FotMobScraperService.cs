@@ -524,16 +524,9 @@ namespace BettingApp.Services
         private string NormalizeText(string text)
         {
             if (string.IsNullOrEmpty(text)) return "";
-            var normalized = text.Normalize(System.Text.NormalizationForm.FormD);
-            var sb = new System.Text.StringBuilder();
-            foreach (var c in normalized)
-            {
-                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
-                {
-                    sb.Append(c);
-                }
-            }
-            string result = sb.ToString().ToLowerInvariant();
+            
+            string result = TeamAliasMappingService.RemoveDiacritics(text).ToLowerInvariant();
+            result = TeamAliasMappingService.ApplyTeamAliases(result);
             
             // Map common nordic and german characters that don't decompose to ascii equivalents
             result = result.Replace("ø", "o").Replace("æ", "a").Replace("å", "a")
