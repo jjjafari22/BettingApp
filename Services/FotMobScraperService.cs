@@ -352,7 +352,7 @@ namespace BettingApp.Services
                                                 if (val.ValueKind == System.Text.Json.JsonValueKind.Number)
                                                     pStats[statName] = val.GetDouble();
                                                 else if (val.ValueKind == System.Text.Json.JsonValueKind.String)
-                                                    pStats[statName] = val.GetString();
+                                                    pStats[statName] = val.GetString() ?? "";
                                             }
                                         }
                                     }
