@@ -352,6 +352,13 @@ namespace BettingApp.Services
                     tools = new[]
                     {
                         new { googleSearch = new { } }
+                    },
+                    generationConfig = new 
+                    {
+                        thinkingConfig = new 
+                        {
+                            thinkingBudgetTokens = 1024
+                        }
                     }
                 };
 
@@ -438,7 +445,14 @@ namespace BettingApp.Services
                 var payload = new
                 {
                     contents = new[] { new { role = "user", parts = new[] { new { text = prompt } } } },
-                    tools = new[] { new { googleSearch = new object() } }
+                    tools = new[] { new { googleSearch = new object() } },
+                    generationConfig = new 
+                    {
+                        thinkingConfig = new 
+                        {
+                            thinkingBudgetTokens = 1024
+                        }
+                    }
                 };
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
