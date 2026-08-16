@@ -145,6 +145,9 @@ namespace BettingApp.Services
                                     continue; // Skip if no fixtures exist for this team
                                 }
                                 
+                                DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
+                                TimeSpan smallestTimeDiff = TimeSpan.MaxValue;
+                                
                                 foreach (var f in fixtures.EnumerateArray())
                                 {
                                     string id = "";
@@ -170,8 +173,23 @@ namespace BettingApp.Services
 
                                     if (match1)
                                     {
-                                        eventId = id;
-                                        break; // Found it!
+                                        if (f.TryGetProperty("status", out var statusProp) && statusProp.TryGetProperty("utcTime", out var utcProp))
+                                        {
+                                            if (DateTime.TryParse(utcProp.GetString(), out DateTime fixtureDate))
+                                            {
+                                                TimeSpan diff = (fixtureDate - targetDate).Duration();
+                                                if (diff < smallestTimeDiff)
+                                                {
+                                                    smallestTimeDiff = diff;
+                                                    eventId = id;
+                                                }
+                                            }
+                                        }
+                                        else if (string.IsNullOrEmpty(eventId))
+                                        {
+                                            // Fallback if no date available
+                                            eventId = id;
+                                        }
                                     }
                                 }
                             }
