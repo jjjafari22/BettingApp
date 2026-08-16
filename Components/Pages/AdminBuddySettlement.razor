@@ -91,26 +91,49 @@
                 Are you sure you want to trigger a settlement snapshot right now?
                 This will calculate who owes whom based on current balances.
             </p>
-            @if (candidates.Any())
-            {
-                <div class="mb-3 p-3 bg-white rounded border border-warning shadow-sm">
-                    <h5>Exclude Users</h5>
-                    <p class="small text-muted mb-2">Select users to exclude from peer-to-peer matching. (They will be settled by the admin/castle instead):</p>
-                    <div class="d-flex flex-wrap gap-3">
-                        @foreach (var c in candidates)
-                        {
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="excl_@c.UserName" 
-                                       checked="@excludedUsers.Contains(c.UserName)"
-                                       @onchange="@((ChangeEventArgs e) => ToggleExclude(c.UserName, e.Value))" />
-                                <label class="form-check-label" for="excl_@c.UserName">
-                                    @c.DisplayName
-                                </label>
+                <div class="row mb-3 gap-3">
+                    @if (candidates.Any())
+                    {
+                        <div class="col-md-5 p-3 bg-white rounded border border-warning shadow-sm">
+                            <h5 class="text-danger"><i class="bi bi-box-arrow-right me-2"></i>Exclude Users from SENDING Money</h5>
+                            <p class="small text-muted mb-2">Select users who owe money but should <b>NOT</b> be matched to pay other users directly. (They will pay the castle instead):</p>
+                            <div class="d-flex flex-wrap gap-3">
+                                @foreach (var c in candidates)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="excl_@c.UserName" 
+                                               checked="@excludedUsers.Contains(c.UserName)"
+                                               @onchange="@((ChangeEventArgs e) => ToggleExclude(c.UserName, e.Value))" />
+                                        <label class="form-check-label" for="excl_@c.UserName">
+                                            @c.DisplayName
+                                        </label>
+                                    </div>
+                                }
                             </div>
-                        }
-                    </div>
+                        </div>
+                    }
+
+                    @if (creditorCandidates.Any())
+                    {
+                        <div class="col-md-5 p-3 bg-white rounded border border-info shadow-sm">
+                            <h5 class="text-info"><i class="bi bi-box-arrow-in-left me-2"></i>Exclude Users from RECEIVING Money</h5>
+                            <p class="small text-muted mb-2">Select users who are owed money but should <b>NOT</b> receive payments from other users. (They will be paid by the castle instead):</p>
+                            <div class="d-flex flex-wrap gap-3">
+                                @foreach (var c in creditorCandidates)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="excl_cred_@c.UserName" 
+                                               checked="@excludedCreditors.Contains(c.UserName)"
+                                               @onchange="@((ChangeEventArgs e) => ToggleExcludeCreditor(c.UserName, e.Value))" />
+                                        <label class="form-check-label" for="excl_cred_@c.UserName">
+                                            @c.DisplayName
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
                 </div>
-            }
             <div class="d-flex gap-2">
                 <button class="btn btn-danger" @onclick="ExecuteSnapshot">Yes, Execute</button>
                 <button class="btn btn-secondary" @onclick="() => showConfirmation = false">Cancel</button>
@@ -490,6 +513,8 @@
     private Dictionary<int, List<DebtorRow>> snapshotDebtorRows = new();
     private List<SettlementCandidate> candidates = new();
     private HashSet<string> excludedUsers = new();
+    private List<SettlementCandidate> creditorCandidates = new();
+    private HashSet<string> excludedCreditors = new();
     
     private List<CashCow> cashCows = new();
     private CashCow newCow = new();
@@ -633,13 +658,13 @@
     {
         using var context = DbFactory.CreateDbContext();
         
+        // 1. Debtors
         var debtorsQuery = await context.Users
             .Where(u => u.Balance < 0 && !u.IsAdmin && !u.IsTestUser)
             .Select(u => new { u.UserName, u.DiscordUsername, u.LastName })
             .ToListAsync();
             
         var allUserNames = debtorsQuery.Select(u => u.UserName).Distinct().ToList();
-        
         var userLookup = debtorsQuery.ToDictionary(u => u.UserName!, u => u);
 
         candidates = allUserNames.Where(n => !string.IsNullOrEmpty(n)).Select(userName => {
@@ -652,7 +677,32 @@
             };
         }).OrderBy(c => c.DisplayName).ToList();
 
+        // 2. Creditors
+        var creditorsQuery = await context.Transactions
+            .Where(t => t.Type == "Withdrawal" && t.Status == "Pending")
+            .Select(t => t.UserName)
+            .Distinct()
+            .ToListAsync();
+
+        var creditorUsers = await context.Users
+            .Where(u => creditorsQuery.Contains(u.UserName))
+            .Select(u => new { u.UserName, u.DiscordUsername, u.LastName })
+            .ToDictionaryAsync(u => u.UserName!, u => u);
+
+        creditorCandidates = creditorsQuery.Where(n => !string.IsNullOrEmpty(n)).Select(userName => {
+            string displayName = userName;
+            if (creditorUsers.TryGetValue(userName, out var u)) {
+                displayName = string.IsNullOrWhiteSpace(u.DiscordUsername) ? u.UserName! : $"{u.DiscordUsername} ({u.LastName})";
+            }
+            return new SettlementCandidate
+            {
+                UserName = userName!,
+                DisplayName = displayName
+            };
+        }).OrderBy(c => c.DisplayName).ToList();
+
         excludedUsers.Clear();
+        excludedCreditors.Clear();
         showConfirmation = true;
     }
 
@@ -664,12 +714,20 @@
             excludedUsers.Remove(userName);
     }
 
+    private void ToggleExcludeCreditor(string userName, object? isChecked)
+    {
+        if (isChecked is bool b && b)
+            excludedCreditors.Add(userName);
+        else
+            excludedCreditors.Remove(userName);
+    }
+
     private async Task ExecuteSnapshot()
     {
         showConfirmation = false;
         isLoading = true;
         await Task.Delay(50);
-        await SettlementService.CreateSnapshotAsync(excludedUsers.ToList());
+        await SettlementService.CreateSnapshotAsync(excludedUsers.ToList(), excludedCreditors.ToList());
         
         // Reset to page 1 to see the new snapshot
         currentPage = 1;

@@ -14,9 +14,10 @@ namespace BettingApp.Services
             _dbFactory = dbFactory;
         }
 
-        public async Task<SettlementSnapshot> CreateSnapshotAsync(List<string>? excludedUserNames = null)
+        public async Task<SettlementSnapshot> CreateSnapshotAsync(List<string>? excludedUserNames = null, List<string>? excludedCreditorNames = null)
         {
             excludedUserNames ??= new List<string>();
+            excludedCreditorNames ??= new List<string>();
             
             using var context = _dbFactory.CreateDbContext();
             
@@ -35,9 +36,8 @@ namespace BettingApp.Services
                 .Select(t => new { t.UserName, t.AmountNOK, t.PaymentDetails })
                 .ToListAsync();
 
-            // Group pending withdrawals by user in case they made multiple requests, and filter excluded
+            // Group pending withdrawals by user in case they made multiple requests
             var creditorsList = pendingWithdrawals
-                .Where(t => !excludedUserNames.Contains(t.UserName!))
                 .GroupBy(t => t.UserName)
                 .Select(g => new { 
                     UserName = g.Key, 
@@ -49,7 +49,7 @@ namespace BettingApp.Services
             var result = new SettlementResult { Date = DateTime.UtcNow };
             
             var debtors = new List<(string Name, decimal Amount, string RawUserName)>();
-            var creditors = new List<(string Name, decimal Amount, string PaymentDetails, string FirstName, string DiscordUsername, string FullName)>();
+            var creditors = new List<(string Name, decimal Amount, string PaymentDetails, string FirstName, string DiscordUsername, string FullName, string RawUserName)>();
 
             // Need a quick lookup for User display names if we want to format Creditors correctly
             var allUsersToFormat = debtorsList.Select(u => u.UserName)
@@ -106,7 +106,7 @@ namespace BettingApp.Services
                 string firstName = GetFirstName(creditor.UserName!);
                 string discordUsername = GetDiscordUsername(creditor.UserName!);
                 string fullName = GetFullName(creditor.UserName!);
-                creditors.Add((displayName, creditor.TotalAmount, creditor.PaymentDetails, firstName, discordUsername, fullName));
+                creditors.Add((displayName, creditor.TotalAmount, creditor.PaymentDetails, firstName, discordUsername, fullName, creditor.UserName!));
                 // Add to UserBalances to show what they are owed in the snapshot history
                 result.UserBalances.Add(new SettlementUserBalance { UserName = displayName + " (Pending Withdrawal)", Balance = creditor.TotalAmount });
             }
@@ -115,8 +115,9 @@ namespace BettingApp.Services
             var p2pDebtors = debtors.Where(d => !excludedUserNames.Contains(d.RawUserName)).OrderByDescending(x => x.Amount).ToList();
             var castleOnlyDebtors = debtors.Where(d => excludedUserNames.Contains(d.RawUserName)).ToList();
             
-            // Sort creditors by amount descending to minimize transaction count
-            creditors = creditors.OrderByDescending(x => x.Amount).ToList();
+            // Split creditors into P2P eligible and Castle-only
+            var p2pCreditors = creditors.Where(c => !excludedCreditorNames.Contains(c.RawUserName)).OrderByDescending(x => x.Amount).ToList();
+            var castleOnlyCreditors = creditors.Where(c => excludedCreditorNames.Contains(c.RawUserName)).ToList();
 
             // 3. Match P2P Debtors to Creditors
             
@@ -135,32 +136,32 @@ namespace BettingApp.Services
             }
 
             bool matchFound = true;
-            while (matchFound && p2pDebtors.Count > 0 && creditors.Count > 0)
+            while (matchFound && p2pDebtors.Count > 0 && p2pCreditors.Count > 0)
             {
                 matchFound = false;
-                int maxSubsetSize = Math.Min(6, p2pDebtors.Count + creditors.Count);
+                int maxSubsetSize = Math.Min(6, p2pDebtors.Count + p2pCreditors.Count);
 
                 for (int size = 2; size <= maxSubsetSize && !matchFound; size++)
                 {
                     for (int dCount = 1; dCount < size; dCount++)
                     {
                         int cCount = size - dCount;
-                        if (dCount > p2pDebtors.Count || cCount > creditors.Count) continue;
+                        if (dCount > p2pDebtors.Count || cCount > p2pCreditors.Count) continue;
 
                         var dCombs = GetCombinations(p2pDebtors.Count, dCount);
-                        var cCombs = GetCombinations(creditors.Count, cCount);
+                        var cCombs = GetCombinations(p2pCreditors.Count, cCount);
 
                         foreach (var dComb in dCombs)
                         {
                             decimal dSum = dComb.Sum(i => p2pDebtors[i].Amount);
                             foreach (var cComb in cCombs)
                             {
-                                decimal cSum = cComb.Sum(i => creditors[i].Amount);
+                                decimal cSum = cComb.Sum(i => p2pCreditors[i].Amount);
                                 if (Math.Abs(dSum - cSum) < 0.01m)
                                 {
                                     // Generate greedy instructions for this exact subset
                                     var subDebtors = dComb.Select(i => p2pDebtors[i]).ToList();
-                                    var subCreditors = cComb.Select(i => creditors[i]).ToList();
+                                    var subCreditors = cComb.Select(i => p2pCreditors[i]).ToList();
 
                                     int sd = 0, sc = 0;
                                     while (sd < subDebtors.Count && sc < subCreditors.Count)
@@ -184,11 +185,11 @@ namespace BettingApp.Services
                                         var nc = subC.Amount - amount;
 
                                         if (nd < 0.01m) sd++; else subDebtors[sd] = (subD.Name, nd, subD.RawUserName);
-                                        if (nc < 0.01m) sc++; else subCreditors[sc] = (subC.Name, nc, subC.PaymentDetails, subC.FirstName, subC.DiscordUsername, subC.FullName);
+                                        if (nc < 0.01m) sc++; else subCreditors[sc] = (subC.Name, nc, subC.PaymentDetails, subC.FirstName, subC.DiscordUsername, subC.FullName, subC.RawUserName);
                                     }
 
                                     foreach (var i in dComb.OrderByDescending(x => x)) p2pDebtors.RemoveAt(i);
-                                    foreach (var i in cComb.OrderByDescending(x => x)) creditors.RemoveAt(i);
+                                    foreach (var i in cComb.OrderByDescending(x => x)) p2pCreditors.RemoveAt(i);
 
                                     matchFound = true;
                                     break;
@@ -204,13 +205,13 @@ namespace BettingApp.Services
             // Greedy matching for any remainder that didn't fit into a subset <= size 6
             // We re-sort after EVERY transaction. This spreads the load across multiple users
             // rather than completely "draining" the largest user and forcing them to make many payments.
-            while (p2pDebtors.Count > 0 && creditors.Count > 0)
+            while (p2pDebtors.Count > 0 && p2pCreditors.Count > 0)
             {
                 p2pDebtors = p2pDebtors.OrderByDescending(x => x.Amount).ToList();
-                creditors = creditors.OrderByDescending(x => x.Amount).ToList();
+                p2pCreditors = p2pCreditors.OrderByDescending(x => x.Amount).ToList();
 
                 var debtor = p2pDebtors[0];
-                var creditor = creditors[0];
+                var creditor = p2pCreditors[0];
 
                 var amount = Math.Min(debtor.Amount, creditor.Amount);
 
@@ -231,8 +232,8 @@ namespace BettingApp.Services
                 if (newDebtorAmount < 0.01m) p2pDebtors.RemoveAt(0);
                 else p2pDebtors[0] = (debtor.Name, newDebtorAmount, debtor.RawUserName); 
 
-                if (newCreditorAmount < 0.01m) creditors.RemoveAt(0);
-                else creditors[0] = (creditor.Name, newCreditorAmount, creditor.PaymentDetails, creditor.FirstName, creditor.DiscordUsername, creditor.FullName); 
+                if (newCreditorAmount < 0.01m) p2pCreditors.RemoveAt(0);
+                else p2pCreditors[0] = (creditor.Name, newCreditorAmount, creditor.PaymentDetails, creditor.FirstName, creditor.DiscordUsername, creditor.FullName, creditor.RawUserName); 
             }
 
             // Any remaining unmatched P2P balances are system imbalances (adjustments)
@@ -246,7 +247,11 @@ namespace BettingApp.Services
             {
                 result.Adjustments.Add(new SettlementAdjustment { UserName = debtor.Name, Amount = debtor.Amount, Reason = "Owes Castle Directly" });
             }
-            foreach (var creditor in creditors)
+            foreach (var creditor in p2pCreditors)
+            {
+                result.Adjustments.Add(new SettlementAdjustment { UserName = creditor.Name, Amount = creditor.Amount, Reason = "Castle Owes Directly" });
+            }
+            foreach (var creditor in castleOnlyCreditors)
             {
                 result.Adjustments.Add(new SettlementAdjustment { UserName = creditor.Name, Amount = creditor.Amount, Reason = "Castle Owes Directly" });
             }
