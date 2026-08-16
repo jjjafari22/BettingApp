@@ -414,19 +414,22 @@ namespace BettingApp.Services
                                              .Where(w => w.Length >= 2 && !IsGenericPrefix(w)).Select(NormalizeText).ToArray();
                 if (homeTeamTokens.Length == 0 && !string.IsNullOrEmpty(homeTeam)) homeTeamTokens = new[] { NormalizeText(homeTeam) };
 
-                bool homeMatch = false;
+                int homeMatches = 0;
                 string normOptHome = NormalizeText(optionHomeName);
                 foreach (var token in homeTeamTokens)
                 {
                     if (FuzzyMatch(token, normOptHome))
                     {
-                        homeMatch = true;
-                        break;
+                        homeMatches++;
                     }
                 }
 
-                bool awayTeamMatch = string.IsNullOrEmpty(awayTeam);
-                if (!awayTeamMatch)
+                int awayMatches = 0;
+                if (string.IsNullOrEmpty(awayTeam))
+                {
+                    awayMatches = 1; // Trivially true if no away team is provided
+                }
+                else
                 {
                     string normOptAway = NormalizeText(optionAwayName);
                     var normalizedAwayTokens = awayTeamTokens.Select(NormalizeText).ToArray();
@@ -434,18 +437,17 @@ namespace BettingApp.Services
                     {
                         if (FuzzyMatch(token, normOptAway))
                         {
-                            awayTeamMatch = true;
-                            break;
+                            awayMatches++;
                         }
                     }
                 }
 
-                if (!homeMatch || !awayTeamMatch)
+                if (homeMatches == 0 || awayMatches == 0)
                 {
-                    continue; // MUST match the home team strictly to home, and away team strictly to away!
+                    continue; // MUST match at least one token from the home team, and one token from the away team!
                 }
 
-                int score = 0;
+                int score = (homeMatches * 10) + (awayMatches * 10);
                 
                 if (queryIsWomen != optionIsWomen) 
                 {
@@ -548,7 +550,7 @@ namespace BettingApp.Services
         {
             if (string.IsNullOrEmpty(word)) return true;
             string w = word.ToLowerInvariant();
-            return w == "fc" || w == "fk" || w == "bk" || w == "if" || w == "il" || w == "ik" || w == "ff" || w == "gf" || w == "cd" || w == "cf" || w == "sc" || w == "ac" || w == "afc" || w == "rc" || w == "city" || w == "united" || w == "club" || w == "real" || w == "de" || w == "la";
+            return w == "fc" || w == "fk" || w == "bk" || w == "if" || w == "il" || w == "ik" || w == "ff" || w == "gf" || w == "cd" || w == "cf";
         }
     }
 }
