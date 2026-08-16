@@ -25,16 +25,16 @@
     
     /* --- MODAL STYLES --- */
     .modal { overscroll-behavior: contain; outline: none; }
-    .review-modal-content { max-height: 90vh; height: 90vh; display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain; }
-    .review-modal-body { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; background-color: #212529; overflow-y: auto; overscroll-behavior: contain; position: relative; }
-    .review-image-container { flex-grow: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 1rem; overflow: hidden; position: relative; }
-    .review-image { max-height: 100%; max-width: 100%; object-fit: contain; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    .review-modal-content { max-height: 90dvh; height: 90dvh; display: flex; flex-direction: column; overflow: hidden; overscroll-behavior: contain; width: 100%; max-width: 100vw; }
+    .review-modal-body { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; width: 100%; padding: 0; background-color: #212529; overflow-y: auto; overscroll-behavior: contain; position: relative; }
+    .review-image-container { flex-grow: 1; min-height: 0; min-width: 0; width: 100%; position: relative; background-color: transparent; }
+    .review-image { position: absolute; top: 1rem; left: 1rem; right: 1rem; bottom: 1rem; width: calc(100% - 2rem); height: calc(100% - 2rem); object-fit: contain; }
     .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 20; background-color: rgba(0, 0, 0, 0.4); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; cursor: pointer; transition: background-color 0.2s; }
     .nav-arrow:hover:not(:disabled) { background-color: rgba(0, 0, 0, 0.7); }
     .nav-arrow:disabled { opacity: 0; pointer-events: none; }
     .nav-arrow-left { left: 10px; }
     .nav-arrow-right { right: 10px; }
-    .review-controls-container { flex-shrink: 0; background-color: #f8f9fa; border-top: 1px solid #dee2e6; padding: 1rem; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index: 10; }
+    .review-controls-container { flex-shrink: 0; min-width: 0; width: 100%; background-color: #f8f9fa; border-top: 1px solid #dee2e6; padding: 1rem; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index: 10; }
     .action-btn { width: 100%; display: block; margin: 0 auto; font-weight: bold; font-size: inherit; white-space: nowrap; }
     @@media (min-width: 992px) {
         .action-btn { width: 80%; }
@@ -136,10 +136,12 @@
             <div class="modal-content review-modal-content" @ontouchstart="HandleTouchStart" @ontouchend="HandleTouchEnd">
                 <div class="modal-header py-2 flex-shrink-0">
                     <div class="d-flex align-items-center w-100 overflow-hidden">
-                        <h5 class="modal-title fs-6 text-truncate me-2 flex-grow-1">
-                            <span class="badge @GetStatusBadgeClass(reviewingBetModel.Status) me-2">@reviewingBetModel.Status</span>
-                            Review Bet #@reviewingBetModel.Id 
-                            <span class="text-muted ms-2 fw-normal">@reviewingBetModel.UserName</span>
+                        <h5 class="modal-title fs-6 me-2 flex-grow-1" style="line-height: 1.4; min-width: 0;">
+                            <span class="badge @GetStatusBadgeClass(reviewingBetModel.Status) me-2 align-middle">@reviewingBetModel.Status</span>
+                            <span class="align-middle">Review Bet #@reviewingBetModel.Id</span> 
+                            <span class="text-muted ms-sm-2 fw-normal d-block d-sm-inline mt-1 mt-sm-0" style="font-size: 0.9rem; word-break: break-all;">
+                                @reviewingBetModel.UserName
+                            </span>
                         </h5>
                         <button type="button" class="btn-close flex-shrink-0" @onclick="CancelReview"></button>
                     </div>
@@ -163,7 +165,7 @@
                    <div class="review-image-container">
                        <button class="nav-arrow nav-arrow-left shadow-lg" @onclick="() => NavigateReview(-1)" disabled="@(currentReviewIndex <= 0)"><i class="bi bi-chevron-left"></i></button>
                        @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
-                           <img src="@reviewingBetModel.ScreenshotUrl" class="review-image rounded" alt="Bet Screenshot" />
+                           <img src="@GetScreenshotUrl(reviewingBetModel.ScreenshotUrl)" class="review-image rounded" alt="Bet Screenshot" />
                        } else {
                            <div class="text-white-50 fst-italic text-center">
                                <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
@@ -173,23 +175,23 @@
                    </div>
 
                    <div class="review-controls-container">
-                        <div class="container-fluid p-0">
+                        <div class="container-fluid px-0 overflow-hidden">
                            <div class="row g-2 mb-3">
-                                <div class="col-3">
+                                <div class="col-6 col-md-3">
                                     <label class="form-label fw-bold text-muted small mb-1">Stake</label>
-                                    <div class="form-control form-control-sm bg-light fw-bold px-2">@reviewingBetModel.AmountNOK?.ToString("N0") kr</div>
+                                    <div class="form-control form-control-sm bg-light fw-bold px-2 text-truncate">@reviewingBetModel.AmountNOK?.ToString("N0") kr</div>
                                 </div>
-                               <div class="col-2">
+                               <div class="col-6 col-md-2">
                                    <label class="form-label fw-bold text-muted small mb-1">Odds</label>
-                                   <div class="form-control form-control-sm bg-light fw-bold px-2">@reviewingBetModel.Odds</div>
+                                   <div class="form-control form-control-sm bg-light fw-bold px-2 text-truncate">@reviewingBetModel.Odds</div>
                                 </div>
-                                <div class="col-3">
+                                <div class="col-6 col-md-3">
                                      <label class="form-label fw-bold text-muted small mb-1">Payout</label>
-                                     <div class="form-control form-control-sm bg-light text-success fw-bold text-end px-2">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
+                                     <div class="form-control form-control-sm bg-light text-success fw-bold text-end px-2 text-truncate">@reviewingBetModel.PotentialPayout.ToString("N0") kr</div>
                                 </div>
-                               <div class="col-4">
-                                    <label class="form-label fw-bold text-muted small mb-1">Net Liability</label>
-                                      <div class="form-control form-control-sm bg-light text-danger fw-bold text-end px-2">@reviewingBetModel.NetLiability.ToString("N0") kr</div>
+                               <div class="col-6 col-md-4">
+                                    <label class="form-label fw-bold text-muted small mb-1 text-truncate" style="display: block;">Net Liability</label>
+                                      <div class="form-control form-control-sm bg-light text-danger fw-bold text-end px-2 text-truncate">@reviewingBetModel.NetLiability.ToString("N0") kr</div>
                                 </div>
                             </div>
 
@@ -1123,6 +1125,53 @@ else
 
     private Bet? originalBetModel;
 
+    private string resolvedScreenshotUrl = "";
+    private Dictionary<string, string> localImageCache = new();
+
+    private string GetScreenshotUrl(string? originalUrl)
+    {
+        return string.IsNullOrEmpty(resolvedScreenshotUrl) ? (originalUrl ?? "") : resolvedScreenshotUrl;
+    }
+
+    private async Task LoadResolvedScreenshotUrlAsync(string? originalUrl)
+    {
+        if (string.IsNullOrEmpty(originalUrl)) 
+        {
+            resolvedScreenshotUrl = "";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (originalUrl.Contains("127.0.0.1:10000") || originalUrl.Contains("localhost:10000"))
+        {
+            if (localImageCache.TryGetValue(originalUrl, out var cachedData))
+            {
+                resolvedScreenshotUrl = cachedData;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            try 
+            {
+                using var client = new HttpClient();
+                var bytes = await client.GetByteArrayAsync(originalUrl);
+                var base64 = Convert.ToBase64String(bytes);
+                var ext = originalUrl.EndsWith(".png") ? "png" : "jpeg";
+                var dataUrl = $"data:image/{ext};base64,{base64}";
+                localImageCache[originalUrl] = dataUrl;
+                resolvedScreenshotUrl = dataUrl;
+            } 
+            catch 
+            { 
+                resolvedScreenshotUrl = originalUrl;
+            }
+        }
+        else
+        {
+            resolvedScreenshotUrl = originalUrl;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
     private void StartReview(Bet bet)
     {
         originalBetModel = bet;
@@ -1151,6 +1200,8 @@ else
         modalSuccessMessage = null; 
         reviewErrorMessage = null; 
         shouldFocusReviewModal = true;
+
+        _ = LoadResolvedScreenshotUrlAsync(reviewingBetModel.ScreenshotUrl);
     }
 
     private async Task CancelReview() 
