@@ -679,13 +679,13 @@
 
         // 2. Creditors
         var creditorsQuery = await context.Transactions
-            .Where(t => t.Type == "Withdrawal" && t.Status == "Pending")
-            .Select(t => t.UserName)
+            .Where(t => t.Type == "Withdrawal" && t.Status == "Pending" && t.UserName != null)
+            .Select(t => t.UserName!)
             .Distinct()
             .ToListAsync();
 
         var creditorUsers = await context.Users
-            .Where(u => creditorsQuery.Contains(u.UserName))
+            .Where(u => u.UserName != null && creditorsQuery.Contains(u.UserName))
             .Select(u => new { u.UserName, u.DiscordUsername, u.LastName })
             .ToDictionaryAsync(u => u.UserName!, u => u);
 
