@@ -357,7 +357,7 @@ namespace BettingApp.Services
                     {
                         thinkingConfig = new 
                         {
-                            thinkingBudgetTokens = 1024
+                            thinkingBudget = 1024
                         }
                     }
                 };
@@ -381,6 +381,12 @@ namespace BettingApp.Services
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
+                
+                if (json.Contains("\"thoughtSignature\"") || json.Contains("\"thought\""))
+                {
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}✅ Confirmed: Google Vertex API actually returned Extended Thinking reasoning blocks.");
+                }
+
                 using var doc = JsonDocument.Parse(json);
                 var text = doc.RootElement
                     .GetProperty("candidates")[0]
@@ -450,7 +456,7 @@ namespace BettingApp.Services
                     {
                         thinkingConfig = new 
                         {
-                            thinkingBudgetTokens = 1024
+                            thinkingBudget = 1024
                         }
                     }
                 };
@@ -470,6 +476,12 @@ namespace BettingApp.Services
                 if (!response.IsSuccessStatusCode) return null;
 
                 var json = await response.Content.ReadAsStringAsync();
+                
+                if (json.Contains("\"thoughtSignature\"") || json.Contains("\"thought\""))
+                {
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}✅ Confirmed: Google Vertex API actually returned Extended Thinking reasoning blocks.");
+                }
+
                 using var doc = JsonDocument.Parse(json);
                 var text = doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
 
