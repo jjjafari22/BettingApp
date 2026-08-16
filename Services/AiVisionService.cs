@@ -195,7 +195,8 @@ namespace BettingApp.Services
                     },
                     generationConfig = new
                     {
-                        responseMimeType = "application/json"
+                        responseMimeType = "application/json",
+                        thinkingConfig = new { thinkingBudget = 1024 }
                     }
                 };
 
@@ -212,6 +213,11 @@ namespace BettingApp.Services
 
                 var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel);
                 string responseString = await response.Content.ReadAsStringAsync();
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    LogAiUsage(responseString, betLabel);
+                }
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -382,14 +388,9 @@ namespace BettingApp.Services
 
                 var json = await response.Content.ReadAsStringAsync();
                 
+                LogAiUsage(json, betLabel);
+
                 using var doc = JsonDocument.Parse(json);
-                
-                if (doc.RootElement.TryGetProperty("usageMetadata", out var usage) && usage.TryGetProperty("thoughtsTokenCount", out var tTokens))
-                {
-                    int used = tTokens.GetInt32();
-                    string warning = used >= 900 ? " ⚠️ (WARNING: Approaching 1024 limit!)" : "";
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}✅ Confirmed: Vertex API used {used} Extended Thinking tokens{warning}.");
-                }
                 var text = doc.RootElement
                     .GetProperty("candidates")[0]
                     .GetProperty("content")
@@ -479,14 +480,9 @@ namespace BettingApp.Services
 
                 var json = await response.Content.ReadAsStringAsync();
                 
+                LogAiUsage(json, betLabel);
+
                 using var doc = JsonDocument.Parse(json);
-                
-                if (doc.RootElement.TryGetProperty("usageMetadata", out var usage) && usage.TryGetProperty("thoughtsTokenCount", out var tTokens))
-                {
-                    int used = tTokens.GetInt32();
-                    string warning = used >= 900 ? " ⚠️ (WARNING: Approaching 1024 limit!)" : "";
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}✅ Confirmed: Vertex API used {used} Extended Thinking tokens{warning}.");
-                }
                 var text = doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
 
                 if (!string.IsNullOrEmpty(text))
@@ -513,6 +509,28 @@ namespace BettingApp.Services
                 return null;
             }
         }
+        private void LogAiUsage(string jsonResponse, string betLabel)
+        {
+            try 
+            {
+                using var doc = JsonDocument.Parse(jsonResponse);
+                if (doc.RootElement.TryGetProperty("usageMetadata", out var usage))
+                {
+                    int total = usage.TryGetProperty("totalTokenCount", out var tt) ? tt.GetInt32() : 0;
+                    int prompt = usage.TryGetProperty("promptTokenCount", out var pt) ? pt.GetInt32() : 0;
+                    int output = usage.TryGetProperty("candidatesTokenCount", out var ct) ? ct.GetInt32() : 0;
+                    int thinking = usage.TryGetProperty("thoughtsTokenCount", out var th) ? th.GetInt32() : 0;
+                    
+                    bool hasThought = jsonResponse.Contains("\"thoughtSignature\"");
+                    string thinkMsg = thinking > 0 ? $" (Thinking: {thinking})" : (hasThought ? " (Thinking: active)" : "");
+                    string warning = thinking >= 900 ? " ⚠️ WARNING: Approaching thinking limit!" : "";
+
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}📊 AI Usage -> Total: {total} | Input: {prompt} | Output: {output}{thinkMsg}{warning}");
+                }
+            }
+            catch { }
+        }
+
         private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "")
         {
             int maxRetries = 3;
