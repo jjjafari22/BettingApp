@@ -35,7 +35,8 @@ namespace BettingApp.Services
             { "ois", "orgryte is" },
             { "paphos", "pafos" },
             { "grasshoppers", "grasshopper" },
-            { "psg", "paris saint germain" }
+            { "psg", "paris saint germain" },
+            { "aalesunds", "aalesund" }
         };
 
         public static string ApplyTeamAliases(string normalizedTeamName)
