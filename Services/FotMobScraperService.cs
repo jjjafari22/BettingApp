@@ -233,7 +233,12 @@ namespace BettingApp.Services
                                 }
 
                                 if (content.TryGetProperty("stats", out var stats)) trimmedData["stats"] = stats;
-                                if (content.TryGetProperty("playerStats", out var playerStats)) trimmedData["playerStats"] = playerStats;
+                                
+                                if (content.TryGetProperty("playerStats", out var playerStats)) 
+                                {
+                                    var pruned = PruneJson(playerStats);
+                                    if (pruned != null) trimmedData["playerStats"] = pruned;
+                                }
                             }
 
                             // Strip down the JSON to only the relevant stats to save massive amounts of tokens and prevent 503s!
@@ -253,6 +258,43 @@ namespace BettingApp.Services
             {
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] Error scraping JSON for {matchName}: {ex.Message}");
                 return null;
+            }
+        }
+
+        private object? PruneJson(System.Text.Json.JsonElement element)
+        {
+            if (element.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                var dict = new System.Collections.Generic.Dictionary<string, object?>();
+                foreach (var prop in element.EnumerateObject())
+                {
+                    var name = prop.Name.ToLowerInvariant();
+                    // Strip out massive spatial tracking arrays
+                    if (name == "shotmap" || name == "heatmap" || name == "events" || name == "coordinates" || name == "path" || name == "zones") 
+                        continue;
+                    
+                    var child = PruneJson(prop.Value);
+                    if (child != null) dict[prop.Name] = child;
+                }
+                return dict;
+            }
+            else if (element.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                // If the array is massive, it's likely raw telemetry data. Cap it to prevent bloat.
+                if (element.GetArrayLength() > 30) return null;
+                
+                var list = new System.Collections.Generic.List<object?>();
+                foreach (var item in element.EnumerateArray())
+                {
+                    var child = PruneJson(item);
+                    if (child != null) list.Add(child);
+                }
+                return list.Count > 0 ? list : null;
+            }
+            else
+            {
+                var val = element.ToString();
+                return string.IsNullOrEmpty(val) ? null : val;
             }
         }
 
