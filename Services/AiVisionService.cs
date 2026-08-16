@@ -202,9 +202,9 @@ namespace BettingApp.Services
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
                 // Hardcoded to the latest available Vertex AI enterprise model
-                var resolvedModel = "gemini-2.5-flash";
+                var resolvedModel = "gemini-3.7-flash";
 
-                var apiUrl = $"https://us-central1-aiplatform.googleapis.com/v1/projects/castle-gemini/locations/us-central1/publishers/google/models/{resolvedModel}:generateContent";
+                var apiUrl = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
@@ -358,9 +358,9 @@ namespace BettingApp.Services
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
                 // Hardcoded to the latest available Vertex AI enterprise model
-                var resolvedModel = "gemini-2.5-flash";
+                var resolvedModel = "gemini-3.7-flash";
 
-                var url = $"https://us-central1-aiplatform.googleapis.com/v1/projects/castle-gemini/locations/us-central1/publishers/google/models/{resolvedModel}:generateContent";
+                var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 
                 betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
@@ -444,9 +444,9 @@ namespace BettingApp.Services
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
                 // Hardcoded to the latest available Vertex AI enterprise model
-                var resolvedModel = "gemini-2.5-flash";
+                var resolvedModel = "gemini-3.7-flash";
 
-                var url = $"https://us-central1-aiplatform.googleapis.com/v1/projects/castle-gemini/locations/us-central1/publishers/google/models/{resolvedModel}:generateContent";
+                var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 string betLabel = "[Match Start Time] ";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}calling Gemini (Model: {resolvedModel})...");
