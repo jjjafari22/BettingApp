@@ -382,12 +382,14 @@ namespace BettingApp.Services
 
                 var json = await response.Content.ReadAsStringAsync();
                 
-                if (json.Contains("\"thoughtSignature\"") || json.Contains("\"thought\""))
-                {
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}✅ Confirmed: Google Vertex API actually returned Extended Thinking reasoning blocks.");
-                }
-
                 using var doc = JsonDocument.Parse(json);
+                
+                if (doc.RootElement.TryGetProperty("usageMetadata", out var usage) && usage.TryGetProperty("thoughtsTokenCount", out var tTokens))
+                {
+                    int used = tTokens.GetInt32();
+                    string warning = used >= 900 ? " ⚠️ (WARNING: Approaching 1024 limit!)" : "";
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}✅ Confirmed: Vertex API used {used} Extended Thinking tokens{warning}.");
+                }
                 var text = doc.RootElement
                     .GetProperty("candidates")[0]
                     .GetProperty("content")
@@ -477,12 +479,14 @@ namespace BettingApp.Services
 
                 var json = await response.Content.ReadAsStringAsync();
                 
-                if (json.Contains("\"thoughtSignature\"") || json.Contains("\"thought\""))
-                {
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}✅ Confirmed: Google Vertex API actually returned Extended Thinking reasoning blocks.");
-                }
-
                 using var doc = JsonDocument.Parse(json);
+                
+                if (doc.RootElement.TryGetProperty("usageMetadata", out var usage) && usage.TryGetProperty("thoughtsTokenCount", out var tTokens))
+                {
+                    int used = tTokens.GetInt32();
+                    string warning = used >= 900 ? " ⚠️ (WARNING: Approaching 1024 limit!)" : "";
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}✅ Confirmed: Vertex API used {used} Extended Thinking tokens{warning}.");
+                }
                 var text = doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
 
                 if (!string.IsNullOrEmpty(text))
