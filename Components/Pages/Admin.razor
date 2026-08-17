@@ -376,7 +376,7 @@
                                         @if (PapiSearchResult != null)
                                         {
                                             <div class="alert alert-info py-1 px-2 mb-2 small fw-bold">
-                                                <i class="bi bi-calendar-event me-1"></i> @PapiSearchResult.MatchName <span class="text-muted fw-normal ms-2">(@PapiSearchResult.StartTime.ToLocalTime().ToString("g"))</span>
+                                                <i class="bi bi-calendar-event me-1"></i> @PapiSearchResult.MatchName <span class="text-muted fw-normal ms-2">(@ToUserLocal(PapiSearchResult.StartTime).ToString("g"))</span>
                                                 @if (PapiSearchResult.IsLive) {
                                                     <span class="badge bg-danger ms-2 shadow-sm"><span class="pulse-dot bg-white rounded-circle d-inline-block me-1" style="width: 6px; height: 6px;"></span> LIVE ODDS</span>
                                                 }
@@ -726,7 +726,7 @@
                                                                         @if (bookies.TryGetValue("unibet.se", out var u) && u.TryGetValue(oName, out var ud)) {
                                                                             <div class="fw-bold">@ud.Price.ToString("0.00")</div>
                                                                             @if (ud.ChangedAt.HasValue) {
-                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ud.ChangedAt.Value.ToLocalTime().ToString("MM-dd HH:mm")</div>
+                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(ud.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
                                                                             }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
@@ -736,7 +736,7 @@
                                                                         @if (bookies.TryGetValue("betsson", out var c) && c.TryGetValue(oName, out var cd)) {
                                                                             <div class="fw-bold">@cd.Price.ToString("0.00")</div>
                                                                             @if (cd.ChangedAt.HasValue) {
-                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@cd.ChangedAt.Value.ToLocalTime().ToString("MM-dd HH:mm")</div>
+                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(cd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
                                                                             }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
@@ -746,7 +746,7 @@
                                                                         @if (bookies.TryGetValue("bet365", out var b) && b.TryGetValue(oName, out var bd)) {
                                                                             <div class="fw-bold">@bd.Price.ToString("0.00")</div>
                                                                             @if (bd.ChangedAt.HasValue) {
-                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@bd.ChangedAt.Value.ToLocalTime().ToString("MM-dd HH:mm")</div>
+                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(bd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
                                                                             }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
