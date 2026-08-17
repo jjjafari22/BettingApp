@@ -237,6 +237,7 @@ namespace BettingApp.Services
                             {
                                 var trimmedHeader = new System.Collections.Generic.Dictionary<string, object>();
                                 if (header.TryGetProperty("status", out var stat)) trimmedHeader["status"] = stat;
+                                if (header.TryGetProperty("teams", out var teams)) trimmedHeader["teams"] = teams;
                                 trimmedData["header"] = trimmedHeader;
                             }
 
@@ -308,6 +309,12 @@ namespace BettingApp.Services
                         
                         if (ev.TryGetProperty("card", out var card)) dict["card"] = card.GetString() ?? "";
                         if (ev.TryGetProperty("goalDescription", out var gDesc)) dict["desc"] = gDesc.GetString() ?? "";
+                        if (ev.TryGetProperty("isHome", out var isHome)) 
+                        {
+                            if (isHome.ValueKind == System.Text.Json.JsonValueKind.True) dict["isHome"] = true;
+                            else if (isHome.ValueKind == System.Text.Json.JsonValueKind.False) dict["isHome"] = false;
+                        }
+
                         
                         flatEvents.Add(dict);
                     }
