@@ -14,6 +14,7 @@ public class DiscordNotificationService : IHostedService
 {
     private readonly DiscordSocketClient _client;
     private readonly IConfiguration _config;
+    public string GuildId => _config["Discord:GuildId"] ?? "";
     private readonly ILogger<DiscordNotificationService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -423,8 +424,23 @@ public class DiscordNotificationService : IHostedService
         }
     }
 
+    private List<(ulong Id, string Name, string CategoryName)>? _cachedChannels;
+    private DateTime _lastChannelCacheTime = DateTime.MinValue;
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(60);
+
+    public void InvalidateChannelCache()
+    {
+        _cachedChannels = null;
+        _lastChannelCacheTime = DateTime.MinValue;
+    }
+
     public async Task<List<(ulong Id, string Name, string CategoryName)>> GetGuildTextChannelsAsync()
     {
+        if (_cachedChannels != null && (DateTime.UtcNow - _lastChannelCacheTime) < CacheDuration)
+        {
+            return _cachedChannels;
+        }
+
         if (_client.LoginState != LoginState.LoggedIn) return new();
         
         var guildIdString = _config["Discord:GuildId"];
@@ -449,7 +465,7 @@ public class DiscordNotificationService : IHostedService
                 .ToDictionary(c => c.Id, c => new { c.Name, c.Position });
             var textChannels = await guild.GetTextChannelsAsync();
 
-            return textChannels
+            var result = textChannels
                 .Select(c => (
                     c.Id, 
                     c.Name, 
@@ -461,6 +477,11 @@ public class DiscordNotificationService : IHostedService
                 .ThenBy(c => c.Item5)
                 .Select(c => (c.Id, c.Name, c.Item3))
                 .ToList();
+                
+            _cachedChannels = result;
+            _lastChannelCacheTime = DateTime.UtcNow;
+            
+            return result;
         }
         catch (Exception ex)
         {

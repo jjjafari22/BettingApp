@@ -907,7 +907,18 @@
                              </td>
                             <td>@bet.Id</td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                            <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
+                            <td>
+                                @{
+                                    var u1Exists = userLookup.TryGetValue(bet.UserId, out var u1);
+                                    var u1Name = u1Exists && !string.IsNullOrEmpty(u1.DiscordName) ? u1.DiscordName : bet.UserName;
+                                    var expectedChannel1 = $"{u1Name?.Trim().ToLower().Replace(" ", "-")}-admins";
+                                    var matchedChannel1 = discordChannels.FirstOrDefault(c => string.Equals(c.Name, expectedChannel1, StringComparison.OrdinalIgnoreCase));
+                                    var u1Link = matchedChannel1.Id != 0 
+                                        ? $"https://discord.com/channels/{DiscordService.GuildId}/{matchedChannel1.Id}" 
+                                        : $"https://discord.com/channels/{DiscordService.GuildId}";
+                                }
+                                <a href="@u1Link" target="_blank" class="text-decoration-none fw-bold">@u1Name</a>
+                            </td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                         </tr>
                     }
@@ -973,7 +984,18 @@
                             <td>@bet.Id</td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
   
-                            <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
+                            <td>
+                                @{
+                                    var u2Exists = userLookup.TryGetValue(bet.UserId, out var u2Discord);
+                                    var u2Name = u2Exists && !string.IsNullOrEmpty(u2Discord.DiscordName) ? u2Discord.DiscordName : bet.UserName;
+                                    var expectedChannel2 = $"{u2Name?.Trim().ToLower().Replace(" ", "-")}-admins";
+                                    var matchedChannel2 = discordChannels.FirstOrDefault(c => string.Equals(c.Name, expectedChannel2, StringComparison.OrdinalIgnoreCase));
+                                    var u2Link = matchedChannel2.Id != 0 
+                                        ? $"https://discord.com/channels/{DiscordService.GuildId}/{matchedChannel2.Id}" 
+                                        : $"https://discord.com/channels/{DiscordService.GuildId}";
+                                }
+                                <a href="@u2Link" target="_blank" class="text-decoration-none fw-bold">@u2Name</a>
+                            </td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                             <td>
                                 @bet.AmountNOK?.ToString("N0") kr
@@ -1075,7 +1097,18 @@
                     
                             <td>@bet.Id</td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
-                            <td>@(userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName)</td>
+                            <td>
+                                @{
+                                    var u3Exists = userLookup.TryGetValue(bet.UserId, out var u3Discord);
+                                    var u3Name = u3Exists && !string.IsNullOrEmpty(u3Discord.DiscordName) ? u3Discord.DiscordName : bet.UserName;
+                                    var expectedChannel3 = $"{u3Name?.Trim().ToLower().Replace(" ", "-")}-admins";
+                                    var matchedChannel3 = discordChannels.FirstOrDefault(c => string.Equals(c.Name, expectedChannel3, StringComparison.OrdinalIgnoreCase));
+                                    var u3Link = matchedChannel3.Id != 0 
+                                        ? $"https://discord.com/channels/{DiscordService.GuildId}/{matchedChannel3.Id}" 
+                                        : $"https://discord.com/channels/{DiscordService.GuildId}";
+                                }
+                                <a href="@u3Link" target="_blank" class="text-decoration-none fw-bold">@u3Name</a>
+                            </td>
                             <td>@(userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "")</td>
                             <td>
                                 @bet.AmountNOK?.ToString("N0") kr
@@ -1119,7 +1152,8 @@
     private List<Bet> pendingBets = new();
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
-    private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
+    private List<(ulong Id, string Name, string CategoryName)> discordChannels = new();
+    private Dictionary<string, (string DiscordName, string LastName, string DiscordUserId)> userLookup = new();
     private int pendingPage = 1;
     private int approvedPage = 1;
     private int completedPage = 1;
@@ -1364,9 +1398,9 @@
         if (missingIds.Any())
         {
             using var context = DbFactory.CreateDbContext();
-            var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.LastName }).ToListAsync();
+            var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.LastName, u.DiscordUserId }).ToListAsync();
             foreach(var u in users) {
-                userLookup[u.Id] = (u.DiscordUsername ?? "", u.LastName ?? "");
+                userLookup[u.Id] = (u.DiscordUsername ?? "", u.LastName ?? "", u.DiscordUserId ?? "");
             }
         }
     }
@@ -1389,6 +1423,7 @@
         await LoadPendingBets();
         await LoadApprovedBets();
         await LoadCompletedBets();
+        discordChannels = await DiscordService.GetGuildTextChannelsAsync();
         if (ReviewBetId.HasValue)
         {
             var targetBet = pendingBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);

@@ -10,6 +10,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
 @inject IHubContext<BetHub> HubContext
+@inject BettingApp.Services.DiscordNotificationService DiscordService
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
@@ -57,6 +58,26 @@ else
                 </div>
             </div>
         </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    Discord Integration
+                </div>
+                <div class="card-body">
+                    @if (showDiscordSuccess)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
+                            Discord cache refreshed successfully!
+                            <button type="button" class="btn-close" @onclick="() => showDiscordSuccess = false"></button>
+                        </div>
+                    }
+                    <p class="form-text mb-3">Manually invalidate the Discord channel cache. Use this to immediately recognize newly created user admin channels without waiting for the automatic 60-minute refresh.</p>
+                    <button type="button" class="btn btn-secondary" @onclick="RefreshDiscordCache">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh Discord Channels Cache
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 }
 
@@ -65,6 +86,7 @@ else
     private bool hasAccess = false;
     private bool isLoading = true;
     private bool showSuccess = false;
+    private bool showDiscordSuccess = false;
     private string? currentAdminName;
     private HubConnection? hubConnection;
 
@@ -146,6 +168,12 @@ else
             await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "System Settings Updated");
             showSuccess = true;
         }
+    }
+
+    private void RefreshDiscordCache()
+    {
+        DiscordService.InvalidateChannelCache();
+        showDiscordSuccess = true;
     }
 
     public async ValueTask DisposeAsync()
