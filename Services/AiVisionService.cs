@@ -301,7 +301,7 @@ namespace BettingApp.Services
                              $"CRITICAL FOR FALLBACK / GOOGLE SEARCH: If FotMob lacks data AND the match has started, you MUST use your Google Search tool (checking ESPN, Flashscore, etc.). If the match has NOT STARTED, do NOT use Google Search for stats! DO NOT guess stats. When searching, you MUST strictly verify two things:\n" +
                              $"1. THE DATE: Ensure the match occurred on or near the correct date listed in the bet slip. If no explicit StartTime is given, you MUST find the MOST RECENT match played between them. If you find a match from months ago, DO NOT use it!\n" +
                              $"2. THE TEAMS/PLAYERS ORDER: You must strictly verify the exact order of the players/teams (Home vs Away). A match between 'Player A vs Player B' is fundamentally different from 'Player B vs Player A'. If they played multiple times recently, the Home/Away order is your source of truth to pick the right match!\n" +
-                             $"CRITICAL FOR SOURCES: For every match, explicitly state 'Verified via provided FotMob JSON' or 'Verified via Google Search' directly in the 'stats' field for each leg.\n" +
+                             $"CRITICAL FOR SOURCES: For every match, explicitly state 'Verified via provided FotMob JSON' or 'Verified via Google Search' directly in the 'stats' field for each leg. If you use Google Search, you MUST include exactly ONE URL to the specific source page you used to find the result (e.g. Flashscore, Sofascore, or ESPN).\n" +
                              $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)', it means the bet transfers to the substitute! If the named player is substituted off, the stats of the player who comes on for them MUST be added to their total! You must find who was substituted on for that player and combine their stats to determine the outcome.\n" +
                              $"Check if the matches are finished, live, or not started. Determine if the overall bet was Won, Lost, or Void based on the results.\n" +
                              $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
@@ -361,6 +361,7 @@ namespace BettingApp.Services
                     },
                     generationConfig = new 
                     {
+                        temperature = 0.1,
                         thinkingConfig = new 
                         {
                             thinkingBudget = 1024
