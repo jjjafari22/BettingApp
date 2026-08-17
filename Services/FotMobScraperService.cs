@@ -263,6 +263,11 @@ namespace BettingApp.Services
                                 {
                                     trimmedData["playerStats"] = FlattenPlayerStats(playerStats);
                                 }
+
+                                if (content.TryGetProperty("lineup", out var lineup))
+                                {
+                                    trimmedData["lineup"] = FlattenLineup(lineup);
+                                }
                             }
 
                             if (trimmedData.TryGetValue("general", out var genObj) && genObj is System.Collections.Generic.Dictionary<string, object> genDict)
@@ -353,6 +358,54 @@ namespace BettingApp.Services
             }
             catch { }
             return flatStats;
+        }
+
+        private object FlattenLineup(System.Text.Json.JsonElement lineupObj)
+        {
+            var flatLineup = new System.Collections.Generic.Dictionary<string, object>();
+            try 
+            {
+                if (lineupObj.TryGetProperty("homeTeam", out var home))
+                {
+                    flatLineup["homeTeam"] = FlattenTeamLineup(home);
+                }
+                if (lineupObj.TryGetProperty("awayTeam", out var away))
+                {
+                    flatLineup["awayTeam"] = FlattenTeamLineup(away);
+                }
+            }
+            catch { }
+            return flatLineup;
+        }
+
+        private object FlattenTeamLineup(System.Text.Json.JsonElement teamObj)
+        {
+            var teamLineup = new System.Collections.Generic.Dictionary<string, object>();
+            if (teamObj.TryGetProperty("starters", out var starters))
+            {
+                teamLineup["starters"] = ExtractPlayerNames(starters);
+            }
+            if (teamObj.TryGetProperty("subs", out var subs))
+            {
+                teamLineup["subs"] = ExtractPlayerNames(subs);
+            }
+            return teamLineup;
+        }
+
+        private System.Collections.Generic.List<string> ExtractPlayerNames(System.Text.Json.JsonElement playersArray)
+        {
+            var names = new System.Collections.Generic.List<string>();
+            if (playersArray.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var player in playersArray.EnumerateArray())
+                {
+                    if (player.TryGetProperty("name", out var name))
+                    {
+                        names.Add(name.GetString() ?? "");
+                    }
+                }
+            }
+            return names;
         }
 
         private object FlattenPlayerStats(System.Text.Json.JsonElement playerStatsElement)
