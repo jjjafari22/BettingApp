@@ -142,7 +142,16 @@
                             <span class="badge @GetStatusBadgeClass(reviewingBetModel.Status) me-2 align-middle">@reviewingBetModel.Status</span>
                             <span class="align-middle">Bet #@reviewingBetModel.Id</span> 
                             <span class="text-muted ms-sm-2 fw-normal d-block d-sm-inline mt-1 mt-sm-0" style="font-size: 0.9rem; word-break: break-all;">
-                                @(userLookup.TryGetValue(reviewingBetModel.UserId, out var u3) && !string.IsNullOrEmpty(u3.DiscordName) ? u3.DiscordName : reviewingBetModel.UserName)
+                                @{
+                                    var uModalExists = userLookup.TryGetValue(reviewingBetModel.UserId, out var uModal);
+                                    var uModalName = uModalExists && !string.IsNullOrEmpty(uModal.DiscordName) ? uModal.DiscordName : reviewingBetModel.UserName;
+                                    var expectedModalChannel = $"{uModalName?.Trim().ToLower().Replace(" ", "-")}-admins";
+                                    var matchedModalChannel = discordChannels.FirstOrDefault(c => string.Equals(c.Name, expectedModalChannel, StringComparison.OrdinalIgnoreCase));
+                                    var uModalLink = matchedModalChannel.Id != 0 
+                                        ? $"https://discord.com/channels/{DiscordService.GuildId}/{matchedModalChannel.Id}" 
+                                        : $"https://discord.com/channels/{DiscordService.GuildId}";
+                                }
+                                <a href="@uModalLink" target="_blank" class="text-decoration-none fw-bold">@uModalName</a>
                             </span>
                         </h5>
                         <div class="dropdown me-2 flex-shrink-0" style="position: relative;">
