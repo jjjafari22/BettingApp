@@ -94,7 +94,7 @@ namespace BettingApp.Services
 
                 if (string.IsNullOrEmpty(dbBet.AiVisionResultJson)) return;
 
-                string? result = await _aiVisionService.ConfirmOutcomeAsync(dbBet.AiVisionResultJson, dbBet.CreatedAt, dbBet.Id);
+                string? result = await _aiVisionService.ConfirmOutcomeAsync(dbBet.AiVisionResultJson, dbBet.CreatedAt, dbBet.MatchStartTime, dbBet.Id);
                 
                 dbBet.AiOutcomeResult = result;
                 

@@ -42,6 +42,9 @@ namespace BettingApp.Services
         [JsonPropertyName("badges")]
         public List<string> Badges { get; set; } = new();
 
+        [JsonPropertyName("matchDate")]
+        public string MatchDate { get; set; } = "";
+
         [JsonPropertyName("odds")]
         public string Odds { get; set; } = "";
         
@@ -169,6 +172,7 @@ namespace BettingApp.Services
                              "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! " +
                              "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! " +
                              "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or visual icons near the bet (e.g., 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost'). IMPORTANT FOR POWER SUB: Some bookmakers do not write the text, but instead use a visual icon next to the player (such as two arrows pointing in opposite directions, a 'swap' symbol, or a substitution icon). If you see a visual icon that clearly represents a player substitution, you MUST add 'Power Sub' to this array. Be careful not to confuse generic UI arrows (like dropdown arrows) with a substitution icon! " +
+                             "   - matchDate (e.g. '22.Aug 04:00', 'Tomorrow 18:00', or '2023-10-25'). CRITICAL: Look very carefully for the kickoff date and time for this match printed on the slip, or the date the bet was placed. Extract exactly what you see. If missing, return null. " +
                              "   - odds (e.g. '1.95'). " +
                              "Return ONLY a raw JSON object with keys: bookmaker, isCombo, totalOdds, stake, legs. Ensure ALL numeric values (like totalOdds, stake, and odds) are formatted as strings, but keep isCombo as a boolean. Do not include markdown blocks like ```json.";
 
@@ -308,7 +312,7 @@ namespace BettingApp.Services
             }
         }
 
-        public async Task<string?> ConfirmOutcomeAsync(string extractedBetDataJson, DateTime betPlacedAt, int? betId = null)
+        public async Task<string?> ConfirmOutcomeAsync(string extractedBetDataJson, DateTime betPlacedAt, DateTime? matchStartTime = null, int? betId = null)
         {
             var token = await GetVertexAccessTokenAsync();
             if (string.IsNullOrEmpty(token)) return "Error: Gemini Auth Token missing.";
@@ -326,9 +330,11 @@ namespace BettingApp.Services
                              $"CRITICAL FOR EXTRA TIME: Unless the market explicitly says 'To Qualify', 'To Lift Trophy', or 'Including Extra Time', ALL bets (goals, cards, corners, match result, player props) apply ONLY to Regular Time (90 minutes + injury time). Events that occur in Extra Time (e.g., the 111th minute of a 120-minute match) DO NOT COUNT! For example, if a player receives a yellow card in Extra Time, a standard 'Player Booked' bet is LOST.\n" +
                              $"CRITICAL FOR SCREENSHOTS: I will attach the RAW JSON statistics fetched directly from the FotMob API for the matches in this bet slip if available. You MUST carefully parse this JSON to find the exact scores for the specific teams requested in the bet legs! This JSON data is your absolute primary source of truth.\n" +
                              $"CRITICAL FOR FALLBACK / GOOGLE SEARCH: If FotMob lacks data AND the match has started, you MUST use your Google Search tool (checking ESPN, Flashscore, etc.). If the match has NOT STARTED, do NOT use Google Search for stats! DO NOT guess stats. When searching, you MUST strictly verify two things:\n" +
-                             $"1. THE DATE: Ensure the match occurred on or near the correct date listed in the bet slip. If no explicit StartTime is given, you MUST find the MOST RECENT match played between them. If you find a match from months ago, DO NOT use it!\n" +
+                             (matchStartTime.HasValue 
+                                 ? $"1. THE DATE TIMEFRAME: We have ALREADY determined the exact start time for this match from our API: {matchStartTime.Value:yyyy-MM-dd HH:mm} UTC. You MUST find the match that corresponds to this EXACT UTC date and time! Do not pick a match from days, weeks or months before or after this exact timestamp.\n"
+                                 : $"1. THE DATE TIMEFRAME: The exact match time is unknown, but this bet slip was uploaded at {betPlacedAt:yyyy-MM-dd HH:mm} UTC. You MUST find the VERY FIRST match played chronologically ON OR AFTER this upload time. Do not pick a match from weeks or months before the upload time!\n") +
                              $"2. THE TEAMS/PLAYERS ORDER: You must strictly verify the exact order of the players/teams (Home vs Away). A match between 'Player A vs Player B' is fundamentally different from 'Player B vs Player A'. If they played multiple times recently, the Home/Away order is your source of truth to pick the right match!\n" +
-                             $"CRITICAL FOR SOURCES: For every match, explicitly state 'Verified via provided FotMob JSON' or 'Verified via Google Search' directly in the 'stats' field for each leg. If you use Google Search, you MUST include exactly ONE URL to the specific source page you used to find the result (e.g. Flashscore, Sofascore, or ESPN).\n" +
+                             $"CRITICAL FOR SOURCES: For every match, explicitly state 'Verified via provided FotMob JSON' or 'Verified via Google Search' directly in the 'stats' field for each leg. If you use Google Search, you MUST include exactly ONE URL to the specific source page you used to find the result. DO NOT just link to the homepage (e.g. https://www.sofascore.com)! You MUST link to the EXACT match or boxscore page (e.g. https://www.sofascore.com/tennis/match/zverev-paul/xyz) where you read the specific statistics.\n" +
                              $"CRITICAL FOR PLAYER PROPS (STARTER RULE): Unless explicitly stated otherwise (e.g., 'To Score As Substitute'), ALL player proposition bets (e.g., Goalscorer, Player to be Carded, Shots, Assists, Tackles, Passes) apply ONLY if the specified player is in the STARTING XI for their team. If the player does not start the match, the bet outcome MUST be marked as 'Void', regardless of whether they were substituted on later and regardless of their actual performance. You MUST verify the player is in the 'starters' list in the provided lineup data. If the player is in 'subs' or missing, the bet is Void.\n" +
                              $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)' (which also covers 'Super Sub' and 'Sub on Play On'), it means the bet transfers to the substitute! If the named player is substituted off, the stats of the player who comes on for them MUST be added to their total! To do this, look at the FotMob 'events' array for a 'Substitution' event where the 'swap' array contains the named player. The other player in that 'swap' array is the substitute who came on. You MUST find both players in the 'playerStats' dictionary and mathematically add their stats together to determine the final outcome.\n" +
                              $"Check if the matches are finished, live, or not started. Determine if the overall bet was Won, Lost, or Void based on the results.\n" +
