@@ -1467,7 +1467,8 @@
         using var context = DbFactory.CreateDbContext();
         totalApprovedBets = await context.Bets.CountAsync(b => b.Status == "Approved");
         approvedBets = await context.Bets.Where(b => b.Status == "Approved")
-            .OrderByDescending(b => b.UpdatedAt)
+            .OrderBy(b => b.NextCheckTime.HasValue)
+            .ThenBy(b => b.NextCheckTime)
             .Skip((approvedPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
