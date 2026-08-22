@@ -119,6 +119,14 @@ public class SportsGameOddsService
                     if (string.IsNullOrEmpty(p2) && awayNames.TryGetProperty("medium", out var am)) p2 = am.GetString() ?? "";
                 }
 
+                // Skip Simulated Reality Leagues (SRL) and e-soccer matches
+                if (p1.EndsWith(" SRL", StringComparison.OrdinalIgnoreCase) || p2.EndsWith(" SRL", StringComparison.OrdinalIgnoreCase) ||
+                    p1.Contains(" SRL ", StringComparison.OrdinalIgnoreCase) || p2.Contains(" SRL ", StringComparison.OrdinalIgnoreCase) ||
+                    p1.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || p2.Contains("Esoccer", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 bool homeMatch = homeTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
                 bool awayMatch = string.IsNullOrEmpty(awayTeam) || awayTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
 

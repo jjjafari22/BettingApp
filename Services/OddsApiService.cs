@@ -151,6 +151,14 @@ public class OddsApiService
                 string p1 = f.TryGetProperty("participant1Name", out var p1n) ? (p1n.GetString() ?? "") : "";
                 string p2 = f.TryGetProperty("participant2Name", out var p2n) ? (p2n.GetString() ?? "") : "";
                 
+                // Skip Simulated Reality Leagues (SRL) and e-soccer matches which pollute OddsPapi
+                if (p1.EndsWith(" SRL", StringComparison.OrdinalIgnoreCase) || p2.EndsWith(" SRL", StringComparison.OrdinalIgnoreCase) ||
+                    p1.Contains(" SRL ", StringComparison.OrdinalIgnoreCase) || p2.Contains(" SRL ", StringComparison.OrdinalIgnoreCase) ||
+                    p1.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || p2.Contains("Esoccer", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                
                 bool homeMatch = homeTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
                 bool awayMatch = string.IsNullOrEmpty(awayTeam) || awayTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
 
