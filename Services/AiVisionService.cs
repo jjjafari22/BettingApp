@@ -206,12 +206,11 @@ namespace BettingApp.Services
                 var resolvedModel = "gemini-3.7-flash";
 
                 var apiUrl = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
 
-                var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel);
+                var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token);
                 string responseString = await response.Content.ReadAsStringAsync();
                 
                 if (response.IsSuccessStatusCode)
@@ -404,12 +403,11 @@ namespace BettingApp.Services
                 var resolvedModel = "gemini-3.7-flash";
 
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 
                 betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
                 
-                var response = await SendWithRetryAsync(url, jsonPayload, betLabel);
+                var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token);
                 if (!response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync();
@@ -500,11 +498,10 @@ namespace BettingApp.Services
                 var resolvedModel = "gemini-3.7-flash";
 
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 string betLabel = "[Match Start Time] ";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}calling Gemini (Model: {resolvedModel})...");
                 
-                var response = await SendWithRetryAsync(url, jsonPayload, betLabel);
+                var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token);
                 
                 if (!response.IsSuccessStatusCode) return null;
 
@@ -561,15 +558,21 @@ namespace BettingApp.Services
             catch { }
         }
 
-        private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "")
+        private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "", string token = "")
         {
             int maxRetries = 3;
             for (int i = 0; i < maxRetries; i++)
             {
                 try
                 {
-                    var requestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-                    var response = await _httpClient.PostAsync(url, requestContent);
+                    var request = new HttpRequestMessage(HttpMethod.Post, url);
+                    request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                    if (!string.IsNullOrEmpty(token))
+                    {
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    }
+                    
+                    var response = await _httpClient.SendAsync(request);
                     
                     if (response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable || response.StatusCode == (System.Net.HttpStatusCode)429)
                     {
