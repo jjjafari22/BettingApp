@@ -956,9 +956,15 @@
     
                         <th style="width: 150px;">Action</th>
                         <th style="width: 110px;">AI Outcome</th>
-                        <th style="width: 130px;">Auto-Tracking</th>
+                        <th style="width: 130px; cursor: pointer;" @onclick="@(() => SortApproved("NextCheckTime"))">
+                            Auto-Tracking 
+                            @if (approvedSortColumn == "NextCheckTime") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
                         <th>ID</th>
-                        <th class="text-nowrap">Last Updated</th>
+                        <th class="text-nowrap" style="cursor: pointer;" @onclick="@(() => SortApproved("UpdatedAt"))">
+                            Last Updated
+                            @if (approvedSortColumn == "UpdatedAt") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
   
                         <th>Discord Username</th>
                         <th>Last Name</th>
@@ -1165,6 +1171,8 @@
     private Dictionary<string, (string DiscordName, string LastName, string DiscordUserId)> userLookup = new();
     private int pendingPage = 1;
     private int approvedPage = 1;
+    private string approvedSortColumn = "UpdatedAt";
+    private bool approvedSortDesc = true;
     private int completedPage = 1;
     private int pageSize = 25;
     
@@ -1466,9 +1474,28 @@
     {
         using var context = DbFactory.CreateDbContext();
         totalApprovedBets = await context.Bets.CountAsync(b => b.Status == "Approved");
-        approvedBets = await context.Bets.Where(b => b.Status == "Approved")
-            .OrderBy(b => b.NextCheckTime.HasValue)
-            .ThenBy(b => b.NextCheckTime)
+        var query = context.Bets.Where(b => b.Status == "Approved");
+        
+        if (approvedSortColumn == "NextCheckTime")
+        {
+            if (approvedSortDesc)
+            {
+                query = query.OrderByDescending(b => b.NextCheckTime.HasValue).ThenByDescending(b => b.NextCheckTime);
+            }
+            else
+            {
+                query = query.OrderBy(b => b.NextCheckTime.HasValue).ThenBy(b => b.NextCheckTime);
+            }
+        }
+        else
+        {
+            if (approvedSortDesc)
+                query = query.OrderByDescending(b => b.UpdatedAt);
+            else
+                query = query.OrderBy(b => b.UpdatedAt);
+        }
+
+        approvedBets = await query
             .Skip((approvedPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -1481,6 +1508,21 @@
     
     private async Task NextApprovedPage() { approvedPage++; await LoadApprovedBets(); }
     private async Task PrevApprovedPage() { if (approvedPage > 1) { approvedPage--; await LoadApprovedBets(); } }
+    
+    private async Task SortApproved(string column)
+    {
+        if (approvedSortColumn == column)
+        {
+            approvedSortDesc = !approvedSortDesc;
+        }
+        else
+        {
+            approvedSortColumn = column;
+            approvedSortDesc = false; // default to ascending on new column
+        }
+        approvedPage = 1;
+        await LoadApprovedBets();
+    }
 
     private async Task LoadCompletedBets()
     {
