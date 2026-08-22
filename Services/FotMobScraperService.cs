@@ -320,6 +320,15 @@ namespace BettingApp.Services
                             else if (isHome.ValueKind == System.Text.Json.JsonValueKind.False) dict["isHome"] = false;
                         }
 
+                        if (ev.TryGetProperty("swap", out var swap) && swap.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            var swapArr = new System.Collections.Generic.List<string>();
+                            foreach (var s in swap.EnumerateArray())
+                            {
+                                if (s.TryGetProperty("name", out var sName)) swapArr.Add(sName.GetString() ?? "");
+                            }
+                            if (swapArr.Count > 0) dict["swap"] = swapArr;
+                        }
                         
                         flatEvents.Add(dict);
                     }

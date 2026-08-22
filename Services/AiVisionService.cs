@@ -168,7 +168,7 @@ namespace BettingApp.Services
                              "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST translate the team names into their standard, globally recognized English names (e.g. you MUST output 'FC Copenhagen' instead of 'FC København', and 'Bayern Munich' instead of 'Bayern München'). This is required for our Odds API to find the match. " +
                              "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! " +
                              "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! " +
-                             "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or icons near the bet (e.g., 'Power Sub', 'Early Payout', 'Super Boost'). If you see any, add them to this array! " +
+                             "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or icons near the bet (e.g., 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost'). If you see any, add them to this array! " +
                              "   - odds (e.g. '1.95'). " +
                              "Return ONLY a raw JSON object with keys: bookmaker, isCombo, totalOdds, stake, legs. Ensure ALL numeric values (like totalOdds, stake, and odds) are formatted as strings, but keep isCombo as a boolean. Do not include markdown blocks like ```json.";
 
@@ -260,9 +260,37 @@ namespace BettingApp.Services
                     {
                         foreach (var leg in result.Legs)
                         {
-                            if (leg.Badges != null && leg.Badges.Any(b => b.Contains("Power Sub", StringComparison.OrdinalIgnoreCase) || b.Contains("Substitute", StringComparison.OrdinalIgnoreCase)))
+                            if (leg == null) continue;
+                            bool isPowerSub = false;
+                            
+                            if (leg.Badges != null && leg.Badges.Any(b => b != null && (
+                                b.Contains("Power Sub", StringComparison.OrdinalIgnoreCase) || 
+                                b.Contains("Substitute", StringComparison.OrdinalIgnoreCase) ||
+                                b.Contains("Super Sub", StringComparison.OrdinalIgnoreCase) ||
+                                b.Contains("Sub on Play", StringComparison.OrdinalIgnoreCase) ||
+                                b.Contains("Sub On", StringComparison.OrdinalIgnoreCase))))
                             {
-                                if (!leg.Selection.Contains("(Power Sub)")) leg.Selection += " (Power Sub)";
+                                isPowerSub = true;
+                            }
+                            
+                            if (!isPowerSub)
+                            {
+                                string combinedText = $"{(leg.Market ?? "")} {(leg.Selection ?? "")}";
+                                if (combinedText.Contains("Power Sub", StringComparison.OrdinalIgnoreCase) || 
+                                    combinedText.Contains("Sub on Play", StringComparison.OrdinalIgnoreCase) ||
+                                    combinedText.Contains("Super Sub", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    isPowerSub = true;
+                                }
+                            }
+
+                            if (isPowerSub) 
+                            {
+                                leg.Selection = leg.Selection ?? "";
+                                if (!leg.Selection.Contains("(Power Sub)"))
+                                {
+                                    leg.Selection += " (Power Sub)";
+                                }
                             }
                         }
                     }
@@ -276,7 +304,7 @@ namespace BettingApp.Services
             catch (Exception ex)
             {
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}EXCEPTION in ExtractBetSlipDataAsync: {ex.Message}");
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}EXCEPTION in ExtractBetSlipDataAsync: {ex.ToString()}");
                 return (null, $"Exception: {ex.Message}");
             }
         }
@@ -303,7 +331,7 @@ namespace BettingApp.Services
                              $"2. THE TEAMS/PLAYERS ORDER: You must strictly verify the exact order of the players/teams (Home vs Away). A match between 'Player A vs Player B' is fundamentally different from 'Player B vs Player A'. If they played multiple times recently, the Home/Away order is your source of truth to pick the right match!\n" +
                              $"CRITICAL FOR SOURCES: For every match, explicitly state 'Verified via provided FotMob JSON' or 'Verified via Google Search' directly in the 'stats' field for each leg. If you use Google Search, you MUST include exactly ONE URL to the specific source page you used to find the result (e.g. Flashscore, Sofascore, or ESPN).\n" +
                              $"CRITICAL FOR PLAYER PROPS (STARTER RULE): Unless explicitly stated otherwise (e.g., 'To Score As Substitute'), ALL player proposition bets (e.g., Goalscorer, Player to be Carded, Shots, Assists, Tackles, Passes) apply ONLY if the specified player is in the STARTING XI for their team. If the player does not start the match, the bet outcome MUST be marked as 'Void', regardless of whether they were substituted on later and regardless of their actual performance. You MUST verify the player is in the 'starters' list in the provided lineup data. If the player is in 'subs' or missing, the bet is Void.\n" +
-                             $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)', it means the bet transfers to the substitute! If the named player is substituted off, the stats of the player who comes on for them MUST be added to their total! You must find who was substituted on for that player and combine their stats to determine the outcome.\n" +
+                             $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)' (which also covers 'Super Sub' and 'Sub on Play On'), it means the bet transfers to the substitute! If the named player is substituted off, the stats of the player who comes on for them MUST be added to their total! To do this, look at the FotMob 'events' array for a 'Substitution' event where the 'swap' array contains the named player. The other player in that 'swap' array is the substitute who came on. You MUST find both players in the 'playerStats' dictionary and mathematically add their stats together to determine the final outcome.\n" +
                              $"Check if the matches are finished, live, or not started. Determine if the overall bet was Won, Lost, or Void based on the results.\n" +
                              $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
                              $"CRITICAL FOR SPLIT ASIAN LINES (Half-Win / Half-Loss): If a bet features a split Asian line (e.g., '-0.5, -1.0', 'Over 2.0, 2.5', '2.25', '2.75') AND the final result causes one half of the bet to Win while the other half Voids (a Half-Win), OR one half to Lose while the other half Voids (a Half-Loss), YOU MUST mark the leg outcome as 'UNKNOWN'. Do NOT mark it as Won, Lost, or Void! You may only mark a split Asian line as 'Won' if BOTH halves win completely, or 'Lost' if BOTH halves lose completely. If the result is split/mixed, you must use 'UNKNOWN'.\n" +
