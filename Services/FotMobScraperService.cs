@@ -208,8 +208,8 @@ namespace BettingApp.Services
 
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Found Match ID {eventId} for {matchName}");
 
-                // 2. Fetch Match HTML
-                string matchHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/match/{eventId}");
+                // 2. Fetch Match HTML (Bust CDN cache with a unique timestamp)
+                string matchHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/match/{eventId}?_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}");
                 
                 // 3. Extract SSR JSON
                 var match = System.Text.RegularExpressions.Regex.Match(matchHtml, @"<script id=""__NEXT_DATA__"" type=""application/json"">(.*?)</script>");
