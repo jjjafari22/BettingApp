@@ -2388,7 +2388,13 @@
         {
             if (dbBet.Status != originalStatus)
             {
-                 errorMessage = $"Action aborted: Bet #{bet.Id} was already updated to '{dbBet.Status}' by another admin.";
+                 var lastAudit = await context.AuditLogs
+                    .Where(a => a.Details.Contains($"Bet ID: {bet.Id}"))
+                    .OrderByDescending(a => a.Timestamp)
+                    .FirstOrDefaultAsync();
+                 
+                 string otherAdminName = lastAudit != null ? lastAudit.AdminUserName : "another admin";
+                 errorMessage = $"Action aborted: Bet #{bet.Id} was already updated to '{dbBet.Status}' by Admin {otherAdminName}.";
                  await LoadPendingBets();
                  await LoadApprovedBets();
                  await LoadCompletedBets();
