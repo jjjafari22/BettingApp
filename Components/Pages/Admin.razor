@@ -1539,10 +1539,25 @@
                 .ToListAsync();
 
             var mismatchedIds = allCompleted.Where(b => 
-                (b.Status == "Won" && !b.AiOutcomeResult!.Contains("MATCH FINISHED - WON") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"WON\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"WON\"") && b.AiOutcomeResult != "WON") ||
-                (b.Status == "Lost" && !b.AiOutcomeResult!.Contains("MATCH FINISHED - LOST") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"LOST\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"LOST\"") && b.AiOutcomeResult != "LOST") ||
-                (b.Status == "Void" && !b.AiOutcomeResult!.Contains("MATCH FINISHED - VOID") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"MATCH VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"MATCH VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\": \"VOID\"") && !b.AiOutcomeResult.Contains("\"overallStatus\":\"VOID\"") && b.AiOutcomeResult != "VOID")
-            ).Select(b => b.Id).ToList();
+            {
+                string aiStatus = "";
+                try {
+                    var doc = System.Text.Json.JsonDocument.Parse(b.AiOutcomeResult!);
+                    if (doc.RootElement.TryGetProperty("overallStatus", out var prop))
+                    {
+                        aiStatus = prop.GetString()?.Trim().ToUpperInvariant() ?? "";
+                    }
+                } catch {}
+
+                if (string.IsNullOrEmpty(aiStatus)) return false;
+                
+                if (aiStatus.Contains("WON")) aiStatus = "WON";
+                else if (aiStatus.Contains("LOST")) aiStatus = "LOST";
+                else if (aiStatus.Contains("VOID")) aiStatus = "VOID";
+                // UNKNOWN remains UNKNOWN
+
+                return b.Status.ToUpperInvariant() != aiStatus;
+            }).Select(b => b.Id).ToList();
 
             query = query.Where(b => mismatchedIds.Contains(b.Id));
         }
@@ -2637,10 +2652,10 @@
                     builder.AddAttribute(1, "class", "badge bg-secondary text-light shadow-sm");
                     builder.AddContent(2, "➖ Void");
                     builder.CloseElement();
-                } else if (lowerStatus.Contains("unknown") || lowerStatus.Contains("not sure")) {
+                } else if (lowerStatus.Contains("unknown")) {
                     builder.OpenElement(0, "span");
                     builder.AddAttribute(1, "class", "badge bg-warning text-dark shadow-sm");
-                    builder.AddContent(2, "❓ Not Sure");
+                    builder.AddContent(2, "❓ Unknown");
                     builder.CloseElement();
                 }
                 return;
@@ -2665,11 +2680,10 @@
                     if (doc.RootElement.TryGetProperty("overallStatus", out var statusProp))
                     {
                         var status = statusProp.GetString()?.Trim().ToUpperInvariant() ?? "";
-                        isFinished = 
-                            status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
-                            status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
-                            status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
-                            status == "UNKNOWN";
+                        isFinished = status == "WON" || status == "LOST" || status == "VOID" || status == "UNKNOWN" ||
+                            status == "MATCH FINISHED - WON" || status == "MATCH WON" || 
+                            status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || 
+                            status == "MATCH FINISHED - VOID" || status == "MATCH VOID";
                     }
                 } catch { }
             }

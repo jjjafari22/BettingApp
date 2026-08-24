@@ -337,22 +337,13 @@ namespace BettingApp.Services
                              $"CRITICAL FOR SOURCES: For every match, explicitly state 'Verified via provided FotMob JSON' or 'Verified via Google Search' directly in the 'stats' field for each leg. If you use Google Search, you MUST include exactly ONE URL to the specific source page you used to find the result. DO NOT just link to the homepage (e.g. https://www.sofascore.com)! You MUST link to the EXACT match or boxscore page (e.g. https://www.sofascore.com/tennis/match/zverev-paul/xyz) where you read the specific statistics.\n" +
                              $"CRITICAL FOR PLAYER PROPS (STARTER RULE): Unless explicitly stated otherwise (e.g., 'To Score As Substitute'), ALL player proposition bets (e.g., Goalscorer, Player to be Carded, Shots, Assists, Tackles, Passes) apply ONLY if the specified player is in the STARTING XI for their team. If the player does not start the match, the bet outcome MUST be marked as 'Void', regardless of whether they were substituted on later and regardless of their actual performance. You MUST verify the player is in the 'starters' list in the provided lineup data. If the player is in 'subs' or missing, the bet is Void.\n" +
                              $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)' (which also covers 'Super Sub' and 'Sub on Play On'), it means the bet transfers to the substitute! If the named player is substituted off, the stats of the player who comes on for them MUST be added to their total! To do this, look at the FotMob 'events' array for a 'Substitution' event where the 'swap' array contains the named player. The other player in that 'swap' array is the substitute who came on. You MUST find both players in the 'playerStats' dictionary and mathematically add their stats together to determine the final outcome.\n" +
-                             $"Check if the matches are finished, live, or not started. Determine if the overall bet was Won, Lost, or Void based on the results.\n" +
                              $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
                              $"CRITICAL FOR SPLIT ASIAN LINES (Half-Win / Half-Loss): If a bet features a split Asian line (e.g., '-0.5, -1.0', 'Over 2.0, 2.5', '2.25', '2.75') AND the final result causes one half of the bet to Win while the other half Voids (a Half-Win), OR one half to Lose while the other half Voids (a Half-Loss), YOU MUST mark the leg outcome as 'UNKNOWN'. Do NOT mark it as Won, Lost, or Void! You may only mark a split Asian line as 'Won' if BOTH halves win completely, or 'Lost' if BOTH halves lose completely. If the result is split/mixed, you must use 'UNKNOWN'.\n" +
                              $"CRITICAL FOR COMBO BETS: Evaluate each leg COMPLETELY INDEPENDENTLY! Even if multiple legs are for the same match, you MUST write a unique, specific 'stats' reasoning for EACH leg based on its specific Market and Selection. Do NOT copy and paste the same stats reasoning across multiple legs. For example, if Leg 1 is a Goalscorer and Leg 2 is a Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.\n" +
-                             $"CRITICAL FOR OVERALL STATUS: The 'overallStatus' field tells us if the USER WON OR LOST THEIR BET SLIP. It has NOTHING to do with which sports team won the actual match! Even if the player's team loses the match 0-5, if the user bet on 'Over 2.5 fouls' and the player got 3 fouls, the overall bet is WON! You MUST evaluate the overallStatus SOLELY on the leg outcomes. It MUST be exactly one of the following strings:\n" +
-                             $"- 'LOST' (if ANY single leg in the bet has definitively lost. One lost leg ruins the entire combo!)\n" +
-                             $"- 'WON' (if ALL legs in the bet are 'Won', or a mix of 'Won' and 'Void'. A bet slip is WON if the user's specific picks succeeded!)\n" +
-                             $"- 'VOID' (ONLY if EVERY SINGLE LEG in the bet was voided)\n" +
-                             $"- 'MATCH NOT STARTED' (if the match has not started yet)\n" +
-                             $"- 'MATCH IN PROGRESS' (if NO legs have lost, but AT LEAST ONE leg is still pending or the match is live) \n" +
-                             $"- 'UNKNOWN' (if the match is finished but the specific prop result cannot be found yet)\n" +
-                             $"CRITICAL FOR LIVE STATUS: If the match is live/ongoing, DO NOT grade the bet UNLESS the specific market has already definitively concluded (e.g., an 'Over' bet that already hit, an 'Under' bet that already busted, or a '1st Half' bet when it is currently the 2nd half). If the market's outcome is still mathematically possible to change, mark the leg as 'Pending' and use 'MATCH IN PROGRESS'.\n" +
                              $"CRITICAL FOR SCHEDULING: If the match has NOT STARTED (e.g. general.started is false), you MUST NOT grade ANY legs as Won or Lost; all legs must be 'Pending'. You must also determine its exact kickoff time in UTC. If the kickoff time is ALREADY clearly stated in the bet slip data (e.g. 'Starts: 28.Jul 11:00'), you MUST parse it directly and DO NOT use Google Search. Only use Google Search if the start time is missing. Return it in ISO 8601 format in the `matchStartTimeIso` field (e.g. \"2026-07-25T19:00:00Z\").\n" +
-                             $"Return a strictly formatted JSON object with the following schema:\n" +
-                             $"{{ \"matchStartTimeIso\": \"2026-07-25T19:00:00Z\", \"fullAnalysis\": \"Your detailed reasoning formatted with \n line breaks...\", \"legs\": [ {{ \"match\": \"Team A vs Team B\", \"outcome\": \"Won\", \"stats\": \"e.g. 12 corners, or Match starts in 2 hours.\" }} ], \"overallStatus\": \"WON\" }}\n" +
                              $"CRITICAL FOR OUTCOMES: For the 'outcome' field in each leg, you MUST strictly use exactly one of these words: 'Won', 'Lost', 'Void', 'Pending', or 'Unknown'. DO NOT use any emojis! DO NOT add extra text!\n" +
+                             $"Return a strictly formatted JSON object with the following schema:\n" +
+                             $"{{ \"matchStartTimeIso\": \"2026-07-25T19:00:00Z\", \"fullAnalysis\": \"Your detailed reasoning formatted with \n line breaks...\", \"legs\": [ {{ \"match\": \"Team A vs Team B\", \"outcome\": \"Won\", \"stats\": \"e.g. 12 corners, or Match starts in 2 hours.\" }} ] }}\n" +
                              $"Return ONLY valid JSON. Do not include markdown code blocks.";
 
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -447,22 +438,36 @@ namespace BettingApp.Services
                 {
                     try
                     {
-                        using var resultDoc = JsonDocument.Parse(finalJson);
-                        string localBetLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
-                        
-                        string status = resultDoc.RootElement.TryGetProperty("overallStatus", out var os) ? os.GetString() ?? "UNKNOWN" : "UNKNOWN";
-                        bool hasStartTime = resultDoc.RootElement.TryGetProperty("matchStartTimeIso", out var ms) && !string.IsNullOrEmpty(ms.GetString());
-                        
-                        if (status == "MATCH NOT STARTED" && hasStartTime)
+                        var resOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var resultObj = JsonSerializer.Deserialize<AiOutcomeResultData>(finalJson, resOptions);
+                        if (resultObj != null && resultObj.Legs != null && resultObj.Legs.Count > 0)
                         {
-                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {localBetLabel} AI: Found start time via Google Search -> {ms.GetString()}");
+                            var outcomes = resultObj.Legs.Select(l => l.Outcome?.ToUpperInvariant() ?? "").ToList();
+                            
+                            if (outcomes.Any(o => o == "LOST")) resultObj.OverallStatus = "LOST";
+                            else if (outcomes.Any(o => o == "UNKNOWN")) resultObj.OverallStatus = "UNKNOWN";
+                            else if (outcomes.Any(o => o == "PENDING")) resultObj.OverallStatus = "MATCH IN PROGRESS";
+                            else if (outcomes.All(o => o == "WON")) resultObj.OverallStatus = "WON";
+                            else if (outcomes.All(o => o == "VOID")) resultObj.OverallStatus = "VOID";
+                            else resultObj.OverallStatus = "UNKNOWN"; // Mix of Won and Void
+                            
+                            finalJson = JsonSerializer.Serialize(resultObj, new JsonSerializerOptions { WriteIndented = false });
+                        }
+                        
+                        string localBetLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
+                        string status = resultObj?.OverallStatus ?? "UNKNOWN";
+                        bool hasStartTime = !string.IsNullOrEmpty(resultObj?.MatchStartTimeIso);
+                        
+                        if (status == "MATCH IN PROGRESS" && hasStartTime)
+                        {
+                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {localBetLabel} AI: Found start time -> {resultObj!.MatchStartTimeIso}");
                         }
                         else
                         {
                             Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {localBetLabel} AI: Checked outcome -> Status: {status}");
                         }
                     }
-                    catch { } // ignore parsing errors for logging
+                    catch { } // ignore parsing errors
                 }
 
                 return finalJson;

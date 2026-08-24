@@ -110,11 +110,7 @@ namespace BettingApp.Services
                         if (doc.RootElement.TryGetProperty("overallStatus", out var statusElement))
                         {
                             var status = statusElement.GetString()?.Trim().ToUpperInvariant() ?? "";
-                            var isFinished = 
-                                status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
-                                status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
-                                status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
-                                status == "UNKNOWN";
+                            var isFinished = status == "WON" || status == "LOST" || status == "VOID" || status == "UNKNOWN";
 
                             if (isFinished)
                             {
@@ -123,7 +119,7 @@ namespace BettingApp.Services
                             }
                             else 
                             {
-                                // Match is still running or unknown.
+                                // Match is still running.
                                 // First check if the AI provided a precise kickoff time (e.g. OddsPapi failed earlier)
                                 if (doc.RootElement.TryGetProperty("matchStartTimeIso", out var startTimeElement) && 
                                     !string.IsNullOrEmpty(startTimeElement.GetString()))
