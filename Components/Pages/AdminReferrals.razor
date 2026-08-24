@@ -564,7 +564,8 @@ else
         await HubContext.Clients.Group(referrer.Id).SendAsync("ReceiveUpdate", $"You received a referral bonus of {payout:N0} FB!");
         _ = DiscordService.NotifyUserFreeBetAsync(referrer.DiscordUserId, (int)payout, $"Referral Bonus ({msg}) for inviting {dbRef.ReferredUserName}");
         
-        successMessage = $"Successfully paid {payout:N0} FB to {referrer.UserName}.";
+        var displayUserName = !string.IsNullOrEmpty(referrer.DiscordUsername) ? referrer.DiscordUsername : referrer.UserName;
+        successMessage = $"Successfully paid {payout:N0} FB to {displayUserName}.";
         await LoadData();
     }
     

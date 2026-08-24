@@ -772,8 +772,11 @@ else
                                         await bgContext.SaveChangesAsync();
                                         System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Saved to DB (Pending) and broadcasted SignalR.\n");
                                         
+                                        var submitterUser = await bgContext.Users.AsNoTracking().Where(u => u.Id == dbBet.UserId).Select(u => new { u.DiscordUsername }).FirstOrDefaultAsync();
+                                        var displayUserName = !string.IsNullOrEmpty(submitterUser?.DiscordUsername) ? submitterUser.DiscordUsername : dbBet.UserName;
+
                                         await hub.Clients.All.SendAsync("ReceiveBetUpdate", dbBet.Id);
-                                        await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {dbBet.UserName}");
+                                        await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {displayUserName}");
                                         await discord.NotifyAdminNewPickAsync(dbBet);
                                     }
                                     else
@@ -841,7 +844,11 @@ else
                 dbBet.UpdatedAt = DateTime.UtcNow;
                 
                 await context.SaveChangesAsync();
-                await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"Pick cancelled by {dbBet.UserName}");
+
+                var submitterUser = await context.Users.AsNoTracking().Where(u => u.Id == dbBet.UserId).Select(u => new { u.DiscordUsername }).FirstOrDefaultAsync();
+                var displayUserName = !string.IsNullOrEmpty(submitterUser?.DiscordUsername) ? submitterUser.DiscordUsername : dbBet.UserName;
+
+                await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"Pick cancelled by {displayUserName}");
 
                 SuccessMessage = "Pick cancelled successfully.";
                 if (viewBetModel?.Id == bet.Id) CloseViewModal();
