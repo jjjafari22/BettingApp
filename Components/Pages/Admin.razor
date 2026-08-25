@@ -141,6 +141,7 @@
                  
                         <h5 class="modal-title fs-6 me-2 flex-grow-1" style="line-height: 1.4;">
                             <span class="badge @GetStatusBadgeClass(reviewingBetModel.Status) me-2 align-middle">@reviewingBetModel.Status</span>
+                            @GetLivePlacedBadge(reviewingBetModel, "me-2 align-middle")
                             <span class="align-middle">Bet #@reviewingBetModel.Id</span> 
                             <span class="text-muted ms-sm-2 fw-normal d-block d-sm-inline mt-1 mt-sm-0" style="font-size: 0.9rem; word-break: break-all;">
                                 @{
@@ -303,6 +304,7 @@
                                         <div class="mb-2">
                                             <strong>Bookmaker:</strong> @AiVisionResult!.Bookmaker <br/>
                                             <strong>Is Combo:</strong> @AiVisionResult!.IsCombo <br/>
+                                            <strong>Is Live Placed:</strong> @AiVisionResult!.IsLive <br/>
                                             <strong>Stake:</strong> @AiVisionResult!.Stake <br/>
                                             <strong>Total Odds:</strong> @AiVisionResult!.TotalOdds
                                         </div>
@@ -915,7 +917,7 @@
                                     <i class="bi bi-eye"></i> Review
                                 </button>
                              </td>
-                            <td>@bet.Id</td>
+                            <td><div class="d-flex flex-column align-items-start"><span>@bet.Id</span>@GetLivePlacedBadge(bet, "mt-1")</div></td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                             <td>
                                 @{
@@ -997,7 +999,7 @@
                                <td class="text-center">
                                    @GetMonitoringStatusBadge(bet)
                                </td>
-                            <td>@bet.Id</td>
+                            <td><div class="d-flex flex-column align-items-start"><span>@bet.Id</span>@GetLivePlacedBadge(bet, "mt-1")</div></td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
   
                             <td>
@@ -1111,7 +1113,7 @@
                                 }
                             </td>
                     
-                            <td>@bet.Id</td>
+                            <td><div class="d-flex flex-column align-items-start"><span>@bet.Id</span>@GetLivePlacedBadge(bet, "mt-1")</div></td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                             <td>
                                 @{
@@ -2733,6 +2735,24 @@
             }
         }
         catch { }
+    };
+
+    private RenderFragment GetLivePlacedBadge(Bet bet, string cssClass = "ms-2") => __builder =>
+    {
+        if (!string.IsNullOrEmpty(bet.AiVisionResultJson))
+        {
+            try 
+            {
+                var extraction = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(bet.AiVisionResultJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (extraction != null && extraction.IsLive)
+                {
+                    <span class="badge bg-danger shadow-sm @cssClass" title="This bet was placed while the match was live/in-play.">
+                        <i class="bi bi-broadcast me-1"></i> Live Bet
+                    </span>
+                }
+            }
+            catch { }
+        }
     };
 
     private RenderFragment GetMonitoringStatusBadge(Bet bet) => __builder =>
