@@ -202,13 +202,18 @@ namespace BettingApp.Services
                 }
             }
 
-            // Greedy matching for any remainder that didn't fit into a subset <= size 6
-            // We re-sort after EVERY transaction. This spreads the load across multiple users
-            // rather than completely "draining" the largest user and forcing them to make many payments.
+            // We track how many P2P transactions each user has made to prevent 
+            // a single user (like audunneg) from making 3 or 4 payments.
+            // By sorting by fewest transactions first, we distribute the payments safely.
+            var userTransactionCount = new Dictionary<string, int>();
+
             while (p2pDebtors.Count > 0 && p2pCreditors.Count > 0)
             {
-                p2pDebtors = p2pDebtors.OrderByDescending(x => x.Amount).ToList();
-                p2pCreditors = p2pCreditors.OrderByDescending(x => x.Amount).ToList();
+                p2pDebtors = p2pDebtors.OrderBy(x => userTransactionCount.GetValueOrDefault(x.Name, 0))
+                                       .ThenByDescending(x => x.Amount).ToList();
+                
+                p2pCreditors = p2pCreditors.OrderBy(x => userTransactionCount.GetValueOrDefault(x.Name, 0))
+                                           .ThenByDescending(x => x.Amount).ToList();
 
                 var debtor = p2pDebtors[0];
                 var creditor = p2pCreditors[0];
@@ -225,6 +230,9 @@ namespace BettingApp.Services
                     Amount = amount,
                     PaymentDetails = creditor.PaymentDetails
                 });
+                
+                userTransactionCount[debtor.Name] = userTransactionCount.GetValueOrDefault(debtor.Name, 0) + 1;
+                userTransactionCount[creditor.Name] = userTransactionCount.GetValueOrDefault(creditor.Name, 0) + 1;
 
                 var newDebtorAmount = debtor.Amount - amount;
                 var newCreditorAmount = creditor.Amount - amount;
