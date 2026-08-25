@@ -617,6 +617,35 @@
                                                                                         {
                                                                                             aiHc = parsedAiHc;
                                                                                         }
+                                                                                        else if (ActiveLookupLeg?.Market != null)
+                                                                                        {
+                                                                                            var mktRegex = new System.Text.RegularExpressions.Regex(@"(?:starts|\()(\d+[-:]\d+|[+-]\d+(?:\.\d+)?)\)?$");
+                                                                                            var mktMatch = mktRegex.Match(ActiveLookupLeg.Market.Replace(" ", "").ToLowerInvariant());
+                                                                                            if (mktMatch.Success)
+                                                                                            {
+                                                                                                string extractedHc = mktMatch.Groups[1].Value;
+                                                                                                if (extractedHc.Contains("-") && extractedHc.Length > 2 && extractedHc[0] != '-') // e.g. "0-2"
+                                                                                                {
+                                                                                                    var parts = extractedHc.Split('-');
+                                                                                                    if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                                                                                    {
+                                                                                                        aiHc = aiTarget == "1" ? (p1 - p2) : (aiTarget == "2" ? (p2 - p1) : (p1 - p2));
+                                                                                                    }
+                                                                                                }
+                                                                                                else if (extractedHc.Contains(":")) // e.g. "0:2"
+                                                                                                {
+                                                                                                    var parts = extractedHc.Split(':');
+                                                                                                    if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                                                                                    {
+                                                                                                        aiHc = aiTarget == "1" ? (p1 - p2) : (aiTarget == "2" ? (p2 - p1) : (p1 - p2));
+                                                                                                    }
+                                                                                                }
+                                                                                                else if (double.TryParse(extractedHc, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedMktHc))
+                                                                                                {
+                                                                                                    aiHc = aiTarget == "1" ? parsedMktHc : (aiTarget == "2" ? -parsedMktHc : parsedMktHc);
+                                                                                                }
+                                                                                            }
+                                                                                        }
                                                                                         
                                                                                         if (opHc.HasValue && aiHc.HasValue && Math.Abs(opHc.Value - aiHc.Value) < 0.001) logicallyMatched = true;
                                                                                         else if (!opHc.HasValue && !aiHc.HasValue) logicallyMatched = true;
