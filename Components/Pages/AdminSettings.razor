@@ -67,14 +67,23 @@ else
                 <div class="card-body">
                     @if (showDiscordSuccess)
                     {
-                        <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
-                            Discord cache refreshed successfully!
+                        var alertClass = discordMessage.StartsWith("Error") ? "alert-danger" : (discordMessage.StartsWith("Warning") ? "alert-warning" : "alert-success");
+                        <div class="alert @alertClass alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
+                            @discordMessage
                             <button type="button" class="btn-close" @onclick="() => showDiscordSuccess = false"></button>
                         </div>
                     }
                     <p class="form-text mb-3">Manually invalidate the Discord channel cache. Use this to immediately recognize newly created user admin channels without waiting for the automatic 60-minute refresh.</p>
                     <button type="button" class="btn btn-secondary" @onclick="RefreshDiscordCache">
                         <i class="bi bi-arrow-clockwise"></i> Refresh Discord Channels Cache
+                    </button>
+                    <hr class="my-4" />
+                    <p class="form-text mb-3">Sort all user text channels alphabetically within the <strong>Admins</strong>, <strong>Active Users</strong>, and <strong>Inactive Users</strong> categories.</p>
+                    <button type="button" class="btn btn-outline-primary" @onclick="SortDiscordChannels">
+                        <i class="bi bi-sort-alpha-down"></i> Sort Channels Alphabetically
+                        @if (isSorting) {
+                            <span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>
+                        }
                     </button>
                 </div>
             </div>
@@ -88,6 +97,8 @@ else
     private bool isLoading = true;
     private bool showSuccess = false;
     private bool showDiscordSuccess = false;
+    private string discordMessage = "";
+    private bool isSorting = false;
     private string? currentAdminName;
     private HubConnection? hubConnection;
 
@@ -174,7 +185,29 @@ else
     private void RefreshDiscordCache()
     {
         DiscordService.InvalidateChannelCache();
+        discordMessage = "Discord cache refreshed successfully!";
         showDiscordSuccess = true;
+    }
+
+    private async Task SortDiscordChannels()
+    {
+        isSorting = true;
+        StateHasChanged();
+
+        try
+        {
+            discordMessage = await DiscordService.SortUserChannelsAlphabeticallyAsync();
+            showDiscordSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            discordMessage = $"Error sorting channels: {ex.Message}";
+            showDiscordSuccess = true;
+        }
+        finally
+        {
+            isSorting = false;
+        }
     }
 
     public async ValueTask DisposeAsync()

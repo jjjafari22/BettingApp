@@ -35,6 +35,8 @@ public class DiscordNotificationService : IHostedService
         _client = new DiscordSocketClient(socketConfig);
     }
 
+    private Timer? _sortingTimer;
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(_botToken))
@@ -48,6 +50,15 @@ public class DiscordNotificationService : IHostedService
             _logger.LogInformation("Starting Discord Bot...");
             await _client.LoginAsync(TokenType.Bot, _botToken);
             await _client.StartAsync();
+
+            // Automatically sort channels every 60 minutes
+            _sortingTimer = new Timer(async _ => 
+            {
+                if (_client.ConnectionState == ConnectionState.Connected)
+                {
+                    await SortUserChannelsAlphabeticallyAsync();
+                }
+            }, null, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(60));
         }
         catch (Exception ex)
         {
@@ -58,6 +69,7 @@ public class DiscordNotificationService : IHostedService
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Stopping Discord Bot...");
+        _sortingTimer?.Dispose();
         await _client.StopAsync();
     }
 
@@ -80,6 +92,75 @@ public class DiscordNotificationService : IHostedService
         {
             _logger.LogError(ex, "Failed to send generic Discord Webhook notification.");
         }
+    }
+
+    // --- SORT CHANNELS ALPHABETICALLY ---
+    public async Task<string> SortUserChannelsAlphabeticallyAsync()
+    {
+        if (string.IsNullOrEmpty(GuildId) || !ulong.TryParse(GuildId, out var parsedGuildId)) 
+            return "Error: Discord Guild ID is not configured.";
+        
+        var guild = _client.GetGuild(parsedGuildId);
+        if (guild == null) 
+            return "Error: Could not connect to the Discord Server. Is the bot online?";
+
+        var categoriesToSort = new[] { "Admins", "Active Users", "Inactive Users" };
+        int sortedCount = 0;
+        var categoriesFound = new List<string>();
+        var categoriesMissing = new List<string>();
+        var errors = new List<string>();
+
+        foreach (var categoryName in categoriesToSort)
+        {
+            var category = guild.CategoryChannels
+                .FirstOrDefault(c => c.Name.Equals(categoryName, StringComparison.OrdinalIgnoreCase));
+
+            if (category == null) 
+            {
+                categoriesMissing.Add(categoryName);
+                continue;
+            }
+
+            categoriesFound.Add(categoryName);
+
+            var norwegianComparer = StringComparer.Create(new System.Globalization.CultureInfo("nb-NO"), ignoreCase: true);
+            
+            var textChannels = category.Channels
+                .OfType<SocketTextChannel>()
+                .ToList();
+
+            if (!textChannels.Any()) continue;
+
+            var currentUiOrder = textChannels.OrderBy(c => c.Position).ThenBy(c => c.Id).ToList();
+            var sortedChannels = currentUiOrder.OrderBy(c => c.Name, norwegianComparer).ToList();
+            
+            bool isAlreadySorted = currentUiOrder.SequenceEqual(sortedChannels);
+            
+            if (isAlreadySorted)
+            {
+                continue; // Skip API call if it's already perfect
+            }
+
+            var properties = sortedChannels.Select((c, i) => new ReorderChannelProperties(c.Id, i)).ToList();
+            try
+            {
+                await guild.ReorderChannelsAsync(properties);
+                sortedCount += textChannels.Count;
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Failed to sort '{categoryName}': {ex.Message}");
+                _logger.LogError(ex, $"Failed to sort channels in category {categoryName}");
+            }
+        }
+        
+        if (errors.Any())
+        {
+            return $"Warning: Sorted {sortedCount} channels, but encountered errors: {string.Join(", ", errors)}";
+        }
+
+        string missingWarning = categoriesMissing.Any() ? $" (Note: Could not find categories: {string.Join(", ", categoriesMissing)})" : "";
+        return $"Successfully sorted {sortedCount} channels across {categoriesFound.Count} categories!{missingWarning}";
     }
 
     // --- USER DM LOGIC (Unchanged) ---
