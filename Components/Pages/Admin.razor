@@ -17,8 +17,8 @@
 @inject OddsApiService OddsApi
 @inject SportsGameOddsService SgoApi
 @inject AiVisionService AiVision
-@inject AiVisionService AiVision
 @inject MarketMappingService MarketMapper
+@inject IServiceProvider ServiceProvider
 @attribute [Authorize]
 @rendermode InteractiveServer
 @implements IAsyncDisposable
@@ -2494,6 +2494,71 @@
             {
                 dbBet.NextCheckTime = null;
                 bet.NextCheckTime = null;
+
+                if (newStatus == "Won" || newStatus == "Lost" || newStatus == "Void")
+                {
+                    bool isAiFinished = false;
+                    if (!string.IsNullOrEmpty(dbBet.AiOutcomeResult))
+                    {
+                        try {
+                            var doc = System.Text.Json.JsonDocument.Parse(dbBet.AiOutcomeResult);
+                            if (doc.RootElement.TryGetProperty("overallStatus", out var prop))
+                            {
+                                var s = prop.GetString()?.ToUpperInvariant() ?? "";
+                                if (s == "WON" || s == "LOST" || s == "VOID" || s == "UNKNOWN")
+                                {
+                                    isAiFinished = true;
+                                }
+                            }
+                        } catch { }
+                    }
+
+                    if (!isAiFinished && dbBet.AiOutcomeResult != "Admin Override")
+                    {
+                        // Fire AI Check immediately in the background
+                        var betId = dbBet.Id;
+                        ConfirmingOutcomeBetIds.Add(betId);
+                        _ = Task.Run(async () => {
+                            try {
+                                using var scope = ServiceProvider.CreateScope();
+                                var dbFactory = scope.ServiceProvider.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<BettingApp.Data.ApplicationDbContext>>();
+                                var aiVision = scope.ServiceProvider.GetRequiredService<BettingApp.Services.AiVisionService>();
+                                
+                                using var bgContext = dbFactory.CreateDbContext();
+                                var b = await bgContext.Bets.FindAsync(betId);
+                                if (b != null)
+                                {
+                                    if (string.IsNullOrEmpty(b.AiVisionResultJson) && !string.IsNullOrEmpty(b.ScreenshotUrl))
+                                    {
+                                        var (res, err) = await aiVision.ExtractBetSlipDataAsync(b.ScreenshotUrl);
+                                        if (err == null && res != null)
+                                        {
+                                            b.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(res);
+                                            await bgContext.SaveChangesAsync();
+                                        }
+                                    }
+
+                                    if (!string.IsNullOrEmpty(b.AiVisionResultJson))
+                                    {
+                                        var outcome = await aiVision.ConfirmOutcomeAsync(b.AiVisionResultJson, b.CreatedAt, b.MatchStartTime, b.Id);
+                                        if (!string.IsNullOrEmpty(outcome) && !outcome.StartsWith("Error") && !outcome.StartsWith("Exception"))
+                                        {
+                                            b.AiOutcomeResult = outcome;
+                                            await bgContext.SaveChangesAsync();
+                                        }
+                                    }
+                                }
+                            }
+                            finally {
+                                await InvokeAsync(async () => {
+                                    ConfirmingOutcomeBetIds.Remove(betId);
+                                    await LoadCompletedBets();
+                                    StateHasChanged();
+                                });
+                            }
+                        });
+                    }
+                }
             }
 
             await context.SaveChangesAsync();
@@ -2656,6 +2721,11 @@
                     builder.OpenElement(0, "span");
                     builder.AddAttribute(1, "class", "badge bg-warning text-dark shadow-sm");
                     builder.AddContent(2, "❓ Unknown");
+                    builder.CloseElement();
+                } else if (lowerStatus.Contains("match in progress") || lowerStatus.Contains("pending") || lowerStatus.Contains("match not started")) {
+                    builder.OpenElement(0, "span");
+                    builder.AddAttribute(1, "class", "badge bg-info text-dark shadow-sm");
+                    builder.AddContent(2, "⏳ Pending");
                     builder.CloseElement();
                 }
                 return;
