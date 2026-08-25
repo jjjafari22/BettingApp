@@ -10,6 +10,12 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <DefaultItemExcludes>$(DefaultItemExcludes);scratch\**</DefaultItemExcludes>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="BettingApp.Tests/**" />
+    <Content Remove="BettingApp.Tests/**" />
+    <None Remove="BettingApp.Tests/**" />
+  </ItemGroup>
+
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" Version="12.23.0" />

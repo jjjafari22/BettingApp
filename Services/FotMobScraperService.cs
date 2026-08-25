@@ -159,35 +159,7 @@ namespace BettingApp.Services
                                     string homeName = f.TryGetProperty("home", out var h) && h.TryGetProperty("name", out var hn) ? hn.GetString() ?? "" : "";
                                     string awayName = f.TryGetProperty("away", out var a) && a.TryGetProperty("name", out var an) ? an.GetString() ?? "" : "";
                                     
-                                    // Check if this fixture matches our target match!
-                                    var homeTokens = homeTeam.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2 && !IsGenericPrefix(w)).Select(NormalizeText).ToArray();
-                                    var awayTokens = cleanAway.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2 && !IsGenericPrefix(w)).Select(NormalizeText).ToArray();
-                                    
-                                    if (homeTokens.Length == 0) homeTokens = new[] { NormalizeText(homeTeam) };
-                                    if (awayTokens.Length == 0 && !string.IsNullOrEmpty(cleanAway)) awayTokens = new[] { NormalizeText(cleanAway) };
-                                    
-                                    string normFixtureHome = NormalizeText(homeName);
-                                    var optHomeTokens = normFixtureHome.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2).ToArray();
-                                    if (optHomeTokens.Length == 0 && !string.IsNullOrEmpty(normFixtureHome)) optHomeTokens = new[] { normFixtureHome };
-                                    
-                                    string normFixtureAway = NormalizeText(awayName);
-                                    var optAwayTokens = normFixtureAway.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2).ToArray();
-                                    if (optAwayTokens.Length == 0 && !string.IsNullOrEmpty(normFixtureAway)) optAwayTokens = new[] { normFixtureAway };
-
-                                    bool homeSlipInOpt = homeTokens.All(t => optHomeTokens.Any(o => FuzzyMatch(t, o)));
-                                    bool homeOptInSlip = optHomeTokens.All(o => homeTokens.Any(t => FuzzyMatch(t, o)));
-                                    bool homeMatches = homeSlipInOpt || homeOptInSlip;
-
-                                    bool awayMatches = true;
-                                    if (awayTokens.Length > 0) {
-                                        bool awaySlipInOpt = awayTokens.All(t => optAwayTokens.Any(o => FuzzyMatch(t, o)));
-                                        bool awayOptInSlip = optAwayTokens.All(o => awayTokens.Any(t => FuzzyMatch(t, o)));
-                                        awayMatches = awaySlipInOpt || awayOptInSlip;
-                                    }
-
-                                    bool match1 = homeMatches && awayMatches;
-
-                                    if (match1)
+                                    if (AreTeamsMatching(homeTeam, awayTeam, homeName, awayName))
                                     {
                                         if (f.TryGetProperty("status", out var statusProp) && statusProp.TryGetProperty("utcTime", out var utcProp))
                                         {
@@ -480,6 +452,71 @@ namespace BettingApp.Services
             return flatStats;
         }
 
+        public static bool CheckSubset(string[] tokensA, string[] tokensB)
+        {
+            if (tokensA.Length == 0) return true;
+            if (tokensB.Length == 0) return false;
+            return tokensA.All(a => tokensB.Any(b => FuzzyMatch(a, b)));
+        }
+
+        public static bool HasSpecialModifier(string input)
+        {
+            var text = input.ToLowerInvariant();
+            return text.Contains("women") || text.Contains("(w)") || text.Contains("femenil") || 
+                   text.Contains("u21") || text.Contains("u23") || text.Contains("u19") || 
+                   text.Contains("u18") || text.Contains("u20") || text.Contains("reserves") || text.Contains("youth");
+        }
+
+        public static string ApplyTeamAliases(string team)
+        {
+            var text = NormalizeText(team);
+            if (text.Contains("athletic bilbao")) return text.Replace("athletic bilbao", "athletic club");
+            if (text.Contains("inter milan")) return text.Replace("inter milan", "internazionale");
+            if (text.Contains("sporting lisbon")) return text.Replace("sporting lisbon", "sporting cp");
+            if (text.Contains("boca juniors")) return text.Replace("boca juniors", "boca");
+            if (text.Contains("fc copenhagen")) return text.Replace("fc copenhagen", "fc kbenhavn");
+            
+            // Premier League shorthand aliases
+            if (text.Contains("man utd") || text.Contains("manchester utd")) return text.Replace("man utd", "manchester united").Replace("manchester utd", "manchester united");
+            if (text.Contains("man city")) return text.Replace("man city", "manchester city");
+            if (text.Contains("spurs")) return text.Replace("spurs", "tottenham hotspur");
+            if (text.Contains("wolves")) return text.Replace("wolves", "wolverhampton wanderers");
+            return text;
+        }
+
+        public static bool CheckTeamMatch(string query, string option)
+        {
+            query = ApplyTeamAliases(query);
+            option = ApplyTeamAliases(option);
+
+            var qTokens = query.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2 && !IsGenericPrefix(w)).ToArray();
+            if (qTokens.Length == 0 && !string.IsNullOrEmpty(query)) qTokens = new[] { NormalizeText(query) };
+            
+            var oTokens = option.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2 && !IsGenericPrefix(w)).ToArray();
+            if (oTokens.Length == 0 && !string.IsNullOrEmpty(option)) oTokens = new[] { NormalizeText(option) };
+
+            if (oTokens.Length == 0) return false;
+
+            bool qInO = CheckSubset(qTokens, oTokens);
+            bool oInQ = CheckSubset(oTokens, qTokens);
+
+            if (HasSpecialModifier(option) && !HasSpecialModifier(query))
+            {
+                return false;
+            }
+
+            return qInO || oInQ;
+        }
+
+        public static bool AreTeamsMatching(string queryHome, string queryAway, string optHome, string optAway)
+        {
+            if (string.IsNullOrEmpty(queryHome)) return false;
+            
+            bool straightMatch = CheckTeamMatch(queryHome, optHome) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optAway));
+            bool swappedMatch = CheckTeamMatch(queryHome, optAway) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optHome));
+            return straightMatch || swappedMatch;
+        }
+
         private string? ExtractEventId(System.Text.Json.JsonDocument doc, string homeTeam, string awayTeam, DateTime? betPlacedAt)
         {
             if (!doc.RootElement.TryGetProperty("matchSuggest", out var matchSuggests) || matchSuggests.GetArrayLength() == 0)
@@ -507,48 +544,13 @@ namespace BettingApp.Services
                 var payload = option.GetProperty("payload");
                 string optionHomeName = payload.TryGetProperty("homeName", out var h) ? h.GetString() ?? "" : "";
                 string optionAwayName = payload.TryGetProperty("awayName", out var a) ? a.GetString() ?? "" : "";
-                string text = option.GetProperty("text").GetString() ?? "";
-                string normalizedText = NormalizeText(text);
 
-                bool queryIsWomen = homeTeam.Contains("women", StringComparison.OrdinalIgnoreCase) || homeTeam.Contains("(w)", StringComparison.OrdinalIgnoreCase) || homeTeam.Contains("femenil", StringComparison.OrdinalIgnoreCase);
-                bool optionIsWomen = text.Contains("women", StringComparison.OrdinalIgnoreCase) || text.Contains("(w)", StringComparison.OrdinalIgnoreCase) || text.Contains("femenil", StringComparison.OrdinalIgnoreCase);
-
-                var homeTeamTokens = homeTeam.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries)
-                                             .Where(w => w.Length >= 2 && !IsGenericPrefix(w)).Select(NormalizeText).ToArray();
-                if (homeTeamTokens.Length == 0 && !string.IsNullOrEmpty(homeTeam)) homeTeamTokens = new[] { NormalizeText(homeTeam) };
-
-                string normOptHome = NormalizeText(optionHomeName);
-                var optionHomeTokens = normOptHome.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2).ToArray();
-                if (optionHomeTokens.Length == 0 && !string.IsNullOrEmpty(normOptHome)) optionHomeTokens = new[] { normOptHome };
-
-                string normOptAway = NormalizeText(optionAwayName);
-                var optionAwayTokens = normOptAway.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2).ToArray();
-                if (optionAwayTokens.Length == 0 && !string.IsNullOrEmpty(normOptAway)) optionAwayTokens = new[] { normOptAway };
-
-                bool homeSlipInOpt = homeTeamTokens.All(t => optionHomeTokens.Any(o => FuzzyMatch(t, o)));
-                bool homeOptInSlip = optionHomeTokens.All(o => homeTeamTokens.Any(t => FuzzyMatch(t, o)));
-                bool homeMatches = homeSlipInOpt || homeOptInSlip;
-
-                bool awayMatches = true;
-                if (!string.IsNullOrEmpty(awayTeam))
+                if (!AreTeamsMatching(homeTeam, awayTeam, optionHomeName, optionAwayName))
                 {
-                    var normalizedAwayTokens = awayTeamTokens.Select(NormalizeText).ToArray();
-                    bool awaySlipInOpt = normalizedAwayTokens.All(t => optionAwayTokens.Any(o => FuzzyMatch(t, o)));
-                    bool awayOptInSlip = optionAwayTokens.All(o => normalizedAwayTokens.Any(t => FuzzyMatch(t, o)));
-                    awayMatches = awaySlipInOpt || awayOptInSlip;
+                    continue;
                 }
 
-                if (!homeMatches || !awayMatches)
-                {
-                    continue; // MUST be a strict bidirectional token subset for BOTH teams to avoid City vs United clashes!
-                }
-
-                int score = 200; // Perfect score since bidirectional subset passed
-                
-                if (queryIsWomen != optionIsWomen) 
-                {
-                    score -= 50; // Heavy penalty for gender mismatch!
-                }
+                int score = 200; 
 
                 // Parse match date to prioritize the closest match (e.g. Leg 1 vs Leg 2)
                 if (payload.TryGetProperty("matchDate", out var matchDateElement))
@@ -599,7 +601,7 @@ namespace BettingApp.Services
 
             return bestId;
         }
-        private string NormalizeText(string text)
+        public static string NormalizeText(string text)
         {
             if (string.IsNullOrEmpty(text)) return "";
             
@@ -616,7 +618,7 @@ namespace BettingApp.Services
             return result;
         }
 
-        private bool FuzzyMatch(string token, string fixtureName)
+        public static bool FuzzyMatch(string token, string fixtureName)
         {
             if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(fixtureName)) return false;
             if (fixtureName.Contains(token)) return true;
@@ -635,7 +637,7 @@ namespace BettingApp.Services
             return false;
         }
 
-        private bool IsGenericPrefix(string word)
+        public static bool IsGenericPrefix(string word)
         {
             if (string.IsNullOrEmpty(word)) return true;
             string w = word.ToLowerInvariant();
