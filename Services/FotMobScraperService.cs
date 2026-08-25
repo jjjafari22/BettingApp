@@ -167,9 +167,25 @@ namespace BettingApp.Services
                                     if (awayTokens.Length == 0 && !string.IsNullOrEmpty(cleanAway)) awayTokens = new[] { NormalizeText(cleanAway) };
                                     
                                     string normFixtureHome = NormalizeText(homeName);
+                                    var optHomeTokens = normFixtureHome.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2).ToArray();
+                                    if (optHomeTokens.Length == 0 && !string.IsNullOrEmpty(normFixtureHome)) optHomeTokens = new[] { normFixtureHome };
+                                    
                                     string normFixtureAway = NormalizeText(awayName);
+                                    var optAwayTokens = normFixtureAway.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2).ToArray();
+                                    if (optAwayTokens.Length == 0 && !string.IsNullOrEmpty(normFixtureAway)) optAwayTokens = new[] { normFixtureAway };
 
-                                    bool match1 = homeTokens.Any(t => FuzzyMatch(t, normFixtureHome)) && (awayTokens.Length == 0 || awayTokens.Any(t => FuzzyMatch(t, normFixtureAway)));
+                                    bool homeSlipInOpt = homeTokens.All(t => optHomeTokens.Any(o => FuzzyMatch(t, o)));
+                                    bool homeOptInSlip = optHomeTokens.All(o => homeTokens.Any(t => FuzzyMatch(t, o)));
+                                    bool homeMatches = homeSlipInOpt || homeOptInSlip;
+
+                                    bool awayMatches = true;
+                                    if (awayTokens.Length > 0) {
+                                        bool awaySlipInOpt = awayTokens.All(t => optAwayTokens.Any(o => FuzzyMatch(t, o)));
+                                        bool awayOptInSlip = optAwayTokens.All(o => awayTokens.Any(t => FuzzyMatch(t, o)));
+                                        awayMatches = awaySlipInOpt || awayOptInSlip;
+                                    }
+
+                                    bool match1 = homeMatches && awayMatches;
 
                                     if (match1)
                                     {
@@ -501,40 +517,33 @@ namespace BettingApp.Services
                                              .Where(w => w.Length >= 2 && !IsGenericPrefix(w)).Select(NormalizeText).ToArray();
                 if (homeTeamTokens.Length == 0 && !string.IsNullOrEmpty(homeTeam)) homeTeamTokens = new[] { NormalizeText(homeTeam) };
 
-                int homeMatches = 0;
                 string normOptHome = NormalizeText(optionHomeName);
-                foreach (var token in homeTeamTokens)
-                {
-                    if (FuzzyMatch(token, normOptHome))
-                    {
-                        homeMatches++;
-                    }
-                }
+                var optionHomeTokens = normOptHome.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2).ToArray();
+                if (optionHomeTokens.Length == 0 && !string.IsNullOrEmpty(normOptHome)) optionHomeTokens = new[] { normOptHome };
 
-                int awayMatches = 0;
-                if (string.IsNullOrEmpty(awayTeam))
+                string normOptAway = NormalizeText(optionAwayName);
+                var optionAwayTokens = normOptAway.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2).ToArray();
+                if (optionAwayTokens.Length == 0 && !string.IsNullOrEmpty(normOptAway)) optionAwayTokens = new[] { normOptAway };
+
+                bool homeSlipInOpt = homeTeamTokens.All(t => optionHomeTokens.Any(o => FuzzyMatch(t, o)));
+                bool homeOptInSlip = optionHomeTokens.All(o => homeTeamTokens.Any(t => FuzzyMatch(t, o)));
+                bool homeMatches = homeSlipInOpt || homeOptInSlip;
+
+                bool awayMatches = true;
+                if (!string.IsNullOrEmpty(awayTeam))
                 {
-                    awayMatches = 1; // Trivially true if no away team is provided
-                }
-                else
-                {
-                    string normOptAway = NormalizeText(optionAwayName);
                     var normalizedAwayTokens = awayTeamTokens.Select(NormalizeText).ToArray();
-                    foreach (var token in normalizedAwayTokens)
-                    {
-                        if (FuzzyMatch(token, normOptAway))
-                        {
-                            awayMatches++;
-                        }
-                    }
+                    bool awaySlipInOpt = normalizedAwayTokens.All(t => optionAwayTokens.Any(o => FuzzyMatch(t, o)));
+                    bool awayOptInSlip = optionAwayTokens.All(o => normalizedAwayTokens.Any(t => FuzzyMatch(t, o)));
+                    awayMatches = awaySlipInOpt || awayOptInSlip;
                 }
 
-                if (homeMatches == 0 || awayMatches == 0)
+                if (!homeMatches || !awayMatches)
                 {
-                    continue; // MUST match at least one token from the home team, and one token from the away team!
+                    continue; // MUST be a strict bidirectional token subset for BOTH teams to avoid City vs United clashes!
                 }
 
-                int score = (homeMatches * 10) + (awayMatches * 10);
+                int score = 200; // Perfect score since bidirectional subset passed
                 
                 if (queryIsWomen != optionIsWomen) 
                 {
