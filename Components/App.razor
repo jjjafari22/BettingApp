@@ -24,7 +24,7 @@
         <link rel="icon" type="image/png" href="favicon-prod.png" />
     }
     
-    <HeadOutlet />
+    <HeadOutlet @rendermode="@PageRenderMode" />
 </head>
 
 <body>
@@ -143,3 +143,21 @@
 </body>
 
 </html>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private Microsoft.AspNetCore.Components.IComponentRenderMode? PageRenderMode
+    {
+        get
+        {
+            var endpoint = HttpContext.GetEndpoint();
+            if (endpoint != null)
+            {
+                return endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Components.RenderModeAttribute>()?.Mode;
+            }
+            return null;
+        }
+    }
+}
