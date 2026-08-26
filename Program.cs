@@ -44,14 +44,19 @@ builder.Services.AddSignalR(hubOptions =>
 
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<DialogService>();
-builder.Services.AddHttpClient<OddsApiService>();
-builder.Services.AddHttpClient<KambiScraperService>();
-builder.Services.AddHttpClient<Bet365ScraperService>();
+Func<HttpMessageHandler> compressedHandler = () => new HttpClientHandler
+{
+    AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate | System.Net.DecompressionMethods.Brotli
+};
+
+builder.Services.AddHttpClient<OddsApiService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
+builder.Services.AddHttpClient<KambiScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
+builder.Services.AddHttpClient<Bet365ScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<AiVisionService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(300); // 5 minutes for LLM processing
-});
-builder.Services.AddHttpClient<FotMobScraperService>();
+}).ConfigurePrimaryHttpMessageHandler(compressedHandler);
+builder.Services.AddHttpClient<FotMobScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddScoped<SportsGameOddsService>();
 builder.Services.AddSingleton<MarketMappingService>();
 builder.Services.AddSingleton<TeamAliasMappingService>();

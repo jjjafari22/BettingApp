@@ -86,7 +86,7 @@ public class KambiScraperService
         
         try 
         {
-            var searchResponse = await _httpClient.GetAsync(searchUrl);
+            using var searchResponse = await _httpClient.GetAsync(searchUrl);
             var searchContent = await searchResponse.Content.ReadAsStringAsync();
             
             if (!searchResponse.IsSuccessStatusCode)
@@ -126,7 +126,7 @@ public class KambiScraperService
 
             // Step 2: Fetch the actual events for this participant
             var listUrl = $"https://eu-offering-api.kambicdn.com/offering/v2018/ub/listView{participantId}.json?lang=en_GB&market=NO";
-            var listResponse = await _httpClient.GetAsync(listUrl);
+            using var listResponse = await _httpClient.GetAsync(listUrl);
             var listContent = await listResponse.Content.ReadAsStringAsync();
 
             if (!listResponse.IsSuccessStatusCode)
@@ -161,7 +161,7 @@ public class KambiScraperService
         var url = $"https://eu-offering-api.kambicdn.com/offering/v2018/ub/betoffer/event/{eventId}.json?lang=en_GB&market=NO";
         try
         {
-            var response = await _httpClient.GetAsync(url);
+            using var response = await _httpClient.GetAsync(url);
             var content = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
