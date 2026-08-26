@@ -5,9 +5,9 @@ namespace BettingApp.Services
 {
     public class TeamAliasMappingService
     {
-        public static string RemoveDiacritics(string text)
+        public static string RemoveDiacritics(string? text)
         {
-            if (string.IsNullOrWhiteSpace(text)) return text;
+            if (string.IsNullOrWhiteSpace(text)) return text ?? "";
             var normalizedString = text.Normalize(System.Text.NormalizationForm.FormD);
             var stringBuilder = new System.Text.StringBuilder(capacity: normalizedString.Length);
             foreach (var c in normalizedString)
@@ -39,9 +39,9 @@ namespace BettingApp.Services
             { "aalesunds", "aalesund" }
         };
 
-        public static string ApplyTeamAliases(string normalizedTeamName)
+        public static string ApplyTeamAliases(string? normalizedTeamName)
         {
-            if (string.IsNullOrWhiteSpace(normalizedTeamName)) return normalizedTeamName;
+            if (string.IsNullOrWhiteSpace(normalizedTeamName)) return normalizedTeamName ?? "";
 
             string result = normalizedTeamName;
             
