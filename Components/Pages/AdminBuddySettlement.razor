@@ -974,7 +974,7 @@
         
         if (result == null) return;
         
-        var csvContent = SettlementService.GenerateCsv(result, snap.CreatedAt);
+        var csvContent = SettlementService.GenerateCsv(result, snap.CreatedAt, cashCows);
         var fileBytes = System.Text.Encoding.UTF8.GetBytes(csvContent);
         using var stream = new MemoryStream(fileBytes);
         using var streamRef = new DotNetStreamReference(stream);

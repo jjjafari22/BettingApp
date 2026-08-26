@@ -42,6 +42,8 @@ namespace BettingApp.Data
     public class SettlementInstruction
     {
         public string FromUser { get; set; } = string.Empty;
+        public string FromUserFullName { get; set; } = string.Empty;
+        public string FromUserDiscordUsername { get; set; } = string.Empty;
         public string ToUser { get; set; } = string.Empty;
         public string ToUserFirstName { get; set; } = string.Empty;
         public string ToUserFullName { get; set; } = string.Empty;
@@ -55,6 +57,8 @@ namespace BettingApp.Data
     public class SettlementAdjustment
     {
         public string UserName { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string DiscordUsername { get; set; } = string.Empty;
         public decimal Amount { get; set; }
         public string Reason { get; set; } = string.Empty;
         public bool IsSent { get; set; } = false;

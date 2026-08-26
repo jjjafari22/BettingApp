@@ -48,7 +48,7 @@ namespace BettingApp.Services
 
             var result = new SettlementResult { Date = DateTime.UtcNow };
             
-            var debtors = new List<(string Name, decimal Amount, string RawUserName)>();
+            var debtors = new List<(string Name, decimal Amount, string RawUserName, string FullName, string DiscordUsername)>();
             var creditors = new List<(string Name, decimal Amount, string PaymentDetails, string FirstName, string DiscordUsername, string FullName, string RawUserName)>();
 
             // Need a quick lookup for User display names if we want to format Creditors correctly
@@ -96,8 +96,10 @@ namespace BettingApp.Services
             foreach (var debtor in debtorsList)
             {
                 string displayName = GetDisplayName(debtor.UserName!);
+                string discordUsername = GetDiscordUsername(debtor.UserName!);
+                string fullName = GetFullName(debtor.UserName!);
                 result.UserBalances.Add(new SettlementUserBalance { UserName = displayName, Balance = debtor.Balance });
-                debtors.Add((displayName, Math.Abs(debtor.Balance), debtor.UserName!));
+                debtors.Add((displayName, Math.Abs(debtor.Balance), debtor.UserName!, fullName, discordUsername));
             }
 
             foreach (var creditor in creditorsList)
@@ -173,6 +175,8 @@ namespace BettingApp.Services
                                         result.Instructions.Add(new SettlementInstruction
                                         {
                                             FromUser = subD.Name,
+                                            FromUserFullName = subD.FullName,
+                                            FromUserDiscordUsername = subD.DiscordUsername,
                                             ToUser = subC.Name,
                                             ToUserFirstName = subC.FirstName,
                                             ToUserFullName = subC.FullName,
@@ -184,7 +188,7 @@ namespace BettingApp.Services
                                         var nd = subD.Amount - amount;
                                         var nc = subC.Amount - amount;
 
-                                        if (nd < 0.01m) sd++; else subDebtors[sd] = (subD.Name, nd, subD.RawUserName);
+                                        if (nd < 0.01m) sd++; else subDebtors[sd] = (subD.Name, nd, subD.RawUserName, subD.FullName, subD.DiscordUsername);
                                         if (nc < 0.01m) sc++; else subCreditors[sc] = (subC.Name, nc, subC.PaymentDetails, subC.FirstName, subC.DiscordUsername, subC.FullName, subC.RawUserName);
                                     }
 
@@ -223,6 +227,8 @@ namespace BettingApp.Services
                 result.Instructions.Add(new SettlementInstruction
                 {
                     FromUser = debtor.Name,
+                    FromUserFullName = debtor.FullName,
+                    FromUserDiscordUsername = debtor.DiscordUsername,
                     ToUser = creditor.Name,
                     ToUserFirstName = creditor.FirstName,
                     ToUserFullName = creditor.FullName,
@@ -238,7 +244,7 @@ namespace BettingApp.Services
                 var newCreditorAmount = creditor.Amount - amount;
 
                 if (newDebtorAmount < 0.01m) p2pDebtors.RemoveAt(0);
-                else p2pDebtors[0] = (debtor.Name, newDebtorAmount, debtor.RawUserName); 
+                else p2pDebtors[0] = (debtor.Name, newDebtorAmount, debtor.RawUserName, debtor.FullName, debtor.DiscordUsername); 
 
                 if (newCreditorAmount < 0.01m) p2pCreditors.RemoveAt(0);
                 else p2pCreditors[0] = (creditor.Name, newCreditorAmount, creditor.PaymentDetails, creditor.FirstName, creditor.DiscordUsername, creditor.FullName, creditor.RawUserName); 
@@ -247,21 +253,21 @@ namespace BettingApp.Services
             // Any remaining unmatched P2P balances are system imbalances (adjustments)
             foreach (var debtor in p2pDebtors)
             {
-                result.Adjustments.Add(new SettlementAdjustment { UserName = debtor.Name, Amount = debtor.Amount, Reason = "Owes Castle Directly" });
+                result.Adjustments.Add(new SettlementAdjustment { UserName = debtor.Name, FullName = debtor.FullName, DiscordUsername = debtor.DiscordUsername, Amount = debtor.Amount, Reason = "Owes Castle Directly" });
             }
             
             // ALL CastleOnly (Excluded) Debtors owe Castle directly
             foreach (var debtor in castleOnlyDebtors)
             {
-                result.Adjustments.Add(new SettlementAdjustment { UserName = debtor.Name, Amount = debtor.Amount, Reason = "Owes Castle Directly" });
+                result.Adjustments.Add(new SettlementAdjustment { UserName = debtor.Name, FullName = debtor.FullName, DiscordUsername = debtor.DiscordUsername, Amount = debtor.Amount, Reason = "Owes Castle Directly" });
             }
             foreach (var creditor in p2pCreditors)
             {
-                result.Adjustments.Add(new SettlementAdjustment { UserName = creditor.Name, Amount = creditor.Amount, Reason = "Castle Owes Directly" });
+                result.Adjustments.Add(new SettlementAdjustment { UserName = creditor.Name, FullName = creditor.FullName, DiscordUsername = creditor.DiscordUsername, Amount = creditor.Amount, Reason = "Castle Owes Directly" });
             }
             foreach (var creditor in castleOnlyCreditors)
             {
-                result.Adjustments.Add(new SettlementAdjustment { UserName = creditor.Name, Amount = creditor.Amount, Reason = "Castle Owes Directly" });
+                result.Adjustments.Add(new SettlementAdjustment { UserName = creditor.Name, FullName = creditor.FullName, DiscordUsername = creditor.DiscordUsername, Amount = creditor.Amount, Reason = "Castle Owes Directly" });
             }
 
             // 4. Save Snapshot
@@ -280,7 +286,7 @@ namespace BettingApp.Services
             return snapshot;
         }
 
-        public string GenerateCsv(SettlementResult result, DateTime createdAtUtc)
+        public string GenerateCsv(SettlementResult result, DateTime createdAtUtc, List<BettingApp.Data.CashCow>? cashCows = null)
         {
             var sb = new StringBuilder();
 
@@ -294,14 +300,46 @@ namespace BettingApp.Services
             // CSV Columns
             sb.AppendLine("Type,From,To,Amount,Details");
 
+            string FormatUser(string raw, string discord, string fullName)
+            {
+                if (!string.IsNullOrWhiteSpace(discord) && !string.IsNullOrWhiteSpace(fullName))
+                    return $"{discord} ({fullName})";
+                if (!string.IsNullOrWhiteSpace(discord)) return discord;
+                if (!string.IsNullOrWhiteSpace(fullName)) return fullName;
+                return raw;
+            }
+            
+            string GetCowName(string userName)
+            {
+                if (cashCows != null && result.SelectedCashCows != null && result.SelectedCashCows.TryGetValue(userName, out var cowId))
+                {
+                    var cow = cashCows.FirstOrDefault(c => c.Id == cowId);
+                    if (cow != null) return $"{cow.FirstName} {cow.LastName}".Trim();
+                }
+                return "Castle";
+            }
+
             foreach (var instr in result.Instructions)
             {
-                sb.AppendLine($"Payment,{instr.FromUser},{instr.ToUser},{instr.Amount:F0},");
+                string fromFormatted = FormatUser(instr.FromUser, instr.FromUserDiscordUsername, instr.FromUserFullName);
+                string toFormatted = FormatUser(instr.ToUser, instr.ToUserDiscordUsername, instr.ToUserFullName);
+                sb.AppendLine($"Peer-to-Peer payment,{fromFormatted},{toFormatted},{instr.Amount:F0},");
             }
 
             foreach (var adj in result.Adjustments)
             {
-                sb.AppendLine($"Adjustment,-,-,{adj.Amount:F0},{adj.Reason} ({adj.UserName})");
+                string userFormatted = FormatUser(adj.UserName, adj.DiscordUsername, adj.FullName);
+                string cowName = GetCowName(adj.UserName);
+                string typeLabel = cowName == "Castle" ? "Peer-to-Castle" : "Peer-to-CashCow";
+                
+                if (adj.Reason.Contains("Castle Owes", StringComparison.OrdinalIgnoreCase))
+                {
+                    sb.AppendLine($"{typeLabel},{cowName},{userFormatted},{adj.Amount:F0},{adj.Reason}");
+                }
+                else
+                {
+                    sb.AppendLine($"{typeLabel},{userFormatted},{cowName},{adj.Amount:F0},{adj.Reason}");
+                }
             }
 
             // Add historical balances to the CSV export
