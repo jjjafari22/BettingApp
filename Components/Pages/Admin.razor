@@ -661,8 +661,11 @@
                                                                     }
                                                                     else
                                                                     {
+                                                                        string rawSel = ActiveLookupLeg?.Selection ?? "";
+                                                                        rawSel = System.Text.RegularExpressions.Regex.Replace(rawSel, @"(\d+)\+", m => $"over {double.Parse(m.Groups[1].Value) - 0.5}");
+
                                                                         string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayOName ?? "").ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
-                                                                        string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg?.Selection ?? "").ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "").Replace("tie", "draw");
+                                                                        string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(rawSel).ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "").Replace("tie", "draw");
                                                                         
                                                                         if (normOName == normSel)
                                                                         {

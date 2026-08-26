@@ -402,7 +402,21 @@ public class OddsApiService
             // Deduplicate outcome names and sort markets by name
             foreach (var market in result.Markets)
             {
-                market.OutcomeNames = market.OutcomeNames.GroupBy(x => x.Value).Select(g => g.First()).ToDictionary(x => x.Key, x => x.Value);
+                market.OutcomeNames = market.OutcomeNames
+                    .GroupBy(x => x.Value)
+                    .Select(g => g.First())
+                    .OrderBy(x => 
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(x.Value, @"\(([^,()]+),\s*([^()]+)\)");
+                        return match.Success ? match.Value : x.Value;
+                    })
+                    .ThenBy(x => x.Value.Contains("Under") ? 1 : 0)
+                    .ThenBy(x => 
+                    {
+                        var m = System.Text.RegularExpressions.Regex.Match(x.Value, @"\d+(?:\.\d+)?");
+                        return m.Success ? double.Parse(m.Value, System.Globalization.CultureInfo.InvariantCulture) : 0;
+                    })
+                    .ToDictionary(x => x.Key, x => x.Value);
             }
             result.Markets.Sort((a, b) => a.MarketName.CompareTo(b.MarketName));
 

@@ -20,6 +20,7 @@ namespace BettingApp.Services
             { "Total Goals 3", "Over Under Full Time" },
             { "Total Goals 4", "Over Under Full Time" },
             { "Player Shots on Target", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target" },
+            { "Player Fouls Committed", "Over Under Player Fouls Committed (incl. overtime)|Player Fouls Committed (incl. overtime)" },
             { "Full Time", "Full Time Result" },
             { "Match Odds", "Full Time Result" },
             { "1x2", "Full Time Result" },
@@ -36,6 +37,7 @@ namespace BettingApp.Services
             { "Early Win", "2Up - Full Time Result" },
             { "Early Win (Anytime 2 Goal Lead)", "2Up - Full Time Result" },
             { "Early Payout", "2Up - Full Time Result" },
+            { "Anytime Goalscorer", "Player Goals (incl. overtime)" },
             { "Player to be Booked", "Player To Be Carded (incl. overtime)" },
             { "Player To Receive A Card", "Player To Be Carded (incl. overtime)" },
             { "Player Cards", "Player To Be Carded (incl. overtime)" },
@@ -44,9 +46,14 @@ namespace BettingApp.Services
 
         public List<string> NormalizeMarketName(string rawMarketName, string? matchName = null)
         {
-            if (string.IsNullOrWhiteSpace(rawMarketName)) return new List<string> { rawMarketName };
+            if (string.IsNullOrWhiteSpace(rawMarketName)) return new List<string>();
 
             var clean = rawMarketName.Trim();
+            
+            if (clean.StartsWith("Alternative ", StringComparison.OrdinalIgnoreCase))
+            {
+                clean = clean.Substring(12).Trim();
+            }
             
             // Detect if the market explicitly specifies a half
             string halfSuffix = "";
@@ -95,7 +102,11 @@ namespace BettingApp.Services
                             return new List<string> { "Over Under Team 2" + halfSuffix };
                             
                         // Otherwise, generic total goals for the match
-                        if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Over Under" + halfSuffix };
+                        if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Over Under" + halfSuffix };
+                            return new List<string> { "Over Under Full Time" };
+                        }
                     }
 
                     // To Win At Least One Half
