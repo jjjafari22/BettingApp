@@ -19,7 +19,7 @@ namespace BettingApp.Services
             { "Total Goals 1", "Over Under Full Time" },
             { "Total Goals 3", "Over Under Full Time" },
             { "Total Goals 4", "Over Under Full Time" },
-            { "Player Shots on Target", "Player Shots On Goal (incl. overtime)|Player's shot on target" },
+            { "Player Shots on Target", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target" },
             { "Full Time", "Full Time Result" },
             { "Match Odds", "Full Time Result" },
             { "1x2", "Full Time Result" },

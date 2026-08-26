@@ -35,7 +35,7 @@ public class OddsApiService
             
             if (!_cache.TryGetValue("OddspapiMarketsJson", out string? mJson))
             {
-                var mResp = await _httpClient.GetAsync(marketsUrl);
+                using var mResp = await _httpClient.GetAsync(marketsUrl);
                 if (mResp.IsSuccessStatusCode)
                 {
                     mJson = await mResp.Content.ReadAsStringAsync();
@@ -111,7 +111,7 @@ public class OddsApiService
             {
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
 
-                var fResp = await _httpClient.GetAsync(fixturesUrl);
+                using var fResp = await _httpClient.GetAsync(fixturesUrl);
                 if (!fResp.IsSuccessStatusCode) return (null, $"Fixtures API returned status {fResp.StatusCode}");
                 
                 fJson = await fResp.Content.ReadAsStringAsync();
@@ -144,6 +144,11 @@ public class OddsApiService
             if (!homeTokens.Any()) homeTokens.Add(homeTeam);
             if (!awayTokens.Any() && !string.IsNullOrEmpty(awayTeam)) awayTokens.Add(awayTeam);
 
+            string normHomeTeam = NormalizeTeamName(homeTeam);
+            string normAwayTeam = string.IsNullOrEmpty(awayTeam) ? "" : NormalizeTeamName(awayTeam);
+            var normHomeTokens = homeTokens.Select(t => NormalizeTeamName(t)).ToList();
+            var normAwayTokens = awayTokens.Select(t => NormalizeTeamName(t)).ToList();
+
             var bestMatches = new List<(JsonElement fixture, int score)>();
 
             foreach (var f in doc.RootElement.EnumerateArray())
@@ -159,26 +164,29 @@ public class OddsApiService
                     continue;
                 }
                 
-                bool homeMatch = homeTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
-                bool awayMatch = string.IsNullOrEmpty(awayTeam) || awayTokens.Any(t => IsNameMatch(p1, t) || IsNameMatch(p2, t));
+                string normP1 = NormalizeTeamName(p1);
+                string normP2 = NormalizeTeamName(p2);
+                
+                bool homeMatch = normHomeTokens.Any(t => IsNameMatch(normP1, t, true) || IsNameMatch(normP2, t, true));
+                bool awayMatch = string.IsNullOrEmpty(normAwayTeam) || normAwayTokens.Any(t => IsNameMatch(normP1, t, true) || IsNameMatch(normP2, t, true));
 
-                bool homeExact = IsExactMatch(p1, homeTeam) || IsExactMatch(p2, homeTeam);
-                bool awayExact = !string.IsNullOrEmpty(awayTeam) && (IsExactMatch(p1, awayTeam) || IsExactMatch(p2, awayTeam));
+                bool homeExact = IsExactMatch(normP1, normHomeTeam, true) || IsExactMatch(normP2, normHomeTeam, true);
+                bool awayExact = !string.IsNullOrEmpty(normAwayTeam) && (IsExactMatch(normP1, normAwayTeam, true) || IsExactMatch(normP2, normAwayTeam, true));
 
                 // Strict rule: Must match at least one token from BOTH sides!
                 if (!homeMatch || !awayMatch)
                 {
                     if (!homeMatch && awayMatch)
                     {
-                        bool p1IsAway = IsNameMatch(p1, awayTeam) || awayTokens.Any(t => IsNameMatch(p1, t));
-                        string otherTeam = p1IsAway ? p2 : p1;
-                        if (ComputeLevenshteinDistance(NormalizeTeamName(otherTeam), NormalizeTeamName(homeTeam)) > 3) continue;
+                        bool p1IsAway = IsNameMatch(normP1, normAwayTeam, true) || normAwayTokens.Any(t => IsNameMatch(normP1, t, true));
+                        string normOtherTeam = p1IsAway ? normP2 : normP1;
+                        if (ComputeLevenshteinDistance(normOtherTeam, normHomeTeam) > 3) continue;
                     }
                     else if (!awayMatch && homeMatch)
                     {
-                        bool p1IsHome = IsNameMatch(p1, homeTeam) || homeTokens.Any(t => IsNameMatch(p1, t));
-                        string otherTeam = p1IsHome ? p2 : p1;
-                        if (ComputeLevenshteinDistance(NormalizeTeamName(otherTeam), NormalizeTeamName(awayTeam)) > 3) continue;
+                        bool p1IsHome = IsNameMatch(normP1, normHomeTeam, true) || normHomeTokens.Any(t => IsNameMatch(normP1, t, true));
+                        string normOtherTeam = p1IsHome ? normP2 : normP1;
+                        if (ComputeLevenshteinDistance(normOtherTeam, normAwayTeam) > 3) continue;
                     }
                     else
                     {
@@ -188,19 +196,19 @@ public class OddsApiService
 
                 int score = 0;
                 
-                if (IsNameMatch(p1, homeTeam) || IsNameMatch(p2, homeTeam)) score += 50;
-                if (!string.IsNullOrEmpty(awayTeam) && (IsNameMatch(p1, awayTeam) || IsNameMatch(p2, awayTeam))) score += 50;
+                if (IsNameMatch(normP1, normHomeTeam, true) || IsNameMatch(normP2, normHomeTeam, true)) score += 50;
+                if (!string.IsNullOrEmpty(normAwayTeam) && (IsNameMatch(normP1, normAwayTeam, true) || IsNameMatch(normP2, normAwayTeam, true))) score += 50;
                 
                 // Huge bonus for exact match to differentiate "Team" from "Team 2"
-                if (IsExactMatch(p1, homeTeam) || IsExactMatch(p2, homeTeam)) score += 100;
-                if (!string.IsNullOrEmpty(awayTeam) && (IsExactMatch(p1, awayTeam) || IsExactMatch(p2, awayTeam))) score += 100;
+                if (IsExactMatch(normP1, normHomeTeam, true) || IsExactMatch(normP2, normHomeTeam, true)) score += 100;
+                if (!string.IsNullOrEmpty(normAwayTeam) && (IsExactMatch(normP1, normAwayTeam, true) || IsExactMatch(normP2, normAwayTeam, true))) score += 100;
 
-                foreach (var token in homeTokens.Concat(awayTokens))
+                foreach (var token in normHomeTokens.Concat(normAwayTokens))
                 {
-                    if (IsNameMatch(p1, token) || IsNameMatch(p2, token)) score += 10;
+                    if (IsNameMatch(normP1, token, true) || IsNameMatch(normP2, token, true)) score += 10;
                     
                     if ((token.Contains("kobenhavn", StringComparison.OrdinalIgnoreCase) || token.Contains("copenhagen", StringComparison.OrdinalIgnoreCase)) && 
-                        (IsNameMatch(p1, "copenhagen") || IsNameMatch(p2, "copenhagen")))
+                        (IsNameMatch(normP1, "copenhagen", true) || IsNameMatch(normP2, "copenhagen", true)))
                     {
                         score += 20;
                     }
@@ -257,12 +265,18 @@ public class OddsApiService
             // Retry once if rate limited
             if (!oResp.IsSuccessStatusCode)
             {
+                oResp.Dispose();
                 await Task.Delay(1000); // Wait 1s
                 oResp = await _httpClient.GetAsync(oddsUrl);
-                if (!oResp.IsSuccessStatusCode) return (null, $"Odds API returned status {oResp.StatusCode}");
+                if (!oResp.IsSuccessStatusCode)
+                {
+                    oResp.Dispose();
+                    return (null, $"Odds API returned status {oResp.StatusCode}");
+                }
             }
 
             var oJson = await oResp.Content.ReadAsStringAsync();
+            oResp.Dispose();
             using var oddsDoc = JsonDocument.Parse(oJson);
             
             var result = new BettingApp.Models.OddsPapiSearchResult
@@ -401,13 +415,13 @@ public class OddsApiService
         }
     }
 
-    private bool IsNameMatch(string source, string target)
+    private bool IsNameMatch(string source, string target, bool isNormalized = false)
     {
         if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(target)) return false;
         
         // Remove common diacritics / normalize
-        string normalizedSource = NormalizeTeamName(source);
-        string normalizedTarget = NormalizeTeamName(target);
+        string normalizedSource = isNormalized ? source : NormalizeTeamName(source);
+        string normalizedTarget = isNormalized ? target : NormalizeTeamName(target);
         
         if (string.IsNullOrEmpty(normalizedSource) || string.IsNullOrEmpty(normalizedTarget)) return false;
         
@@ -415,10 +429,12 @@ public class OddsApiService
                normalizedTarget.Contains(normalizedSource, StringComparison.OrdinalIgnoreCase);
     }
     
-    private bool IsExactMatch(string source, string target)
+    private bool IsExactMatch(string source, string target, bool isNormalized = false)
     {
         if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(target)) return false;
-        return NormalizeTeamName(source).Equals(NormalizeTeamName(target), StringComparison.OrdinalIgnoreCase);
+        string normalizedSource = isNormalized ? source : NormalizeTeamName(source);
+        string normalizedTarget = isNormalized ? target : NormalizeTeamName(target);
+        return normalizedSource.Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase);
     }
     
     private string NormalizeTeamName(string name)

@@ -733,7 +733,7 @@
                                                                         
                                                                         if (!isMatch)
                                                                         {
-                                                                            var parenMatch = System.Text.RegularExpressions.Regex.Match(displayOName ?? "", @"\(([^,]+),\s*([^)]+)\)");
+                                                                            var parenMatch = System.Text.RegularExpressions.Regex.Match(displayOName ?? "", @"\(([^,()]+),\s*([^()]+)\)");
                                                                             if (parenMatch.Success)
                                                                             {
                                                                                 string lastName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
@@ -742,7 +742,7 @@
                                                                                 if (normSel.Contains(lastName) && normSel.Contains(firstName))
                                                                                 {
                                                                                     string outcomePart = (displayOName ?? "").Substring(0, parenMatch.Index).Trim();
-                                                                                    string normOutcomePart = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "");
+                                                                                    string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
                                                                                     
                                                                                     if (string.IsNullOrEmpty(normOutcomePart) || normSel.Contains(normOutcomePart) || 
                                                                                         (normOutcomePart == "yes" && (normSel.Contains("tobebooked") || normSel.Contains("willgetbooked") || normSel.Contains("card"))))
