@@ -429,35 +429,35 @@
                                                             <th class="text-start">Outcome</th>
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("pinnacle+30", out var pinUrl)) {
-                                                                    <a href="@pinUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Pinnacle">Pinnacle <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                    <a href="@pinUrl" target="_blank" class="text-decoration-none" title="Open match in Pinnacle">Pinnacle</a>
                                                                 } else {
                                                                     <span>Pinnacle</span>
                                                                 }
                                                             </th>
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("unibet.se", out var unibetUrl)) {
-                                                                    <a href="@unibetUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Unibet">Unibet SE <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                    <a href="@unibetUrl" target="_blank" class="text-decoration-none" title="Open match in Unibet">Unibet SE</a>
                                                                 } else {
                                                                     <span>Unibet SE</span>
                                                                 }
                                                             </th>
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("bet365", out var bet365Url)) {
-                                                                    <a href="@bet365Url" target="_blank" class="text-decoration-none text-dark" title="Open match in Bet365">Bet365 <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                    <a href="@bet365Url" target="_blank" class="text-decoration-none" title="Open match in Bet365">Bet365</a>
                                                                 } else {
                                                                     <span>Bet365</span>
                                                                 }
                                                             </th>
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("1xbet", out var xUrl)) {
-                                                                    <a href="@xUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in 1xBet">1xBet <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                    <a href="@xUrl" target="_blank" class="text-decoration-none" title="Open match in 1xBet">1xBet</a>
                                                                 } else {
                                                                     <span>1xBet</span>
                                                                 }
                                                             </th>
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("betsson", out var betssonUrl)) {
-                                                                    <a href="@betssonUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Betsson">Betsson <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                    <a href="@betssonUrl" target="_blank" class="text-decoration-none" title="Open match in Betsson">Betsson</a>
                                                                 } else {
                                                                     <span>Betsson</span>
                                                                 }
@@ -765,13 +765,13 @@
                                                                                 string lastName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
                                                                                 string firstName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[2].Value).ToLowerInvariant().Replace(" ", "");
                                                                                 
-                                                                                if (normSel.Contains(lastName) && normSel.Contains(firstName))
+                                                                                if (normSel.Contains(lastName) || normSel.Contains(firstName))
                                                                                 {
                                                                                     string outcomePart = (displayOName ?? "").Substring(0, parenMatch.Index).Trim();
                                                                                     string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
                                                                                     
                                                                                     if (string.IsNullOrEmpty(normOutcomePart) || normSel.Contains(normOutcomePart) || 
-                                                                                        (normOutcomePart == "yes" && (normSel.Contains("tobebooked") || normSel.Contains("willgetbooked") || normSel.Contains("card"))))
+                                                                                        (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under"))))
                                                                                     {
                                                                                         isMatch = true;
                                                                                     }
@@ -783,13 +783,14 @@
                                                                                 if (simpleParenMatch.Success)
                                                                                 {
                                                                                     string pName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(simpleParenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
-                                                                                    if (normSel.Contains(pName))
+                                                                                    
+                                                                                    if (!double.TryParse(pName, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _) && normSel.Contains(pName))
                                                                                     {
                                                                                         string outcomePart = (displayOName ?? "").Substring(0, simpleParenMatch.Index).Trim();
                                                                                         string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
                                                                                         
                                                                                         if (string.IsNullOrEmpty(normOutcomePart) || normSel.Contains(normOutcomePart) || 
-                                                                                            (normOutcomePart == "yes" && (normSel.Contains("tobebooked") || normSel.Contains("willgetbooked") || normSel.Contains("card"))))
+                                                                                            (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under"))))
                                                                                         {
                                                                                             isMatch = true;
                                                                                         }
