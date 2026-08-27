@@ -819,10 +819,7 @@
                                                                                 }
                                                                             </div>
                                                                             @if (pd.Limit.HasValue) {
-                                                                                <div class="fw-bold text-success" style="font-size: 0.75rem;" title="Max Bet Limit">Max: €@pd.Limit.Value.ToString("0")</div>
-                                                                            }
-                                                                            @if (pd.ChangedAt.HasValue) {
-                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(pd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
+                                                                                <div class="fw-bold text-success text-nowrap" style="font-size: 0.7rem;" title="Max Bet Limit">Max: €@pd.Limit.Value.ToString("0")</div>
                                                                             }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
@@ -837,9 +834,6 @@
                                                                                     @ud.Price.ToString("0.00")
                                                                                 }
                                                                             </div>
-                                                                            @if (ud.ChangedAt.HasValue) {
-                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(ud.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
-                                                                            }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
                                                                         }
@@ -853,9 +847,6 @@
                                                                                     @bd.Price.ToString("0.00")
                                                                                 }
                                                                             </div>
-                                                                            @if (bd.ChangedAt.HasValue) {
-                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(bd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
-                                                                            }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
                                                                         }
@@ -869,9 +860,6 @@
                                                                                     @xd.Price.ToString("0.00")
                                                                                 }
                                                                             </div>
-                                                                            @if (xd.ChangedAt.HasValue) {
-                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(xd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
-                                                                            }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
                                                                         }
@@ -885,9 +873,6 @@
                                                                                     @cd.Price.ToString("0.00")
                                                                                 }
                                                                             </div>
-                                                                            @if (cd.ChangedAt.HasValue) {
-                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(cd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
-                                                                            }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
                                                                         }
