@@ -19,6 +19,10 @@ namespace BettingApp.Services
             { "Total Goals 1", "Over Under Full Time" },
             { "Total Goals 3", "Over Under Full Time" },
             { "Total Goals 4", "Over Under Full Time" },
+            { "1st Half Goals 1", "Over Under First Half" },
+            { "1st Half Goals 2", "Over Under First Half" },
+            { "1st Half Goals", "Over Under First Half" },
+            { "First Half Goals", "Over Under First Half" },
             { "Player Shots on Target", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target" },
             { "Player Fouls Committed", "Over Under Player Fouls Committed (incl. overtime)|Player Fouls Committed (incl. overtime)" },
             { "Full Time", "Full Time Result" },
@@ -148,6 +152,13 @@ namespace BettingApp.Services
             if (clean.StartsWith("Total Goals", StringComparison.OrdinalIgnoreCase))
             {
                 return new List<string> { "Over Under Full Time" };
+            }
+
+            if (clean.StartsWith("1st Half Goals", StringComparison.OrdinalIgnoreCase) || 
+                clean.StartsWith("First Half Goals", StringComparison.OrdinalIgnoreCase) ||
+                clean.StartsWith("Half Time Goals", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Over Under First Half" };
             }
 
             // Strip off any trailing scores (like "0 - 1") for 3-Way Handicaps

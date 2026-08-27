@@ -470,7 +470,7 @@
                                                             var selectedMarket = PapiSearchResult.Markets.FirstOrDefault(m => m.MarketId == SelectedPapiMarketId);
                                                             var outcomes = selectedMarket?.OutcomeNames ?? new Dictionary<string, string>();
                                                             
-                                                            @foreach (var kvp in outcomes)
+                                                            @foreach (var kvp in outcomes.OrderBy(k => GetSortKey(k.Value)))
                                                             {
                                                                 var oId = kvp.Key;
                                                                 var oName = kvp.Value;
@@ -523,7 +523,7 @@
                                                                                     validHc = true;
                                                                                 }
                                                                             }
-                                                                            else if (double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                                                                            if (!validHc && double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
                                                                             {
                                                                                 t1Hc = val;
                                                                                 t2Hc = -val;
@@ -2932,4 +2932,20 @@
             }
         }
     };
+    
+    public static string GetSortKey(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return input;
+        
+        string normalized = input.Replace(" ", "").Replace("(", "").Replace(")", "").Replace("+", "");
+
+        return System.Text.RegularExpressions.Regex.Replace(normalized, @"([-]?\d+(?:\.\d+)?)", m => 
+        {
+            if (double.TryParse(m.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+            {
+                return (val + 100000).ToString("000000.0000", System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return m.Value;
+        });
+    }
 }
