@@ -15,6 +15,8 @@ public class OddsData
 {
     public double Price { get; set; }
     public DateTime? ChangedAt { get; set; }
+    public string? BetslipUrl { get; set; }
+    public bool IsSuspended { get; set; }
 }
 
 public class OddsPapiSearchResult
@@ -22,6 +24,7 @@ public class OddsPapiSearchResult
     public string MatchName { get; set; } = "";
     public DateTime StartTime { get; set; }
     public bool IsLive { get; set; }
+    public string? FlashscoreId { get; set; }
     
     // List of all markets found for this match
     public List<OddsPapiMarket> Markets { get; set; } = new();

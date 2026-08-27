@@ -279,11 +279,21 @@ public class OddsApiService
             oResp.Dispose();
             using var oddsDoc = JsonDocument.Parse(oJson);
             
+            string? flashscoreId = null;
+            if (bestFixture.TryGetProperty("externalProviders", out var ep))
+            {
+                if (ep.TryGetProperty("flashscoreId", out var fsid) && fsid.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    flashscoreId = fsid.GetString();
+                }
+            }
+
             var result = new BettingApp.Models.OddsPapiSearchResult
             {
                 MatchName = matchName,
                 StartTime = startTime,
-                IsLive = isLive
+                IsLive = isLive,
+                FlashscoreId = flashscoreId
             };
 
             if (oddsDoc.RootElement.TryGetProperty("bookmakerOdds", out var bookmakerOdds))
@@ -346,6 +356,18 @@ public class OddsApiService
                                             if (playerProp.Value.TryGetProperty("price", out var price))
                                             {
                                                 var oddsData = new BettingApp.Models.OddsData { Price = price.GetDouble() };
+
+                                                if (result.BookmakerUrls.TryGetValue(bmName, out var fixtureUrl))
+                                                {
+                                                    oddsData.BetslipUrl = fixtureUrl;
+                                                }
+
+                                                bool pActive = !playerProp.Value.TryGetProperty("active", out var aProp) || aProp.ValueKind != System.Text.Json.JsonValueKind.False;
+                                                bool bmSuspended = bookmaker.Value.TryGetProperty("suspended", out var sProp) && sProp.ValueKind == System.Text.Json.JsonValueKind.True;
+                                                bool mActive = !market.Value.TryGetProperty("marketActive", out var mProp) || mProp.ValueKind != System.Text.Json.JsonValueKind.False;
+                                                
+                                                oddsData.IsSuspended = bmSuspended || !mActive || !pActive;
+
                                                 if (playerProp.Value.TryGetProperty("changedAt", out var changedAtProp) && changedAtProp.ValueKind == System.Text.Json.JsonValueKind.String)
                                                 {
                                                     if (DateTime.TryParse(changedAtProp.GetString(), out var changedAt))
