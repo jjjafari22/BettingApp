@@ -180,6 +180,13 @@ namespace BettingApp.Services
                 return new List<string> { "Asian Handicap" };
             }
 
+            // Route Asian Total variants to Over Under
+            if (clean.StartsWith("Asian Total", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Over Under" + halfSuffix };
+                return new List<string> { "Over Under Full Time" };
+            }
+
             // 2. Otherwise return what the AI gave us
             return new List<string> { clean };
         }
