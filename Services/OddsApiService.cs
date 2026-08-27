@@ -259,7 +259,7 @@ public class OddsApiService
             }
 
             // 3. Fetch Odds for Unibet SE, Betsson, Bet365
-            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365";
+            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365,pinnacle%2B30,1xbet";
             var oResp = await _httpClient.GetAsync(oddsUrl);
             
             // Retry once if rate limited
@@ -367,6 +367,11 @@ public class OddsApiService
                                                 bool mActive = !market.Value.TryGetProperty("marketActive", out var mProp) || mProp.ValueKind != System.Text.Json.JsonValueKind.False;
                                                 
                                                 oddsData.IsSuspended = bmSuspended || !mActive || !pActive;
+
+                                                if (playerProp.Value.TryGetProperty("limit", out var limitProp) && limitProp.ValueKind == System.Text.Json.JsonValueKind.Number)
+                                                {
+                                                    oddsData.Limit = limitProp.GetDouble();
+                                                }
 
                                                 if (playerProp.Value.TryGetProperty("changedAt", out var changedAtProp) && changedAtProp.ValueKind == System.Text.Json.JsonValueKind.String)
                                                 {

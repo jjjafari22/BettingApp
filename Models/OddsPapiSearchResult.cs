@@ -17,6 +17,7 @@ public class OddsData
     public DateTime? ChangedAt { get; set; }
     public string? BetslipUrl { get; set; }
     public bool IsSuspended { get; set; }
+    public double? Limit { get; set; }
 }
 
 public class OddsPapiSearchResult

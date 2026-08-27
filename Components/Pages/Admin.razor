@@ -428,6 +428,13 @@
                                                         <tr>
                                                             <th class="text-start">Outcome</th>
                                                             <th>
+                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("pinnacle+30", out var pinUrl)) {
+                                                                    <a href="@pinUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Pinnacle">Pinnacle <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                } else {
+                                                                    <span>Pinnacle</span>
+                                                                }
+                                                            </th>
+                                                            <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("unibet.se", out var unibetUrl)) {
                                                                     <a href="@unibetUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Unibet">Unibet SE <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
                                                                 } else {
@@ -435,17 +442,24 @@
                                                                 }
                                                             </th>
                                                             <th>
-                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("betsson", out var betssonUrl)) {
-                                                                    <a href="@betssonUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Betsson">Betsson <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
-                                                                } else {
-                                                                    <span>Betsson</span>
-                                                                }
-                                                            </th>
-                                                            <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("bet365", out var bet365Url)) {
                                                                     <a href="@bet365Url" target="_blank" class="text-decoration-none text-dark" title="Open match in Bet365">Bet365 <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
                                                                 } else {
                                                                     <span>Bet365</span>
+                                                                }
+                                                            </th>
+                                                            <th>
+                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("1xbet", out var xUrl)) {
+                                                                    <a href="@xUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in 1xBet">1xBet <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                } else {
+                                                                    <span>1xBet</span>
+                                                                }
+                                                            </th>
+                                                            <th>
+                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("betsson", out var betssonUrl)) {
+                                                                    <a href="@betssonUrl" target="_blank" class="text-decoration-none text-dark" title="Open match in Betsson">Betsson <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.7rem;"></i></a>
+                                                                } else {
+                                                                    <span>Betsson</span>
                                                                 }
                                                             </th>
                                                         </tr>
@@ -776,6 +790,25 @@
                                                                         @displayOName
                                                                     </td>
                                                                     <td class="text-dark">
+                                                                        @if (bookies.TryGetValue("pinnacle+30", out var p) && p.TryGetValue(oName, out var pd)) {
+                                                                            <div class="fw-bold">
+                                                                                @if (pd.IsSuspended) {
+                                                                                    <span title="Suspended" class="text-muted"><i class="bi bi-lock-fill text-warning"></i> @pd.Price.ToString("0.00")</span>
+                                                                                } else {
+                                                                                    @pd.Price.ToString("0.00")
+                                                                                }
+                                                                            </div>
+                                                                            @if (pd.Limit.HasValue) {
+                                                                                <div class="fw-bold text-success" style="font-size: 0.75rem;" title="Max Bet Limit">Max: €@pd.Limit.Value.ToString("0")</div>
+                                                                            }
+                                                                            @if (pd.ChangedAt.HasValue) {
+                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(pd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
+                                                                            }
+                                                                        } else {
+                                                                            <div class="fw-bold">-</div>
+                                                                        }
+                                                                    </td>
+                                                                    <td class="text-dark">
                                                                         @if (bookies.TryGetValue("unibet.se", out var u) && u.TryGetValue(oName, out var ud)) {
                                                                             <div class="fw-bold">
                                                                                 @if (ud.IsSuspended) {
@@ -792,22 +825,6 @@
                                                                         }
                                                                     </td>
                                                                     <td class="text-dark">
-                                                                        @if (bookies.TryGetValue("betsson", out var c) && c.TryGetValue(oName, out var cd)) {
-                                                                            <div class="fw-bold">
-                                                                                @if (cd.IsSuspended) {
-                                                                                    <span title="Suspended" class="text-muted"><i class="bi bi-lock-fill text-warning"></i> @cd.Price.ToString("0.00")</span>
-                                                                                } else {
-                                                                                    @cd.Price.ToString("0.00")
-                                                                                }
-                                                                            </div>
-                                                                            @if (cd.ChangedAt.HasValue) {
-                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(cd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
-                                                                            }
-                                                                        } else {
-                                                                            <div class="fw-bold">-</div>
-                                                                        }
-                                                                    </td>
-                                                                    <td class="text-dark">
                                                                         @if (bookies.TryGetValue("bet365", out var b) && b.TryGetValue(oName, out var bd)) {
                                                                             <div class="fw-bold">
                                                                                 @if (bd.IsSuspended) {
@@ -818,6 +835,38 @@
                                                                             </div>
                                                                             @if (bd.ChangedAt.HasValue) {
                                                                                 <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(bd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
+                                                                            }
+                                                                        } else {
+                                                                            <div class="fw-bold">-</div>
+                                                                        }
+                                                                    </td>
+                                                                    <td class="text-dark">
+                                                                        @if (bookies.TryGetValue("1xbet", out var x) && x.TryGetValue(oName, out var xd)) {
+                                                                            <div class="fw-bold">
+                                                                                @if (xd.IsSuspended) {
+                                                                                    <span title="Suspended" class="text-muted"><i class="bi bi-lock-fill text-warning"></i> @xd.Price.ToString("0.00")</span>
+                                                                                } else {
+                                                                                    @xd.Price.ToString("0.00")
+                                                                                }
+                                                                            </div>
+                                                                            @if (xd.ChangedAt.HasValue) {
+                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(xd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
+                                                                            }
+                                                                        } else {
+                                                                            <div class="fw-bold">-</div>
+                                                                        }
+                                                                    </td>
+                                                                    <td class="text-dark">
+                                                                        @if (bookies.TryGetValue("betsson", out var c) && c.TryGetValue(oName, out var cd)) {
+                                                                            <div class="fw-bold">
+                                                                                @if (cd.IsSuspended) {
+                                                                                    <span title="Suspended" class="text-muted"><i class="bi bi-lock-fill text-warning"></i> @cd.Price.ToString("0.00")</span>
+                                                                                } else {
+                                                                                    @cd.Price.ToString("0.00")
+                                                                                }
+                                                                            </div>
+                                                                            @if (cd.ChangedAt.HasValue) {
+                                                                                <div style="font-size: 0.65rem; color: #6c757d;" title="Last updated">@ToUserLocal(cd.ChangedAt.Value).ToString("MM-dd HH:mm")</div>
                                                                             }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
