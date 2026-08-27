@@ -541,14 +541,20 @@
                                                                         if (!hcMatch.Success || (!displayOName.Contains(t1) && !displayOName.Contains(t2) && !displayOName.Contains("Draw")))
                                                                         {
                                                                             if (displayOName == "1") displayOName = t1;
-                                                                            else if (displayOName.StartsWith("1 ")) displayOName = t1 + displayOName.Substring(1);
-                                                                            
-                                                                            if (displayOName == "2") displayOName = t2;
-                                                                            else if (displayOName.StartsWith("2 ")) displayOName = t2 + displayOName.Substring(1);
-                                                                            
-                                                                            displayOName = displayOName.Replace("1/", $"{t1}/").Replace("/1", $"/{t1}");
-                                                                            displayOName = displayOName.Replace("2/", $"{t2}/").Replace("/2", $"/{t2}");
-                                                                            displayOName = displayOName.Replace("X", "Draw").Replace("x", "Draw");
+                                                                            else if (displayOName == "2") displayOName = t2;
+                                                                            else if (displayOName.Equals("X", StringComparison.OrdinalIgnoreCase)) displayOName = "Draw";
+                                                                            else if (displayOName.Equals("1X", StringComparison.OrdinalIgnoreCase)) displayOName = $"{t1} or Draw";
+                                                                            else if (displayOName.Equals("X2", StringComparison.OrdinalIgnoreCase)) displayOName = $"Draw or {t2}";
+                                                                            else if (displayOName == "12") displayOName = $"{t1} or {t2}";
+                                                                            else {
+                                                                                if (displayOName.StartsWith("1 ")) displayOName = t1 + displayOName.Substring(1);
+                                                                                else if (displayOName.StartsWith("2 ")) displayOName = t2 + displayOName.Substring(1);
+                                                                                
+                                                                                displayOName = displayOName.Replace("1/", $"{t1}/").Replace("/1", $"/{t1}");
+                                                                                displayOName = displayOName.Replace("2/", $"{t2}/").Replace("/2", $"/{t2}");
+                                                                                displayOName = displayOName.Replace("X/", "Draw/").Replace("x/", "Draw/");
+                                                                                displayOName = displayOName.Replace("/X", "/Draw").Replace("/x", "/Draw");
+                                                                            }
                                                                         }
                                                                     }
                                                                 }
@@ -2182,10 +2188,26 @@
                 {
                     SelectedPapiMarketId = bestMatch.MarketId;
                     
-                    if (!isCanonicalTranslation && !simplifiedTargets.Any(t => t.StartsWith(simplify(bestMatch.MarketName)) || simplify(bestMatch.MarketName) == t))
+                    if (!isCanonicalTranslation)
                     {
-                        OddsLookupWarningMessage = $"OddsPapi doesn't offer '{preSelectCategory}'. Showing '{bestMatch.MarketName}' instead.";
-                        Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
+                        var lineRegex = new System.Text.RegularExpressions.Regex(@"\d+(?:\.\d+)?");
+                        var lineMatch = lineRegex.Match(ActiveLookupLeg?.Selection ?? "");
+                        if (lineMatch.Success && double.TryParse(lineMatch.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double aiVal))
+                        {
+                            bool lineExists = bestMatch.OutcomeNames.Values.Any(v => {
+                                var vMatch = lineRegex.Match(v);
+                                if (vMatch.Success && double.TryParse(vMatch.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double vVal)) {
+                                    return Math.Abs(aiVal - vVal) < 0.001;
+                                }
+                                return false;
+                            });
+                            
+                            if (!lineExists)
+                            {
+                                OddsLookupWarningMessage = $"The betslip is for '{preSelectCategory}'. Automatically showing '{bestMatch.MarketName}' instead, but verify if the specific line is available.";
+                                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
+                            }
+                        }
                     }
                 }
                 else

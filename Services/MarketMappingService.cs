@@ -154,6 +154,12 @@ namespace BettingApp.Services
                 return new List<string> { "Over Under Full Time" };
             }
 
+            if (clean.StartsWith("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Cards Over/Under", StringComparison.OrdinalIgnoreCase))
+            {
+                if (halfSuffix == " First Half") return new List<string> { "Bookings - Over Under First Half" };
+                return new List<string> { "Bookings - Over Under Full Time" };
+            }
+
             if (clean.StartsWith("1st Half Goals", StringComparison.OrdinalIgnoreCase) || 
                 clean.StartsWith("First Half Goals", StringComparison.OrdinalIgnoreCase) ||
                 clean.StartsWith("Half Time Goals", StringComparison.OrdinalIgnoreCase))

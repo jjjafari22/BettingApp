@@ -18,7 +18,10 @@ namespace BettingApp.Services
                     stringBuilder.Append(c);
                 }
             }
-            return stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC);
+            var result = stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC);
+            return result.Replace("ø", "o").Replace("Ø", "O")
+                         .Replace("æ", "a").Replace("Æ", "A")
+                         .Replace("å", "a").Replace("Å", "A");
         }
 
         // Maps alternative/bilingual team names to their standard API format.
