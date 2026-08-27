@@ -429,7 +429,13 @@ public class OddsApiService
             // Deduplicate outcome names and sort markets by name
             foreach (var market in result.Markets)
             {
-                market.OutcomeNames = market.OutcomeNames
+                // Prune outcomes that have no odds at all (e.g. empty generic markets)
+                var activeOutcomes = market.OutcomeNames.Where(kv => 
+                    result.BookmakerOdds.TryGetValue(market.MarketName, out var bmDict) && 
+                    bmDict.Any(bm => bm.Value.ContainsKey(kv.Value))
+                ).ToList();
+
+                market.OutcomeNames = activeOutcomes
                     .GroupBy(x => x.Value)
                     .Select(g => g.First())
                     .OrderBy(x => 

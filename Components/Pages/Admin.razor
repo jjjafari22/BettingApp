@@ -777,6 +777,25 @@
                                                                                     }
                                                                                 }
                                                                             }
+                                                                            else
+                                                                            {
+                                                                                var simpleParenMatch = System.Text.RegularExpressions.Regex.Match(displayOName ?? "", @"\(([^()]+)\)$");
+                                                                                if (simpleParenMatch.Success)
+                                                                                {
+                                                                                    string pName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(simpleParenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
+                                                                                    if (normSel.Contains(pName))
+                                                                                    {
+                                                                                        string outcomePart = (displayOName ?? "").Substring(0, simpleParenMatch.Index).Trim();
+                                                                                        string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
+                                                                                        
+                                                                                        if (string.IsNullOrEmpty(normOutcomePart) || normSel.Contains(normOutcomePart) || 
+                                                                                            (normOutcomePart == "yes" && (normSel.Contains("tobebooked") || normSel.Contains("willgetbooked") || normSel.Contains("card"))))
+                                                                                        {
+                                                                                            isMatch = true;
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
                                                                         }
                                                                     }
                                                                 }
