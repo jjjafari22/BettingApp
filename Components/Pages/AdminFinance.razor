@@ -56,13 +56,25 @@
             <button type="button" class="btn btn-@(viewMode == ViewMode.Weekly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Weekly)">Weekly</button>
             <button type="button" class="btn btn-@(viewMode == ViewMode.Monthly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Monthly)">Monthly</button>
             <button type="button" class="btn btn-@(viewMode == ViewMode.Yearly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Yearly)">Yearly</button>
+            <button type="button" class="btn btn-@(viewMode == ViewMode.Custom ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Custom)">Custom</button>
         </div>
         
-        <div class="d-flex align-items-center">
-            <button class="btn btn-outline-light btn-sm me-2" @onclick="PreviousPeriod"><i class="bi bi-chevron-left"></i></button>
-            <span class="fw-bold mx-2">@GetPeriodDisplayString()</span>
-            <button class="btn btn-outline-light btn-sm ms-2" @onclick="NextPeriod"><i class="bi bi-chevron-right"></i></button>
-            <button class="btn btn-light btn-sm ms-3" @onclick="GoToCurrent">Today</button>
+        <div class="d-flex align-items-center flex-wrap gap-2 mt-2 mt-md-0">
+            @if (viewMode == ViewMode.Custom)
+            {
+                <div class="d-flex align-items-center bg-white rounded p-1 shadow-sm">
+                    <input type="date" class="form-control form-control-sm border-0" @bind="customStartDateNorway" @bind:after="OnCustomDateChanged" title="From Date" />
+                    <span class="mx-2 text-dark fw-bold">-</span>
+                    <input type="date" class="form-control form-control-sm border-0" @bind="customEndDateNorway" @bind:after="OnCustomDateChanged" title="To Date" />
+                </div>
+            }
+            else
+            {
+                <button class="btn btn-outline-light btn-sm" @onclick="PreviousPeriod"><i class="bi bi-chevron-left"></i></button>
+                <span class="fw-bold mx-2">@GetPeriodDisplayString()</span>
+                <button class="btn btn-outline-light btn-sm" @onclick="NextPeriod"><i class="bi bi-chevron-right"></i></button>
+                <button class="btn btn-light btn-sm ms-2" @onclick="GoToCurrent">Today</button>
+            }
         </div>
     </div>
     
@@ -139,7 +151,7 @@
 </div>
 
 @code {
-    private enum ViewMode { Daily, Weekly, Monthly, Yearly }
+    private enum ViewMode { Daily, Weekly, Monthly, Yearly, Custom }
 
     private bool isAuthorized = false;
     private HubConnection? hubConnection;
@@ -147,6 +159,10 @@
     // State
     private ViewMode viewMode = ViewMode.Daily;
     private DateTime currentDateNorway; // Tracks the currently viewed date in Norway time
+    
+    // Custom Date Range
+    private DateTime? customStartDateNorway;
+    private DateTime? customEndDateNorway;
     
     // Live Tracker
     private decimal netOpenLiability = 0;
@@ -226,7 +242,27 @@
     private void SetViewMode(ViewMode mode)
     {
         viewMode = mode;
+        if (mode == ViewMode.Custom)
+        {
+            customStartDateNorway ??= currentDateNorway.Date.AddDays(-7);
+            customEndDateNorway ??= currentDateNorway.Date;
+        }
         _ = LoadMetricsAsync();
+    }
+
+    private void OnCustomDateChanged()
+    {
+        if (customStartDateNorway != null && customEndDateNorway != null)
+        {
+            if (customStartDateNorway > customEndDateNorway)
+            {
+                // Auto-correct if start > end
+                var temp = customStartDateNorway;
+                customStartDateNorway = customEndDateNorway;
+                customEndDateNorway = temp;
+            }
+            _ = LoadMetricsAsync();
+        }
     }
 
     private void PreviousPeriod()
@@ -301,6 +337,10 @@
             case ViewMode.Yearly:
                 startNorway = new DateTime(currentDateNorway.Year, 1, 1);
                 endNorway = startNorway.AddYears(1);
+                break;
+            case ViewMode.Custom:
+                startNorway = customStartDateNorway?.Date ?? currentDateNorway.Date;
+                endNorway = (customEndDateNorway?.Date ?? currentDateNorway.Date).AddDays(1);
                 break;
             default:
                 startNorway = currentDateNorway.Date;
