@@ -17,13 +17,13 @@
 
 <h3>Admin Settings</h3>
 
-@if (!hasAccess)
-{
-    <div class="alert alert-danger">You are not authorized to view this page.</div>
-}
-else if (isLoading)
+@if (isLoading)
 {
     <p><em>Loading settings...</em></p>
+}
+else if (!hasAccess)
+{
+    <div class="alert alert-danger">You are not authorized to view this page.</div>
 }
 else
 {

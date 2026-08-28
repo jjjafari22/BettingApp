@@ -14,7 +14,11 @@
 
 <h3>Audit Logs (@totalLogs)</h3>
 
-@if (!isAdmin)
+@if (isInitializing)
+{
+    <p><em>Loading...</em></p>
+}
+else if (!isAdmin)
 {
     <div class="alert alert-danger">You are not authorized to view this page.</div>
 }
@@ -125,6 +129,7 @@ else
     private const int pageSize = 25;
     private int totalLogs = 0;
     private bool isAdmin = false;
+    private bool isInitializing = true;
     private int totalPages => totalLogs == 0 ? 1 : (int)Math.Ceiling((double)totalLogs / pageSize);
     private bool hasNextPage => currentPage < totalPages;
     private int TimezoneOffset { get; set; }
@@ -170,6 +175,7 @@ else
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         }
+        isInitializing = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

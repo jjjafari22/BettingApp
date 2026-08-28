@@ -16,7 +16,11 @@
 
 <PageTitle>Admin Referrals - Castle of Happiness</PageTitle>
 
-@if (!isAdmin)
+@if (isInitializing)
+{
+    <p><em>Loading...</em></p>
+}
+else if (!isAdmin)
 {
     <div class="alert alert-danger mt-4 mx-3">You are not authorized to view this page.</div>
 }
@@ -272,6 +276,7 @@ else
 
 @code {
     private bool isAdmin = false;
+    private bool isInitializing = true;
     private List<ApplicationUser> allUsers = new();
     private List<ReferralVM> activeReferrals = new();
     private List<ReferralVM> historicReferrals = new();
@@ -302,6 +307,7 @@ else
                 await LoadData();
             }
         }
+        isInitializing = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

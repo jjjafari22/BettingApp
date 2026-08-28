@@ -27,13 +27,13 @@
     </div>
 }
 
-@if (!isAdmin)
-{
-    <p>You are not authorized to view this page.</p>
-}
-else if (userRows == null)
+@if (userRows == null)
 {
     <p><em>Loading...</em></p>
+}
+else if (!isAdmin)
+{
+    <p>You are not authorized to view this page.</p>
 }
 else
 {

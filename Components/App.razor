@@ -93,6 +93,49 @@
     <script src="@Assets["lib/bootstrap/dist/js/bootstrap.bundle.min.js"]"></script>
     <script src="js/discordMarkdown.js"></script>
     
+    <style>
+        #components-reconnect-modal {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 10000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(248, 249, 250, 0.9);
+            backdrop-filter: blur(5px);
+            color: #212529;
+            text-align: center;
+        }
+        #components-reconnect-modal.components-reconnect-show {
+            display: flex;
+            animation: fadeIn 0.3s;
+        }
+        @@keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .reconnect-spinner {
+            width: 2.5rem;
+            height: 2.5rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+
+    <div id="components-reconnect-modal" class="components-reconnect-hide">
+        <div class="spinner-border text-primary reconnect-spinner" role="status">
+            <span class="visually-hidden">Reconnecting...</span>
+        </div>
+        <h5 class="fw-bold mb-1">Connection lost</h5>
+        <p class="text-muted small mb-4">Attempting to securely reconnect (Timeout in <span id="reconnect-countdown" class="fw-bold text-danger">35</span>s)...</p>
+        <button class="btn btn-outline-primary px-4 rounded-pill shadow-sm" onclick="window.location.reload()">
+            <i class="bi bi-arrow-clockwise me-2"></i>Reload Now
+        </button>
+    </div>
+
     @* --- MOBILE OPTIMIZED RECONNECTION LOGIC --- *@
     <script src="_framework/blazor.web.js" autostart="false"></script>
     <script>
@@ -109,8 +152,13 @@
 
         // 2. Safely monitor for the reconnect modal without queueing infinite loops
         let reconnectTimer = null;
+        let countdownInterval = null;
+        let timeLeft = 35;
+        
         const observer = new MutationObserver(() => {
             const modal = document.getElementById('components-reconnect-modal');
+            const countdownEl = document.getElementById('reconnect-countdown');
+            
             if (modal) {
                 // If Blazor officially gave up or the circuit was rejected, reload immediately
                 if (modal.classList.contains('components-reconnect-failed') || 
@@ -124,6 +172,14 @@
                 // so the user doesn't lose their state on a slow connection.
                 if (modal.classList.contains('components-reconnect-show')) {
                     if (!reconnectTimer) {
+                        timeLeft = 35;
+                        if (countdownEl) countdownEl.innerText = timeLeft;
+                        
+                        countdownInterval = setInterval(() => {
+                            timeLeft--;
+                            if (countdownEl) countdownEl.innerText = timeLeft;
+                        }, 1000);
+                        
                         reconnectTimer = setTimeout(() => {
                             console.log("Stuck rejoining for 35 seconds. Reloading to recover.");
                             window.location.reload();
@@ -134,6 +190,10 @@
                     if (reconnectTimer) {
                         clearTimeout(reconnectTimer);
                         reconnectTimer = null;
+                    }
+                    if (countdownInterval) {
+                        clearInterval(countdownInterval);
+                        countdownInterval = null;
                     }
                 }
             }

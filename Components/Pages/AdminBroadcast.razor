@@ -46,13 +46,13 @@
 
 <h3>Broadcast Message to Discord</h3>
 
-@if (!hasAccess)
-{
-    <div class="alert alert-danger">You are not authorized to view this page.</div>
-}
-else if (isLoading)
+@if (isLoading)
 {
     <p><em>Loading channels...</em></p>
+}
+else if (!hasAccess)
+{
+    <div class="alert alert-danger">You are not authorized to view this page.</div>
 }
 else
 {
