@@ -64,11 +64,7 @@
 
 @if (IsLoading)
 {
-    <div class="d-flex justify-content-center align-items-center p-5">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-    </div>
+    <LoadingData Text="Loading Dashboard..." />
 }
 else if (string.IsNullOrEmpty(userId))
 {

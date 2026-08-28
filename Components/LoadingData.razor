@@ -1,0 +1,11 @@
+<div class="d-flex flex-column justify-content-center align-items-center p-5 mt-4">
+    <div class="spinner-border text-primary mb-3" role="status" style="width: 3.5rem; height: 3.5rem; border-width: 0.35em;">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <h5 class="fw-bold text-muted">@Text</h5>
+</div>
+
+@code {
+    [Parameter]
+    public string Text { get; set; } = "Loading Your Data...";
+}

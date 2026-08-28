@@ -19,6 +19,13 @@
 
 <h3>Manage Transactions</h3>
 
+@if (isInitializing)
+{
+    <LoadingData Text="Loading Transactions..." />
+}
+else
+{
+
 @if (successMessage != null)
 {
     <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
@@ -359,7 +366,10 @@
     </div>
 </div>
 
+}
+
 @code {
+    private bool isInitializing = true;
     private List<Transaction> allTransactions = new();
     private List<Transaction> pendingWithdrawals = new();
     
@@ -434,6 +444,7 @@
         }
 
         await LoadTransactions(context);
+        isInitializing = false;
     }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
