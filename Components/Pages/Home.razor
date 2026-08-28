@@ -1,5 +1,5 @@
 @page "/"
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 @using Microsoft.AspNetCore.SignalR
 @using BettingApp.Hubs
 @using Microsoft.AspNetCore.Authorization
@@ -465,8 +465,13 @@ else
         return utcDate.AddMinutes(-TimezoneOffset);
     }
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         try
         {
             var auth = await AuthState.GetAuthenticationStateAsync();
@@ -475,7 +480,6 @@ else
             {
                 userId = uid;
                 userName = auth.User.Identity?.Name ?? "Unknown";
-                
                 using var context = DbFactory.CreateDbContext();
                 var user = await context.Users.AsNoTracking()
                     .Select(u => new { u.Id, u.IsAdmin }) 

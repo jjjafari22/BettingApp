@@ -1,5 +1,5 @@
 @page "/deposit-withdraw"
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 @using BettingApp.Data
 @using BettingApp.Services
 @using Microsoft.EntityFrameworkCore
@@ -269,8 +269,13 @@
         return utcDate.AddMinutes(-TimezoneOffset);
     }
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var auth = await AuthState.GetAuthenticationStateAsync();
         userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value ?? "";
         

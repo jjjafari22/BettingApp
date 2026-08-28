@@ -12,7 +12,7 @@
 @using BettingApp.Services
 @inject DiscordNotificationService DiscordService
 @inject BettingApp.Services.DialogService DialogService
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <PageTitle>Admin Referrals - Castle of Happiness</PageTitle>
 
@@ -294,8 +294,13 @@ else
     private string? errorMessage;
     private int TimezoneOffset { get; set; }
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         if (authState.User.Identity?.IsAuthenticated == true)
         {

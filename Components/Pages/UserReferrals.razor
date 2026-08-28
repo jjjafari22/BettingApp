@@ -5,7 +5,7 @@
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <PageTitle>My Referrals - Castle of Happiness</PageTitle>
 
@@ -124,8 +124,13 @@
         return string.IsNullOrEmpty(fullName) ? fallback : fullName;
     }
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         if (user.Identity?.IsAuthenticated == true)

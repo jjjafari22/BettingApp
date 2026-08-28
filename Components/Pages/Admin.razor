@@ -21,7 +21,7 @@
 @inject MarketMappingService MarketMapper
 @inject IServiceProvider ServiceProvider
 @attribute [Authorize]
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 @implements IAsyncDisposable
 
 <style>
@@ -1553,8 +1553,13 @@ else
         }
     }
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         currentAdminName = user.Identity?.Name;

@@ -14,7 +14,7 @@
 @inject NavigationManager Nav
 @inject IHubContext<BetHub> HubContext
 @inject BettingApp.Services.DialogService DialogService
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 @implements IAsyncDisposable
 
 <h3>Credit / Liability</h3>
@@ -169,8 +169,13 @@ else
         return sortDescending ? "bi bi-arrow-down-short text-warning" : "bi bi-arrow-up-short text-warning";
     }
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         currentAdminName = user.Identity?.Name;

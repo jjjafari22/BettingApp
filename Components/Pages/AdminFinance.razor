@@ -8,7 +8,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
 @attribute [Authorize]
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <h3>Finance Dashboard</h3>
 
@@ -180,9 +180,13 @@
     private decimal totalNetLiability = 0;
     private int totalBets = 0;
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
-        // 1. Authorization Check
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var userName = authState.User.Identity?.Name;
 

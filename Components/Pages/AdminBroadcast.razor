@@ -9,7 +9,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <style>
     .channel-list {
@@ -330,8 +330,13 @@ else
 
     private bool CanSend => !string.IsNullOrWhiteSpace(broadcastMessage) && selectedChannelIds.Count > 0;
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 

@@ -13,7 +13,7 @@
 @inject IHubContext<BetHub> HubContext
 @inject BettingApp.Services.DiscordNotificationService DiscordService
 @implements IAsyncDisposable
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <h3>Admin Settings</h3>
 
@@ -102,8 +102,13 @@ else
     private string? currentAdminName;
     private HubConnection? hubConnection;
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         currentAdminName = user.Identity?.Name;

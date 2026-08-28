@@ -10,7 +10,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @implements IAsyncDisposable
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <h3>Audit Logs (@totalLogs)</h3>
 
@@ -149,8 +149,13 @@ else
         }
     }
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 

@@ -15,7 +15,7 @@
 @inject DiscordNotificationService DiscordService
 @inject BettingApp.Services.DialogService DialogService
 @attribute [Authorize]
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <h3>Manage Transactions</h3>
 
@@ -423,8 +423,13 @@ else
         }
     }
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         currentAdminName = user.Identity?.Name;

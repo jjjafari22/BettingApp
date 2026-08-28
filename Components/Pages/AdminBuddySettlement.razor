@@ -8,7 +8,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Web
 @attribute [Authorize]
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
 @inject SettlementService SettlementService
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IJSRuntime JS
@@ -560,8 +560,13 @@
         return utcDate.AddMinutes(-TimezoneOffset);
     }
 
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         using var context = DbFactory.CreateDbContext();
