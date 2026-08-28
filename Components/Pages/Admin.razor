@@ -1110,7 +1110,7 @@
                                </td>
                                <td class="text-center">
                                    @if (ConfirmingOutcomeBetIds.Contains(bet.Id)) {
-                                       <span class="spinner-border spinner-border-sm text-info" role="status" title="Checking outcome..."></span>
+                                       <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>
                                    } else {
                                        @GetAiOutcomeBadge(bet.AiOutcomeResult)
                                    }
@@ -1226,7 +1226,7 @@
                             </td>
                             <td class="text-center">
                                 @if (ConfirmingOutcomeBetIds.Contains(bet.Id)) {
-                                    <span class="spinner-border spinner-border-sm text-info" role="status" title="Checking outcome..."></span>
+                                    <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>
                                 } else {
                                     @GetAiOutcomeBadge(bet.AiOutcomeResult)
                                 }
@@ -2630,9 +2630,6 @@
             }
             else if (newStatus != "Approved" && newStatus != "Pending")
             {
-                dbBet.NextCheckTime = null;
-                bet.NextCheckTime = null;
-
                 if (newStatus == "Won" || newStatus == "Lost" || newStatus == "Void")
                 {
                     bool isAiFinished = false;
@@ -2649,6 +2646,12 @@
                                 }
                             }
                         } catch { }
+                    }
+                    
+                    if (isAiFinished || dbBet.AiOutcomeResult == "Admin Override")
+                    {
+                        dbBet.NextCheckTime = null;
+                        bet.NextCheckTime = null;
                     }
 
                     if (!isAiFinished && dbBet.AiOutcomeResult != "Admin Override")

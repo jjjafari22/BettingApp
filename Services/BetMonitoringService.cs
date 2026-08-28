@@ -55,9 +55,9 @@ namespace BettingApp.Services
             var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             using var context = dbFactory.CreateDbContext();
 
-            // Find active bets where NextCheckTime has passed
+            // Find active or completed bets where NextCheckTime has passed
             var dueBets = await context.Bets
-                .Where(b => b.Status == "Approved" && b.NextCheckTime.HasValue && b.NextCheckTime.Value <= DateTime.UtcNow)
+                .Where(b => (b.Status == "Approved" || b.Status == "Won" || b.Status == "Lost" || b.Status == "Void") && b.NextCheckTime.HasValue && b.NextCheckTime.Value <= DateTime.UtcNow)
                 .ToListAsync(stoppingToken);
 
             bool anyUpdates = false;
