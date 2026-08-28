@@ -15,7 +15,7 @@
 @inject DiscordNotificationService DiscordService
 @inject BettingApp.Services.DialogService DialogService
 @attribute [Authorize]
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h3>Manage Transactions</h3>
 

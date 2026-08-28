@@ -14,7 +14,7 @@
 @inject NavigationManager Nav
 @inject IHubContext<BetHub> HubContext
 @inject BettingApp.Services.DialogService DialogService
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IAsyncDisposable
 
 <h3>Credit / Liability</h3>

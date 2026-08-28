@@ -21,7 +21,7 @@
 @inject MarketMappingService MarketMapper
 @inject IServiceProvider ServiceProvider
 @attribute [Authorize]
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IAsyncDisposable
 
 <style>

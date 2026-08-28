@@ -13,7 +13,7 @@
 @inject IHubContext<BetHub> HubContext
 @inject BettingApp.Services.DiscordNotificationService DiscordService
 @implements IAsyncDisposable
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h3>Admin Settings</h3>
 

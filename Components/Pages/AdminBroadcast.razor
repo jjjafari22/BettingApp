@@ -9,7 +9,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <style>
     .channel-list {

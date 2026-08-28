@@ -18,7 +18,7 @@
 @inject IEmailSender<ApplicationUser> EmailSenderInterface
 @inject BettingApp.Services.DialogService DialogService
 @implements IAsyncDisposable
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <style>
     /* Clickable Rows */

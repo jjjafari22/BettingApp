@@ -12,7 +12,7 @@
 @using BettingApp.Services
 @inject DiscordNotificationService DiscordService
 @inject BettingApp.Services.DialogService DialogService
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <PageTitle>Admin Referrals - Castle of Happiness</PageTitle>
 
