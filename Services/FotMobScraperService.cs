@@ -613,7 +613,8 @@ namespace BettingApp.Services
                            .Replace("ö", "o").Replace("ä", "a").Replace("ü", "u");
                            
             // Map common english translated team names to local names
-            result = result.Replace("copenhagen", "kobenhavn");
+            result = result.Replace("copenhagen", "kobenhavn")
+                           .Replace("munich", "munchen");
             
             return result;
         }
