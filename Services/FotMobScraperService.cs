@@ -500,7 +500,7 @@ namespace BettingApp.Services
             bool qInO = CheckSubset(qTokens, oTokens);
             bool oInQ = CheckSubset(oTokens, qTokens);
 
-            if (HasSpecialModifier(option) && !HasSpecialModifier(query))
+            if (HasSpecialModifier(option) != HasSpecialModifier(query))
             {
                 return false;
             }

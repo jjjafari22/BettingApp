@@ -20,6 +20,9 @@ namespace BettingApp.Tests
         [InlineData("Wolves", "Everton", "Wolverhampton Wanderers", "Everton", true)] // Alias Wolves
         [InlineData("FC Copenhagen", "Brondby", "FC København", "Brondby", true)] // Alias Copenhagen
         [InlineData("West Ham", "Charlton Athletic", "Charlton Athletic", "West Ham", true)] // Reversed order
+        [InlineData("Vasco da Gama U20", "Palmeiras U20", "Vasco da Gama", "Palmeiras", false)] // U20 vs Senior match should be rejected
+        [InlineData("Vasco da Gama", "Palmeiras", "Vasco da Gama U20", "Palmeiras U20", false)] // Senior vs U20 match should be rejected
+        [InlineData("Vasco da Gama U20", "Palmeiras U20", "Vasco U20", "Palmeiras U20", true)] // U20 vs U20 match should be accepted
         public void Test_AreTeamsMatching(string qHome, string qAway, string oHome, string oAway, bool expected)
         {
             bool result = FotMobScraperService.AreTeamsMatching(qHome, qAway, oHome, oAway);
