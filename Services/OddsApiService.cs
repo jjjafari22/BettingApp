@@ -156,10 +156,13 @@ public class OddsApiService
                 string p1 = f.TryGetProperty("participant1Name", out var p1n) ? (p1n.GetString() ?? "") : "";
                 string p2 = f.TryGetProperty("participant2Name", out var p2n) ? (p2n.GetString() ?? "") : "";
                 
-                // Skip Simulated Reality Leagues (SRL) and e-soccer matches which pollute OddsPapi
-                if (p1.EndsWith(" SRL", StringComparison.OrdinalIgnoreCase) || p2.EndsWith(" SRL", StringComparison.OrdinalIgnoreCase) ||
-                    p1.Contains(" SRL ", StringComparison.OrdinalIgnoreCase) || p2.Contains(" SRL ", StringComparison.OrdinalIgnoreCase) ||
-                    p1.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || p2.Contains("Esoccer", StringComparison.OrdinalIgnoreCase))
+                string tName = f.TryGetProperty("tournamentName", out var tn) ? (tn.GetString() ?? "") : "";
+                
+                // Skip Youth/Women's/SRL matches if they weren't explicitly requested
+                bool qHasMod = HasSpecialModifier(homeTeam) || HasSpecialModifier(awayTeam);
+                bool fHasMod = HasSpecialModifier(p1) || HasSpecialModifier(p2) || HasSpecialModifier(tName) || p1.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || p2.Contains("Esoccer", StringComparison.OrdinalIgnoreCase);
+                
+                if (!qHasMod && fHasMod)
                 {
                     continue;
                 }
@@ -460,6 +463,15 @@ public class OddsApiService
             Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] Exception in SearchOddsComparisonAsync: {ex.Message}");
             return (null, $"Exception: {ex.Message}");
         }
+    }
+    private bool HasSpecialModifier(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return false;
+        var text = input.ToLowerInvariant();
+        return text.Contains("women") || text.Contains("(w)") || text.Contains("femenil") || 
+               text.Contains("u21") || text.Contains("u23") || text.Contains("u19") || 
+               text.Contains("u18") || text.Contains("u20") || text.Contains("reserves") || text.Contains("youth") ||
+               text.Contains(" srl");
     }
 
     private bool IsNameMatch(string source, string target, bool isNormalized = false)
