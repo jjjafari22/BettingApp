@@ -407,24 +407,31 @@ else
 
     private async Task LoadData()
     {
-        using var context = DbFactory.CreateDbContext();
-        allUsers = await context.Users.OrderBy(u => u.FirstName).ThenBy(u => u.LastName).ToListAsync();
+        using var context1 = DbFactory.CreateDbContext();
+        using var context2 = DbFactory.CreateDbContext();
+        using var context3 = DbFactory.CreateDbContext();
         
-        var allRefs = await context.Referrals.ToListAsync();
+        var usersTask = context1.Users.OrderBy(u => u.FirstName).ThenBy(u => u.LastName).ToListAsync();
+        var refsTask = context2.Referrals.ToListAsync();
+        var turnoverTask = context3.Bets
+            .Where(b => (b.Status == "Won" || b.Status == "Lost") && b.Odds >= 1.50m)
+            .GroupBy(b => b.UserId)
+            .Select(g => new { UserId = g.Key, Turnover = g.Sum(x => x.AmountNOK ?? 0) })
+            .ToListAsync();
+            
+        await Task.WhenAll(usersTask, refsTask, turnoverTask);
+        
+        allUsers = usersTask.Result;
+        var allRefs = refsTask.Result;
+        var turnoverList = turnoverTask.Result;
+        
         var hist = allRefs.Where(r => r.Tier1Paid && r.Tier2Paid && r.Tier3Paid).ToList();
         var active = allRefs.Where(r => !(r.Tier1Paid && r.Tier2Paid && r.Tier3Paid)).ToList();
         
         historicReferrals.Clear();
         activeReferrals.Clear();
         
-        var settledBets = await context.Bets
-            .Where(b => (b.Status == "Won" || b.Status == "Lost") && b.Odds >= 1.50m)
-            .Select(b => new { b.UserId, b.AmountNOK })
-            .ToListAsync();
-            
-        var turnoverDict = settledBets
-            .GroupBy(b => b.UserId)
-            .ToDictionary(g => g.Key, g => g.Sum(x => x.AmountNOK ?? 0));
+        var turnoverDict = turnoverList.ToDictionary(x => x.UserId, x => (decimal)x.Turnover);
 
         var referredUserIds = allRefs.Select(r => r.ReferredUserId).ToHashSet();
         
@@ -465,7 +472,7 @@ else
             
         foreach(var r in active)
         {
-            decimal tOver = settledBets.Where(b => b.UserId == r.ReferredUserId).Sum(b => (decimal)(b.AmountNOK ?? 0));
+            decimal tOver = turnoverDict.TryGetValue(r.ReferredUserId, out var turnover) ? turnover : 0m;
             var referrerUser = allUsers.FirstOrDefault(u => u.Id == r.ReferrerUserId);
             var referredUser = allUsers.FirstOrDefault(u => u.Id == r.ReferredUserId);
             activeReferrals.Add(new ReferralVM { 

@@ -1594,10 +1594,7 @@ else
             Nav.NavigateTo("/");
             return;
         }
-
-        await LoadPendingBets();
-        await LoadApprovedBets();
-        await LoadCompletedBets();
+        await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
         discordChannels = await DiscordService.GetGuildTextChannelsAsync();
         if (ReviewBetId.HasValue)
         {
@@ -1814,9 +1811,7 @@ else
                     {
                         await InvokeAsync(async () =>
                         {
-                            await LoadPendingBets();
-                            await LoadApprovedBets(); 
-                            await LoadCompletedBets();
+                            await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
                             StateHasChanged();
                         });
                     };
@@ -2605,9 +2600,7 @@ else
                  
                  string otherAdminName = lastAudit != null ? lastAudit.AdminUserName : "another admin";
                  errorMessage = $"Action aborted: Bet #{bet.Id} was already updated to '{dbBet.Status}' by Admin {otherAdminName}.";
-                 await LoadPendingBets();
-                 await LoadApprovedBets();
-                 await LoadCompletedBets();
+                 await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
                  reviewingBetModel = null;
                  StateHasChanged();
                  return;
@@ -2767,18 +2760,14 @@ else
             catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
             {
                 errorMessage = $"Action aborted: Bet #{bet.Id} was modified concurrently.";
-                await LoadPendingBets();
-                await LoadApprovedBets();
-                await LoadCompletedBets();
+                await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
                 reviewingBetModel = null;
                 StateHasChanged();
                 return;
             }
         }
 
-        await LoadPendingBets();
-        await LoadApprovedBets();
-        await LoadCompletedBets();
+        await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
         if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
         {
             _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet!, newStatus, isUpdate: false);

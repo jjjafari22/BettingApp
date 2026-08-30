@@ -704,49 +704,71 @@ else
 
     private async Task LoadData(ApplicationDbContext context)
     {
-        var users = await context.Users.AsNoTracking().ToListAsync();
-        var bets = await context.Bets.AsNoTracking().ToListAsync();
-        var transactions = await context.Transactions.AsNoTracking().ToListAsync();
+        var usersData = await context.Users.AsNoTracking().Select(u => new
+        {
+            u.Id,
+            u.UserName,
+            u.Email,
+            u.FirstName,
+            u.LastName,
+            u.IsAdmin,
+            u.IsTestUser,
+            u.CreditLimit,
+            u.Balance,
+            u.FreeBetBalance,
+            u.CreatedAt,
+            u.UpdatedAt,
+            u.DiscordUserId,
+            u.DiscordUsername,
+            u.ReferredBy,
+            u.PhoneNumber,
+            u.IsManuallyVerified,
+            u.EmailConfirmed,
+            
+            Winnings = context.Bets.Where(b => b.UserId == u.Id && b.Status == "Won")
+                .Sum(b => (decimal?)((b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount)) ?? 0m,
+                
+            SettledStakes = context.Bets.Where(b => b.UserId == u.Id && (b.Status == "Won" || b.Status == "Lost"))
+                .Sum(b => (decimal?)((b.AmountNOK ?? 0) - b.FreeBetAmount)) ?? 0m,
+                
+            Handle = context.Bets.Where(b => b.UserId == u.Id && b.Status != "Rejected" && b.Status != "Cancelled")
+                .Sum(b => (decimal?)(b.AmountNOK ?? 0)) ?? 0m,
+                
+            TotalFreeBetsGiven = context.Transactions.Where(t => t.UserId == u.Id && t.Type == "Free Bet")
+                .Sum(t => (decimal?)t.AmountNOK) ?? 0m,
+                
+            FirstBetDate = context.Bets.Where(b => b.UserId == u.Id).Min(b => (DateTime?)b.CreatedAt),
+            LastBetDate = context.Bets.Where(b => b.UserId == u.Id).Max(b => (DateTime?)b.UpdatedAt),
+            
+            FirstTransDate = context.Transactions.Where(t => t.UserId == u.Id).Min(t => (DateTime?)t.Date),
+            LastTransDate = context.Transactions.Where(t => t.UserId == u.Id).Max(t => (DateTime?)t.UpdatedAt)
+        }).ToListAsync();
 
         allUsersVM = new List<UserViewModel>();
         pendingUsersVM = new List<UserViewModel>();
-        foreach (var u in users)
+        
+        foreach (var u in usersData)
         {
-            var userBets = bets.Where(b => b.UserId == u.Id).ToList();
-            var userTrans = transactions.Where(t => t.UserId == u.Id).ToList();
+            var lifetimeProfit = Math.Floor(u.Winnings) - u.SettledStakes;
 
-            var winnings = userBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
-            var settledStakes = userBets
-                .Where(b => b.Status == "Won" || b.Status == "Lost")
-                .Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount);
-            var lifetimeProfit = winnings - settledStakes;
-
-            var handle = userBets
-                .Where(b => b.Status != "Rejected" && b.Status != "Cancelled")
-                .Sum(b => (decimal)(b.AmountNOK ?? 0));
             DateTime dateJoined = u.CreatedAt;
             if (dateJoined == DateTime.MinValue)
             {
-                var firstBet = userBets.OrderBy(b => b.CreatedAt).FirstOrDefault()?.CreatedAt;
-                var firstTrans = userTrans.OrderBy(t => t.Date).FirstOrDefault()?.Date;
-                
-                if (firstBet.HasValue && firstTrans.HasValue)
-                    dateJoined = firstBet.Value < firstTrans.Value ? firstBet.Value : firstTrans.Value;
-                else if (firstBet.HasValue)
-                    dateJoined = firstBet.Value;
-                else if (firstTrans.HasValue)
-                    dateJoined = firstTrans.Value;
+                if (u.FirstBetDate.HasValue && u.FirstTransDate.HasValue)
+                    dateJoined = u.FirstBetDate.Value < u.FirstTransDate.Value ? u.FirstBetDate.Value : u.FirstTransDate.Value;
+                else if (u.FirstBetDate.HasValue)
+                    dateJoined = u.FirstBetDate.Value;
+                else if (u.FirstTransDate.HasValue)
+                    dateJoined = u.FirstTransDate.Value;
                 else
                     dateJoined = DateTime.MaxValue;
             }
 
-            var lastBetDate = userBets.Any() ? userBets.Max(b => b.UpdatedAt) : DateTime.MinValue;
-            var lastTransDate = userTrans.Any() ? userTrans.Max(t => t.UpdatedAt) : DateTime.MinValue;
+            var lastBetDate = u.LastBetDate ?? DateTime.MinValue;
+            var lastTransDate = u.LastTransDate ?? DateTime.MinValue;
             var userUpdateDate = u.UpdatedAt == DateTime.MinValue ? u.CreatedAt : u.UpdatedAt;
             
             var lastActive = new[] { userUpdateDate, lastBetDate, lastTransDate }.Max();
-            
-            var totalFreeBetsGiven = userTrans.Where(t => t.Type == "Free Bet").Sum(t => (decimal)t.AmountNOK);
 
             var vm = new UserViewModel
             {
@@ -755,13 +777,13 @@ else
                 Email = u.Email ?? "",
                 FirstName = u.FirstName ?? "",
                 LastName = u.LastName ?? "",
-                Handle = handle,
+                Handle = Math.Floor(u.Handle),
                 IsAdmin = u.IsAdmin,
                 IsTestUser = u.IsTestUser,
                 CreditLimit = u.CreditLimit, 
                 Balance = u.Balance, 
                 FreeBetBalance = u.FreeBetBalance,
-                TotalFreeBetsGiven = totalFreeBetsGiven,
+                TotalFreeBetsGiven = Math.Floor(u.TotalFreeBetsGiven),
                 AvailableCredit = u.Balance + u.CreditLimit + u.FreeBetBalance, 
                 LifetimeProfit = lifetimeProfit,
                 DateJoined = dateJoined,

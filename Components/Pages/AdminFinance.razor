@@ -368,16 +368,28 @@
         // Fetch settled bets ONLY (using UpdatedAt instead of CreatedAt)
         // EXCLUDES Test Users.
         var validStatuses = new[] { "Won", "Lost", "Void" };
-        var periodBets = await context.Bets
+        var stats = await context.Bets
             .Where(b => b.UpdatedAt >= startUtc && b.UpdatedAt < endUtc && validStatuses.Contains(b.Status))
             .Where(b => !context.Users.Any(u => u.Id == b.UserId && u.IsTestUser))
-            .AsNoTracking()
-            .ToListAsync();
+            .GroupBy(b => 1)
+            .Select(g => new
+            {
+                Count = g.Count(),
+                TotalAmountNOK = g.Sum(b => (decimal)(b.AmountNOK ?? 0)),
+                TotalStakes = g.Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount),
+                WonPayouts = g.Where(b => b.Status == "Won").Sum(b => (decimal)(b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount),
+                VoidRefunds = g.Where(b => b.Status == "Void").Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount),
+                TotalWageredForOdds = g.Where(b => b.Odds > 0).Sum(b => (decimal)(b.AmountNOK ?? 0)),
+                WeightedOddsProduct = g.Where(b => b.Odds > 0).Sum(b => (decimal)(b.AmountNOK ?? 0) * b.Odds),
+                ArithmeticAverageOdds = g.Where(b => b.Odds > 0).Average(b => (decimal?)b.Odds) ?? 0m,
+                TotalNetLiability = g.Sum(b => (decimal)(b.AmountNOK ?? 0) * (b.Odds - 1)),
+                AvgNetLiability = g.Average(b => (decimal?)((decimal)(b.AmountNOK ?? 0) * (b.Odds - 1))) ?? 0m
+            })
+            .FirstOrDefaultAsync();
             
-        totalBets = periodBets.Count;
-        
-        if (totalBets == 0)
+        if (stats == null || stats.Count == 0)
         {
+            totalBets = 0;
             totalStakes = 0;
             netProfit = 0;
             holdPercentage = 0;
@@ -388,46 +400,24 @@
         }
         else
         {
-            // 1. Total Stakes: Includes Volume from all Settled bets (Won, Lost, Void)
-            // CRITICAL FIX: Only count real money stakes to avoid distorted hold % and profit
-            totalStakes = periodBets.Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount);
-            
-            // 2. Total Payouts calculation:
-            // - Won bets pay out the PotentialPayout (already accounts for net winnings on free bet portion)
-            // - Void bets refund the original stake (AmountNOK)
-            // - Lost bets pay out 0
-            decimal wonPayouts = periodBets.Where(b => b.Status == "Won").Sum(b => b.PotentialPayout);
-            decimal voidRefunds = periodBets.Where(b => b.Status == "Void").Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount);
-            decimal totalPayouts = wonPayouts + voidRefunds;
-            
-            // 3. Net Profit: Real Stakes minus payouts
+            totalBets = stats.Count;
+            totalStakes = stats.TotalStakes;
+            decimal totalPayouts = Math.Floor(stats.WonPayouts) + stats.VoidRefunds;
             netProfit = totalStakes - totalPayouts;
-            
-            // 4. Hold %: Profit Margin on real money flow
             holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
             
-            // 5. Averages and Liabilities
-            var validBetsWithOdds = periodBets.Where(b => b.Odds > 0).ToList();
-            if (validBetsWithOdds.Any())
+            if (stats.TotalWageredForOdds > 0)
             {
-                var totalWageredForOdds = validBetsWithOdds.Sum(b => (decimal)(b.AmountNOK ?? 0));
-                avgOdds = totalWageredForOdds > 0 
-                    ? validBetsWithOdds.Sum(b => (decimal)(b.AmountNOK ?? 0) * b.Odds) / totalWageredForOdds 
-                    : (decimal)validBetsWithOdds.Average(b => b.Odds);
+                avgOdds = stats.WeightedOddsProduct / stats.TotalWageredForOdds;
             }
             else
             {
-                avgOdds = 0;
+                avgOdds = stats.ArithmeticAverageOdds;
             }
             
-            avgBetSize = (decimal)periodBets.Average(b => (decimal)(b.AmountNOK ?? 0));
-            
-            // Liability definition: Net winnings potential
-            // (Potential Payout - Normal Stake Portion)
-            avgNetLiability = periodBets.Average(b => b.NetLiability);
-            
-            // Total Period Liability
-            totalNetLiability = periodBets.Sum(b => b.NetLiability);
+            avgBetSize = stats.Count > 0 ? stats.TotalAmountNOK / stats.Count : 0;
+            avgNetLiability = Math.Floor(stats.AvgNetLiability);
+            totalNetLiability = Math.Floor(stats.TotalNetLiability);
         }
 
         await InvokeAsync(StateHasChanged);

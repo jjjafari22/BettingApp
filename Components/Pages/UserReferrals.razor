@@ -140,7 +140,6 @@
             
             if (dbUser != null)
             {
-                var allUsers = await context.Users.ToListAsync();
                 myReferrals = await context.Referrals.Where(r => r.ReferrerUserId == dbUser.Id).ToListAsync();
                 
                 var hist = myReferrals.Where(r => r.Tier1Paid && r.Tier2Paid && r.Tier3Paid).ToList();
@@ -149,14 +148,21 @@
                 historicReferrals.Clear();
                 activeReferrals.Clear();
                 
-                var settledBets = await context.Bets
-                    .Where(b => (b.Status == "Won" || b.Status == "Lost") && b.Odds >= 1.50m)
-                    .Select(b => new { b.UserId, b.AmountNOK })
-                    .ToListAsync();
+                var referredIds = myReferrals.Select(r => r.ReferredUserId).ToList();
+                
+                var referredUsers = await context.Users
+                    .Where(u => referredIds.Contains(u.Id))
+                    .ToDictionaryAsync(u => u.Id);
+                
+                var turnoverDict = await context.Bets
+                    .Where(b => referredIds.Contains(b.UserId) && (b.Status == "Won" || b.Status == "Lost") && b.Odds >= 1.50m)
+                    .GroupBy(b => b.UserId)
+                    .Select(g => new { UserId = g.Key, Turnover = g.Sum(x => x.AmountNOK ?? 0) })
+                    .ToDictionaryAsync(x => x.UserId, x => (decimal)x.Turnover);
 
                 foreach(var r in hist)
                 {
-                    var referredUser = allUsers.FirstOrDefault(u => u.Id == r.ReferredUserId);
+                    referredUsers.TryGetValue(r.ReferredUserId, out var referredUser);
                     historicReferrals.Add(new ReferralVM { 
                         Ref = r, 
                         Turnover = 0,
@@ -166,8 +172,8 @@
 
                 foreach(var r in active)
                 {
-                    decimal tOver = settledBets.Where(b => b.UserId == r.ReferredUserId).Sum(b => (decimal)(b.AmountNOK ?? 0));
-                    var referredUser = allUsers.FirstOrDefault(u => u.Id == r.ReferredUserId);
+                    decimal tOver = turnoverDict.TryGetValue(r.ReferredUserId, out var turnover) ? turnover : 0m;
+                    referredUsers.TryGetValue(r.ReferredUserId, out var referredUser);
                     activeReferrals.Add(new ReferralVM { 
                         Ref = r, 
                         Turnover = tOver,
