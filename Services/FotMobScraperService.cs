@@ -26,7 +26,10 @@ namespace BettingApp.Services
                 string homeTeam = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: false);
                 string awayTeam = split.Length > 1 ? _teamAliasMapper.NormalizeTeamName(split[1].Trim(), removeStopWords: false) : "";
                 
-                string matchQuery = Uri.EscapeDataString(homeTeam); // Search only home team to guarantee results
+                string homeSearchStr = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: true);
+                if (string.IsNullOrEmpty(homeSearchStr)) homeSearchStr = homeTeam; // Fallback if it was ONLY stop words
+                
+                string matchQuery = Uri.EscapeDataString(homeSearchStr); // Search only home team to guarantee results
                 
                 // 1. Search FotMob API
                 string searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={matchQuery}";
@@ -46,8 +49,8 @@ namespace BettingApp.Services
                     // Fallback: If full home team fails or returned only invalid matches (like women's teams), try searching the most significant word (longest word).
                     if (string.IsNullOrEmpty(eventId))
                     {
-                        string longestWord = homeTeam.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? homeTeam.Split(' ')[0];
-                        if (longestWord != homeTeam && longestWord.Length >= 3)
+                        string longestWord = homeSearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? homeSearchStr.Split(' ')[0];
+                        if (longestWord != homeSearchStr && longestWord.Length >= 3)
                         {
                             string fallbackQuery = Uri.EscapeDataString(longestWord);
                             searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
@@ -68,7 +71,10 @@ namespace BettingApp.Services
                             cleanAwayTeam = awayTeam.Substring(0, dateMatch.Index).Trim();
                         }
                         
-                        string longestAway = cleanAwayTeam.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? cleanAwayTeam.Split(' ')[0];
+                        string awaySearchStr = _teamAliasMapper.NormalizeTeamName(cleanAwayTeam, removeStopWords: true);
+                        if (string.IsNullOrEmpty(awaySearchStr)) awaySearchStr = cleanAwayTeam;
+
+                        string longestAway = awaySearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? awaySearchStr.Split(' ')[0];
                         if (longestAway.Length >= 3)
                         {
                             string fallbackQuery = Uri.EscapeDataString(longestAway);
@@ -111,15 +117,19 @@ namespace BettingApp.Services
                         } catch { }
                     }
 
-                    string longestHome = homeTeam.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
+                    string longestHome = homeSearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
                     string cleanAway = awayTeam;
                     var dm = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (dm.Success) cleanAway = awayTeam.Substring(0, dm.Index).Trim();
-                    string longestAway = cleanAway.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
+                    
+                    string awaySearchStr = _teamAliasMapper.NormalizeTeamName(cleanAway, removeStopWords: true);
+                    if (string.IsNullOrEmpty(awaySearchStr)) awaySearchStr = cleanAway;
+
+                    string longestAway = awaySearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
 
                     await Task.WhenAll(
-                        TryCollectTeamIds(homeTeam),
-                        TryCollectTeamIds(awayTeam),
+                        TryCollectTeamIds(homeSearchStr),
+                        TryCollectTeamIds(awaySearchStr),
                         TryCollectTeamIds(longestHome),
                         TryCollectTeamIds(longestAway)
                     );
