@@ -16,7 +16,7 @@
 @inject IJSRuntime JSRuntime
 @inject BettingApp.Services.DialogService DialogService
 @inject OddsApiService OddsApi
-@inject SportsGameOddsService SgoApi
+
 @inject AiVisionService AiVision
 @inject MarketMappingService MarketMapper
 @inject IServiceProvider ServiceProvider
@@ -382,10 +382,6 @@ else
                                             </div>
                                         }
                                         <div class="input-group input-group-sm mb-2">
-                                            <select class="form-select form-select-sm fw-bold bg-light" style="max-width: 150px;" @bind="SelectedOddsProvider">
-                                                <option value="oddspapi">OddsPapi</option>
-                                                <option value="sgo">SportsGameOdds</option>
-                                            </select>
                                             <input type="text" class="form-control" placeholder="Search team (e.g. Arsenal)..." @bind="OddsSearchTeam" @onkeydown="@(e => { if (e.Key == "Enter") _ = SearchOdds(); })" />
                                             <button class="btn btn-primary" @onclick="() => SearchOdds()" disabled="@IsSearchingOdds">
                                                 @if(IsSearchingOdds) { <span class="spinner-border spinner-border-sm"></span> } else { <i class="bi bi-search"></i> }
@@ -2067,7 +2063,7 @@ else
         ShowOddsLookup = !ShowOddsLookup;
     }
 
-    private string SelectedOddsProvider { get; set; } = "oddspapi";
+
 
     private async Task SearchOdds(string? preSelectCategory = null)
     {
@@ -2085,14 +2081,7 @@ else
         BettingApp.Models.OddsPapiSearchResult? result;
         string? error;
         
-        if (SelectedOddsProvider == "sgo")
-        {
-            (result, error) = await SgoApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
-        }
-        else
-        {
-            (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
-        }
+        (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
         
         if (result == null)
         {
