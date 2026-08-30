@@ -42,7 +42,18 @@ namespace BettingApp.Services
             { "aalesunds", "aalesund" },
             { "nacional de montevideo", "nacional" },
             { "albion fc", "albion" },
-            { "stade rennais", "rennes" }
+            { "stade rennais", "rennes" },
+            { "al draih", "al diriyah" },
+            { "al-draih", "al diriyah" },
+            { "al fateh", "al fateh fc" },
+            { "al-fateh", "al fateh fc" },
+            { "al nassr", "al nassr fc" },
+            { "al-nassr", "al nassr fc" },
+            { "al taawoun", "al-taawoun" },
+            { "al ettifaq", "al-ettifaq" },
+            { "al-ettifaq", "al-ettifaq" },
+            { "al ittihad", "al ittihad" },
+            { "al-ittihad", "al ittihad" }
         };
 
         public static string ApplyTeamAliases(string? normalizedTeamName)

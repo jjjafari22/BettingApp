@@ -23,8 +23,9 @@ namespace BettingApp.Services
             { "1st Half Goals 2", "Over Under First Half" },
             { "1st Half Goals", "Over Under First Half" },
             { "First Half Goals", "Over Under First Half" },
-            { "Player Shots on Target", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target" },
-            { "Player Fouls Committed", "Over Under Player Fouls Committed (incl. overtime)|Player Fouls Committed (incl. overtime)" },
+            { "Player Shots on Target", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target|Player Shots on Target|Player Shots on Target (incl. overtime)" },
+            { "Player Shots", "Player Shots (incl. overtime)|Player Shots" },
+            { "Player Fouls Committed", "Over Under Player Fouls Committed (incl. overtime)|Player Fouls Committed (incl. overtime)|Player Fouls Committed" },
             { "Full Time", "Full Time Result" },
             { "Match Odds", "Full Time Result" },
             { "1x2", "Full Time Result" },
@@ -45,12 +46,13 @@ namespace BettingApp.Services
             { "Early Win", "2Up - Full Time Result" },
             { "Early Win (Anytime 2 Goal Lead)", "2Up - Full Time Result" },
             { "Early Payout", "2Up - Full Time Result" },
-            { "Anytime Goalscorer", "Player Goals (incl. overtime)" },
-            { "To Be Booked", "Player To Be Carded (incl. overtime)|Player To Be Carded" },
-            { "Player to be Booked", "Player To Be Carded (incl. overtime)" },
-            { "Player To Receive A Card", "Player To Be Carded (incl. overtime)" },
-            { "Player Cards", "Player To Be Carded (incl. overtime)" },
-            { "Will/Will not get Booked", "Player To Be Carded (incl. overtime)" }
+            { "Anytime Goalscorer", "Anytime Goal Scorer|Player Goals (incl. overtime)|Player Goals" },
+            { "To Be Booked", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
+            { "Player to be Booked", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
+            { "Player To Receive A Card", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
+            { "Player Cards", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
+            { "Will/Will not get Booked", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
+            { "Player Assists", "Player Assists (incl. overtime)|Player Assists" }
         };
 
         public List<string> NormalizeMarketName(string rawMarketName, string? matchName = null)
@@ -159,6 +161,33 @@ namespace BettingApp.Services
                 if (halfSuffix == " First Half") return new List<string> { "Bookings - Over Under First Half" };
                 return new List<string> { "Bookings - Over Under Full Time" };
             }
+
+            // --- Dynamic Player Prop Catch-Alls (handles when AI appends player names to the market) ---
+            if (clean.Contains("Goalscorer", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Scorer", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals" };
+            }
+            if (clean.Contains("Shots on Target", StringComparison.OrdinalIgnoreCase) || clean.Contains("Shots On Goal", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Over Under Player Shots On Goal (incl. overtime)", "Player Shots On Goal (incl. overtime)", "Player's shot on target", "Player Shots on Target", "Player Shots on Target (incl. overtime)" };
+            }
+            if (clean.Contains("Shots", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Player Shots (incl. overtime)", "Player Shots" };
+            }
+            if (clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Over Under Player Fouls Committed (incl. overtime)", "Player Fouls Committed (incl. overtime)", "Player Fouls Committed" };
+            }
+            if (clean.Contains("Assists", StringComparison.OrdinalIgnoreCase) || clean.Contains("Assist", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Player Assists (incl. overtime)", "Player Assists" };
+            }
+            if (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) || (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Card", StringComparison.OrdinalIgnoreCase)))
+            {
+                return new List<string> { "Player To Be Carded (incl. overtime)", "Player To Be Carded", "Player Cards" };
+            }
+            // -----------------------------------------------------------------------------------------
 
             if (clean.StartsWith("1st Half Goals", StringComparison.OrdinalIgnoreCase) || 
                 clean.StartsWith("First Half Goals", StringComparison.OrdinalIgnoreCase) ||
