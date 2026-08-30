@@ -97,6 +97,7 @@ namespace BettingApp.Data
         public string LastName { get; set; } = string.Empty;
         public string Vipps { get; set; } = string.Empty;
         public string Revolut { get; set; } = string.Empty;
+        public string BankTransfer { get; set; } = string.Empty;
         public string OtherPlatformName { get; set; } = string.Empty;
         public string OtherPaymentDetails { get; set; } = string.Empty;
     }

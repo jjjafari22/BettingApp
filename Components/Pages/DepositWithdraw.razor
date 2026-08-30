@@ -97,6 +97,13 @@
                                 <InputText @bind-Value="revolutDetails" class="form-control" placeholder="Revolut Tag / Username" />
                             </div>
                         </div>
+                        
+                        <div class="card bg-light border-0 mb-3 shadow-sm">
+                            <div class="card-body py-3 px-3">
+                                <label class="form-label fw-semibold mb-2">Bank Transfer</label>
+                                <InputText @bind-Value="bankTransferDetails" class="form-control" placeholder="Account Number" />
+                            </div>
+                        </div>
 
                         <div class="card bg-light border-0 mb-4 shadow-sm">
                             <div class="card-body py-3 px-3">
@@ -212,6 +219,7 @@
     private int? withdrawalAmount;
     private string vippsDetails = "";
     private string revolutDetails = "";
+    private string bankTransferDetails = "";
     private string otherPlatformName = "";
     private string otherDetails = "";
     private bool showOneMethodWarning = false;
@@ -357,11 +365,21 @@
             return;
         }
 
+        bool hasOtherPlatform = !string.IsNullOrWhiteSpace(otherPlatformName);
+        bool hasOtherDetails = !string.IsNullOrWhiteSpace(otherDetails);
+
+        if (hasOtherPlatform != hasOtherDetails)
+        {
+            ErrorMessage = "For 'Other Payment Method', you must fill out BOTH the platform name and the receiving info if you use it.";
+            return;
+        }
+
         bool hasVipps = !string.IsNullOrWhiteSpace(vippsDetails);
         bool hasRevolut = !string.IsNullOrWhiteSpace(revolutDetails);
-        bool hasOther = !string.IsNullOrWhiteSpace(otherPlatformName) && !string.IsNullOrWhiteSpace(otherDetails);
+        bool hasBank = !string.IsNullOrWhiteSpace(bankTransferDetails);
+        bool hasOther = hasOtherPlatform && hasOtherDetails;
 
-        int methodsCount = (hasVipps ? 1 : 0) + (hasRevolut ? 1 : 0) + (hasOther ? 1 : 0);
+        int methodsCount = (hasVipps ? 1 : 0) + (hasRevolut ? 1 : 0) + (hasBank ? 1 : 0) + (hasOther ? 1 : 0);
 
         if (methodsCount == 0)
         {
@@ -391,6 +409,7 @@
         {
             bool hasVipps = !string.IsNullOrWhiteSpace(vippsDetails);
             bool hasRevolut = !string.IsNullOrWhiteSpace(revolutDetails);
+            bool hasBank = !string.IsNullOrWhiteSpace(bankTransferDetails);
             bool hasOther = !string.IsNullOrWhiteSpace(otherPlatformName) && !string.IsNullOrWhiteSpace(otherDetails);
 
             using var context = DbFactory.CreateDbContext();
@@ -415,6 +434,12 @@
             {
                 providedMethods.Add($"Revolut: {revolutDetails.Trim()}");
                 if (primaryPlatform == "Mixed") primaryPlatform = "Revolut";
+                else primaryPlatform = "Multiple";
+            }
+            if (hasBank)
+            {
+                providedMethods.Add($"Bank Transfer: {bankTransferDetails.Trim()}");
+                if (primaryPlatform == "Mixed") primaryPlatform = "Bank Transfer";
                 else primaryPlatform = "Multiple";
             }
             if (hasOther)
@@ -449,6 +474,7 @@
             withdrawalAmount = null;
             vippsDetails = "";
             revolutDetails = "";
+            bankTransferDetails = "";
             otherPlatformName = "";
             otherDetails = "";
             await LoadData();

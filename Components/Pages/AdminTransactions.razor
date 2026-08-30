@@ -197,6 +197,7 @@ else
                             <select class="form-select" @bind="newTrans.Platform">
                                 <option value="Vipps">Vipps</option>
                                 <option value="Revolut">Revolut</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
                                 <option value="Other">Other Payment</option>
                             </select>
                         </div>
@@ -221,6 +222,7 @@ else
                                 <label>
                                     @if (newTrans.Platform == "Vipps") { <text>Phone Number</text> }
                                     else if (newTrans.Platform == "Revolut") { <text>Revtag/Username</text> }
+                                    else if (newTrans.Platform == "Bank Transfer") { <text>Account Number</text> }
                                     else { <text>Payment Details</text> }
                                 </label>
                                 <input type="text" class="form-control" @bind="newTrans.PaymentDetails" />

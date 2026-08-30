@@ -60,6 +60,10 @@
                             <input type="text" class="form-control form-control-sm" @bind="newCow.Revolut" />
                         </div>
                         <div class="col-md-2">
+                            <label class="form-label small text-muted fw-bold">Bank Transfer</label>
+                            <input type="text" class="form-control form-control-sm" @bind="newCow.BankTransfer" />
+                        </div>
+                        <div class="col-md-2">
                             <label class="form-label small text-muted fw-bold">Other Platform Name</label>
                             <input type="text" class="form-control form-control-sm" placeholder="e.g. PayPal" @bind="newCow.OtherPlatformName" />
                         </div>
@@ -91,6 +95,7 @@
                                         <div class="text-muted small">
                                             @if(!string.IsNullOrEmpty(cow.Vipps)) { <span class="me-3"><i class="bi bi-phone"></i> Vipps: @cow.Vipps</span> }
                                             @if(!string.IsNullOrEmpty(cow.Revolut)) { <span class="me-3"><i class="bi bi-credit-card"></i> Revolut: @cow.Revolut</span> }
+                                            @if(!string.IsNullOrEmpty(cow.BankTransfer)) { <span class="me-3"><i class="bi bi-bank"></i> Bank Transfer: @cow.BankTransfer</span> }
                                             @if(!string.IsNullOrEmpty(cow.OtherPlatformName)) { <span><i class="bi bi-cash-coin"></i> @cow.OtherPlatformName: @cow.OtherPaymentDetails</span> }
                                         </div>
                                     </div>
@@ -323,6 +328,10 @@
                                                                                                             <span class="input-group-text" style="width: 70px;">Revolut</span>
                                                                                                             <input type="text" class="form-control" @bind="dest.Revolut" @bind:event="oninput" @bind:after="() => row.GenerateText()" />
                                                                                                         </div>
+                                                                                                        <div class="input-group input-group-sm mb-1">
+                                                                                                            <span class="input-group-text" style="width: 70px;">Bank</span>
+                                                                                                            <input type="text" class="form-control" @bind="dest.BankTransfer" @bind:event="oninput" @bind:after="() => row.GenerateText()" />
+                                                                                                        </div>
                                                                                                         <div class="input-group input-group-sm">
                                                                                                             <span class="input-group-text" style="width: 70px;">Annet</span>
                                                                                                             <input type="text" class="form-control" @bind="dest.Other" @bind:event="oninput" @bind:after="() => row.GenerateText()" />
@@ -499,6 +508,7 @@
                 var methods = new List<string>();
                 if (!string.IsNullOrWhiteSpace(dest.Vipps)) methods.Add($"- **Vipps:** `{dest.Vipps.Trim()}`");
                 if (!string.IsNullOrWhiteSpace(dest.Revolut)) methods.Add($"- **Revolut:** `{dest.Revolut.Trim()}`");
+                if (!string.IsNullOrWhiteSpace(dest.BankTransfer)) methods.Add($"- **Bank Transfer:** `{dest.BankTransfer.Trim()}`");
                 if (!string.IsNullOrWhiteSpace(dest.Other)) methods.Add($"- **Annet:** `{dest.Other.Trim()}`");
                 
                 if (methods.Any())
@@ -523,6 +533,7 @@
         public decimal Amount { get; set; }
         public string Vipps { get; set; } = "";
         public string Revolut { get; set; } = "";
+        public string BankTransfer { get; set; } = "";
         public string Other { get; set; } = "";
         public bool IsCastle { get; set; } = false;
         public string SelectedCowId { get; set; } = "";
@@ -604,6 +615,7 @@
             LastName = cow.LastName,
             Vipps = cow.Vipps,
             Revolut = cow.Revolut,
+            BankTransfer = cow.BankTransfer,
             OtherPlatformName = cow.OtherPlatformName,
             OtherPaymentDetails = cow.OtherPaymentDetails
         };
@@ -861,6 +873,8 @@
                         dest.Vipps = part.Replace("Vipps:", "", StringComparison.OrdinalIgnoreCase).Trim();
                     else if (part.Trim().StartsWith("Revolut:", StringComparison.OrdinalIgnoreCase))
                         dest.Revolut = part.Replace("Revolut:", "", StringComparison.OrdinalIgnoreCase).Trim();
+                    else if (part.Trim().StartsWith("Bank Transfer:", StringComparison.OrdinalIgnoreCase))
+                        dest.BankTransfer = part.Replace("Bank Transfer:", "", StringComparison.OrdinalIgnoreCase).Trim();
                     else if (!string.IsNullOrWhiteSpace(part))
                         otherParts.Add(part.Trim());
                 }
@@ -901,6 +915,7 @@
                     dest.ToDisplayName = cow.FirstName;
                     dest.Vipps = cow.Vipps;
                     dest.Revolut = cow.Revolut;
+                    dest.BankTransfer = cow.BankTransfer;
                     dest.Other = string.IsNullOrEmpty(cow.OtherPlatformName) ? "" : $"{cow.OtherPlatformName}: {cow.OtherPaymentDetails}";
                 }
             }
@@ -945,6 +960,7 @@
             dest.ToName = cow.FirstName;
             dest.Vipps = cow.Vipps;
             dest.Revolut = cow.Revolut;
+            dest.BankTransfer = cow.BankTransfer;
             dest.Other = string.IsNullOrEmpty(cow.OtherPlatformName) ? "" : $"{cow.OtherPlatformName}: {cow.OtherPaymentDetails}";
         }
         else
@@ -952,6 +968,7 @@
             dest.ToName = "Velg Cash Cow";
             dest.Vipps = "";
             dest.Revolut = "";
+            dest.BankTransfer = "";
             dest.Other = "";
         }
         row.GenerateText();
