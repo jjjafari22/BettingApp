@@ -450,12 +450,19 @@ namespace BettingApp.Services
                         {
                             var outcomes = resultObj.Legs.Select(l => l.Outcome?.ToUpperInvariant() ?? "").ToList();
                             
-                            if (outcomes.Any(o => o == "LOST")) resultObj.OverallStatus = "LOST";
-                            else if (outcomes.Any(o => o == "UNKNOWN")) resultObj.OverallStatus = "UNKNOWN";
-                            else if (outcomes.Any(o => o == "PENDING")) resultObj.OverallStatus = "MATCH IN PROGRESS";
+                            bool hasVoid = outcomes.Any(o => o == "VOID");
+                            bool hasWonOrLost = outcomes.Any(o => o == "WON" || o == "LOST");
+                            bool hasUnknown = outcomes.Any(o => o == "UNKNOWN");
+                            bool hasPending = outcomes.Any(o => o == "PENDING");
+                            bool hasLost = outcomes.Any(o => o == "LOST");
+
+                            if (hasUnknown) resultObj.OverallStatus = "UNKNOWN";
+                            else if (hasVoid && hasWonOrLost) resultObj.OverallStatus = "UNKNOWN"; // User rule: Mix of Void with Won/Lost requires manual review for odds recalculation
+                            else if (hasPending) resultObj.OverallStatus = "MATCH IN PROGRESS";
+                            else if (hasLost) resultObj.OverallStatus = "LOST";
                             else if (outcomes.All(o => o == "WON")) resultObj.OverallStatus = "WON";
                             else if (outcomes.All(o => o == "VOID")) resultObj.OverallStatus = "VOID";
-                            else resultObj.OverallStatus = "UNKNOWN"; // Mix of Won and Void
+                            else resultObj.OverallStatus = "UNKNOWN";
                             
                             finalJson = JsonSerializer.Serialize(resultObj, new JsonSerializerOptions { WriteIndented = false });
                         }
