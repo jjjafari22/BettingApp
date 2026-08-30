@@ -56,6 +56,7 @@ namespace BettingApp.Data
         public DateTime? NextCheckTime { get; set; }
         
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        [ConcurrencyCheck]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 

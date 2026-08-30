@@ -2566,6 +2566,7 @@ else
                  await LoadPendingBets();
                  await LoadApprovedBets();
                  await LoadCompletedBets();
+                 reviewingBetModel = null;
                  StateHasChanged();
                  return;
             }
@@ -2717,7 +2718,20 @@ else
                 }
             }
 
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+            {
+                errorMessage = $"Action aborted: Bet #{bet.Id} was modified concurrently.";
+                await LoadPendingBets();
+                await LoadApprovedBets();
+                await LoadCompletedBets();
+                reviewingBetModel = null;
+                StateHasChanged();
+                return;
+            }
         }
 
         await LoadPendingBets();
