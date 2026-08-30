@@ -127,7 +127,8 @@ else
                         <input type="text" class="form-control" 
                                placeholder="Start typing Discord username..." 
                                @bind="searchTerm" 
-                               @oninput="SearchUsers" />
+                               @bind:event="oninput" 
+                               @bind:after="PerformSearchUsers" />
                         
                         @if (searchResults.Any())
                         {
@@ -260,7 +261,8 @@ else
                 <input type="text" class="form-control" 
                        placeholder="Filter by user..." 
                        @bind="filterSearchTerm" 
-                       @oninput="SearchFilterUsers" />
+                       @bind:event="oninput" 
+                       @bind:after="PerformFilterSearch" />
             </div>
         
         @if (filterSearchResults.Any())
@@ -481,9 +483,8 @@ else
         }
     }
 
-    private async Task SearchUsers(ChangeEventArgs e)
+    private async Task PerformSearchUsers()
     {
-        searchTerm = e.Value?.ToString() ?? "";
         
         if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Length < 2)
         {
@@ -519,9 +520,8 @@ else
         newTrans.UserId = "";
     }
 
-    private async Task SearchFilterUsers(ChangeEventArgs e)
+    private async Task PerformFilterSearch()
     {
-        filterSearchTerm = e.Value?.ToString() ?? "";
         
         if (string.IsNullOrWhiteSpace(filterSearchTerm) || filterSearchTerm.Length < 2)
         {

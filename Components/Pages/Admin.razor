@@ -1070,9 +1070,21 @@ else
 
         <div class="d-flex justify-content-between align-items-center mb-3 flex-nowrap gap-2">
             <h4 class="mb-0 text-truncate" style="font-size: clamp(1rem, 4vw, 1.5rem);">Active Bets (@totalApprovedBets)</h4>
-            <button class="btn btn-outline-secondary btn-sm flex-shrink-0" @onclick="ExportActiveBetsCsv" title="Export CSV">
-                 <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Export CSV</span>
-            </button>
+            <div class="d-flex gap-2 align-items-center flex-shrink-0">
+                <div class="input-group input-group-sm shadow-sm flex-shrink-0" style="max-width: 200px;">
+                    <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" class="form-control border-start-0 ps-0" placeholder="Bet ID or Username..." @bind="approvedSearchTerm" @bind:event="oninput" @bind:after="OnApprovedSearchChanged" />
+                    @if (!string.IsNullOrWhiteSpace(approvedSearchTerm))
+                    {
+                        <button class="btn btn-outline-secondary" type="button" @onclick="ClearApprovedSearch" title="Clear search">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    }
+                </div>
+                <button class="btn btn-outline-secondary btn-sm flex-shrink-0" @onclick="ExportActiveBetsCsv" title="Export CSV">
+                     <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Export CSV</span>
+                </button>
+            </div>
         </div>
         <div class="table-responsive mb-5">
             <table class="table table-sm table-striped table-hover text-nowrap align-middle">
@@ -1163,10 +1175,10 @@ else
             <div class="d-flex justify-content-between align-items-center flex-nowrap gap-2">
                 <h4 class="mb-0 text-truncate" style="font-size: clamp(1rem, 4vw, 1.5rem);">Completed (@totalCompletedBets)</h4>
                 <div class="d-flex gap-2 align-items-center flex-shrink-0">
-                    <div class="input-group input-group-sm shadow-sm flex-shrink-0" style="max-width: 150px;">
-                        <span class="input-group-text"><i class="bi bi-search"></i></span>
-                        <input type="text" class="form-control" placeholder="Bet ID..." @bind="completedSearchBetId" @bind:after="OnCompletedSearchChanged" />
-                        @if (!string.IsNullOrWhiteSpace(completedSearchBetId))
+                    <div class="input-group input-group-sm shadow-sm flex-shrink-0" style="max-width: 200px;">
+                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" placeholder="Bet ID or Username..." @bind="completedSearchTerm" @bind:event="oninput" @bind:after="OnCompletedSearchChanged" />
+                        @if (!string.IsNullOrWhiteSpace(completedSearchTerm))
                         {
                             <button class="btn btn-outline-secondary" type="button" @onclick="ClearCompletedSearch" title="Clear search">
                                 <i class="bi bi-x"></i>
@@ -1352,7 +1364,8 @@ else
     private HashSet<string> completedStatusFilters = new() { "Won", "Lost", "Void", "Rejected", "Cancelled" };
     private bool showOnlyMismatch = false;
     private bool showOnlyAdminOverride = false;
-    private string completedSearchBetId = "";
+    private string completedSearchTerm = "";
+    private string approvedSearchTerm = "";
     
     private async Task ToggleFilter(string status)
     {
@@ -1387,9 +1400,22 @@ else
 
     private async Task ClearCompletedSearch()
     {
-        completedSearchBetId = "";
+        completedSearchTerm = "";
         completedPage = 1;
         await LoadCompletedBets();
+    }
+
+    private async Task OnApprovedSearchChanged()
+    {
+        approvedPage = 1;
+        await LoadApprovedBets();
+    }
+
+    private async Task ClearApprovedSearch()
+    {
+        approvedSearchTerm = "";
+        approvedPage = 1;
+        await LoadApprovedBets();
     }
     private bool hasMoreCompletedBets = false;
     private bool hasMoreApprovedBets = false;
@@ -1606,8 +1632,28 @@ else
     private async Task LoadApprovedBets()
     {
         using var context = DbFactory.CreateDbContext();
-        totalApprovedBets = await context.Bets.CountAsync(b => b.Status == "Approved");
         var query = context.Bets.Where(b => b.Status == "Approved");
+
+        if (!string.IsNullOrWhiteSpace(approvedSearchTerm))
+        {
+            var searchStr = approvedSearchTerm.Trim().ToLower();
+            if (int.TryParse(searchStr, out int searchId))
+            {
+                query = query.Where(b => b.Id == searchId);
+            }
+            else
+            {
+                var matchingUserIds = await context.Users
+                    .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(searchStr)) 
+                             || (u.FirstName != null && u.FirstName.ToLower().Contains(searchStr))
+                             || (u.LastName != null && u.LastName.ToLower().Contains(searchStr)))
+                    .Select(u => u.Id)
+                    .ToListAsync();
+                query = query.Where(b => matchingUserIds.Contains(b.UserId));
+            }
+        }
+
+        totalApprovedBets = await query.CountAsync();
         
         if (approvedSortColumn == "NextCheckTime")
         {
@@ -1704,15 +1750,22 @@ else
             query = query.Where(b => completedStatusFilters.Contains(b.Status));
         }
 
-        if (!string.IsNullOrWhiteSpace(completedSearchBetId))
+        if (!string.IsNullOrWhiteSpace(completedSearchTerm))
         {
-            if (int.TryParse(completedSearchBetId.Trim(), out int searchId))
+            var searchStr = completedSearchTerm.Trim().ToLower();
+            if (int.TryParse(searchStr, out int searchId))
             {
                 query = query.Where(b => b.Id == searchId);
             }
             else
             {
-                query = query.Where(b => false);
+                var matchingUserIds = await context.Users
+                    .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(searchStr)) 
+                             || (u.FirstName != null && u.FirstName.ToLower().Contains(searchStr))
+                             || (u.LastName != null && u.LastName.ToLower().Contains(searchStr)))
+                    .Select(u => u.Id)
+                    .ToListAsync();
+                query = query.Where(b => matchingUserIds.Contains(b.UserId));
             }
         }
         
