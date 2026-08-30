@@ -1,0 +1,15 @@
+{
+  "command-blocker": {
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/block_banned_commands.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
