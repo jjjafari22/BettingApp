@@ -642,7 +642,7 @@ namespace BettingApp.Services
         {
             if (string.IsNullOrEmpty(word)) return true;
             string w = word.ToLowerInvariant();
-            return w == "fc" || w == "fk" || w == "bk" || w == "if" || w == "il" || w == "ik" || w == "ff" || w == "gf" || w == "cd" || w == "cf";
+            return w == "fc" || w == "fk" || w == "bk" || w == "if" || w == "il" || w == "ik" || w == "ff" || w == "gf" || w == "cd" || w == "cf" || w == "al" || w == "el" || w == "la" || w == "de";
         }
     }
 }

@@ -50,6 +50,7 @@ namespace BettingApp.Services
             { "al nassr", "al nassr fc" },
             { "al-nassr", "al nassr fc" },
             { "al taawoun", "al-taawoun" },
+            { "al tawoun", "al-taawoun" },
             { "al ettifaq", "al-ettifaq" },
             { "al-ettifaq", "al-ettifaq" },
             { "al ittihad", "al ittihad" },
