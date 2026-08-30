@@ -26,7 +26,9 @@ namespace BettingApp.Tests
         [InlineData("Bayern Munich", "VfB Stuttgart", "Bayern München", "VfB Stuttgart", true)] // English translation of Munich to Munchen
         public void Test_AreTeamsMatching(string qHome, string qAway, string oHome, string oAway, bool expected)
         {
-            bool result = FotMobScraperService.AreTeamsMatching(qHome, qAway, oHome, oAway);
+            var mapper = new BettingApp.Services.TeamAliasMappingService();
+            var service = new BettingApp.Services.FotMobScraperService(new System.Net.Http.HttpClient(), mapper);
+            bool result = service.AreTeamsMatching(qHome, qAway, oHome, oAway);
             Assert.Equal(expected, result);
         }
     }

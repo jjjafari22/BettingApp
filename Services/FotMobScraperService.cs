@@ -467,33 +467,16 @@ namespace BettingApp.Services
                    text.Contains("u18") || text.Contains("u20") || text.Contains("reserves") || text.Contains("youth");
         }
 
-        public static string ApplyTeamAliases(string team)
+        public bool CheckTeamMatch(string query, string option)
         {
-            var text = NormalizeText(team);
-            if (text.Contains("athletic bilbao")) return text.Replace("athletic bilbao", "athletic club");
-            if (text.Contains("inter milan")) return text.Replace("inter milan", "internazionale");
-            if (text.Contains("sporting lisbon")) return text.Replace("sporting lisbon", "sporting cp");
-            if (text.Contains("boca juniors")) return text.Replace("boca juniors", "boca");
-            if (text.Contains("fc copenhagen")) return text.Replace("fc copenhagen", "fc kbenhavn");
-            
-            // Premier League shorthand aliases
-            if (text.Contains("man utd") || text.Contains("manchester utd")) return text.Replace("man utd", "manchester united").Replace("manchester utd", "manchester united");
-            if (text.Contains("man city")) return text.Replace("man city", "manchester city");
-            if (text.Contains("spurs")) return text.Replace("spurs", "tottenham hotspur");
-            if (text.Contains("wolves")) return text.Replace("wolves", "wolverhampton wanderers");
-            return text;
-        }
-
-        public static bool CheckTeamMatch(string query, string option)
-        {
-            query = ApplyTeamAliases(query);
-            option = ApplyTeamAliases(option);
+            query = _teamAliasMapper.NormalizeTeamName(query, removeStopWords: false);
+            option = _teamAliasMapper.NormalizeTeamName(option, removeStopWords: false);
 
             var qTokens = query.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2 && !IsGenericPrefix(w)).ToArray();
-            if (qTokens.Length == 0 && !string.IsNullOrEmpty(query)) qTokens = new[] { NormalizeText(query) };
+            if (qTokens.Length == 0 && !string.IsNullOrEmpty(query)) qTokens = new[] { _teamAliasMapper.NormalizeTeamName(query, removeStopWords: false) };
             
             var oTokens = option.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2 && !IsGenericPrefix(w)).ToArray();
-            if (oTokens.Length == 0 && !string.IsNullOrEmpty(option)) oTokens = new[] { NormalizeText(option) };
+            if (oTokens.Length == 0 && !string.IsNullOrEmpty(option)) oTokens = new[] { _teamAliasMapper.NormalizeTeamName(option, removeStopWords: false) };
 
             if (oTokens.Length == 0) return false;
 
@@ -508,7 +491,7 @@ namespace BettingApp.Services
             return qInO || oInQ;
         }
 
-        public static bool AreTeamsMatching(string queryHome, string queryAway, string optHome, string optAway)
+        public bool AreTeamsMatching(string queryHome, string queryAway, string optHome, string optAway)
         {
             if (string.IsNullOrEmpty(queryHome)) return false;
             
@@ -600,23 +583,6 @@ namespace BettingApp.Services
             }
 
             return bestId;
-        }
-        public static string NormalizeText(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return "";
-            
-            string result = TeamAliasMappingService.RemoveDiacritics(text).ToLowerInvariant();
-            result = TeamAliasMappingService.ApplyTeamAliases(result);
-            
-            // Map common nordic and german characters that don't decompose to ascii equivalents
-            result = result.Replace("ø", "o").Replace("æ", "a").Replace("å", "a")
-                           .Replace("ö", "o").Replace("ä", "a").Replace("ü", "u");
-                           
-            // Map common english translated team names to local names
-            result = result.Replace("copenhagen", "kobenhavn")
-                           .Replace("munich", "munchen");
-            
-            return result;
         }
 
         public static bool FuzzyMatch(string token, string fixtureName)

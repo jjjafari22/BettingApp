@@ -54,7 +54,19 @@ namespace BettingApp.Services
             { "al ettifaq", "al-ettifaq" },
             { "al-ettifaq", "al-ettifaq" },
             { "al ittihad", "al ittihad" },
-            { "al-ittihad", "al ittihad" }
+            { "al-ittihad", "al ittihad" },
+            { "athletic bilbao", "athletic club" },
+            { "inter milan", "internazionale" },
+            { "sporting lisbon", "sporting cp" },
+            { "boca juniors", "boca" },
+            { "fc copenhagen", "fc kobenhavn" },
+            { "copenhagen", "kobenhavn" },
+            { "munich", "munchen" },
+            { "man utd", "manchester united" },
+            { "manchester utd", "manchester united" },
+            { "man city", "manchester city" },
+            { "spurs", "tottenham hotspur" },
+            { "wolves", "wolverhampton wanderers" }
         };
 
         public static string ApplyTeamAliases(string? normalizedTeamName)
