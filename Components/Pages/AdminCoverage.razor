@@ -1,0 +1,542 @@
+@page "/admin/coverage"
+<PageTitle>Coverage Schedule - Castle of Happiness</PageTitle>
+@using BettingApp.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JSRuntime
+@rendermode @(new InteractiveServerRenderMode(prerender: true))
+
+<style>
+    .coverage-table th, .coverage-table td {
+        text-align: center;
+        vertical-align: middle;
+        cursor: pointer;
+        height: 50px;
+        user-select: none;
+    }
+    .coverage-table td:hover {
+        background-color: #f8f9fa;
+    }
+    .selected-cell {
+        background-color: #cfe2ff !important;
+        outline: 2px solid #0d6efd;
+        outline-offset: -2px;
+    }
+    .hour-col {
+        width: 100px;
+        font-weight: bold;
+        background-color: #f8f9fa;
+        white-space: nowrap;
+        font-size: 0.9rem;
+    }
+</style>
+
+<div class="container-fluid mb-5" @onmouseup="EndSelect" @onmouseleave="EndSelect">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <h2><i class="bi bi-calendar-week me-2 text-primary"></i>Coverage Schedule</h2>
+        <div>
+            <button class="btn btn-outline-secondary me-2" @onclick="PrevWeek"><i class="bi bi-chevron-left"></i> Prev</button>
+            <button class="btn btn-primary me-2" @onclick="ThisWeek">This Week</button>
+            <button class="btn btn-outline-secondary" @onclick="NextWeek">Next <i class="bi bi-chevron-right"></i></button>
+        </div>
+    </div>
+    
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success">@successMessage</div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="text-center my-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted">Loading schedule...</p>
+        </div>
+    }
+    else
+    {
+        <h4 class="mb-3 text-center">Week of @startOfDisplayWeek.ToString("MMMM d, yyyy") (Norway Time)</h4>
+        
+        <div class="d-flex justify-content-center align-items-center mb-3 gap-4 small">
+            <div><span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: #198754; vertical-align: middle;"></span> 100% Available</div>
+            <div><span class="d-inline-block rounded-circle me-1" style="width: 10px; height: 10px; background-color: #ffc107; vertical-align: middle;"></span> Partly Available</div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered coverage-table table-sm">
+                <thead class="table-dark">
+                    <tr>
+                        <th class="hour-col">Time</th>
+                        @for (int d = 0; d < 7; d++)
+                        {
+                            var date = startOfDisplayWeek.AddDays(d);
+                            bool isToday = date.Date == norwayToday.Date;
+                            <th class="@(isToday ? "bg-primary" : "")">
+                                @date.ToString("ddd")<br />
+                                <small>@date.ToString("MM/dd")</small>
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody @onmouseleave="EndSelect">
+                    @for (int h = 0; h < 24; h++)
+                    {
+                        int currentHour = h;
+                        <tr>
+                            <td class="hour-col">@($"{h:00}:00-{(h + 1 == 24 ? 0 : h + 1):00}:00")</td>
+                            @for (int d = 0; d < 7; d++)
+                            {
+                                int currentDay = d;
+                                var cellDate = startOfDisplayWeek.AddDays(currentDay).AddHours(currentHour);
+                                var shift = shifts.FirstOrDefault(s => s.StartTimeUtc == TimeHelpers.GetUtcFromNorwayTime(cellDate));
+                                
+                                bool hasShift = shift != null;
+                                bool isSelected = selectedDates.Contains(cellDate);
+                                string cellClass = isSelected ? "selected-cell" : "";
+                                string customStyle = hasShift && !isSelected ? $"background-color: {GetAdminColor(shift!.AdminUserName)}" : "";
+                                
+                                <td class="@cellClass" 
+                                    style="@customStyle"
+                                    @onmousedown="() => BeginSelect(currentDay, currentHour)"
+                                    @onmouseenter="() => EnterSelect(currentDay, currentHour)"
+                                    @onmouseup="() => EndSelect()"
+                                    @onclick:preventDefault>
+                                    @if (hasShift && !isSelected)
+                                    {
+                                        <div class="d-flex align-items-center justify-content-center">
+                                            <span class="d-inline-block rounded-circle me-2" 
+                                                  style="width: 10px; height: 10px; background-color: @(shift!.IsPartlyAvailable ? "#ffc107" : "#198754");" 
+                                                  title="@(shift.IsPartlyAvailable ? "Partly Available" : "100% Available")"></span>
+                                            <span class="fw-bold text-dark">@GetAdminFirstName(shift.AdminUserName)</span>
+                                            @if (!string.IsNullOrWhiteSpace(shift.Note))
+                                            {
+                                                <i class="bi bi-journal-text ms-2 text-primary" title="@shift.Note"></i>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="text-muted small mt-2">
+            <em>Tip: Click and drag your mouse across multiple cells to schedule yourself for multiple hours at once!</em>
+        </div>
+    }
+</div>
+
+@if (showModal)
+{
+    <div class="modal fade show d-block" id="coverageModal" tabindex="-1" style="background: rgba(0,0,0,0.5);" @onkeydown="HandleKeyDown">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-content-title">
+                        @(selectedDates.Count > 1 ? $"Shift Coverage ({selectedDates.Count} hours selected)" : "Shift Coverage")
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (selectedDates.Count == 1)
+                    {
+                        var firstDate = selectedDates.First();
+                        <p><strong>Time:</strong> @firstDate.ToString("dddd, MMMM d, yyyy - HH:00")-@firstDate.AddHours(1).ToString("HH:00") (Norway Time)</p>
+                    }
+                    else
+                    {
+                        <p><strong>Multiple Times Selected</strong> (See highlighted cells)</p>
+                    }
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Covered By</label>
+                        <select class="form-select" @bind="modalAdminUserName">
+                            @foreach (var admin in allAdmins)
+                            {
+                                <option value="@admin.UserName">@(string.IsNullOrWhiteSpace(admin.FirstName) ? admin.UserName : $"{admin.FirstName} {admin.LastName}".Trim())</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Availability</label>
+                        <div class="position-relative">
+                            <div class="form-select text-start d-flex justify-content-between align-items-center" style="cursor: pointer;" @onclick="() => showAvailabilityDropdown = !showAvailabilityDropdown">
+                                <span>
+                                    <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background-color: @(modalIsPartlyAvailable ? "#ffc107" : "#198754");"></span>
+                                    @(modalIsPartlyAvailable ? "Partly Available" : "100% Available")
+                                </span>
+                            </div>
+                            @if (showAvailabilityDropdown)
+                            {
+                                <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1040;" @onclick="() => showAvailabilityDropdown = false"></div>
+                                <ul class="dropdown-menu w-100 show" style="position: absolute; top: 100%; left: 0; z-index: 1050; margin-top: 2px;">
+                                    <li>
+                                        <a class="dropdown-item" style="cursor: pointer;" @onclick="() => { modalIsPartlyAvailable = false; showAvailabilityDropdown = false; }">
+                                            <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background-color: #198754;"></span> 100% Available
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" style="cursor: pointer;" @onclick="() => { modalIsPartlyAvailable = true; showAvailabilityDropdown = false; }">
+                                            <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background-color: #ffc107;"></span> Partly Available
+                                        </a>
+                                    </li>
+                                </ul>
+                            }
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notes (Optional)</label>
+                        <textarea class="form-control" rows="2" @bind="modalNote" placeholder="Any special notes for these hours?"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer d-flex justify-content-between">
+                    <button class="btn btn-danger" @onclick="RemoveShift">Clear Selected</button>
+                    <div>
+                        <button class="btn btn-secondary me-2" @onclick="CloseModal">Cancel</button>
+                        <button class="btn btn-success" @onclick="SaveShift">Save Shifts</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private int weekOffset = 0;
+    private DateTime norwayToday;
+    private DateTime startOfDisplayWeek;
+    private List<CoverageShift> shifts = new();
+    private List<ApplicationUser> allAdmins = new();
+    private bool isLoading = true;
+    private string errorMessage = "";
+    private string successMessage = "";
+    
+    private bool isAdmin = false;
+    private string currentUserName = "";
+
+    // Selection State
+    private bool isDragging = false;
+    private HashSet<DateTime> selectedDates = new();
+
+    // Modal state
+    private bool showModal = false;
+    private string modalAdminUserName = "";
+    private string modalNote = "";
+    private bool modalIsPartlyAvailable = false;
+    private bool showAvailabilityDropdown = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            currentUserName = user.Identity.Name ?? "Unknown";
+            using var context = DbFactory.CreateDbContext();
+            var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == currentUserName);
+            isAdmin = dbUser?.IsAdmin ?? false;
+            
+            if (isAdmin)
+            {
+                allAdmins = await context.Users
+                    .AsNoTracking()
+                    .Where(u => u.IsAdmin)
+                    .OrderBy(u => u.FirstName)
+                    .ToListAsync();
+            }
+        }
+
+        if (isAdmin)
+        {
+            CalculateWeek();
+            await LoadShifts();
+        }
+    }
+
+    private void CalculateWeek()
+    {
+        var norwayNow = TimeHelpers.GetNorwayTime(DateTime.UtcNow);
+        norwayToday = norwayNow.Date;
+        
+        int diff = (7 + (norwayNow.DayOfWeek - DayOfWeek.Monday)) % 7;
+        startOfDisplayWeek = norwayNow.AddDays(-1 * diff).Date.AddDays(weekOffset * 7);
+    }
+
+    private async Task LoadShifts()
+    {
+        isLoading = true;
+        errorMessage = "";
+        successMessage = "";
+        selectedDates.Clear();
+        isDragging = false;
+        StateHasChanged();
+        
+        try
+        {
+            var startUtc = TimeHelpers.GetUtcFromNorwayTime(startOfDisplayWeek);
+            var endUtc = TimeHelpers.GetUtcFromNorwayTime(startOfDisplayWeek.AddDays(7));
+            
+            using var context = DbFactory.CreateDbContext();
+            shifts = await context.CoverageShifts
+                .Where(s => s.StartTimeUtc >= startUtc && s.StartTimeUtc < endUtc)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading schedule: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetAdminFirstName(string userName)
+    {
+        var admin = allAdmins.FirstOrDefault(a => a.UserName == userName);
+        if (admin != null && !string.IsNullOrWhiteSpace(admin.FirstName))
+        {
+            return admin.FirstName;
+        }
+        return userName;
+    }
+
+    private string GetAdminColor(string userName)
+    {
+        if (string.IsNullOrEmpty(userName)) return "#d1e7dd";
+        int hash = 0;
+        for (int i = 0; i < userName.Length; i++)
+        {
+            hash = userName[i] + ((hash << 5) - hash);
+        }
+        int hue = Math.Abs(hash % 360);
+        return $"hsl({hue}, 75%, 85%)";
+    }
+
+    private int dragStartDay = -1;
+    private int dragStartHour = -1;
+
+    private void BeginSelect(int day, int hour)
+    {
+        selectedDates.Clear();
+        isDragging = true;
+        dragStartDay = day;
+        dragStartHour = hour;
+        UpdateSelection(day, hour);
+    }
+
+    private void EnterSelect(int day, int hour)
+    {
+        if (isDragging)
+        {
+            UpdateSelection(day, hour);
+        }
+    }
+
+    private void UpdateSelection(int endDay, int endHour)
+    {
+        selectedDates.Clear();
+        int minDay = Math.Min(dragStartDay, endDay);
+        int maxDay = Math.Max(dragStartDay, endDay);
+        int minHour = Math.Min(dragStartHour, endHour);
+        int maxHour = Math.Max(dragStartHour, endHour);
+        
+        for (int d = minDay; d <= maxDay; d++)
+        {
+            for (int h = minHour; h <= maxHour; h++)
+            {
+                selectedDates.Add(startOfDisplayWeek.AddDays(d).AddHours(h));
+            }
+        }
+    }
+
+    private void EndSelect()
+    {
+        if (isDragging)
+        {
+            isDragging = false;
+            dragStartDay = -1;
+            dragStartHour = -1;
+            if (selectedDates.Count > 0)
+            {
+                OpenModalForSelection();
+            }
+        }
+    }
+
+    private void OpenModalForSelection()
+    {
+        successMessage = "";
+        errorMessage = "";
+        
+        // If selecting a single cell with an existing shift, prefill it.
+        if (selectedDates.Count == 1)
+        {
+            var shift = shifts.FirstOrDefault(s => s.StartTimeUtc == TimeHelpers.GetUtcFromNorwayTime(selectedDates.First()));
+            if (shift != null)
+            {
+                modalAdminUserName = shift.AdminUserName;
+                modalNote = shift.Note ?? "";
+                modalIsPartlyAvailable = shift.IsPartlyAvailable;
+            }
+            else
+            {
+                modalAdminUserName = currentUserName;
+                modalNote = "";
+                modalIsPartlyAvailable = false;
+            }
+        }
+        else
+        {
+            // For multiple selection, always default to current user and blank note
+            modalAdminUserName = currentUserName;
+            modalNote = "";
+            modalIsPartlyAvailable = false;
+        }
+        
+        showModal = true;
+        StateHasChanged();
+        _ = JSRuntime.InvokeVoidAsync("eval", "setTimeout(() => { var m = document.getElementById('coverageModal'); if(m) m.focus(); }, 50);");
+    }
+
+    private void HandleKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            CloseModal();
+        }
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        selectedDates.Clear();
+    }
+
+    private async Task SaveShift()
+    {
+        if (string.IsNullOrWhiteSpace(modalAdminUserName))
+        {
+            errorMessage = "Please select an Admin.";
+            showModal = false;
+            return;
+        }
+
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            
+            var utcTimes = selectedDates.Select(d => TimeHelpers.GetUtcFromNorwayTime(d)).ToList();
+            var existingShifts = await context.CoverageShifts
+                .Where(s => utcTimes.Contains(s.StartTimeUtc))
+                .ToDictionaryAsync(s => s.StartTimeUtc);
+            
+            var auditLogs = new List<AuditLog>();
+
+            foreach (var date in selectedDates)
+            {
+                var utcTime = TimeHelpers.GetUtcFromNorwayTime(date);
+                string actionDetails = "";
+                
+                if (existingShifts.TryGetValue(utcTime, out var existing))
+                {
+                    existing.AdminUserName = modalAdminUserName;
+                    existing.Note = modalNote.Trim();
+                    existing.IsPartlyAvailable = modalIsPartlyAvailable;
+                    actionDetails = $"Updated coverage for {date:g} (Norway) -> Admin: {existing.AdminUserName}";
+                }
+                else
+                {
+                    var newShift = new CoverageShift
+                    {
+                        StartTimeUtc = utcTime,
+                        AdminUserName = modalAdminUserName,
+                        Note = modalNote.Trim(),
+                        IsPartlyAvailable = modalIsPartlyAvailable,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    context.CoverageShifts.Add(newShift);
+                    actionDetails = $"Added coverage for {date:g} (Norway) -> Admin: {newShift.AdminUserName}";
+                }
+
+                auditLogs.Add(new AuditLog
+                {
+                    Timestamp = DateTime.UtcNow,
+                    AdminUserName = currentUserName,
+                    Action = "Coverage Shift",
+                    TargetUserName = "System",
+                    Details = actionDetails
+                });
+            }
+
+            context.AuditLogs.AddRange(auditLogs);
+            await context.SaveChangesAsync();
+            successMessage = $"Successfully saved {selectedDates.Count} shift(s).";
+            showModal = false;
+            await LoadShifts();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving shift(s): {ex.Message}";
+            showModal = false;
+            selectedDates.Clear();
+        }
+    }
+
+    private async Task RemoveShift()
+    {
+        if (selectedDates.Count == 0) return;
+        
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            
+            var utcTimes = selectedDates.Select(d => TimeHelpers.GetUtcFromNorwayTime(d)).ToList();
+            var existingShifts = await context.CoverageShifts
+                .Where(s => utcTimes.Contains(s.StartTimeUtc))
+                .ToListAsync();
+
+            if (existingShifts.Any())
+            {
+                context.CoverageShifts.RemoveRange(existingShifts);
+                
+                var auditLogs = existingShifts.Select(dbShift => new AuditLog
+                {
+                    Timestamp = DateTime.UtcNow,
+                    AdminUserName = currentUserName,
+                    Action = "Coverage Shift",
+                    TargetUserName = "System",
+                    Details = $"Removed coverage for {TimeHelpers.GetNorwayTime(dbShift.StartTimeUtc):g} (Norway). Previous Admin: {dbShift.AdminUserName}"
+                }).ToList();
+                
+                context.AuditLogs.AddRange(auditLogs);
+                await context.SaveChangesAsync();
+                successMessage = $"Successfully removed {existingShifts.Count} shift(s).";
+            }
+            
+            showModal = false;
+            await LoadShifts();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error removing shift(s): {ex.Message}";
+            showModal = false;
+            selectedDates.Clear();
+        }
+    }
+
+    private async Task NextWeek() { weekOffset++; CalculateWeek(); await LoadShifts(); }
+    private async Task PrevWeek() { weekOffset--; CalculateWeek(); await LoadShifts(); }
+    private async Task ThisWeek() { weekOffset = 0; CalculateWeek(); await LoadShifts(); }
+}

@@ -122,4 +122,14 @@ namespace BettingApp.Data
         public string RecipientNames { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
+
+    public class CoverageShift
+    {
+        public int Id { get; set; }
+        public DateTime StartTimeUtc { get; set; } 
+        public string AdminUserName { get; set; } = string.Empty; 
+        public string? Note { get; set; }
+        public bool IsPartlyAvailable { get; set; } = false;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
 }

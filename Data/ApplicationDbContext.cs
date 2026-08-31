@@ -14,6 +14,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SettlementSnapshot> SettlementSnapshots { get; set; }
     
     public DbSet<Referral> Referrals { get; set; }
+    public DbSet<CoverageShift> CoverageShifts { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
