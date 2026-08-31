@@ -29,6 +29,9 @@ namespace BettingApp.Services
         // We use string replacement so "Kuopion Palloseura U21" becomes "Kups U21".
         private static readonly Dictionary<string, string> _teamAliases = new(StringComparer.OrdinalIgnoreCase)
         {
+            { "borussia monchengladbach", "borussia m'gladbach" },
+            { "monchengladbach", "m'gladbach" },
+            { "mönchengladbach", "m'gladbach" },
             { "kuopion palloseura", "kups" },
             { "st georgen", "san giorgio" },
             { "asc st georgen", "san giorgio" },
