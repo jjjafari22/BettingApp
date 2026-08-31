@@ -10,6 +10,7 @@
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavManager
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Nav
 @inject IHubContext<BetHub> HubContext
@@ -189,10 +190,13 @@ else
             isAdmin = currentUser?.IsAdmin ?? false;
         }
 
-        if (isAdmin)
+        if (!isAdmin)
         {
-            await LoadUsers();
+            NavManager.NavigateTo("/");
+            return;
         }
+
+        await LoadUsers();
     }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)

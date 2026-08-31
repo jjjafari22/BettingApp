@@ -7,6 +7,7 @@
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavManager
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
@@ -346,13 +347,16 @@ else
             var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
             hasAccess = dbUser?.IsAdmin ?? false;
 
-            if (hasAccess)
+            if (!hasAccess)
             {
-                await LoadHistoryAsync(context);
-                availableChannels = await DiscordService.GetGuildTextChannelsAsync();
-                // Select all by default
-                selectedChannelIds = new HashSet<ulong>(availableChannels.Select(c => c.Id));
+                NavManager.NavigateTo("/");
+                return;
             }
+
+            await LoadHistoryAsync(context);
+            availableChannels = await DiscordService.GetGuildTextChannelsAsync();
+            // Select all by default
+            selectedChannelIds = new HashSet<ulong>(availableChannels.Select(c => c.Id));
         }
         isLoading = false;
     }

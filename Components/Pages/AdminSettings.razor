@@ -121,8 +121,11 @@ else
             hasAccess = dbUser?.IsAdmin ?? false;
         }
 
-        if (hasAccess)
+        if (!hasAccess)
         {
+            Nav.NavigateTo("/");
+            return;
+        }
             await LoadSettings(context);
             // --- SignalR Listener ---
             hubConnection = new HubConnectionBuilder()
@@ -140,7 +143,6 @@ else
             });
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
-        }
         isLoading = false;
     }
 

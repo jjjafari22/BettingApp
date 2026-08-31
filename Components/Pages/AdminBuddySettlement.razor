@@ -586,7 +586,7 @@
         var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == currentUserName);
         if (dbUser?.IsAdmin != true)
         {
-            NavigationManager.NavigateTo("Account/Login");
+            NavigationManager.NavigateTo("/");
             return;
         }
 

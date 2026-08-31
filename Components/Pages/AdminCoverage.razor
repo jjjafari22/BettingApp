@@ -8,6 +8,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JSRuntime
+@inject NavigationManager NavManager
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <style>
@@ -256,11 +257,14 @@
             }
         }
 
-        if (isAdmin)
+        if (!isAdmin)
         {
-            CalculateWeek();
-            await LoadShifts();
+            NavManager.NavigateTo("/");
+            return;
         }
+
+        CalculateWeek();
+        await LoadShifts();
     }
 
     private void CalculateWeek()

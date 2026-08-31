@@ -640,7 +640,11 @@ else
             hasAccess = currentUser?.IsAdmin ?? false;
         }
 
-        if (!hasAccess) return;
+        if (!hasAccess) 
+        {
+            Nav.NavigateTo("/");
+            return;
+        }
         
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Nav.ToAbsoluteUri("/bethub"))

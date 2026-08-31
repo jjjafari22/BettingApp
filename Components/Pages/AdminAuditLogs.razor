@@ -166,7 +166,11 @@ else
             isAdmin = dbUser?.IsAdmin ?? false;
         }
 
-        if (isAdmin)
+        if (!isAdmin)
+        {
+            Nav.NavigateTo("/");
+            return;
+        }
         {
             await LoadLogs();
             hubConnection = new HubConnectionBuilder()
