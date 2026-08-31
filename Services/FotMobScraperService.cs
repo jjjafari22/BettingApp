@@ -518,6 +518,20 @@ namespace BettingApp.Services
             if (!matchSuggests[0].TryGetProperty("options", out var options) || options.GetArrayLength() == 0)
                 return null;
 
+            DateTime? parsedTargetDate = null;
+            if (awayTeam != null)
+            {
+                var dateMatch = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (dateMatch.Success)
+                {
+                    string dateStr = dateMatch.Groups[1].Value;
+                    awayTeam = awayTeam.Substring(0, dateMatch.Index).Trim();
+                    
+                    if (DateTime.TryParse(dateStr, out DateTime dt1)) parsedTargetDate = dt1;
+                    else if (DateTime.TryParseExact(dateStr, "dd.MMM HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime dt2)) parsedTargetDate = dt2;
+                }
+            }
+
             var awayTeamTokens = string.IsNullOrEmpty(awayTeam) ? new string[0] : 
                 awayTeam.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries)
                         .Where(w => w.Length >= 2 && !IsGenericPrefix(w))
@@ -538,7 +552,7 @@ namespace BettingApp.Services
                 string optionHomeName = payload.TryGetProperty("homeName", out var h) ? h.GetString() ?? "" : "";
                 string optionAwayName = payload.TryGetProperty("awayName", out var a) ? a.GetString() ?? "" : "";
 
-                if (!AreTeamsMatching(homeTeam, awayTeam, optionHomeName, optionAwayName))
+                if (!AreTeamsMatching(homeTeam, awayTeam ?? "", optionHomeName, optionAwayName))
                 {
                     continue;
                 }
@@ -552,13 +566,9 @@ namespace BettingApp.Services
                     {
                         DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
                         
-                        // If the awayTeam string contains "(Starts: 24.Jul 20:00)", extract the date!
-                        var dateMatch = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        if (dateMatch.Success && DateTime.TryParse(dateMatch.Groups[1].Value, out DateTime parsedTarget))
+                        if (parsedTargetDate.HasValue)
                         {
-                            // if it parsed successfully without a year, it might be in the past or future.
-                            // We can just use it if it's within a few months of betPlacedAt
-                            targetDate = parsedTarget;
+                            targetDate = parsedTargetDate.Value;
                             if (betPlacedAt.HasValue && Math.Abs((targetDate - betPlacedAt.Value).TotalDays) > 180)
                             {
                                 // Fix year wrap-around

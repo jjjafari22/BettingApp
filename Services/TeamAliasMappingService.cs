@@ -21,7 +21,8 @@ namespace BettingApp.Services
             var result = stringBuilder.ToString().Normalize(System.Text.NormalizationForm.FormC);
             return result.Replace("ø", "o").Replace("Ø", "O")
                          .Replace("æ", "a").Replace("Æ", "A")
-                         .Replace("å", "a").Replace("Å", "A");
+                         .Replace("å", "a").Replace("Å", "A")
+                         .Replace("ı", "i").Replace("İ", "I");
         }
 
         // Maps alternative/bilingual team names to their standard API format.
