@@ -8,10 +8,10 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
-<div class="top-row ps-3 navbar navbar-dark" style="height: auto; min-height: 3.5rem; padding-top: 1rem; padding-bottom: 1rem;">
-    <div class="container-fluid d-flex flex-column align-items-center justify-content-center">
-        <a class="navbar-brand mx-0" href="">Castle of Happiness</a>
-        <img src="images/logo.png" alt="Logo" class="mt-2" style="width: 80px; height: auto;" />
+<div class="top-row navbar navbar-dark d-flex align-items-center" style="padding-left: 1rem;">
+    <div class="container-fluid d-flex flex-row align-items-center justify-content-start flex-nowrap pe-5 pe-md-2" style="padding-left: 0;">
+        <img src="images/logo.png" alt="Logo" class="me-2" style="width: 42px; height: 42px; min-width: 42px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.2);" />
+        <a class="navbar-brand mx-0 mb-0 fw-bold text-truncate" style="font-size: 1.05rem; line-height: 1.2; margin-left: 0 !important; white-space: nowrap;" href="">Castle of Happiness</a>
     </div>
 </div>
 
