@@ -385,7 +385,7 @@
                 TotalNetLiability = g.Sum(b => (decimal)(b.AmountNOK ?? 0) * (b.Odds - 1)),
                 AvgNetLiability = g.Average(b => (decimal?)((decimal)(b.AmountNOK ?? 0) * (b.Odds - 1))) ?? 0m
             })
-            .FirstOrDefaultAsync();
+            .SingleOrDefaultAsync();
             
         if (stats == null || stats.Count == 0)
         {
