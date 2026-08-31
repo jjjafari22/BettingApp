@@ -547,7 +547,7 @@ else
                                                                             else if (displayOName == "2") displayOName = t2;
                                                                             else if (displayOName.Equals("X", StringComparison.OrdinalIgnoreCase)) displayOName = "Draw";
                                                                             else if (displayOName.Equals("1X", StringComparison.OrdinalIgnoreCase)) displayOName = $"{t1} or Draw";
-                                                                            else if (displayOName.Equals("X2", StringComparison.OrdinalIgnoreCase)) displayOName = $"Draw or {t2}";
+                                                                            else if (displayOName.Equals("X2", StringComparison.OrdinalIgnoreCase) || displayOName.Equals("2X", StringComparison.OrdinalIgnoreCase)) displayOName = $"{t2} or Draw";
                                                                             else if (displayOName == "12") displayOName = $"{t1} or {t2}";
                                                                             else {
                                                                                 if (displayOName.StartsWith("1 ")) displayOName = t1 + displayOName.Substring(1);
@@ -2199,14 +2199,22 @@ else
                 
                 var simplifiedTargets = normalizedTargets.Select(t => simplify(t)).ToList();
                 
-                // 1. Try exact match first
-                var bestMatch = result.Markets.FirstOrDefault(m => simplifiedTargets.Contains(simplify(m.MarketName)));
+                // 1. Try exact match first by respecting the priority order from MarketMappingService
+                BettingApp.Models.OddsPapiMarket? bestMatch = null;
+                foreach (var target in simplifiedTargets)
+                {
+                    bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == target);
+                    if (bestMatch != null) break;
+                }
                 
-                // 2. Fallback to contains match if no exact match is found
+                // 2. Fallback to contains match if no exact match is found (respecting priority)
                 if (bestMatch == null)
                 {
-                    bestMatch = result.Markets.FirstOrDefault(m => 
-                        simplifiedTargets.Any(t => simplify(m.MarketName).Contains(t) || t.Contains(simplify(m.MarketName))));
+                    foreach (var target in simplifiedTargets)
+                    {
+                        bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(target) || target.Contains(simplify(m.MarketName)));
+                        if (bestMatch != null) break;
+                    }
                 }
 
                 bool isCanonicalTranslation = false;

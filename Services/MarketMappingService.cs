@@ -204,9 +204,10 @@ namespace BettingApp.Services
             }
 
             // Strip off any trailing scores (like "-1.0" or "(0-1)") for Asian Handicaps
-            if (clean.StartsWith("Asian Handicap", StringComparison.OrdinalIgnoreCase))
+            if (clean.StartsWith("Asian Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.StartsWith("Goals Handicap", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Asian Handicap" };
+                return new List<string> { "Asian Handicap", "3-Way Handicap" };
             }
 
             // Route Asian Total variants to Over Under
