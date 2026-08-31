@@ -727,52 +727,73 @@ else
             u.ReferredBy,
             u.PhoneNumber,
             u.IsManuallyVerified,
-            u.EmailConfirmed,
-            
-            Winnings = context.Bets.Where(b => b.UserId == u.Id && b.Status == "Won")
-                .Sum(b => (decimal?)((b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount)) ?? 0m,
-                
-            SettledStakes = context.Bets.Where(b => b.UserId == u.Id && (b.Status == "Won" || b.Status == "Lost"))
-                .Sum(b => (decimal?)((b.AmountNOK ?? 0) - b.FreeBetAmount)) ?? 0m,
-                
-            Handle = context.Bets.Where(b => b.UserId == u.Id && b.Status != "Rejected" && b.Status != "Cancelled")
-                .Sum(b => (decimal?)(b.AmountNOK ?? 0)) ?? 0m,
-                
-            TotalFreeBetsGiven = context.Transactions.Where(t => t.UserId == u.Id && t.Type == "Free Bet")
-                .Sum(t => (decimal?)t.AmountNOK) ?? 0m,
-                
-            FirstBetDate = context.Bets.Where(b => b.UserId == u.Id).Min(b => (DateTime?)b.CreatedAt),
-            LastBetDate = context.Bets.Where(b => b.UserId == u.Id).Max(b => (DateTime?)b.UpdatedAt),
-            
-            FirstTransDate = context.Transactions.Where(t => t.UserId == u.Id).Min(t => (DateTime?)t.Date),
-            LastTransDate = context.Transactions.Where(t => t.UserId == u.Id).Max(t => (DateTime?)t.UpdatedAt)
+            u.EmailConfirmed
         }).ToListAsync();
+
+        var betStats = await context.Bets
+            .AsNoTracking()
+            .GroupBy(b => b.UserId)
+            .Select(g => new
+            {
+                UserId = g.Key,
+                Winnings = g.Sum(b => b.Status == "Won" ? (decimal?)((b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount) : 0m),
+                SettledStakes = g.Sum(b => (b.Status == "Won" || b.Status == "Lost") ? (decimal?)((b.AmountNOK ?? 0) - b.FreeBetAmount) : 0m),
+                Handle = g.Sum(b => (b.Status != "Rejected" && b.Status != "Cancelled") ? (decimal?)(b.AmountNOK ?? 0) : 0m),
+                FirstBetDate = g.Min(b => (DateTime?)b.CreatedAt),
+                LastBetDate = g.Max(b => (DateTime?)b.UpdatedAt)
+            })
+            .ToDictionaryAsync(x => x.UserId);
+
+        var transStats = await context.Transactions
+            .AsNoTracking()
+            .GroupBy(t => t.UserId)
+            .Select(g => new
+            {
+                UserId = g.Key,
+                TotalFreeBetsGiven = g.Sum(t => t.Type == "Free Bet" ? (decimal?)t.AmountNOK : 0m),
+                FirstTransDate = g.Min(t => (DateTime?)t.Date),
+                LastTransDate = g.Max(t => (DateTime?)t.UpdatedAt)
+            })
+            .ToDictionaryAsync(x => x.UserId);
 
         allUsersVM = new List<UserViewModel>();
         pendingUsersVM = new List<UserViewModel>();
         
         foreach (var u in usersData)
         {
-            var lifetimeProfit = Math.Floor(u.Winnings) - u.SettledStakes;
+            var bStats = betStats.ContainsKey(u.Id) ? betStats[u.Id] : null;
+            var tStats = transStats.ContainsKey(u.Id) ? transStats[u.Id] : null;
+            
+            var winnings = bStats?.Winnings ?? 0m;
+            var settledStakes = bStats?.SettledStakes ?? 0m;
+            var handle = bStats?.Handle ?? 0m;
+            var firstBetDate = bStats?.FirstBetDate;
+            var lastBetDate = bStats?.LastBetDate;
+            
+            var totalFreeBetsGiven = tStats?.TotalFreeBetsGiven ?? 0m;
+            var firstTransDate = tStats?.FirstTransDate;
+            var lastTransDate = tStats?.LastTransDate;
+
+            var lifetimeProfit = Math.Floor(winnings) - settledStakes;
 
             DateTime dateJoined = u.CreatedAt;
             if (dateJoined == DateTime.MinValue)
             {
-                if (u.FirstBetDate.HasValue && u.FirstTransDate.HasValue)
-                    dateJoined = u.FirstBetDate.Value < u.FirstTransDate.Value ? u.FirstBetDate.Value : u.FirstTransDate.Value;
-                else if (u.FirstBetDate.HasValue)
-                    dateJoined = u.FirstBetDate.Value;
-                else if (u.FirstTransDate.HasValue)
-                    dateJoined = u.FirstTransDate.Value;
+                if (firstBetDate.HasValue && firstTransDate.HasValue)
+                    dateJoined = firstBetDate.Value < firstTransDate.Value ? firstBetDate.Value : firstTransDate.Value;
+                else if (firstBetDate.HasValue)
+                    dateJoined = firstBetDate.Value;
+                else if (firstTransDate.HasValue)
+                    dateJoined = firstTransDate.Value;
                 else
                     dateJoined = DateTime.MaxValue;
             }
 
-            var lastBetDate = u.LastBetDate ?? DateTime.MinValue;
-            var lastTransDate = u.LastTransDate ?? DateTime.MinValue;
+            var lastBetDateValue = lastBetDate ?? DateTime.MinValue;
+            var lastTransDateValue = lastTransDate ?? DateTime.MinValue;
             var userUpdateDate = u.UpdatedAt == DateTime.MinValue ? u.CreatedAt : u.UpdatedAt;
             
-            var lastActive = new[] { userUpdateDate, lastBetDate, lastTransDate }.Max();
+            var lastActive = new[] { userUpdateDate, lastBetDateValue, lastTransDateValue }.Max();
 
             var vm = new UserViewModel
             {
@@ -781,13 +802,13 @@ else
                 Email = u.Email ?? "",
                 FirstName = u.FirstName ?? "",
                 LastName = u.LastName ?? "",
-                Handle = Math.Floor(u.Handle),
+                Handle = Math.Floor(handle),
                 IsAdmin = u.IsAdmin,
                 IsTestUser = u.IsTestUser,
                 CreditLimit = u.CreditLimit, 
                 Balance = u.Balance, 
                 FreeBetBalance = u.FreeBetBalance,
-                TotalFreeBetsGiven = Math.Floor(u.TotalFreeBetsGiven),
+                TotalFreeBetsGiven = Math.Floor(totalFreeBetsGiven),
                 AvailableCredit = u.Balance + u.CreditLimit + u.FreeBetBalance, 
                 LifetimeProfit = lifetimeProfit,
                 DateJoined = dateJoined,
