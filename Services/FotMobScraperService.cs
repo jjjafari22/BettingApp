@@ -29,7 +29,7 @@ namespace BettingApp.Services
                 string homeSearchStr = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: true);
                 if (string.IsNullOrEmpty(homeSearchStr)) homeSearchStr = homeTeam; // Fallback if it was ONLY stop words
                 
-                string matchQuery = Uri.EscapeDataString(homeSearchStr); // Search only home team to guarantee results
+                string matchQuery = Uri.EscapeDataString(homeTeam); // Search the full home team first to guarantee specific results like "Sheffield United" instead of just "Sheffield"
                 
                 // 1. Search FotMob API
                 string searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={matchQuery}";
@@ -37,17 +37,20 @@ namespace BettingApp.Services
                 
                 string? eventId = null;
 
+                int currentBestScore = 0;
                 using (var searchDoc = System.Text.Json.JsonDocument.Parse(searchJson))
                 {
                     searchDoc.RootElement.TryGetProperty("matchSuggest", out var matchSuggests);
 
                     if (matchSuggests.ValueKind != System.Text.Json.JsonValueKind.Undefined && matchSuggests.GetArrayLength() > 0)
                     {
-                        eventId = ExtractEventId(searchDoc, homeTeam, awayTeam, betPlacedAt);
+                        var res = ExtractEventIdWithScore(searchDoc, homeTeam, awayTeam, betPlacedAt);
+                        eventId = res.id;
+                        currentBestScore = res.score;
                     }
 
-                    // Fallback: If full home team fails or returned only invalid matches (like women's teams), try searching the most significant word (longest word).
-                    if (string.IsNullOrEmpty(eventId))
+                    // Fallback: If we didn't find a perfect straight match, try searching the most significant word (longest word).
+                    if (currentBestScore < 200)
                     {
                         string longestWord = homeSearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? homeSearchStr.Split(' ')[0];
                         if (longestWord != homeSearchStr && longestWord.Length >= 3)
@@ -57,7 +60,12 @@ namespace BettingApp.Services
                             string fallbackJson = await _httpClient.GetStringAsync(searchUrl);
                             
                             using var fallbackDoc = System.Text.Json.JsonDocument.Parse(fallbackJson);
-                            eventId = ExtractEventId(fallbackDoc, homeTeam, awayTeam, betPlacedAt);
+                            var fallbackRes = ExtractEventIdWithScore(fallbackDoc, homeTeam, awayTeam, betPlacedAt);
+                            if (fallbackRes.score > currentBestScore || (fallbackRes.score == currentBestScore && fallbackRes.score > 0 && string.IsNullOrEmpty(eventId)))
+                            {
+                                eventId = fallbackRes.id;
+                                currentBestScore = fallbackRes.score;
+                            }
                         }
                     }
 
@@ -82,13 +90,19 @@ namespace BettingApp.Services
                             string fallbackJson = await _httpClient.GetStringAsync(searchUrl);
                             
                             using var fallbackDoc = System.Text.Json.JsonDocument.Parse(fallbackJson);
-                            eventId = ExtractEventId(fallbackDoc, homeTeam, awayTeam, betPlacedAt);
+                            var fallbackRes = ExtractEventIdWithScore(fallbackDoc, homeTeam, awayTeam, betPlacedAt);
+                            if (fallbackRes.score > currentBestScore || (fallbackRes.score == currentBestScore && fallbackRes.score > 0 && string.IsNullOrEmpty(eventId)))
+                            {
+                                eventId = fallbackRes.id;
+                                currentBestScore = fallbackRes.score;
+                            }
                         }
                     }
                 }
 
                 // Fallback 3: Deep dive into Team Fixtures! (Because apigw suggest only returns top 3-4 matches, hiding older or pre-season friendlies)
-                if (string.IsNullOrEmpty(eventId))
+                // If currentBestScore < 200, it means we only found a swappedMatch or nothing. Do a Deep Dive to ensure we don't miss a straightMatch!
+                if (currentBestScore < 200)
                 {
                     // Collect team IDs from our previous searches!
                     var teamIdsToDeepSearch = new System.Collections.Generic.HashSet<string>();
@@ -156,6 +170,7 @@ namespace BettingApp.Services
                                 }
                                 
                                 DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
+                                // We will carry over smallestTimeDiff to prefer closer matches
                                 TimeSpan smallestTimeDiff = TimeSpan.MaxValue;
                                 
                                 foreach (var f in fixtures.EnumerateArray())
@@ -169,25 +184,29 @@ namespace BettingApp.Services
                                     string homeName = f.TryGetProperty("home", out var h) && h.TryGetProperty("name", out var hn) ? hn.GetString() ?? "" : "";
                                     string awayName = f.TryGetProperty("away", out var a) && a.TryGetProperty("name", out var an) ? an.GetString() ?? "" : "";
                                     
-                                    if (AreTeamsMatching(homeTeam, awayTeam, homeName, awayName))
+                                    int matchScore = GetTeamMatchScore(homeTeam, awayTeam ?? "", homeName, awayName);
+                                    if (matchScore == 0) continue;
+
+                                    if (f.TryGetProperty("status", out var statusProp) && statusProp.TryGetProperty("utcTime", out var utcProp))
                                     {
-                                        if (f.TryGetProperty("status", out var statusProp) && statusProp.TryGetProperty("utcTime", out var utcProp))
+                                        if (DateTime.TryParse(utcProp.GetString(), out DateTime fixtureDate))
                                         {
-                                            if (DateTime.TryParse(utcProp.GetString(), out DateTime fixtureDate))
+                                            TimeSpan diff = (fixtureDate - targetDate).Duration();
+                                            // Reject matches that are completely wildly off
+                                            if (diff.TotalDays > 120) continue;
+
+                                            if (matchScore > currentBestScore || (matchScore == currentBestScore && diff < smallestTimeDiff))
                                             {
-                                                TimeSpan diff = (fixtureDate - targetDate).Duration();
-                                                if (diff < smallestTimeDiff)
-                                                {
-                                                    smallestTimeDiff = diff;
-                                                    eventId = id;
-                                                }
+                                                currentBestScore = matchScore;
+                                                smallestTimeDiff = diff;
+                                                eventId = id;
                                             }
                                         }
-                                        else if (string.IsNullOrEmpty(eventId))
-                                        {
-                                            // Fallback if no date available
-                                            eventId = id;
-                                        }
+                                    }
+                                    else if (string.IsNullOrEmpty(eventId) || matchScore > currentBestScore)
+                                    {
+                                        currentBestScore = matchScore;
+                                        eventId = id;
                                     }
                                 }
                             }
@@ -501,22 +520,31 @@ namespace BettingApp.Services
             return qInO || oInQ;
         }
 
-        public bool AreTeamsMatching(string queryHome, string queryAway, string optHome, string optAway)
+        public int GetTeamMatchScore(string queryHome, string queryAway, string optHome, string optAway)
         {
-            if (string.IsNullOrEmpty(queryHome)) return false;
+            if (string.IsNullOrEmpty(queryHome)) return 0;
             
             bool straightMatch = CheckTeamMatch(queryHome, optHome) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optAway));
+            if (straightMatch) return 200;
+
             bool swappedMatch = CheckTeamMatch(queryHome, optAway) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optHome));
-            return straightMatch || swappedMatch;
+            if (swappedMatch) return 100;
+
+            return 0;
         }
 
-        private string? ExtractEventId(System.Text.Json.JsonDocument doc, string homeTeam, string awayTeam, DateTime? betPlacedAt)
+        public bool AreTeamsMatching(string queryHome, string queryAway, string optHome, string optAway)
+        {
+            return GetTeamMatchScore(queryHome, queryAway, optHome, optAway) > 0;
+        }
+
+        private (string? id, int score) ExtractEventIdWithScore(System.Text.Json.JsonDocument doc, string homeTeam, string awayTeam, DateTime? betPlacedAt)
         {
             if (!doc.RootElement.TryGetProperty("matchSuggest", out var matchSuggests) || matchSuggests.GetArrayLength() == 0)
-                return null;
+                return (null, 0);
 
             if (!matchSuggests[0].TryGetProperty("options", out var options) || options.GetArrayLength() == 0)
-                return null;
+                return (null, 0);
 
             DateTime? parsedTargetDate = null;
             if (awayTeam != null)
@@ -552,12 +580,11 @@ namespace BettingApp.Services
                 string optionHomeName = payload.TryGetProperty("homeName", out var h) ? h.GetString() ?? "" : "";
                 string optionAwayName = payload.TryGetProperty("awayName", out var a) ? a.GetString() ?? "" : "";
 
-                if (!AreTeamsMatching(homeTeam, awayTeam ?? "", optionHomeName, optionAwayName))
+                int score = GetTeamMatchScore(homeTeam, awayTeam ?? "", optionHomeName, optionAwayName);
+                if (score == 0)
                 {
                     continue;
                 }
-
-                int score = 200; 
 
                 // Parse match date to prioritize the closest match (e.g. Leg 1 vs Leg 2)
                 if (payload.TryGetProperty("matchDate", out var matchDateElement))
@@ -602,7 +629,7 @@ namespace BettingApp.Services
                 }
             }
 
-            return bestId;
+            return (bestId, bestScore);
         }
 
         public static bool FuzzyMatch(string token, string fixtureName)
