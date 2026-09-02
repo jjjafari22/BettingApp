@@ -475,6 +475,10 @@ else
                         {
                             <span class="badge bg-secondary text-light border"><i class="bi bi-arrow-return-right me-1"></i> Fulfillment</span>
                         }
+                        else if (t.Type == "Transfer")
+                        {
+                            <span class="badge bg-primary text-light"><i class="bi bi-arrow-left-right me-1"></i> Transfer</span>
+                        }
                          else
                         {
                             <span class="badge bg-warning text-dark">@((t.Type == "Withdrawal" ? "Withdraw" : t.Type))</span>
@@ -1773,6 +1777,15 @@ else
             else if (addTransReceiverType == "CashCow" && receiverCC != null)
             {
                 receiverCC.Balance += amount;
+            }
+
+            if (addTransSenderType == "CashCow" && addTransReceiverType == "CashCow")
+            {
+                var txTransfer = CreateBaseTx();
+                txTransfer.Type = "Transfer";
+                txTransfer.UserId = ""; 
+                txTransfer.UserName = "System";
+                transactionsToAdd.Add(txTransfer);
             }
         }
 
