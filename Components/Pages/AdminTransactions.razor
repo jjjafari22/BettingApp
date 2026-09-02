@@ -433,6 +433,7 @@ else
         <thead class="table-dark">
             <tr>
                 <th class="text-nowrap">Last Updated</th>
+                <th>ID</th>
                 <th>Sender</th>
                 <th>Receiver</th>
                 <th>Type</th>
@@ -446,6 +447,7 @@ else
             {
                 <tr>
                     <td class="text-nowrap">@ToUserLocal(t.UpdatedAt).ToString("g")</td>
+                    <td><span class="text-muted small">#@t.Id</span></td>
                     <td>
                         @if (!string.IsNullOrEmpty(t.SenderId) && userLookup.TryGetValue(t.SenderId, out var su)) {
                             <strong>@su.DiscordName</strong> <small class="text-muted">(@su.FirstName @su.LastName)</small>
