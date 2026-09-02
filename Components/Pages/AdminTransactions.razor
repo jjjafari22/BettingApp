@@ -212,7 +212,7 @@ else
                                     <ul class="list-group position-absolute w-100 shadow" style="z-index: 1000; max-height: 200px; overflow-y: auto;">
                                         @foreach (var u in senderSearchResults)
                                         {
-                                            <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" style="cursor: pointer;" @onclick="() => { addTransSenderId = u.Id; senderSearchTerm = u.DiscordUsername ?? u.UserName; selectedSenderUser = u; senderSearchResults.Clear(); }">
+                                            <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" style="cursor: pointer;" @onclick='() => { addTransSenderId = u.Id; senderSearchTerm = u.DiscordUsername ?? u.UserName ?? ""; selectedSenderUser = u; senderSearchResults.Clear(); }'>
                                                 <div><strong>@u.DiscordUsername</strong> <small>(@u.FirstName @u.LastName)</small></div>
                                                 <span class="badge @(u.Balance >= 0 ? "bg-success" : "bg-danger") rounded-pill">@u.Balance.ToString("N0") kr</span>
                                             </li>
@@ -269,7 +269,7 @@ else
                                     <ul class="list-group position-absolute w-100 shadow" style="z-index: 1000; max-height: 200px; overflow-y: auto;">
                                         @foreach (var u in receiverSearchResults)
                                         {
-                                            <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" style="cursor: pointer;" @onclick="() => { addTransReceiverId = u.Id; receiverSearchTerm = u.DiscordUsername ?? u.UserName; selectedReceiverUser = u; receiverSearchResults.Clear(); AutoFillPaymentDetails(); }">
+                                            <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" style="cursor: pointer;" @onclick='() => { addTransReceiverId = u.Id; receiverSearchTerm = u.DiscordUsername ?? u.UserName ?? ""; selectedReceiverUser = u; receiverSearchResults.Clear(); AutoFillPaymentDetails(); }'>
                                                 <div><strong>@u.DiscordUsername</strong> <small>(@u.FirstName @u.LastName)</small></div>
                                                 <span class="badge @(u.Balance >= 0 ? "bg-success" : "bg-danger") rounded-pill">@u.Balance.ToString("N0") kr</span>
                                             </li>
@@ -690,7 +690,7 @@ else
                                             </td>
                                             <td>
                                                 @if (isIncoming) { 
-                                                    string nameDisplay = t.SenderName;
+                                                    string nameDisplay = t.SenderName ?? "";
                                                     if (userLookup.TryGetValue(t.SenderId ?? "", out var u))
                                                     {
                                                         nameDisplay = string.IsNullOrEmpty(u.DiscordName) ? $"{u.FirstName} {u.LastName}".Trim() : $"{u.DiscordName} ({u.FirstName} {u.LastName})".Trim();
@@ -698,7 +698,7 @@ else
                                                     <span class="text-success"><i class="bi bi-arrow-down-left"></i> From @nameDisplay</span> 
                                                 }
                                                 else { 
-                                                    string nameDisplay = t.ReceiverName;
+                                                    string nameDisplay = t.ReceiverName ?? "";
                                                     if (userLookup.TryGetValue(t.ReceiverId ?? "", out var u))
                                                     {
                                                         nameDisplay = string.IsNullOrEmpty(u.DiscordName) ? $"{u.FirstName} {u.LastName}".Trim() : $"{u.DiscordName} ({u.FirstName} {u.LastName})".Trim();
@@ -774,7 +774,7 @@ else
     
     private string newTransPaymentDetailsBound
     {
-        get => newTrans.PaymentDetails;
+        get => newTrans.PaymentDetails ?? "";
         set
         {
             if (newTrans.Platform == "Vipps")
