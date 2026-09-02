@@ -10,6 +10,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SystemSetting> Settings { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<BroadcastHistory> Broadcasts { get; set; }
+    public DbSet<CashCow> CashCows { get; set; }
 
     public DbSet<SettlementSnapshot> SettlementSnapshots { get; set; }
     
@@ -54,6 +55,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<Referral>()
             .Property(r => r.TotalBonusAmount)
             .HasPrecision(18, 0);
+
+        builder.Entity<Transaction>()
+            .Property(t => t.FulfilledAmount)
+            .HasPrecision(18, 2);
+
+        builder.Entity<CashCow>()
+            .Property(c => c.Balance)
+            .HasPrecision(18, 2);
 
         // --- NEW: Performance Indexes ---
         builder.Entity<Bet>().HasIndex(b => b.Status); 

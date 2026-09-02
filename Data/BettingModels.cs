@@ -63,6 +63,8 @@ namespace BettingApp.Data
     public class Transaction
     {
         public int Id { get; set; }
+        
+        // Legacy fields (kept for backwards compatibility for standard deposits/withdrawals)
         public string UserId { get; set; } = string.Empty;
         public string UserName { get; set; } = string.Empty;
         
@@ -71,6 +73,18 @@ namespace BettingApp.Data
         
         [Required]
         public int AmountNOK { get; set; }
+        
+        // NEW Peer-to-Peer & CashCow Tracking Fields
+        public string? SenderType { get; set; } // "User", "CashCow", "System"
+        public string? SenderId { get; set; }
+        public string? SenderName { get; set; }
+        
+        public string? ReceiverType { get; set; } // "User", "CashCow", "System"
+        public string? ReceiverId { get; set; }
+        public string? ReceiverName { get; set; }
+        
+        public decimal FulfilledAmount { get; set; } = 0m;
+        // ----------------------------------------
         
         [Required]
         public string Platform { get; set; } = string.Empty;
@@ -87,7 +101,7 @@ namespace BettingApp.Data
     {
         public int Id { get; set; }
         public decimal MinBetAmount { get; set; } = 100m; 
-        public string CashCowsJson { get; set; } = "[]";
+        // CashCowsJson removed in favor of dedicated DB Table
     }
 
     public class CashCow
@@ -100,6 +114,9 @@ namespace BettingApp.Data
         public string BankTransfer { get; set; } = string.Empty;
         public string OtherPlatformName { get; set; } = string.Empty;
         public string OtherPaymentDetails { get; set; } = string.Empty;
+        
+        public decimal Balance { get; set; } = 0m;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     public class AuditLog

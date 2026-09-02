@@ -87,21 +87,21 @@
                         <div class="card bg-light border-0 mb-3 shadow-sm">
                             <div class="card-body py-3 px-3">
                                 <label class="form-label fw-semibold mb-2">Vipps</label>
-                                <InputText @bind-Value="vippsDetails" class="form-control" placeholder="8-digit Norwegian Phone Number" />
+                                <input type="text" @bind="vippsDetails" @bind:event="oninput" class="form-control" placeholder="8-digit Norwegian Phone Number" />
                             </div>
                         </div>
 
                         <div class="card bg-light border-0 mb-3 shadow-sm">
                             <div class="card-body py-3 px-3">
                                 <label class="form-label fw-semibold mb-2">Revolut</label>
-                                <InputText @bind-Value="revolutDetails" class="form-control" placeholder="Revolut Tag / Username" />
+                                <input type="text" @bind="revolutDetails" @bind:event="oninput" class="form-control" placeholder="Revolut Tag / Username" />
                             </div>
                         </div>
                         
                         <div class="card bg-light border-0 mb-3 shadow-sm">
                             <div class="card-body py-3 px-3">
                                 <label class="form-label fw-semibold mb-2">Bank Transfer</label>
-                                <InputText @bind-Value="bankTransferDetails" class="form-control" placeholder="Account Number" />
+                                <input type="text" @bind="bankTransferDetails" @bind:event="oninput" class="form-control" placeholder="Account Number" />
                             </div>
                         </div>
 
@@ -168,7 +168,10 @@
                         <td>
                             @t.Platform
                             @if((t.Type == "Withdrawal" || t.Type == "Free Bet") && !string.IsNullOrEmpty(t.PaymentDetails)) {
-                                <br/><small class="text-muted">@t.PaymentDetails</small>
+                                foreach (var detail in t.PaymentDetails.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                                {
+                                    <div class="text-muted small">@detail.Trim()</div>
+                                }
                             }
                         </td>
                         <td>@t.AmountNOK.ToString("N0") kr</td>
@@ -217,9 +220,50 @@
 @code {
     private Transaction withdrawalRequest = new() { Type = "Withdrawal", Platform = "Pending" };
     private int? withdrawalAmount;
-    private string vippsDetails = "";
-    private string revolutDetails = "";
-    private string bankTransferDetails = "";
+    private string _vippsDetails = "";
+    private string vippsDetails
+    {
+        get => _vippsDetails;
+        set
+        {
+            var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
+            if (digits.Length > 8) digits = digits.Substring(0, 8);
+            _vippsDetails = digits;
+        }
+    }
+
+    private string _revolutDetails = "";
+    private string revolutDetails
+    {
+        get => _revolutDetails;
+        set
+        {
+            var val = (value ?? "").Trim();
+            if (string.IsNullOrEmpty(val) || val == "@")
+            {
+                _revolutDetails = "";
+                return;
+            }
+            if (!val.StartsWith("@")) val = "@" + val;
+            val = "@" + val.Substring(1).Replace("@", "");
+            _revolutDetails = val;
+        }
+    }
+
+    private string _bankTransferDetails = "";
+    private string bankTransferDetails
+    {
+        get => _bankTransferDetails;
+        set
+        {
+            var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
+            if (digits.Length > 11) digits = digits.Substring(0, 11);
+            
+            if (digits.Length <= 4) _bankTransferDetails = digits;
+            else if (digits.Length <= 6) _bankTransferDetails = $"{digits.Substring(0, 4)}.{digits.Substring(4)}";
+            else _bankTransferDetails = $"{digits.Substring(0, 4)}.{digits.Substring(4, 2)}.{digits.Substring(6)}";
+        }
+    }
     private string otherPlatformName = "";
     private string otherDetails = "";
     private bool showOneMethodWarning = false;
@@ -335,9 +379,9 @@
             FreeBetBalance = user.FreeBetBalance;
         }
 
-        totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
+        totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId && t.Type != "Withdrawal Fulfillment");
         myTransactions = await context.Transactions
-            .Where(t => t.UserId == userId)
+            .Where(t => t.UserId == userId && t.Type != "Withdrawal Fulfillment")
             .OrderByDescending(t => t.UpdatedAt)
             .Skip((transPage - 1) * PageSize)
             .Take(PageSize)
@@ -365,27 +409,20 @@
             return;
         }
 
-        bool hasOtherPlatform = !string.IsNullOrWhiteSpace(otherPlatformName);
-        bool hasOtherDetails = !string.IsNullOrWhiteSpace(otherDetails);
-
-        if (hasOtherPlatform != hasOtherDetails)
+        var validationResult = BettingApp.Services.PaymentValidationHelper.ValidatePaymentMethods(
+            vippsDetails, revolutDetails, bankTransferDetails, otherPlatformName, otherDetails, requireAtLeastOne: true);
+            
+        if (!validationResult.isValid)
         {
-            ErrorMessage = "For 'Other Payment Method', you must fill out BOTH the platform name and the receiving info if you use it.";
+            ErrorMessage = validationResult.errorMessage;
             return;
         }
 
         bool hasVipps = !string.IsNullOrWhiteSpace(vippsDetails);
         bool hasRevolut = !string.IsNullOrWhiteSpace(revolutDetails);
         bool hasBank = !string.IsNullOrWhiteSpace(bankTransferDetails);
-        bool hasOther = hasOtherPlatform && hasOtherDetails;
-
+        bool hasOther = !string.IsNullOrWhiteSpace(otherPlatformName) && !string.IsNullOrWhiteSpace(otherDetails);
         int methodsCount = (hasVipps ? 1 : 0) + (hasRevolut ? 1 : 0) + (hasBank ? 1 : 0) + (hasOther ? 1 : 0);
-
-        if (methodsCount == 0)
-        {
-            ErrorMessage = "Please provide at least one payment method to receive your withdrawal.";
-            return;
-        }
 
         if (methodsCount == 1)
         {
@@ -455,6 +492,9 @@
             {
                 UserId = userId,
                 UserName = userName,
+                ReceiverId = userId,
+                ReceiverType = "User",
+                ReceiverName = $"{user?.FirstName} {user?.LastName}".Trim(),
                 Type = "Withdrawal",
                 AmountNOK = withdrawalAmount!.Value,
                 Platform = primaryPlatform,

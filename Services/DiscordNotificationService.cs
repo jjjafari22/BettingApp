@@ -181,9 +181,9 @@ public class DiscordNotificationService : IHostedService
 
         if (status == "Completed")
         {
-            header = "**Withdrawal Confirmed!**";
+            header = "**Transaction Completed**";
             icon = "✅";
-            messageBody = $"Your withdrawal of **{transaction.AmountNOK:N0} NOK** has been successfully processed.";
+            messageBody = $"A withdrawal of **{transaction.AmountNOK:N0} NOK** has been successfully processed.";
         }
         else if (status == "Rejected")
         {
@@ -221,8 +221,8 @@ public class DiscordNotificationService : IHostedService
     {
         if (string.IsNullOrWhiteSpace(discordUserId)) return;
 
-        string message = $"💰 **Deposit Processed!**\n" +
-                         $"Your account has been credited with **{amount:N0} NOK**.\n" +
+        string message = $"✅ **Transaction Completed**\n" +
+                         $"A deposit of **{amount:N0} NOK** has been successfully processed.\n" +
                          $"Good luck! 🍀\n" +
                          $"------------------------------\n";
 

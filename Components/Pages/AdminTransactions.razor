@@ -42,6 +42,21 @@ else
     </div>
 }
 
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link @(activeTab == "pending" ? "active" : "")" style="cursor: pointer;" @onclick='() => activeTab = "pending"'>
+            <i class="bi bi-list-check me-2"></i> Transactions Overview
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link @(activeTab == "cashcows" ? "active" : "")" style="cursor: pointer;" @onclick='() => activeTab = "cashcows"'>
+            <i class="bi bi-wallet2 me-2"></i> Cash Cows
+        </a>
+    </li>
+</ul>
+
+@if (activeTab == "pending")
+{
 <div class="card border-warning mb-4">
     <div class="card-header bg-warning text-dark">
         <strong>Pending Withdraw Requests</strong>
@@ -74,8 +89,23 @@ else
                             <td>@(userLookup.TryGetValue(w.UserId, out var u2) ? $"{u2.FirstName} {u2.LastName}".Trim() : "")</td>
                             <td>
                                 @w.Platform
-                                @if(!string.IsNullOrEmpty(w.PaymentDetails)) {
-                                    <br/><small class="text-muted">@w.PaymentDetails</small>
+                                @if (editingTransactionId == w.Id)
+                                {
+                                    <div class="mt-1 d-flex flex-column gap-1">
+                                        <input type="text" class="form-control form-control-sm" placeholder="Vipps" @bind="editPendingVippsBound" @bind:event="oninput" />
+                                        <input type="text" class="form-control form-control-sm" placeholder="Revolut" @bind="editPendingRevolutBound" @bind:event="oninput" />
+                                        <input type="text" class="form-control form-control-sm" placeholder="Bank" @bind="editPendingBankBound" @bind:event="oninput" />
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control" placeholder="Platform" @bind="editPendingOtherPlatform" />
+                                            <input type="text" class="form-control" placeholder="Details" @bind="editPendingOtherDetails" />
+                                        </div>
+                                    </div>
+                                }
+                                else if(!string.IsNullOrEmpty(w.PaymentDetails)) {
+                                    foreach (var detail in w.PaymentDetails.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                                    {
+                                        <div class="text-muted small">@detail.Trim()</div>
+                                    }
                                 }
                             </td>
                             <td>
@@ -89,6 +119,11 @@ else
                                 else
                                 {
                                     <strong>@w.AmountNOK.ToString("N0") kr</strong>
+                                    @if(w.FulfilledAmount > 0)
+                                    {
+                                        <div class="text-success small">Fulfilled: @w.FulfilledAmount.ToString("N0") kr</div>
+                                        <div class="text-danger small">Left: @((w.AmountNOK - w.FulfilledAmount).ToString("N0")) kr</div>
+                                    }
                                 }
                             </td>
                             <td>
@@ -119,120 +154,222 @@ else
 <div class="row">
     <div class="col-md-12 mb-4">
         <div class="card">
-             <div class="card-header bg-primary text-white">Add Transaction (Manual)</div>
+             <div class="card-header bg-primary text-white">Add Transaction</div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-3 mb-3 position-relative">
-                        <label>Target User (Search Discord)</label>
-                        <input type="text" class="form-control" 
-                               placeholder="Start typing Discord username..." 
-                               @bind="searchTerm" 
-                               @bind:event="oninput" 
-                               @bind:after="PerformSearchUsers" />
-                        
-                        @if (searchResults.Any())
-                        {
-                            <ul class="list-group position-absolute w-100 shadow" style="z-index: 1000; max-height: 200px; overflow-y: auto;">
-                                @foreach (var user in searchResults)
-                                {
-                                     <li class="list-group-item list-group-item-action" 
-                                        style="cursor: pointer;" 
-                                        @onclick="() => SelectUser(user)">
-                                        <strong>@(!string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : user.UserName)</strong> 
-                                        <small class="text-muted ms-1">(@user.Balance.ToString("N0") kr)</small>
-                                     </li>
-                                }
-                            </ul>
-                        }
+                    <div class="col-md-12 mb-3">
+                        <label class="fw-bold mb-2">Transaction Type</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="typeRadio" id="typeTransaction" autocomplete="off" 
+                                   checked="@(newTrans.Type == "Deposit")" @onclick='() => { newTrans.Type = "Deposit"; ClearForm(); }'>
+                            <label class="btn btn-outline-primary" for="typeTransaction">
+                                <i class="bi bi-currency-exchange me-1"></i> Transaction
+                            </label>
 
-                        @if (selectedUser != null)
+                            <input type="radio" class="btn-check" name="typeRadio" id="typeFreeBet" autocomplete="off" 
+                                   checked="@(newTrans.Type == "Free Bet")" @onclick='() => { newTrans.Type = "Free Bet"; ClearForm(); }'>
+                            <label class="btn btn-outline-info" for="typeFreeBet">
+                                <i class="bi bi-gift me-1"></i> Free Bet
+                            </label>
+                        </div>
+                    </div>
+                    @if (newTrans.Type != "Free Bet")
+                    {
+                    <!-- SENDER -->
+                    <div class="col-md-5 mb-3 border rounded p-3 bg-light">
+                        <h6 class="fw-bold text-success"><i class="bi bi-arrow-up-right-circle me-1"></i> Sender (Who paid the money?)</h6>
+                        <div class="btn-group w-100 mb-2" role="group">
+                            <input type="radio" class="btn-check" name="senderType" id="senderUser" autocomplete="off" 
+                                   checked="@(addTransSenderType == "User")" @onclick='() => { addTransSenderType = "User"; addTransSenderId = ""; selectedSenderUser = null; senderSearchTerm = ""; }'>
+                            <label class="btn btn-outline-secondary btn-sm" for="senderUser">User</label>
+                            
+                            <input type="radio" class="btn-check" name="senderType" id="senderCC" autocomplete="off" 
+                                   checked="@(addTransSenderType == "CashCow")" @onclick='() => { addTransSenderType = "CashCow"; addTransSenderId = ""; selectedSenderUser = null; senderSearchTerm = ""; }'>
+                            <label class="btn btn-outline-secondary btn-sm" for="senderCC">Cash Cow</label>
+                        </div>
+                        
+                        @if (addTransSenderType == "CashCow")
                         {
-                            <div class="mt-2 p-2 bg-light border rounded small">
-                                <div class="d-flex justify-content-between">
-                                    <span>Balance:</span>
-                                    <span class="@(selectedUser.Balance >= 0 ? "text-success" : "text-danger") fw-bold">
-                                        @selectedUser.Balance.ToString("N0") kr
-                                    </span>
-                                </div>
-                                <div class="text-success">
-                                    <small>Selected: <strong>@(!string.IsNullOrEmpty(selectedUser.DiscordUsername) ? selectedUser.DiscordUsername : selectedUser.UserName)</strong></small>
-                                    <button class="btn btn-link btn-sm p-0 ms-2 text-danger" @onclick="ClearSelection">(x)</button>
-                                </div>
+                            <select class="form-select" @bind="addTransSenderId">
+                                <option value="">-- Select Cash Cow --</option>
+                                @foreach (var cow in cashCows) { <option value="@cow.Id">@cow.FirstName @cow.LastName</option> }
+                            </select>
+                            @if (!string.IsNullOrEmpty(addTransSenderId)) {
+                                var cc = cashCows.FirstOrDefault(c => c.Id == addTransSenderId);
+                                if (cc != null) {
+                                    <div class="mt-2 p-2 bg-white border rounded small shadow-sm d-flex justify-content-between">
+                                        <span class="text-muted">CC Balance:</span><span class="fw-bold @(cc.Balance >= 0 ? "text-success" : "text-danger")">@cc.Balance.ToString("N0") kr</span>
+                                    </div>
+                                }
+                            }
+                        }
+                        else if (addTransSenderType == "User")
+                        {
+                            <div class="position-relative">
+                                <input type="text" class="form-control" placeholder="Search Discord User..." @bind="senderSearchTerm" @bind:event="oninput" @bind:after="SearchSender" />
+                                @if (senderSearchResults.Any())
+                                {
+                                    <ul class="list-group position-absolute w-100 shadow" style="z-index: 1000; max-height: 200px; overflow-y: auto;">
+                                        @foreach (var u in senderSearchResults)
+                                        {
+                                            <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" style="cursor: pointer;" @onclick="() => { addTransSenderId = u.Id; senderSearchTerm = u.DiscordUsername ?? u.UserName; selectedSenderUser = u; senderSearchResults.Clear(); }">
+                                                <div><strong>@u.DiscordUsername</strong> <small>(@u.FirstName @u.LastName)</small></div>
+                                                <span class="badge @(u.Balance >= 0 ? "bg-success" : "bg-danger") rounded-pill">@u.Balance.ToString("N0") kr</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
                             </div>
-                         }
+                            @if (selectedSenderUser != null) {
+                                <div class="mt-2 p-2 bg-white border rounded small shadow-sm">
+                                    <div class="d-flex justify-content-between text-muted"><span>User Balance:</span><span class="fw-bold @(selectedSenderUser.Balance >= 0 ? "text-success" : "text-danger")">@selectedSenderUser.Balance.ToString("N0") kr</span></div>
+                                    <div class="text-success"><small>Selected: <strong>@selectedSenderUser.DiscordUsername</strong> (@selectedSenderUser.FirstName @selectedSenderUser.LastName)</small></div>
+                                </div>
+                            }
+                        }
                     </div>
 
-                    <div class="col-md-4 mb-3">
-                        <label>Type</label>
-                        <div class="btn-group w-100" role="group">
-                            <input type="radio" class="btn-check" name="btnradio" id="typeDeposit" autocomplete="off" 
-                                   checked="@(newTrans.Type == "Deposit")" @onclick="@(() => ChangeType("Deposit"))">
-                            <label class="btn btn-outline-success" for="typeDeposit">Deposit</label>
-
-                            <input type="radio" class="btn-check" name="btnradio" id="typeWithdraw" autocomplete="off" 
-                                   checked="@(newTrans.Type == "Withdrawal")" @onclick="@(() => ChangeType("Withdrawal"))">
-                            <label class="btn btn-outline-warning" for="typeWithdraw">Withdraw</label>
+                    }
+                    <!-- RECEIVER -->
+                    <div class="col-md-5 mb-3 border rounded p-3 bg-light ms-md-3">
+                        <h6 class="fw-bold text-primary"><i class="bi bi-arrow-down-right-circle me-1"></i> Receiver (Who got the money?)</h6>
+                        <div class="btn-group w-100 mb-2" role="group">
+                            <input type="radio" class="btn-check" name="receiverType" id="receiverUser" autocomplete="off" 
+                                   checked="@(addTransReceiverType == "User")" @onclick='() => { addTransReceiverType = "User"; addTransReceiverId = ""; selectedReceiverUser = null; receiverSearchTerm = ""; AutoFillPaymentDetails(); }'>
+                            <label class="btn btn-outline-secondary btn-sm" for="receiverUser">User</label>
                             
-                             <input type="radio" class="btn-check" name="btnradio" id="typeFreeBet" autocomplete="off" 
-                                   checked="@(newTrans.Type == "Free Bet")" @onclick="@(() => ChangeType("Free Bet"))">
-                            <label class="btn btn-outline-info" for="typeFreeBet">Free Bet</label>
+                            @if (newTrans.Type != "Free Bet") {
+                                <input type="radio" class="btn-check" name="receiverType" id="receiverCC" autocomplete="off" 
+                                       checked="@(addTransReceiverType == "CashCow")" @onclick='() => { addTransReceiverType = "CashCow"; addTransReceiverId = ""; selectedReceiverUser = null; receiverSearchTerm = ""; AutoFillPaymentDetails(); }'>
+                                <label class="btn btn-outline-secondary btn-sm" for="receiverCC">Cash Cow</label>
+                            }
+                        </div>
+                        
+                        @if (addTransReceiverType == "CashCow")
+                        {
+                            <select class="form-select" @bind="addTransReceiverId" @bind:after="AutoFillPaymentDetails">
+                                <option value="">-- Select Cash Cow --</option>
+                                @foreach (var cow in cashCows) { <option value="@cow.Id">@cow.FirstName @cow.LastName</option> }
+                            </select>
+                            @if (!string.IsNullOrEmpty(addTransReceiverId)) {
+                                var cc = cashCows.FirstOrDefault(c => c.Id == addTransReceiverId);
+                                if (cc != null) {
+                                    <div class="mt-2 p-2 bg-white border rounded small shadow-sm d-flex justify-content-between">
+                                        <span class="text-muted">CC Balance:</span><span class="fw-bold @(cc.Balance >= 0 ? "text-success" : "text-danger")">@cc.Balance.ToString("N0") kr</span>
+                                    </div>
+                                }
+                            }
+                        }
+                        else if (addTransReceiverType == "User")
+                        {
+                            <div class="position-relative">
+                                <input type="text" class="form-control" placeholder="Search Discord User..." @bind="receiverSearchTerm" @bind:event="oninput" @bind:after="SearchReceiver" />
+                                @if (receiverSearchResults.Any())
+                                {
+                                    <ul class="list-group position-absolute w-100 shadow" style="z-index: 1000; max-height: 200px; overflow-y: auto;">
+                                        @foreach (var u in receiverSearchResults)
+                                        {
+                                            <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" style="cursor: pointer;" @onclick="() => { addTransReceiverId = u.Id; receiverSearchTerm = u.DiscordUsername ?? u.UserName; selectedReceiverUser = u; receiverSearchResults.Clear(); AutoFillPaymentDetails(); }">
+                                                <div><strong>@u.DiscordUsername</strong> <small>(@u.FirstName @u.LastName)</small></div>
+                                                <span class="badge @(u.Balance >= 0 ? "bg-success" : "bg-danger") rounded-pill">@u.Balance.ToString("N0") kr</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                                @if (selectedReceiverUser != null) {
+                                    <div class="mt-2 p-2 bg-white border rounded small shadow-sm">
+                                        <div class="d-flex justify-content-between text-muted"><span>User Balance:</span><span class="fw-bold @(selectedReceiverUser.Balance >= 0 ? "text-success" : "text-danger")">@selectedReceiverUser.Balance.ToString("N0") kr</span></div>
+                                        <div class="text-success"><small>Selected: <strong>@selectedReceiverUser.DiscordUsername</strong> (@selectedReceiverUser.FirstName @selectedReceiverUser.LastName)</small></div>
+                                    </div>
+                                }
+                            }
+                        </div>
+                        
+                    <div class="col-md-12 mb-3">
+                        <div class="alert alert-info py-2 small shadow-sm">
+                            <i class="bi bi-info-circle-fill me-1"></i> <strong>Automated Engine:</strong> Just log who sent money to who. If the receiver has a pending withdrawal, the system will automatically fulfill it without double-deducting balances!
                         </div>
                     </div>
 
+                    
+
+                    <div class="col-md-3 mb-3">
+                        <label class="fw-bold">Amount (NOK)</label>
+                        <input type="number" class="form-control" @bind="adminAddAmount" @bind:event="oninput" />
+                    </div>
+                    
                     @if (newTrans.Type == "Free Bet")
                     {
-                         <div class="col-md-3 mb-3">
-                            <label>Note</label>
-                            <input type="text" class="form-control" placeholder="e.g. Promotional Free Bet" @bind="newTrans.PaymentDetails" />
-                        </div>
-                        <div class="col-md-2 mb-3">
-                            <label>Amount (NOK)</label>
-                            <input type="number" class="form-control" @bind="adminAddAmount" />
+                         <div class="col-md-6 mb-3">
+                            <label class="fw-bold">Note (e.g. Promotional)</label>
+                            @if (addTransReceiverType == "CashCow") {
+                                    <div class="p-2 border rounded bg-light fw-bold text-primary font-monospace shadow-sm">
+                                        <i class="bi bi-wallet2 me-2"></i>@(string.IsNullOrEmpty(newTrans.PaymentDetails) ? "No details provided" : newTrans.PaymentDetails)
+                                    </div>
+                                } else {
+                                    <input type="text" class="form-control" @bind="newTrans.PaymentDetails" />
+                                }
                         </div>
                     }
                     else
                     {
-                         <div class="col-md-3 mb-3">
-                            <label>Payment Method</label>
-                            <select class="form-select" @bind="newTrans.Platform">
+                        <div class="col-md-6 mb-3">
+                            <label class="fw-bold">Payment Method</label>
+                            <select class="form-select" value="@newTrans.Platform" @onchange="OnPlatformChanged">
                                 <option value="Vipps">Vipps</option>
                                 <option value="Revolut">Revolut</option>
                                 <option value="Bank Transfer">Bank Transfer</option>
                                 <option value="Other">Other Payment</option>
                             </select>
                         </div>
-                        <div class="col-md-2 mb-3">
-                             <label>Amount (NOK)</label>
-                            <input type="number" class="form-control" @bind="adminAddAmount" />
-                        </div>
+                        
                         @if (newTrans.Platform == "Other")
                         {
                             <div class="col-md-5 mb-3">
-                                <label>Platform Name (e.g. PayPal)</label>
-                                <input type="text" class="form-control" @bind="otherPlatformName" />
+                                <label class="fw-bold">Platform Name (e.g. PayPal)</label>
+                                @if (addTransReceiverType == "CashCow" || isPaymentDetailsAutoFilled) {
+                                    <div class="p-2 border rounded bg-light fw-bold text-primary shadow-sm">
+                                        @(string.IsNullOrEmpty(otherPlatformName) ? "None" : otherPlatformName)
+                                    </div>
+                                } else {
+                                    <input type="text" class="form-control" @bind="otherPlatformName" />
+                                }
                             </div>
                             <div class="col-md-7 mb-3">
-                                <label>Payment Details</label>
-                                <input type="text" class="form-control" @bind="newTrans.PaymentDetails" />
+                                <label class="fw-bold">Payment Details</label>
+                                @if (addTransReceiverType == "CashCow" || isPaymentDetailsAutoFilled) {
+                                    <div class="p-2 border rounded bg-light fw-bold text-primary font-monospace shadow-sm">
+                                        <i class="bi bi-wallet2 me-2"></i>@(string.IsNullOrEmpty(newTrans.PaymentDetails) ? "No details provided" : newTrans.PaymentDetails)
+                                    </div>
+                                } else {
+                                    <input type="text" class="form-control" @bind="newTransPaymentDetailsBound" @bind:event="oninput" />
+                                }
                             </div>
                         }
                         else
                         {
                             <div class="col-md-12 mb-3">
-                                <label>
+                                <label class="fw-bold">
                                     @if (newTrans.Platform == "Vipps") { <text>Phone Number</text> }
                                     else if (newTrans.Platform == "Revolut") { <text>Revtag/Username</text> }
-                                    else if (newTrans.Platform == "Bank Transfer") { <text>Account Number</text> }
-                                    else { <text>Payment Details</text> }
+                                    else { <text>Bank Account Number</text> }
                                 </label>
-                                <input type="text" class="form-control" @bind="newTrans.PaymentDetails" />
-                             </div>
+                                @if (addTransReceiverType == "CashCow" || isPaymentDetailsAutoFilled) {
+                                    <div class="p-2 border rounded bg-light fw-bold text-primary font-monospace shadow-sm">
+                                        <i class="bi bi-wallet2 me-2"></i>@(string.IsNullOrEmpty(newTrans.PaymentDetails) ? "No details provided" : newTrans.PaymentDetails)
+                                    </div>
+                                } else {
+                                    <input type="text" class="form-control" @bind="newTransPaymentDetailsBound" @bind:event="oninput" />
+                                }
+                            </div>
                         }
                     }
 
-                    <div class="col-md-12 mb-3">
-                        <button class="btn btn-primary w-100" @onclick="AddTransaction" disabled="@(selectedUser == null)">Add Transaction</button>
-                     </div>
+                    <div class="col-md-12">
+                        <button class="btn btn-primary w-100 fw-bold" @onclick="AddTransaction" disabled="@(!adminAddAmount.HasValue || adminAddAmount.Value <= 0 || (newTrans.Type != "Free Bet" && newTrans.Platform == "Other" && string.IsNullOrEmpty(otherPlatformName)))">Execute Transaction</button>
+                    
+                    </div>
                 </div>
             </div>
         </div>
@@ -296,8 +433,8 @@ else
         <thead class="table-dark">
             <tr>
                 <th class="text-nowrap">Last Updated</th>
-                <th>Discord Username</th>
-                <th>Full Name</th>
+                <th>Sender</th>
+                <th>Receiver</th>
                 <th>Type</th>
                 <th>Payment Method</th>
                 <th>Amount</th>
@@ -309,8 +446,22 @@ else
             {
                 <tr>
                     <td class="text-nowrap">@ToUserLocal(t.UpdatedAt).ToString("g")</td>
-                    <td>@(userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName)</td>
-                    <td>@(userLookup.TryGetValue(t.UserId, out var u2) ? $"{u2.FirstName} {u2.LastName}".Trim() : "")</td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(t.SenderId) && userLookup.TryGetValue(t.SenderId, out var su)) {
+                            <strong>@su.DiscordName</strong> <small class="text-muted">(@su.FirstName @su.LastName)</small>
+                        } else {
+                            <strong>@t.SenderName</strong>
+                        }
+                        @if (t.SenderType == "CashCow") { <span class="badge bg-secondary ms-1">CC</span> }
+                    </td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(t.ReceiverId) && userLookup.TryGetValue(t.ReceiverId, out var ru)) {
+                            <strong>@ru.DiscordName</strong> <small class="text-muted">(@ru.FirstName @ru.LastName)</small>
+                        } else {
+                            <strong>@t.ReceiverName</strong>
+                        }
+                        @if (t.ReceiverType == "CashCow") { <span class="badge bg-secondary ms-1">CC</span> }
+                    </td>
                     <td>
                          @if (t.Type == "Deposit")
                         {
@@ -320,6 +471,10 @@ else
                         {
                             <span class="badge bg-info text-dark">Free Bet</span>
                         }
+                        else if (t.Type == "Withdrawal Fulfillment")
+                        {
+                            <span class="badge bg-secondary text-light border"><i class="bi bi-arrow-return-right me-1"></i> Fulfillment</span>
+                        }
                          else
                         {
                             <span class="badge bg-warning text-dark">@((t.Type == "Withdrawal" ? "Withdraw" : t.Type))</span>
@@ -328,7 +483,10 @@ else
                     <td>
                         @t.Platform
                         @if(!string.IsNullOrEmpty(t.PaymentDetails)) {
-                             <br/><small class="text-muted">@t.PaymentDetails</small>
+                            foreach (var detail in t.PaymentDetails.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                <div class="text-muted small">@detail.Trim()</div>
+                            }
                         }
                     </td>
                     <td>@t.AmountNOK.ToString("N0") kr</td>
@@ -372,7 +530,444 @@ else
 
 }
 
+@if (activeTab == "cashcows")
+{
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white">
+                    @(editingCowId == null ? "Add New Cash Cow" : "Edit Cash Cow")
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">First Name</label>
+                            <input type="text" class="form-control" @bind="newCow.FirstName" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Last Name</label>
+                            <input type="text" class="form-control" @bind="newCow.LastName" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Vipps (Phone)</label>
+                            <input type="text" class="form-control" @bind="newCowVippsBound" @bind:event="oninput" placeholder="8-digit Norwegian Phone Number" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Revolut (Revtag)</label>
+                            <input type="text" class="form-control" @bind="newCowRevolutBound" @bind:event="oninput" placeholder="Revolut Tag / Username" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Bank Transfer</label>
+                            <input type="text" class="form-control" @bind="newCowBankTransferBound" @bind:event="oninput" placeholder="Account Number" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Other Platform</label>
+                            <input type="text" class="form-control" placeholder="e.g. PayPal" @bind="newCow.OtherPlatformName" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Other Details</label>
+                            <input type="text" class="form-control" placeholder="Email/Tag" @bind="newCow.OtherPaymentDetails" />
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end justify-content-end gap-2">
+                            @if (editingCowId != null)
+                            {
+                                <button class="btn btn-secondary w-100" @onclick="() => { editingCowId = null; newCow = new(); }">Cancel</button>
+                            }
+                            <button class="btn btn-primary w-100 fw-bold" @onclick="SaveCashCow">@(editingCowId == null ? "Add" : "Save Changes")</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+        
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <strong>Cash Cows Overview</strong>
+                    <div class="d-flex gap-2 align-items-center">
+                        <span class="small fw-bold">Date Range Filter:</span>
+                        <input type="date" class="form-control form-control-sm" style="width: auto;" @bind="ccStartDate" @bind:after="UpdateCashCowPeriodNet" />
+                        <span class="small">to</span>
+                        <input type="date" class="form-control form-control-sm" style="width: auto;" @bind="ccEndDate" @bind:after="UpdateCashCowPeriodNet" />
+                        <button class="btn btn-sm btn-outline-light fw-bold" @onclick="ClearCashCowFilter">Clear</button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="cursor: pointer; user-select: none;" @onclick='() => SortCashCows("LastUpdated")'>
+                                        Last Updated @GetSortIcon("LastUpdated")
+                                    </th>
+                                    <th>Name</th>
+                                    <th>Contact / Details</th>
+                                    <th style="cursor: pointer; user-select: none;" @onclick='() => SortCashCows("LifetimeBalance")'>
+                                        Lifetime Balance @GetSortIcon("LifetimeBalance")
+                                    </th>
+                                    <th style="cursor: pointer; user-select: none;" @onclick='() => SortCashCows("PeriodNet")'>
+                                        Period Net @GetSortIcon("PeriodNet")
+                                    </th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!cashCows.Any())
+                                {
+                                    <tr><td colspan="5" class="text-center text-muted p-3">No Cash Cows configured.</td></tr>
+                                }
+                                @foreach (var cow in GetSortedCashCows())
+                                {
+                                    <tr>
+                                        <td>
+                                            @{
+                                                var lastUpd = ccLastUpdated.TryGetValue(cow.Id, out var dt) ? dt : null;
+                                                if (lastUpd.HasValue) {
+                                                    <span class="text-muted small">@ToUserLocal(lastUpd.Value).ToString("g")</span>
+                                                } else {
+                                                    <span class="text-muted small fst-italic">No transactions</span>
+                                                }
+                                            }
+                                        </td>
+                                        <td><strong>@cow.FirstName @cow.LastName</strong></td>
+                                        <td>
+                                            @if(!string.IsNullOrEmpty(cow.Vipps)) { <span class="badge bg-primary">Vipps: @cow.Vipps</span> }
+                                            @if(!string.IsNullOrEmpty(cow.Revolut)) { <span class="badge bg-dark">Rev: @cow.Revolut</span> }
+                                            @if(!string.IsNullOrEmpty(cow.BankTransfer)) { <span class="badge bg-secondary">Bank: @cow.BankTransfer</span> }
+                                            @if(!string.IsNullOrEmpty(cow.OtherPlatformName)) { <span class="badge bg-info text-dark">@cow.OtherPlatformName: @cow.OtherPaymentDetails</span> }
+                                        </td>
+                                        <td><strong class="@(cow.Balance >= 0 ? "text-success" : "text-danger")">@cow.Balance.ToString("N0") kr</strong></td>
+                                        @{
+                                            var pNet = GetCashCowPeriodNet(cow);
+                                        }
+                                        <td><strong class="@(pNet >= 0 ? "text-success" : "text-danger")">@pNet.ToString("N0") kr</strong></td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm btn-outline-info me-2" @onclick="() => OpenCowLedger(cow)">Ledger</button>
+                                            <button class="btn btn-sm btn-outline-primary" @onclick="() => EditCashCow(cow)">Edit</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            
+            @if (viewingCow != null)
+            {
+                <div class="card shadow-sm border-0 mt-4 border-info">
+                    <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
+                        <strong>Ledger: @viewingCow.FirstName @viewingCow.LastName</strong>
+                        <button class="btn-close" @onclick="() => viewingCow = null"></button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm mb-0">
+                                <thead class="table-light position-sticky top-0">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Platform</th>
+                                        <th>Amount</th>
+                                        <th>Direction</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (!viewingCowTransactions.Any())
+                                    {
+                                        <tr><td colspan="5" class="text-center text-muted p-3">No transactions found.</td></tr>
+                                    }
+                                    @foreach (var t in viewingCowTransactions)
+                                    {
+                                        var isIncoming = t.ReceiverId == viewingCow.Id;
+                                        <tr>
+                                            <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
+                                            <td><span class="badge bg-secondary">@t.Type</span></td>
+                                            <td><small class="text-muted">@t.Platform</small></td>
+                                            <td class="@(isIncoming ? "text-success fw-bold" : "text-danger fw-bold")">
+                                                @(isIncoming ? "+" : "-")@t.AmountNOK kr
+                                            </td>
+                                            <td>
+                                                @if (isIncoming) { 
+                                                    string nameDisplay = t.SenderName;
+                                                    if (userLookup.TryGetValue(t.SenderId ?? "", out var u))
+                                                    {
+                                                        nameDisplay = string.IsNullOrEmpty(u.DiscordName) ? $"{u.FirstName} {u.LastName}".Trim() : $"{u.DiscordName} ({u.FirstName} {u.LastName})".Trim();
+                                                    }
+                                                    <span class="text-success"><i class="bi bi-arrow-down-left"></i> From @nameDisplay</span> 
+                                                }
+                                                else { 
+                                                    string nameDisplay = t.ReceiverName;
+                                                    if (userLookup.TryGetValue(t.ReceiverId ?? "", out var u))
+                                                    {
+                                                        nameDisplay = string.IsNullOrEmpty(u.DiscordName) ? $"{u.FirstName} {u.LastName}".Trim() : $"{u.DiscordName} ({u.FirstName} {u.LastName})".Trim();
+                                                    }
+                                                    <span class="text-danger"><i class="bi bi-arrow-up-right"></i> To @nameDisplay</span> 
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-light d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Page @viewingCowCurrentPage</span>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm @(viewingCowCurrentPage == 1 ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold")" @onclick="PrevCowPage" disabled="@(viewingCowCurrentPage == 1)">
+                                <i class="bi bi-arrow-left"></i> Prev
+                            </button>
+                            <button class="btn btn-sm @(!viewingCowHasMore ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold")" @onclick="NextCowPage" disabled="@(!viewingCowHasMore)">
+                                 Next <i class="bi bi-arrow-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+}
 @code {
+
+    private string activeTab = "pending";
+    private ApplicationUser? selectedSenderUser = null;
+    private ApplicationUser? selectedReceiverUser = null;
+    
+    private string newCowVippsBound
+    {
+        get => newCow.Vipps;
+        set
+        {
+            var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
+            if (digits.Length > 8) digits = digits.Substring(0, 8);
+            newCow.Vipps = digits;
+        }
+    }
+    
+    private string newCowRevolutBound
+    {
+        get => newCow.Revolut;
+        set
+        {
+            var val = (value ?? "").Trim();
+            if (string.IsNullOrEmpty(val) || val == "@") { newCow.Revolut = ""; return; }
+            if (!val.StartsWith("@")) val = "@" + val;
+            val = "@" + val.Substring(1).Replace("@", "");
+            newCow.Revolut = val;
+        }
+    }
+    
+    private string newCowBankTransferBound
+    {
+        get => newCow.BankTransfer;
+        set
+        {
+            var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
+            if (digits.Length > 11) digits = digits.Substring(0, 11);
+            if (digits.Length <= 4) newCow.BankTransfer = digits;
+            else if (digits.Length <= 6) newCow.BankTransfer = $"{digits.Substring(0, 4)}.{digits.Substring(4)}";
+            else newCow.BankTransfer = $"{digits.Substring(0, 4)}.{digits.Substring(4, 2)}.{digits.Substring(6)}";
+        }
+    }
+    
+    private string newTransPaymentDetailsBound
+    {
+        get => newTrans.PaymentDetails;
+        set
+        {
+            if (newTrans.Platform == "Vipps")
+            {
+                var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
+                if (digits.Length > 8) digits = digits.Substring(0, 8);
+                newTrans.PaymentDetails = digits;
+            }
+            else if (newTrans.Platform == "Revolut")
+            {
+                var val = (value ?? "").Trim();
+                if (string.IsNullOrEmpty(val) || val == "@") { newTrans.PaymentDetails = ""; return; }
+                if (!val.StartsWith("@")) val = "@" + val;
+                val = "@" + val.Substring(1).Replace("@", "");
+                newTrans.PaymentDetails = val;
+            }
+            else if (newTrans.Platform == "Bank Transfer")
+            {
+                var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
+                if (digits.Length > 11) digits = digits.Substring(0, 11);
+                if (digits.Length <= 4) newTrans.PaymentDetails = digits;
+                else if (digits.Length <= 6) newTrans.PaymentDetails = $"{digits.Substring(0, 4)}.{digits.Substring(4)}";
+                else newTrans.PaymentDetails = $"{digits.Substring(0, 4)}.{digits.Substring(4, 2)}.{digits.Substring(6)}";
+            }
+            else
+            {
+                newTrans.PaymentDetails = value ?? "";
+            }
+        }
+    }
+    
+    private string editPendingVippsBound
+    {
+        get => editPendingVipps;
+        set
+        {
+            var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
+            if (digits.Length > 8) digits = digits.Substring(0, 8);
+            editPendingVipps = digits;
+        }
+    }
+    
+    private string editPendingRevolutBound
+    {
+        get => editPendingRevolut;
+        set
+        {
+            var val = (value ?? "").Trim();
+            if (string.IsNullOrEmpty(val) || val == "@") { editPendingRevolut = ""; return; }
+            if (!val.StartsWith("@")) val = "@" + val;
+            val = "@" + val.Substring(1).Replace("@", "");
+            editPendingRevolut = val;
+        }
+    }
+    
+    private string editPendingBankBound
+    {
+        get => editPendingBank;
+        set
+        {
+            var digits = new string((value ?? "").Where(char.IsDigit).ToArray());
+            if (digits.Length > 11) digits = digits.Substring(0, 11);
+            if (digits.Length <= 4) editPendingBank = digits;
+            else if (digits.Length <= 6) editPendingBank = $"{digits.Substring(0, 4)}.{digits.Substring(4)}";
+            else editPendingBank = $"{digits.Substring(0, 4)}.{digits.Substring(4, 2)}.{digits.Substring(6)}";
+        }
+    }
+    
+    private void OnPlatformChanged(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "";
+        newTrans.Platform = val;
+        AutoFillPaymentDetails();
+    }
+    
+    private void AutoFillPaymentDetails()
+    {
+        string autoFilled = "";
+        
+        if (addTransReceiverType == "CashCow" && !string.IsNullOrEmpty(addTransReceiverId))
+        {
+            var cow = cashCows.FirstOrDefault(c => c.Id == addTransReceiverId);
+            if (cow != null)
+            {
+                if (newTrans.Platform == "Vipps") autoFilled = cow.Vipps;
+                else if (newTrans.Platform == "Revolut") autoFilled = cow.Revolut;
+                else if (newTrans.Platform == "Bank Transfer") autoFilled = cow.BankTransfer;
+            }
+        }
+        else if (addTransReceiverType == "User" && selectedReceiverUser != null)
+        {
+            var pending = pendingWithdrawals.FirstOrDefault(p => p.UserId == selectedReceiverUser.Id);
+            if (pending != null && !string.IsNullOrEmpty(pending.PaymentDetails))
+            {
+                var parts = pending.PaymentDetails.Split(" | ", StringSplitOptions.RemoveEmptyEntries);
+                foreach(var part in parts)
+                {
+                    if (newTrans.Platform == "Other") {
+                        if (!part.StartsWith("Vipps:") && !part.StartsWith("Revolut:") && !part.StartsWith("Bank Transfer:")) {
+                            var split = part.Split(":", 2);
+                            if (split.Length == 2) {
+                                otherPlatformName = split[0].Trim();
+                                autoFilled = split[1].Trim();
+                            }
+                            break;
+                        }
+                    } else if (part.StartsWith(newTrans.Platform + ":")) {
+                        autoFilled = part.Substring(newTrans.Platform.Length + 1).Trim();
+                        break;
+                    }
+                }
+            }
+        }
+
+        newTrans.PaymentDetails = autoFilled ?? "";
+        isPaymentDetailsAutoFilled = !string.IsNullOrEmpty(newTrans.PaymentDetails);
+        if (newTrans.Platform == "Other" && string.IsNullOrEmpty(newTrans.PaymentDetails))
+        {
+            otherPlatformName = "";
+        }
+    }
+    
+    private async Task ShowSuccess(string message)
+    {
+        successMessage = message;
+        StateHasChanged();
+        await Task.Delay(3000);
+        successMessage = null;
+        StateHasChanged();
+    }
+    private List<CashCow> cashCows = new();
+    private CashCow newCow = new();
+    private CashCow? viewingCow = null;
+    private List<Transaction> viewingCowTransactions = new();
+    private int viewingCowCurrentPage = 1;
+    private bool viewingCowHasMore = false;
+    private const int ViewingCowPageSize = 20;
+
+    private async Task OpenCowLedger(CashCow cow)
+    {
+        viewingCowCurrentPage = 1;
+        await LoadCowTransactions(cow);
+    }
+    
+    private async Task NextCowPage() { viewingCowCurrentPage++; await LoadCowTransactions(viewingCow!); }
+    private async Task PrevCowPage() { if(viewingCowCurrentPage > 1) { viewingCowCurrentPage--; await LoadCowTransactions(viewingCow!); } }
+
+    private async Task LoadCowTransactions(CashCow cow)
+    {
+        viewingCow = cow;
+        using var context = DbFactory.CreateDbContext();
+        
+        var query = context.Transactions.Where(t => t.SenderId == cow.Id || t.ReceiverId == cow.Id);
+        
+        if (ccStartDate.HasValue)
+        {
+            var startUtc = DateTime.SpecifyKind(ccStartDate.Value.Date.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
+            query = query.Where(t => t.Date >= startUtc);
+        }
+        
+        if (ccEndDate.HasValue)
+        {
+            var endUtc = DateTime.SpecifyKind(ccEndDate.Value.Date.AddDays(1).AddMinutes(TimezoneOffset).AddTicks(-1), DateTimeKind.Utc);
+            query = query.Where(t => t.Date <= endUtc);
+        }
+
+        var total = await query.CountAsync();
+        viewingCowHasMore = total > (viewingCowCurrentPage * ViewingCowPageSize);
+        
+        viewingCowTransactions = await query
+            .OrderByDescending(t => t.UpdatedAt)
+            .Skip((viewingCowCurrentPage - 1) * ViewingCowPageSize)
+            .Take(ViewingCowPageSize)
+            .ToListAsync();
+            
+        var additionalUserIds = viewingCowTransactions.Select(t => t.SenderId).Concat(viewingCowTransactions.Select(t => t.ReceiverId)).Distinct();
+        await PopulateUserLookup(additionalUserIds!);
+    }
+    private string? editingCowId = null;
+
+    private string addTransSenderType = "User";
+    private string addTransSenderId = "";
+    private string addTransReceiverType = "User";
+    private string addTransReceiverId = "";
+    
+    private string senderSearchTerm = "";
+    private List<ApplicationUser> senderSearchResults = new();
+    
+    private string receiverSearchTerm = "";
+    private List<ApplicationUser> receiverSearchResults = new();
+
     private bool isInitializing = true;
     private List<Transaction> allTransactions = new();
     private List<Transaction> pendingWithdrawals = new();
@@ -381,11 +976,25 @@ else
     private Transaction newTrans = new() { Type = "Deposit", Platform = "Vipps", Date = DateTime.UtcNow, Status = "Completed" };
     private int? adminAddAmount; 
     private string otherPlatformName = "";
+    private bool isPaymentDetailsAutoFilled = false;
+    
+    private DateTime? ccStartDate;
+    private DateTime? ccEndDate;
+    private Dictionary<string, int> ccPeriodNet = new();
+    private Dictionary<string, DateTime?> ccLastUpdated = new();
+    private string ccSortColumn = "LastUpdated";
+    private bool ccSortAscending = false;
     
     private string searchTerm = "";
 
     private int? editingTransactionId = null;
     private int editingTransactionAmount = 0;
+    
+    private string editPendingVipps = "";
+    private string editPendingRevolut = "";
+    private string editPendingBank = "";
+    private string editPendingOtherPlatform = "";
+    private string editPendingOtherDetails = "";
     private List<ApplicationUser> searchResults = new();
     private ApplicationUser? selectedUser;
 
@@ -469,21 +1078,98 @@ else
         }
     }
 
-    private void ChangeType(string type)
+    
+
+    private async Task SearchSender()
     {
-        newTrans.Type = type;
-        if (type == "Free Bet")
+        if (string.IsNullOrWhiteSpace(senderSearchTerm) || senderSearchTerm.Length < 2)
         {
-            newTrans.Platform = "Free Bet";
-            newTrans.PaymentDetails = string.Empty;
+            senderSearchResults.Clear();
+            return;
+        }
+        var searchLower = senderSearchTerm.ToLower();
+        using var context = DbFactory.CreateDbContext();
+        senderSearchResults = await context.Users
+            .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(searchLower)) || (u.UserName != null && u.UserName.ToLower().Contains(searchLower)))
+            .OrderBy(u => u.DiscordUsername)
+            .Take(10)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+    
+    private async Task SearchReceiver()
+    {
+        if (string.IsNullOrWhiteSpace(receiverSearchTerm) || receiverSearchTerm.Length < 2)
+        {
+            receiverSearchResults.Clear();
+            return;
+        }
+        var searchLower = receiverSearchTerm.ToLower();
+        using var context = DbFactory.CreateDbContext();
+        receiverSearchResults = await context.Users
+            .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(searchLower)) || (u.UserName != null && u.UserName.ToLower().Contains(searchLower)))
+            .OrderBy(u => u.DiscordUsername)
+            .Take(10)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+    
+    private void EditCashCow(CashCow cow)
+    {
+        editingCowId = cow.Id;
+        newCow = new CashCow
+        {
+            Id = cow.Id,
+            FirstName = cow.FirstName,
+            LastName = cow.LastName,
+            Vipps = cow.Vipps,
+            Revolut = cow.Revolut,
+            BankTransfer = cow.BankTransfer,
+            OtherPlatformName = cow.OtherPlatformName,
+            OtherPaymentDetails = cow.OtherPaymentDetails,
+            Balance = cow.Balance,
+            CreatedAt = cow.CreatedAt
+        };
+    }
+
+    private async Task SaveCashCow()
+    {
+        if (string.IsNullOrWhiteSpace(newCow.FirstName)) return;
+
+        var validationResult = BettingApp.Services.PaymentValidationHelper.ValidatePaymentMethods(
+            newCow.Vipps, newCow.Revolut, newCow.BankTransfer, newCow.OtherPlatformName, newCow.OtherPaymentDetails, requireAtLeastOne: false);
+            
+        if (!validationResult.isValid)
+        {
+            errorMessage = validationResult.errorMessage;
+            return;
+        }
+        
+        using var context = DbFactory.CreateDbContext();
+        if (editingCowId == null)
+        {
+            context.CashCows.Add(newCow);
         }
         else
         {
-            newTrans.Platform = "Vipps";
-            newTrans.PaymentDetails = string.Empty;
-            otherPlatformName = "";
+            var dbCow = await context.CashCows.FindAsync(editingCowId);
+            if (dbCow != null)
+            {
+                dbCow.FirstName = newCow.FirstName;
+                dbCow.LastName = newCow.LastName;
+                dbCow.Vipps = newCow.Vipps;
+                dbCow.Revolut = newCow.Revolut;
+                dbCow.BankTransfer = newCow.BankTransfer;
+            }
         }
+        await context.SaveChangesAsync();
+        
+        editingCowId = null;
+        newCow = new CashCow();
+        await LoadTransactions(context);
     }
+
+
 
     private async Task PerformSearchUsers()
     {
@@ -636,6 +1322,15 @@ else
             .ToListAsync();
         totalTransactions = await query.CountAsync();
         hasMoreTransactions = totalTransactions > (currentPage * PageSize);
+        cashCows = await context.CashCows.ToListAsync();
+        ccLastUpdated.Clear();
+        foreach (var cow in cashCows) {
+            var lastTx = await context.Transactions
+                .Where(t => (t.SenderType == "CashCow" && t.SenderId == cow.Id) || (t.ReceiverType == "CashCow" && t.ReceiverId == cow.Id))
+                .OrderByDescending(t => t.Date)
+                .FirstOrDefaultAsync();
+            ccLastUpdated[cow.Id] = lastTx?.Date;
+        }
         pendingWithdrawals = await context.Transactions
             .Where(t => t.Type == "Withdrawal" && t.Status == "Pending")
             .OrderBy(t => t.Date)
@@ -650,13 +1345,109 @@ else
     private async Task PrevPage() { if(currentPage > 1) { currentPage--;
     using var c = DbFactory.CreateDbContext(); await LoadTransactions(c); } }
 
+    private void SortCashCows(string column)
+    {
+        if (ccSortColumn == column) {
+            ccSortAscending = !ccSortAscending;
+        } else {
+            ccSortColumn = column;
+            ccSortAscending = false;
+        }
+    }
+
+    private string GetSortIcon(string column)
+    {
+        if (ccSortColumn != column) return "";
+        return ccSortAscending ? "↑" : "↓";
+    }
+
+    private int GetCashCowPeriodNet(CashCow cow)
+    {
+        return (ccStartDate.HasValue || ccEndDate.HasValue) 
+            ? (ccPeriodNet.TryGetValue(cow.Id, out var n) ? n : 0) 
+            : (int)cow.Balance;
+    }
+
+    private IEnumerable<CashCow> GetSortedCashCows()
+    {
+        var query = cashCows.AsEnumerable();
+        if (ccSortColumn == "LifetimeBalance") {
+            query = ccSortAscending ? query.OrderBy(c => c.Balance) : query.OrderByDescending(c => c.Balance);
+        } else if (ccSortColumn == "PeriodNet") {
+            query = ccSortAscending ? query.OrderBy(GetCashCowPeriodNet) : query.OrderByDescending(GetCashCowPeriodNet);
+        } else {
+            // LastUpdated (default)
+            query = ccSortAscending 
+                ? query.OrderBy(c => ccLastUpdated.TryGetValue(c.Id, out var d) ? (d ?? DateTime.MinValue) : DateTime.MinValue) 
+                : query.OrderByDescending(c => ccLastUpdated.TryGetValue(c.Id, out var d) ? (d ?? DateTime.MinValue) : DateTime.MinValue);
+        }
+        return query;
+    }
+
+    private async Task ClearCashCowFilter()
+    {
+        ccStartDate = null;
+        ccEndDate = null;
+        ccPeriodNet.Clear();
+        if (viewingCow != null)
+        {
+            viewingCowCurrentPage = 1;
+            await LoadCowTransactions(viewingCow);
+        }
+    }
+
+    private async Task UpdateCashCowPeriodNet()
+    {
+        if (ccStartDate == null && ccEndDate == null)
+        {
+            await ClearCashCowFilter();
+            return;
+        }
+
+        using var context = DbFactory.CreateDbContext();
+        var query = context.Transactions.Where(t => t.Status == "Completed");
+        
+        if (ccStartDate.HasValue)
+        {
+            var startUtc = DateTime.SpecifyKind(ccStartDate.Value.Date.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
+            query = query.Where(t => t.Date >= startUtc);
+        }
+        
+        if (ccEndDate.HasValue)
+        {
+            var endUtc = DateTime.SpecifyKind(ccEndDate.Value.Date.AddDays(1).AddMinutes(TimezoneOffset).AddTicks(-1), DateTimeKind.Utc);
+            query = query.Where(t => t.Date <= endUtc);
+        }
+        
+        var txs = await query.ToListAsync();
+        
+        ccPeriodNet.Clear();
+        foreach (var cow in cashCows)
+        {
+            var ccId = cow.Id;
+            var sent = txs.Where(t => t.SenderType == "CashCow" && string.Equals(t.SenderId, ccId, StringComparison.OrdinalIgnoreCase)).Sum(t => t.AmountNOK);
+            var received = txs.Where(t => t.ReceiverType == "CashCow" && string.Equals(t.ReceiverId, ccId, StringComparison.OrdinalIgnoreCase)).Sum(t => t.AmountNOK);
+            ccPeriodNet[ccId] = received - sent;
+        }
+
+        if (viewingCow != null)
+        {
+            viewingCowCurrentPage = 1;
+            await LoadCowTransactions(viewingCow);
+        }
+    }
+
     private async Task ConfirmWithdraw(Transaction t)
     {
         successMessage = null;
         errorMessage = null;
         var displayUser = userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName;
-        var confirmed = await DialogService.ConfirmAsync( 
-            $"Confirm payout of {t.AmountNOK} kr to {displayUser}?");
+        
+        var msg = t.AmountNOK <= 0 
+            ? $"This withdrawal has been fully fulfilled. Clear this {t.AmountNOK}kr request for {displayUser}?" 
+            : $"Confirm payout of {t.AmountNOK} kr to {displayUser}?";
+            
+        var confirmed = await DialogService.ConfirmAsync(msg);
         if (!confirmed) return;
 
         using var context = DbFactory.CreateDbContext();
@@ -665,18 +1456,28 @@ else
         var dbTrans = await context.Transactions.FindAsync(t.Id);
         if (dbTrans != null)
         {
-            dbTrans.Status = "Completed";
-            dbTrans.UpdatedAt = DateTime.UtcNow;
-            context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Confirmed Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {t.AmountNOK}, Platform: {t.Platform}" });
-            await context.SaveChangesAsync();
-            await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal confirmed");
-            
-            if (user != null && !string.IsNullOrEmpty(user.DiscordUserId))
+            if (dbTrans.AmountNOK <= 0)
             {
-                await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, t, "Completed");
+                context.Transactions.Remove(dbTrans);
+                context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Cleared Fulfilled Withdrawal", TargetUserName = t.UserName, Details = $"ID: {t.Id}" });
+                await context.SaveChangesAsync();
+                _ = ShowSuccess("Fulfilled withdrawal request cleared.");
             }
-
-            successMessage = "Withdrawal confirmed.";
+            else
+            {
+                dbTrans.Status = "Completed";
+                dbTrans.UpdatedAt = DateTime.UtcNow;
+                context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Confirmed Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {t.AmountNOK}, Platform: {t.Platform}" });
+                await context.SaveChangesAsync();
+                await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal confirmed");
+                
+                if (user != null && !string.IsNullOrEmpty(user.DiscordUserId))
+                {
+                    await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, t, "Completed");
+                }
+                _ = ShowSuccess("Withdrawal confirmed.");
+            }
+            
             await LoadTransactions(context);
         }
     }
@@ -685,6 +1486,32 @@ else
     {
         editingTransactionId = t.Id;
         editingTransactionAmount = t.AmountNOK;
+        
+        editPendingVipps = "";
+        editPendingRevolut = "";
+        editPendingBank = "";
+        editPendingOtherPlatform = "";
+        editPendingOtherDetails = "";
+
+        if (!string.IsNullOrEmpty(t.PaymentDetails))
+        {
+            var parts = t.PaymentDetails.Split(" | ", StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                if (part.StartsWith("Vipps:")) editPendingVipps = part.Substring(6).Trim();
+                else if (part.StartsWith("Revolut:")) editPendingRevolut = part.Substring(8).Trim();
+                else if (part.StartsWith("Bank Transfer:")) editPendingBank = part.Substring(14).Trim();
+                else
+                {
+                    var split = part.Split(":", 2);
+                    if (split.Length == 2)
+                    {
+                        editPendingOtherPlatform = split[0].Trim();
+                        editPendingOtherDetails = split[1].Trim();
+                    }
+                }
+            }
+        }
     }
 
     private void CancelTransactionEdit()
@@ -700,8 +1527,17 @@ else
             return;
         }
 
+        var validationResult = BettingApp.Services.PaymentValidationHelper.ValidatePaymentMethods(
+            editPendingVipps, editPendingRevolut, editPendingBank, editPendingOtherPlatform, editPendingOtherDetails, requireAtLeastOne: true);
+            
+        if (!validationResult.isValid)
+        {
+            errorMessage = validationResult.errorMessage;
+            return;
+        }
+
         var confirmed = await DialogService.ConfirmAsync( 
-            $"Change withdrawal amount from {t.AmountNOK} kr to {editingTransactionAmount} kr?");
+            $"Save changes to pending withdrawal?");
         if (!confirmed) return;
 
         using var context = DbFactory.CreateDbContext();
@@ -713,9 +1549,6 @@ else
             int oldAmount = dbTrans.AmountNOK;
             int difference = oldAmount - editingTransactionAmount;
             
-            // If difference > 0 (e.g. 1000 -> 500), we return 500 to user.
-            // If difference < 0 (e.g. 1000 -> 1500), we take 500 more from user.
-            
             if (difference < 0 && user.Balance < Math.Abs(difference))
             {
                 var confirmNegative = await DialogService.ConfirmAsync( 
@@ -725,19 +1558,32 @@ else
 
             user.Balance += difference;
             dbTrans.AmountNOK = editingTransactionAmount;
+            
+            var newDetailsList = new List<string>();
+            if (!string.IsNullOrWhiteSpace(editPendingVipps)) newDetailsList.Add($"Vipps: {editPendingVipps.Trim()}");
+            if (!string.IsNullOrWhiteSpace(editPendingRevolut)) newDetailsList.Add($"Revolut: {editPendingRevolut.Trim()}");
+            if (!string.IsNullOrWhiteSpace(editPendingBank)) newDetailsList.Add($"Bank Transfer: {editPendingBank.Trim()}");
+            if (!string.IsNullOrWhiteSpace(editPendingOtherPlatform) && !string.IsNullOrWhiteSpace(editPendingOtherDetails))
+                newDetailsList.Add($"{editPendingOtherPlatform.Trim()}: {editPendingOtherDetails.Trim()}");
+
+            string newDetailsStr = string.Join(" | ", newDetailsList);
+
+            string oldDetails = dbTrans.PaymentDetails ?? "";
+            dbTrans.PaymentDetails = newDetailsStr;
+            
             dbTrans.UpdatedAt = DateTime.UtcNow;
 
             context.AuditLogs.Add(new AuditLog { 
                 AdminUserName = currentAdminName ?? "Unknown", 
                 Action = "Edited Pending Withdrawal", 
                 TargetUserName = t.UserName, 
-                Details = $"ID: {t.Id}, Old: {oldAmount}, New: {editingTransactionAmount}" 
+                Details = $"ID: {t.Id}, OldAmt: {oldAmount}, NewAmt: {editingTransactionAmount}, OldDet: {oldDetails}, NewDet: {newDetailsStr}" 
             });
             
             await context.SaveChangesAsync();
             await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal amount updated");
             
-            successMessage = $"Withdrawal amount updated to {editingTransactionAmount} kr.";
+            _ = ShowSuccess($"Withdrawal amount updated to {editingTransactionAmount} kr.");
             editingTransactionId = null;
             await LoadTransactions(context);
         }
@@ -765,7 +1611,7 @@ else
             {
                 await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, t, "Rejected");
             }
-            successMessage = "Withdrawal rejected.";
+            _ = ShowSuccess("Withdrawal rejected.");
             await LoadTransactions(context);
         }
     }
@@ -776,94 +1622,211 @@ else
     {
         successMessage = null;
         errorMessage = null;
+
+        if (string.IsNullOrEmpty(newTrans.Platform) || !adminAddAmount.HasValue || adminAddAmount.Value <= 0)
+        {
+            errorMessage = "Please enter valid amount and platform.";
+            return;
+        }
+        if (newTrans.Type != "Free Bet" && addTransSenderType == "User" && string.IsNullOrEmpty(addTransSenderId)) { errorMessage = "Select Sender User"; return; }
+        if (addTransReceiverType == "User" && string.IsNullOrEmpty(addTransReceiverId)) { errorMessage = "Select Receiver User"; return; }
         
-        if (string.IsNullOrEmpty(newTrans.UserId) || !adminAddAmount.HasValue || adminAddAmount.Value <= 0 || string.IsNullOrEmpty(newTrans.Platform))
+        if (newTrans.Type != "Free Bet" && addTransSenderType == addTransReceiverType && addTransSenderId == addTransReceiverId)
         {
-            errorMessage = "Please fill in all fields (User, valid Amount, and Platform).";
-            return;
-        }
-        
-        if (newTrans.Platform == "Other" && string.IsNullOrWhiteSpace(otherPlatformName))
-        {
-            errorMessage = "Please specify the platform name.";
+            errorMessage = "Sender and Receiver cannot be the exact same.";
             return;
         }
 
-        if (newTrans.Type != "Free Bet" && string.IsNullOrWhiteSpace(newTrans.PaymentDetails))
+        if (newTrans.Type != "Free Bet")
         {
-            errorMessage = "Please provide payment details/address.";
-            return;
-        }
+            string? vipps = newTrans.Platform == "Vipps" ? newTrans.PaymentDetails : null;
+            string? revolut = newTrans.Platform == "Revolut" ? newTrans.PaymentDetails : null;
+            string? bank = newTrans.Platform == "Bank Transfer" ? newTrans.PaymentDetails : null;
+            string? otherPlatform = newTrans.Platform == "Other" ? otherPlatformName : null;
+            string? otherDetails = newTrans.Platform == "Other" ? newTrans.PaymentDetails : null;
 
-        using var context = DbFactory.CreateDbContext();
-        var user = await context.Users.FindAsync(newTrans.UserId);
-        if (user == null) { errorMessage = "User not found"; return;
-        }
+            var validationResult = BettingApp.Services.PaymentValidationHelper.ValidatePaymentMethods(
+                vipps, revolut, bank, otherPlatform, otherDetails, requireAtLeastOne: true);
 
-        if (newTrans.Type == "Withdrawal")
-        {
-            if (user.Balance < adminAddAmount.Value)
+            if (!validationResult.isValid)
             {
-                var confirmNegative = await DialogService.ConfirmAsync( $"This withdrawal will result in a negative balance ({user.Balance - adminAddAmount.Value:N0} kr). Do you want to proceed?");
-                if (!confirmNegative)
-                {
-                    return;
-                }
+                errorMessage = validationResult.errorMessage;
+                return;
             }
-            user.Balance -= adminAddAmount.Value;
         }
-        else if (newTrans.Type == "Free Bet")
+        
+        using var context = DbFactory.CreateDbContext();
+        
+        decimal amount = adminAddAmount.Value;
+        
+        if (newTrans.Type != "Free Bet" && newTrans.Platform == "Other") {
+            newTrans.Platform = otherPlatformName;
+        }
+        else if (newTrans.Type == "Free Bet") {
+            newTrans.Platform = "Free Bet";
+        }
+
+        
+        // 1. Resolve Sender
+        ApplicationUser? senderUser = null;
+        CashCow? senderCC = null;
+        if (addTransSenderType == "User") senderUser = await context.Users.FindAsync(addTransSenderId);
+        else if (addTransSenderType == "CashCow") senderCC = await context.CashCows.FindAsync(addTransSenderId);
+        
+        // 2. Resolve Receiver
+        ApplicationUser? receiverUser = null;
+        CashCow? receiverCC = null;
+        if (addTransReceiverType == "User") receiverUser = await context.Users.FindAsync(addTransReceiverId);
+        else if (addTransReceiverType == "CashCow") receiverCC = await context.CashCows.FindAsync(addTransReceiverId);
+
+        newTrans.AmountNOK = (int)amount;
+        newTrans.Date = DateTime.UtcNow;
+        newTrans.UpdatedAt = DateTime.UtcNow;
+        newTrans.Status = "Completed";
+        
+        newTrans.SenderType = addTransSenderType;
+        newTrans.SenderId = addTransSenderId;
+        newTrans.SenderName = senderUser != null ? senderUser.FirstName + " " + senderUser.LastName : (senderCC != null ? senderCC.FirstName + " " + senderCC.LastName : "Unknown");
+        
+        newTrans.ReceiverType = addTransReceiverType;
+        newTrans.ReceiverId = addTransReceiverId;
+        newTrans.ReceiverName = receiverUser != null ? receiverUser.FirstName + " " + receiverUser.LastName : (receiverCC != null ? receiverCC.FirstName + " " + receiverCC.LastName : "Unknown");
+
+        // Helper to create a base transaction row
+        Transaction CreateBaseTx() => new Transaction
         {
-            user.FreeBetBalance += adminAddAmount.Value;
+            AmountNOK = (int)amount,
+            Date = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Status = "Completed",
+            Platform = newTrans.Platform,
+            PaymentDetails = newTrans.PaymentDetails,
+            SenderType = addTransSenderType,
+            SenderId = addTransSenderId,
+            SenderName = senderUser != null ? $"{senderUser.FirstName} {senderUser.LastName}" : (senderCC != null ? $"{senderCC.FirstName} {senderCC.LastName}" : "Unknown"),
+            ReceiverType = addTransReceiverType,
+            ReceiverId = addTransReceiverId,
+            ReceiverName = receiverUser != null ? $"{receiverUser.FirstName} {receiverUser.LastName}" : (receiverCC != null ? $"{receiverCC.FirstName} {receiverCC.LastName}" : "Unknown")
+        };
+
+        var transactionsToAdd = new List<Transaction>();
+        
+        // ==========================================
+        // THE AUTOMATED ROUTING ENGINE
+        // ==========================================
+
+        if (newTrans.Type == "Free Bet")
+        {
+            if (receiverUser != null) {
+                receiverUser.FreeBetBalance += amount;
+                var tx = CreateBaseTx();
+                tx.Type = "Free Bet";
+                tx.UserId = receiverUser.Id;
+                tx.UserName = receiverUser.UserName ?? "";
+                transactionsToAdd.Add(tx);
+            }
         }
         else 
         {
-            user.Balance += adminAddAmount.Value;
+            // Intercept pending withdrawals to dynamically reduce their requested amount
+            if (addTransReceiverType == "User" && receiverUser != null)
+            {
+                var pendingW = await context.Transactions
+                    .Where(t => t.UserId == receiverUser.Id && t.Type == "Withdrawal" && t.Status == "Pending")
+                    .OrderBy(t => t.Date)
+                    .FirstOrDefaultAsync();
+                    
+                if (pendingW != null)
+                {
+                    // Deduct the amount from the pending request.
+                    // We explicitly allow this to reach 0 or go negative so admins maintain manual oversight
+                    // and can physically click 'Confirm' themselves.
+                    pendingW.AmountNOK -= (int)amount;
+                }
+            }
+
+            // 1. Process Sender (Gives physical cash => Gets digital balance / Deducts CC)
+            if (addTransSenderType == "User" && senderUser != null)
+            {
+                senderUser.Balance += amount;
+                var txSender = CreateBaseTx();
+                txSender.Type = "Deposit";
+                txSender.UserId = senderUser.Id;
+                txSender.UserName = senderUser.UserName ?? "";
+                transactionsToAdd.Add(txSender);
+            }
+            else if (addTransSenderType == "CashCow" && senderCC != null)
+            {
+                senderCC.Balance -= amount;
+            }
+
+            // 2. Process Receiver (Gets physical cash => Loses digital balance / Adds CC)
+            if (addTransReceiverType == "User" && receiverUser != null)
+            {
+                receiverUser.Balance -= amount;
+                var txReceiver = CreateBaseTx();
+                txReceiver.Type = "Withdrawal";
+                txReceiver.UserId = receiverUser.Id;
+                txReceiver.UserName = receiverUser.UserName ?? "";
+                transactionsToAdd.Add(txReceiver);
+            }
+            else if (addTransReceiverType == "CashCow" && receiverCC != null)
+            {
+                receiverCC.Balance += amount;
+            }
         }
 
-        newTrans.AmountNOK = adminAddAmount.Value;
-        newTrans.UserName = user.UserName ?? "Unknown";
-        newTrans.Date = DateTime.UtcNow;
-        newTrans.UpdatedAt = DateTime.UtcNow;
-        newTrans.Status = "Completed"; 
-
-        if (newTrans.Platform == "Other")
-        {
-            newTrans.Platform = otherPlatformName;
-        }
-
-        context.Transactions.Add(newTrans);
-        context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = $"Added {newTrans.Type}", TargetUserName = newTrans.UserName, Details = $"Amount: {newTrans.AmountNOK}, Platform: {newTrans.Platform}" });
+        context.Transactions.AddRange(transactionsToAdd);
+        var auditAction = string.Join(" & ", transactionsToAdd.Select(t => t.Type).Distinct());
+        context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = $"Added {auditAction}", TargetUserName = "Multiple", Details = $"Amount: {amount}, From: {addTransSenderType}, To: {addTransReceiverType}" });
         await context.SaveChangesAsync();
-        
-        await HubContext.Clients.Group(newTrans.UserId).SendAsync("ReceiveUpdate", $"New transaction: {newTrans.Type}");
-        await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        
-        if (!string.IsNullOrEmpty(user.DiscordUserId))
+
+        foreach (var tx in transactionsToAdd)
         {
-            if (newTrans.Type == "Withdrawal")
+            if (tx.Type == "Withdrawal")
             {
-                await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, newTrans, "Completed");
+                var user = await context.Users.FindAsync(tx.UserId);
+                if (user != null && !string.IsNullOrEmpty(user.DiscordUserId))
+                {
+                    await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, tx, "Completed");
+                    await HubContext.Clients.Group(user.Id).SendAsync("ReceiveUpdate", "Withdrawal processed");
+                }
             }
-            else if (newTrans.Type == "Free Bet")
+            else if (tx.Type == "Deposit")
             {
-                await DiscordService.NotifyUserFreeBetAsync(user.DiscordUserId, newTrans.AmountNOK, newTrans.PaymentDetails);
-            }
-            else if (newTrans.Type == "Deposit")
-            {
-                await DiscordService.NotifyUserDepositAsync(user.DiscordUserId, newTrans.AmountNOK);
+                var user = await context.Users.FindAsync(tx.UserId);
+                if (user != null && !string.IsNullOrEmpty(user.DiscordUserId))
+                {
+                    await DiscordService.NotifyUserDepositAsync(user.DiscordUserId, tx.AmountNOK);
+                    await HubContext.Clients.Group(user.Id).SendAsync("ReceiveUpdate", "Deposit processed");
+                }
             }
         }
         
-        successMessage = "Transaction added successfully!";
-        var type = newTrans.Type; 
-        newTrans = new Transaction { Type = type, Platform = type == "Free Bet" ?
-        "Free Bet" : "Vipps", Date = DateTime.UtcNow, Status = "Completed" };
-        adminAddAmount = null;
-        otherPlatformName = "";
+        _ = ShowSuccess("Transaction added & balances dynamically routed successfully!");
+        ClearForm();
         
-        ClearSelection();
         await LoadTransactions(context);
+    }
+
+    private void ClearForm()
+    {
+        var keepType = newTrans.Type;
+        newTrans = new Transaction { Type = keepType, Platform = "Vipps", Date = DateTime.UtcNow, Status = "Completed" };
+        adminAddAmount = null;
+        
+        addTransSenderType = "User";
+        addTransSenderId = "";
+        selectedSenderUser = null;
+        senderSearchTerm = "";
+        
+        addTransReceiverType = "User";
+        addTransReceiverId = "";
+        selectedReceiverUser = null;
+        receiverSearchTerm = "";
+        
+        otherPlatformName = "";
+        isPaymentDetailsAutoFilled = false;
     }
 
     public async ValueTask DisposeAsync()
