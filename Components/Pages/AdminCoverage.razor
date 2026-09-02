@@ -90,35 +90,44 @@
                     @for (int h = 0; h < 24; h++)
                     {
                         int currentHour = h;
-                        <tr>
-                            <td class="hour-col">@($"{h:00}:00-{(h + 1 == 24 ? 0 : h + 1):00}:00")</td>
+                        bool isCurrentHour = weekOffset == 0 && norwayNow.Hour == currentHour;
+                        <tr class="@(isCurrentHour ? "table-active" : "")">
+                            <td class="hour-col">
+                                @($"{h:00}:00-{(h + 1 == 24 ? 0 : h + 1):00}:00")<br/>
+                                @if (TimezoneOffset != 0)
+                                {
+                                    <small class="text-muted fw-normal" style="font-size: 0.75rem;">@GetLocalTimeRange(h)</small>
+                                }
+                            </td>
                             @for (int d = 0; d < 7; d++)
                             {
                                 int currentDay = d;
                                 var cellDate = startOfDisplayWeek.AddDays(currentDay).AddHours(currentHour);
-                                var shift = shifts.FirstOrDefault(s => s.StartTimeUtc == TimeHelpers.GetUtcFromNorwayTime(cellDate));
+                                var cellShifts = shifts.Where(s => s.StartTimeUtc == TimeHelpers.GetUtcFromNorwayTime(cellDate)).ToList();
                                 
-                                bool hasShift = shift != null;
                                 bool isSelected = selectedDates.Contains(cellDate);
                                 string cellClass = isSelected ? "selected-cell" : "";
-                                string customStyle = hasShift && !isSelected ? $"background-color: {GetAdminColor(shift!.AdminUserName)}" : "";
                                 
                                 <td class="@cellClass" 
-                                    style="@customStyle"
                                     @onmousedown="() => BeginSelect(currentDay, currentHour)"
                                     @onmouseenter="() => EnterSelect(currentDay, currentHour)"
                                     @onmouseup="() => EndSelect()"
                                     @onclick:preventDefault>
-                                    @if (hasShift && !isSelected)
+                                    @if (!isSelected && cellShifts.Any())
                                     {
-                                        <div class="d-flex align-items-center justify-content-center">
-                                            <span class="d-inline-block rounded-circle me-2" 
-                                                  style="width: 10px; height: 10px; background-color: @(shift!.IsPartlyAvailable ? "#ffc107" : "#198754");" 
-                                                  title="@(shift.IsPartlyAvailable ? "Partly Available" : "100% Available")"></span>
-                                            <span class="fw-bold text-dark">@GetAdminFirstName(shift.AdminUserName)</span>
-                                            @if (!string.IsNullOrWhiteSpace(shift.Note))
+                                        <div class="d-flex flex-column align-items-center justify-content-center gap-1">
+                                            @foreach (var shift in cellShifts)
                                             {
-                                                <i class="bi bi-journal-text ms-2 text-primary" title="@shift.Note"></i>
+                                                <div class="px-2 py-1 rounded w-100 text-center" style="background-color: @GetAdminColor(shift.AdminUserName); font-size: 0.8rem;">
+                                                    <span class="d-inline-block rounded-circle me-1" 
+                                                          style="width: 8px; height: 8px; background-color: @(shift.IsPartlyAvailable ? "#ffc107" : "#198754");" 
+                                                          title="@(shift.IsPartlyAvailable ? "Partly Available" : "100% Available")"></span>
+                                                    <span class="fw-bold text-dark">@GetAdminFirstName(shift.AdminUserName)</span>
+                                                    @if (!string.IsNullOrWhiteSpace(shift.Note))
+                                                    {
+                                                        <i class="bi bi-journal-text ms-1 text-primary" title="@shift.Note"></i>
+                                                    }
+                                                </div>
                                             }
                                         </div>
                                     }
@@ -157,41 +166,20 @@
                         <p><strong>Multiple Times Selected</strong> (See highlighted cells)</p>
                     }
                     
-                    <div class="mb-3">
-                        <label class="form-label">Covered By</label>
-                        <select class="form-select" @bind="modalAdminUserName">
-                            @foreach (var admin in allAdmins)
-                            {
-                                <option value="@admin.UserName">@(string.IsNullOrWhiteSpace(admin.FirstName) ? admin.UserName : $"{admin.FirstName} {admin.LastName}".Trim())</option>
-                            }
-                        </select>
-                    </div>
+
 
                     <div class="mb-3">
-                        <label class="form-label">Availability</label>
-                        <div class="position-relative">
-                            <div class="form-select text-start d-flex justify-content-between align-items-center" style="cursor: pointer;" @onclick="() => showAvailabilityDropdown = !showAvailabilityDropdown">
-                                <span>
-                                    <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background-color: @(modalIsPartlyAvailable ? "#ffc107" : "#198754");"></span>
-                                    @(modalIsPartlyAvailable ? "Partly Available" : "100% Available")
-                                </span>
-                            </div>
-                            @if (showAvailabilityDropdown)
-                            {
-                                <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1040;" @onclick="() => showAvailabilityDropdown = false"></div>
-                                <ul class="dropdown-menu w-100 show" style="position: absolute; top: 100%; left: 0; z-index: 1050; margin-top: 2px;">
-                                    <li>
-                                        <a class="dropdown-item" style="cursor: pointer;" @onclick="() => { modalIsPartlyAvailable = false; showAvailabilityDropdown = false; }">
-                                            <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background-color: #198754;"></span> 100% Available
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a class="dropdown-item" style="cursor: pointer;" @onclick="() => { modalIsPartlyAvailable = true; showAvailabilityDropdown = false; }">
-                                            <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background-color: #ffc107;"></span> Partly Available
-                                        </a>
-                                    </li>
-                                </ul>
-                            }
+                        <label class="form-label d-block">Availability</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="btnradio" id="btnradio1" autocomplete="off" checked="@(!modalIsPartlyAvailable)" @onchange="() => modalIsPartlyAvailable = false">
+                            <label class="btn btn-outline-success" for="btnradio1">
+                                <span class="d-inline-block rounded-circle me-1" style="width: 8px; height: 8px; background-color: #198754;"></span> 100% Available
+                            </label>
+
+                            <input type="radio" class="btn-check" name="btnradio" id="btnradio2" autocomplete="off" checked="@modalIsPartlyAvailable" @onchange="() => modalIsPartlyAvailable = true">
+                            <label class="btn btn-outline-warning" for="btnradio2">
+                                <span class="d-inline-block rounded-circle me-1" style="width: 8px; height: 8px; background-color: #ffc107;"></span> Partly Available
+                            </label>
                         </div>
                     </div>
                     
@@ -215,6 +203,7 @@
 @code {
     private int weekOffset = 0;
     private DateTime norwayToday;
+    private DateTime norwayNow;
     private DateTime startOfDisplayWeek;
     private List<CoverageShift> shifts = new();
     private List<ApplicationUser> allAdmins = new();
@@ -234,7 +223,6 @@
     private string modalAdminUserName = "";
     private string modalNote = "";
     private bool modalIsPartlyAvailable = false;
-    private bool showAvailabilityDropdown = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -267,13 +255,41 @@
         await LoadShifts();
     }
 
+    private int TimezoneOffset { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && isAdmin)
+        {
+            try
+            {
+                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                StateHasChanged();
+            }
+            catch { }
+        }
+    }
+
     private void CalculateWeek()
     {
-        var norwayNow = TimeHelpers.GetNorwayTime(DateTime.UtcNow);
+        norwayNow = TimeHelpers.GetNorwayTime(DateTime.UtcNow);
         norwayToday = norwayNow.Date;
         
         int diff = (7 + (norwayNow.DayOfWeek - DayOfWeek.Monday)) % 7;
         startOfDisplayWeek = norwayNow.AddDays(-1 * diff).Date.AddDays(weekOffset * 7);
+    }
+    
+    private string GetLocalTimeRange(int h)
+    {
+        // h is the hour in Norway time
+        // We first need to get the UTC time for today at hour h (Norway time)
+        // Let's use today's date in Norway
+        var dummyDate = norwayToday.AddHours(h);
+        var utc = TimeHelpers.GetUtcFromNorwayTime(dummyDate);
+        var localStart = utc.AddMinutes(-TimezoneOffset);
+        var localEnd = localStart.AddHours(1);
+        
+        return $"{localStart:HH:mm}-{localEnd:HH:mm}";
     }
 
     private async Task LoadShifts()
@@ -387,16 +403,14 @@
         // If selecting a single cell with an existing shift, prefill it.
         if (selectedDates.Count == 1)
         {
-            var shift = shifts.FirstOrDefault(s => s.StartTimeUtc == TimeHelpers.GetUtcFromNorwayTime(selectedDates.First()));
+            var shift = shifts.FirstOrDefault(s => s.StartTimeUtc == TimeHelpers.GetUtcFromNorwayTime(selectedDates.First()) && s.AdminUserName == currentUserName);
             if (shift != null)
             {
-                modalAdminUserName = shift.AdminUserName;
                 modalNote = shift.Note ?? "";
                 modalIsPartlyAvailable = shift.IsPartlyAvailable;
             }
             else
             {
-                modalAdminUserName = currentUserName;
                 modalNote = "";
                 modalIsPartlyAvailable = false;
             }
@@ -404,10 +418,10 @@
         else
         {
             // For multiple selection, always default to current user and blank note
-            modalAdminUserName = currentUserName;
             modalNote = "";
             modalIsPartlyAvailable = false;
         }
+        modalAdminUserName = currentUserName;
         
         showModal = true;
         StateHasChanged();
@@ -430,12 +444,7 @@
 
     private async Task SaveShift()
     {
-        if (string.IsNullOrWhiteSpace(modalAdminUserName))
-        {
-            errorMessage = "Please select an Admin.";
-            showModal = false;
-            return;
-        }
+        modalAdminUserName = currentUserName;
 
         try
         {
@@ -443,48 +452,31 @@
             
             var utcTimes = selectedDates.Select(d => TimeHelpers.GetUtcFromNorwayTime(d)).ToList();
             var existingShifts = await context.CoverageShifts
-                .Where(s => utcTimes.Contains(s.StartTimeUtc))
+                .Where(s => utcTimes.Contains(s.StartTimeUtc) && s.AdminUserName == currentUserName)
                 .ToDictionaryAsync(s => s.StartTimeUtc);
             
-            var auditLogs = new List<AuditLog>();
-
             foreach (var date in selectedDates)
             {
                 var utcTime = TimeHelpers.GetUtcFromNorwayTime(date);
-                string actionDetails = "";
-                
                 if (existingShifts.TryGetValue(utcTime, out var existing))
                 {
-                    existing.AdminUserName = modalAdminUserName;
                     existing.Note = modalNote.Trim();
                     existing.IsPartlyAvailable = modalIsPartlyAvailable;
-                    actionDetails = $"Updated coverage for {date:g} (Norway) -> Admin: {existing.AdminUserName}";
                 }
                 else
                 {
                     var newShift = new CoverageShift
                     {
                         StartTimeUtc = utcTime,
-                        AdminUserName = modalAdminUserName,
+                        AdminUserName = currentUserName,
                         Note = modalNote.Trim(),
                         IsPartlyAvailable = modalIsPartlyAvailable,
                         CreatedAt = DateTime.UtcNow
                     };
                     context.CoverageShifts.Add(newShift);
-                    actionDetails = $"Added coverage for {date:g} (Norway) -> Admin: {newShift.AdminUserName}";
                 }
-
-                auditLogs.Add(new AuditLog
-                {
-                    Timestamp = DateTime.UtcNow,
-                    AdminUserName = currentUserName,
-                    Action = "Coverage Shift",
-                    TargetUserName = "System",
-                    Details = actionDetails
-                });
             }
 
-            context.AuditLogs.AddRange(auditLogs);
             await context.SaveChangesAsync();
             successMessage = $"Successfully saved {selectedDates.Count} shift(s).";
             showModal = false;
@@ -508,23 +500,12 @@
             
             var utcTimes = selectedDates.Select(d => TimeHelpers.GetUtcFromNorwayTime(d)).ToList();
             var existingShifts = await context.CoverageShifts
-                .Where(s => utcTimes.Contains(s.StartTimeUtc))
+                .Where(s => utcTimes.Contains(s.StartTimeUtc) && s.AdminUserName == currentUserName)
                 .ToListAsync();
 
             if (existingShifts.Any())
             {
                 context.CoverageShifts.RemoveRange(existingShifts);
-                
-                var auditLogs = existingShifts.Select(dbShift => new AuditLog
-                {
-                    Timestamp = DateTime.UtcNow,
-                    AdminUserName = currentUserName,
-                    Action = "Coverage Shift",
-                    TargetUserName = "System",
-                    Details = $"Removed coverage for {TimeHelpers.GetNorwayTime(dbShift.StartTimeUtc):g} (Norway). Previous Admin: {dbShift.AdminUserName}"
-                }).ToList();
-                
-                context.AuditLogs.AddRange(auditLogs);
                 await context.SaveChangesAsync();
                 successMessage = $"Successfully removed {existingShifts.Count} shift(s).";
             }
