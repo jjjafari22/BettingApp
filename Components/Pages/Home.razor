@@ -644,8 +644,13 @@ else
         }
     }
 
+    private bool _isPlacingBet = false;
+
     private async Task PlaceBet()
     {
+        if (_isPlacingBet) return;
+        _isPlacingBet = true;
+        
         ErrorMessage = null;
         SuccessMessage = null;
         IsSubmitting = true;
@@ -814,6 +819,7 @@ else
         }
         finally
         {
+            _isPlacingBet = false;
             IsSubmitting = false;
             StateHasChanged();
         }
