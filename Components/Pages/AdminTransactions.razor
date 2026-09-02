@@ -1726,6 +1726,7 @@ else
         }
         else 
         {
+            int amountAlreadyDeducted = 0;
             // Intercept pending withdrawals to dynamically reduce their requested amount
             if (addTransReceiverType == "User" && receiverUser != null)
             {
@@ -1736,6 +1737,10 @@ else
                     
                 if (pendingW != null)
                 {
+                    // The pending request's original amount was ALREADY deducted from the user's balance.
+                    int pendingAmount = pendingW.AmountNOK > 0 ? pendingW.AmountNOK : 0;
+                    amountAlreadyDeducted = Math.Min(pendingAmount, (int)amount);
+
                     // Deduct the amount from the pending request.
                     // We explicitly allow this to reach 0 or go negative so admins maintain manual oversight
                     // and can physically click 'Confirm' themselves.
@@ -1761,7 +1766,7 @@ else
             // 2. Process Receiver (Gets physical cash => Loses digital balance / Adds CC)
             if (addTransReceiverType == "User" && receiverUser != null)
             {
-                receiverUser.Balance -= amount;
+                receiverUser.Balance -= (amount - amountAlreadyDeducted);
                 var txReceiver = CreateBaseTx();
                 txReceiver.Type = "Withdrawal";
                 txReceiver.UserId = receiverUser.Id;
