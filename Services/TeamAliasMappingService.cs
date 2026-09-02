@@ -80,7 +80,9 @@ namespace BettingApp.Services
             { "manchester utd", "manchester united" },
             { "man city", "manchester city" },
             { "spurs", "tottenham hotspur" },
-            { "wolves", "wolverhampton wanderers" }
+            { "wolves", "wolverhampton wanderers" },
+            { "qpr", "queens park rangers" },
+            { "van buyuksehir belediyespor", "van spor kulubu" }
         };
 
         public static string ApplyTeamAliases(string? normalizedTeamName)

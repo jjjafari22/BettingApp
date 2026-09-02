@@ -193,7 +193,7 @@ namespace BettingApp.Services
                                         {
                                             TimeSpan diff = (fixtureDate - targetDate).Duration();
                                             // Reject matches that are completely wildly off
-                                            if (diff.TotalDays > 120) continue;
+                                            if (diff.TotalDays > 7) continue;
 
                                             if (matchScore > currentBestScore || (matchScore == currentBestScore && diff < smallestTimeDiff))
                                             {
@@ -606,8 +606,8 @@ namespace BettingApp.Services
                         // Calculate absolute time difference between target date and match date
                         TimeSpan diff = (matchDate - targetDate).Duration();
                         
-                        // Strict threshold: If the match is more than 90 days apart from our target date, reject it!
-                        if (diff.TotalDays > 90)
+                        // Strict threshold: If the match is more than 7 days apart from our target date, reject it!
+                        if (diff.TotalDays > 7)
                         {
                             continue;
                         }
