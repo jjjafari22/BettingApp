@@ -588,11 +588,8 @@ else
                 <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                     <strong>Cash Cows Overview</strong>
                     <div class="d-flex gap-2 align-items-center">
-                        <span class="small fw-bold">Date Range Filter:</span>
-                        <input type="date" class="form-control form-control-sm" style="width: auto;" @bind="ccStartDate" @bind:after="UpdateCashCowPeriodNet" />
-                        <span class="small">to</span>
-                        <input type="date" class="form-control form-control-sm" style="width: auto;" @bind="ccEndDate" @bind:after="UpdateCashCowPeriodNet" />
-                        <button class="btn btn-sm btn-outline-light fw-bold" @onclick="ClearCashCowFilter">Clear</button>
+                        <span class="small fw-bold d-none d-md-inline">Date Filter:</span>
+                        <DateRangePicker @bind-StartDate="ccStartDate" @bind-EndDate="ccEndDate" OnFilterApplied="UpdateCashCowPeriodNet" ButtonClass="btn-outline-light" ActiveButtonClass="btn-light text-dark" />
                     </div>
                 </div>
                 <div class="card-body p-0">

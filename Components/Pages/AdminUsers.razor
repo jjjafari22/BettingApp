@@ -44,42 +44,6 @@
         .btn-xl-mobile { padding-top: 0.75rem; padding-bottom: 0.75rem; font-size: 1.1rem; }
     }
 
-    /* Balanced Large Toggle Switch */
-    .form-switch .form-check-input.large-switch {
-        width: 4rem;
-        height: 2rem;
-        cursor: pointer;
-        margin-top: 0;
-    }
-    .toggle-container {
-        background-color: #f8f9fa;
-        padding: 0.6rem 1.25rem;
-        border-radius: 50px;
-        border: 2px solid #dee2e6;
-        display: inline-flex;
-        align-items: center;
-        transition: all 0.2s ease-in-out;
-        cursor: pointer;
-        user-select: none;
-    }
-    .toggle-container:hover {
-        border-color: #0d6efd;
-        background-color: #f8f9fa;
-    }
-    .toggle-container.active {
-        border-color: #0d6efd;
-        background-color: #0d6efd;
-        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.2);
-    }
-    .toggle-container.active .toggle-label-text {
-        color: white !important;
-    }
-    .toggle-label-text {
-        font-weight: 600;
-        margin-left: 0.75rem;
-        font-size: 1.05rem;
-    }
-
     /* --- STICKY TABLE STYLES --- */
     .table-responsive {
         position: relative;
@@ -291,31 +255,19 @@ else
     <div class="alert alert-info py-2 d-flex align-items-center shadow-sm">
         <i class="bi bi-info-circle-fill me-2 fs-5"></i>
         <div>
-            @if (showActiveRealUsers)
-            {
-                <strong>Filter Enabled:</strong><span> Showing only active real players (excluding 0 kr balance, admins, and test users).</span>
-            }
-            else
-            {
-                <strong>All Users:</strong><span> Showing all active and inactive users, including staff. Click any header to sort.</span>
-            }
+            <strong>All Users:</strong><span> Showing all active and inactive users, including staff. Filter by Last Active date using the Date Range filter. Click any header to sort.</span>
         </div>
     </div>
     
-    <div class="row mb-4 align-items-center">
-        <div class="col-md-6">
-            <div class="input-group shadow-sm">
-                <span class="input-group-text bg-white border-end-0 px-3"><i class="bi bi-search text-muted"></i></span>
-                 <input type="text" class="form-control border-start-0 ps-0" placeholder="Search by name or discord username..." @bind="searchTerm" @bind:event="oninput" @onkeyup="HandleSearchResetPage" />
+    <div class="d-flex flex-wrap gap-3 mb-4 align-items-center">
+        <div style="max-width: 350px; flex-grow: 1;">
+            <div class="input-group shadow-sm rounded-pill overflow-hidden">
+                <span class="input-group-text bg-white border-0 px-3"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" class="form-control border-0 ps-1 shadow-none" placeholder="Search users..." @bind="searchTerm" @bind:event="oninput" @onkeyup="HandleSearchResetPage" style="box-shadow: none;" />
              </div>
          </div>
-         <div class="col-md-6 text-md-end mt-3 mt-md-0">
-             <label class="toggle-container shadow-sm @(showActiveRealUsers ? "active" : "")" for="showActiveRealToggle">
-                 <div class="form-check form-switch m-0 p-0 d-flex align-items-center">
-                     <input class="form-check-input large-switch m-0 me-3 shadow-none" type="checkbox" role="switch" id="showActiveRealToggle" checked="@showActiveRealUsers" @onchange="ToggleShowActiveReal" />
-                     <span class="toggle-label-text @(showActiveRealUsers ? "text-primary" : "text-muted")">Show Active Real Users</span>
-                 </div>
-             </label>
+         <div class="d-flex align-items-center">
+             <DateRangePicker @bind-StartDate="filterStartDate" @bind-EndDate="filterEndDate" OnFilterApplied="OnDateFilterChanged" />
          </div>
     </div>
 
@@ -330,7 +282,7 @@ else
                     <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("FreeBetBalance")'>Free Bet <i class="@GetSortIconClass("FreeBetBalance")"></i></th>
                     <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("AvailableCredit")'>Avail. Credit <i class="@GetSortIconClass("AvailableCredit")"></i></th>
                     <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("Handle")'>Handle <i class="@GetSortIconClass("Handle")"></i></th>
-                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("LifetimeProfit")'>Lifetime Profit <i class="@GetSortIconClass("LifetimeProfit")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("LifetimeProfit")'>@(filterStartDate.HasValue || filterEndDate.HasValue ? "Profit (Period)" : "Lifetime Profit") <i class="@GetSortIconClass("LifetimeProfit")"></i></th>
                     <th style="cursor: pointer; user-select:none;" @onclick='() => Sort("FirstName")'>Full Name <i class="@GetSortIconClass("FirstName")"></i></th>
                     <th style="cursor: pointer; user-select:none;" @onclick='() => Sort("Email")'>Email <i class="@GetSortIconClass("Email")"></i></th>
                     <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("PhoneNumber")'>Phone <i class="@GetSortIconClass("PhoneNumber")"></i></th>
@@ -462,13 +414,6 @@ else
                         <option value="Cancelled">Cancelled</option>
                       </select>
 
-                     <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-outline-secondary @(dateFilter == "7D" ? "active" : "")" @onclick='() => SetDateFilter("7D")'>Last 7 Days</button>
-                        <button type="button" class="btn btn-outline-secondary @(dateFilter == "30D" ? "active" : "")" @onclick='() => SetDateFilter("30D")'>Last 30 Days</button>
-                        <button type="button" class="btn btn-outline-secondary @(dateFilter == "6M" ? "active" : "")" @onclick='() => SetDateFilter("6M")'>6 Months</button>
-                          <button type="button" class="btn btn-outline-secondary @(dateFilter == "1Y" ? "active" : "")" @onclick='() => SetDateFilter("1Y")'>1 Year</button>
-                        <button type="button" class="btn btn-outline-secondary @(dateFilter == "All" ? "active" : "")" @onclick='() => SetDateFilter("All")'>All Time</button>
-                    </div>
                 </div>
                </div>
 
@@ -504,6 +449,7 @@ else
                              <th>Odds</th>
                              <th>Status</th>
                                <th>Payout</th>
+                               <th>Net Profit</th>
                          </tr>
                     </thead>
                     <tbody>
@@ -542,6 +488,11 @@ else
                                          <span class="text-muted">-</span>
                                     }
                                  </td>
+                                 @{
+                                     var netProfit = GetNetProfit(bet);
+                                     var profitClass = netProfit > 0 ? "text-success" : (netProfit < 0 ? "text-danger" : "text-muted");
+                                 }
+                                 <td class="@profitClass fw-bold">@netProfit.ToString("N0") kr</td>
                                 </tr>
                         }
                         @if (!displayedUserBets.Any())
@@ -572,7 +523,6 @@ else
     private List<Bet> allSelectedUserBets = new();
     private List<Bet> displayedUserBets = new();
     
-    private string dateFilter = "All";
     private string dateFilterText = "All Time";
     private string statusFilter = "All"; 
     
@@ -588,7 +538,9 @@ else
     private decimal currentReviewUserFreeBalance = 0;
     private double touchStartX = 0;
     private double touchEndX = 0;
-    private bool showActiveRealUsers = false;
+    
+    private DateTime? filterStartDate;
+    private DateTime? filterEndDate;
 
     private int TimezoneOffset { get; set; }
     
@@ -736,9 +688,10 @@ else
             .Select(g => new
             {
                 UserId = g.Key,
-                Winnings = g.Sum(b => b.Status == "Won" ? (decimal?)((b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount) : 0m),
-                SettledStakes = g.Sum(b => (b.Status == "Won" || b.Status == "Lost") ? (decimal?)((b.AmountNOK ?? 0) - b.FreeBetAmount) : 0m),
-                Handle = g.Sum(b => (b.Status != "Rejected" && b.Status != "Cancelled") ? (decimal?)(b.AmountNOK ?? 0) : 0m),
+                Winnings = g.Sum(b => b.Status == "Won" && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)((b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount) : 0m),
+                SettledStakes = g.Sum(b => (b.Status == "Won" || b.Status == "Lost") && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)((b.AmountNOK ?? 0) - b.FreeBetAmount) : 0m),
+                Handle = g.Sum(b => (b.Status != "Rejected" && b.Status != "Cancelled") && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)(b.AmountNOK ?? 0) : 0m),
+                PeriodBetsCount = g.Sum(b => (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? 1 : 0),
                 FirstBetDate = g.Min(b => (DateTime?)b.CreatedAt),
                 LastBetDate = g.Max(b => (DateTime?)b.UpdatedAt)
             })
@@ -750,7 +703,8 @@ else
             .Select(g => new
             {
                 UserId = g.Key,
-                TotalFreeBetsGiven = g.Sum(t => t.Type == "Free Bet" ? (decimal?)t.AmountNOK : 0m),
+                TotalFreeBetsGiven = g.Sum(t => t.Type == "Free Bet" && (!filterStartDate.HasValue || t.Date >= filterStartDate) && (!filterEndDate.HasValue || t.Date <= filterEndDate) ? (decimal?)t.AmountNOK : 0m),
+                PeriodTransCount = g.Sum(t => (!filterStartDate.HasValue || t.Date >= filterStartDate) && (!filterEndDate.HasValue || t.Date <= filterEndDate) ? 1 : 0),
                 FirstTransDate = g.Min(t => (DateTime?)t.Date),
                 LastTransDate = g.Max(t => (DateTime?)t.UpdatedAt)
             })
@@ -775,6 +729,7 @@ else
             var lastTransDate = tStats?.LastTransDate;
 
             var lifetimeProfit = Math.Floor(winnings) - settledStakes;
+            var periodActivityCount = bStats?.PeriodBetsCount ?? 0;
 
             DateTime dateJoined = u.CreatedAt;
             if (dateJoined == DateTime.MinValue)
@@ -817,7 +772,8 @@ else
                 DiscordUsername = u.DiscordUsername,
                 ReferredBy = u.ReferredBy,           
                 PhoneNumber = u.PhoneNumber,
-                IsManuallyVerified = u.IsManuallyVerified 
+                IsManuallyVerified = u.IsManuallyVerified,
+                PeriodActivityCount = periodActivityCount
             };
             if (u.EmailConfirmed)
             {
@@ -846,12 +802,6 @@ else
         ApplyFilters();
     }
 
-    private void SetDateFilter(string filter)
-    {
-        dateFilter = filter;
-        ApplyFilters();
-    }
-
     private void OnStatusFilterChanged(ChangeEventArgs e)
     {
         statusFilter = e.Value?.ToString() ?? "All";
@@ -861,15 +811,13 @@ else
     private void ApplyFilters()
     {
         if (selectedUserId == null) return;
-        DateTime cutoff = DateTime.MinValue;
-        dateFilterText = "All Time";
 
-        if (dateFilter == "7D") { cutoff = DateTime.UtcNow.AddDays(-7); dateFilterText = "Last 7 Days"; }
-        else if (dateFilter == "30D") { cutoff = DateTime.UtcNow.AddDays(-30); dateFilterText = "Last 30 Days"; }
-        else if (dateFilter == "6M") { cutoff = DateTime.UtcNow.AddMonths(-6); dateFilterText = "Last 6 Months"; }
-        else if (dateFilter == "1Y") { cutoff = DateTime.UtcNow.AddYears(-1); dateFilterText = "Last Year"; }
+        dateFilterText = filterStartDate.HasValue || filterEndDate.HasValue ? "Period" : "All Time";
 
-        var betsInDateRange = allSelectedUserBets.Where(b => b.UpdatedAt >= cutoff).ToList();
+        var betsInDateRange = allSelectedUserBets.Where(b => 
+            (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) &&
+            (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate)
+        ).ToList();
         
         if (statusFilter == "All")
         {
@@ -1492,16 +1440,15 @@ else
     private int usersPage = 1;
     private const int PageSize = 25;
 
-    private async Task ToggleShowActiveReal(ChangeEventArgs e)
-    {
-        showActiveRealUsers = (bool)(e.Value ?? false);
-        usersPage = 1;
-        await InvokeAsync(StateHasChanged);
-    }
-
     private void HandleSearchResetPage()
     {
         usersPage = 1;
+    }
+
+    private async Task OnDateFilterChanged()
+    {
+        usersPage = 1;
+        await RefreshData();
     }
 
     private IEnumerable<UserViewModel> BaseFilteredQuery
@@ -1517,10 +1464,11 @@ else
                     (u.DiscordUsername != null && u.DiscordUsername.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)));
             }
 
-            if (showActiveRealUsers)
+            if (filterStartDate.HasValue || filterEndDate.HasValue)
             {
-                query = query.Where(u => u.Balance != 0 && !u.IsAdmin && !u.IsTestUser);
+                query = query.Where(u => u.PeriodActivityCount > 0);
             }
+            
             return query;
         }
     }
@@ -1562,6 +1510,14 @@ else
     private void PrevUsersPage() { if (usersPage > 1) usersPage--; StateHasChanged(); }
 
 
+    private decimal GetNetProfit(Bet bet)
+    {
+        decimal realStakePortion = (decimal)(bet.AmountNOK ?? 0) - bet.FreeBetAmount;
+        if (bet.Status == "Lost") return realStakePortion;
+        if (bet.Status == "Won") return realStakePortion - bet.PotentialPayout;
+        return 0; 
+    }
+
     public class UserViewModel
     {
         public string Id { get; set; } = "";
@@ -1585,5 +1541,6 @@ else
         public string? ReferredBy { get; set; }
         public string? PhoneNumber { get; set; }
         public bool IsManuallyVerified { get; set; }
+        public int PeriodActivityCount { get; set; }
     }
 }

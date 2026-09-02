@@ -1,0 +1,95 @@
+<div class="d-flex flex-wrap gap-2 align-items-center">
+    <div class="btn-group btn-group-sm shadow-sm" role="group">
+        <button type="button" class="btn @GetBtnClass("All")" @onclick='() => SetPreset("All")'>All</button>
+        <button type="button" class="btn @GetBtnClass("Today")" @onclick='() => SetPreset("Today")'>Today</button>
+        <button type="button" class="btn @GetBtnClass("7D")" @onclick='() => SetPreset("7D")'>Last 7D</button>
+        <button type="button" class="btn @GetBtnClass("30D")" @onclick='() => SetPreset("30D")'>Last 30D</button>
+        <button type="button" class="btn @GetBtnClass("Custom")" @onclick='() => SetPreset("Custom")'>Custom</button>
+    </div>
+    
+    @if (selectedPreset == "Custom")
+    {
+        <div class="d-flex align-items-center gap-1 shadow-sm rounded p-1 bg-white border">
+            <input type="date" class="form-control form-control-sm border-0 bg-light" style="width: auto;" @bind="customStartDate" @bind:after="ApplyCustom" />
+            <span class="small text-muted fw-bold px-1">to</span>
+            <input type="date" class="form-control form-control-sm border-0 bg-light" style="width: auto;" @bind="customEndDate" @bind:after="ApplyCustom" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public DateTime? StartDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> StartDateChanged { get; set; }
+    
+    [Parameter] public DateTime? EndDate { get; set; }
+    [Parameter] public EventCallback<DateTime?> EndDateChanged { get; set; }
+    
+    [Parameter] public EventCallback OnFilterApplied { get; set; }
+
+    [Parameter] public string ButtonClass { get; set; } = "btn-outline-secondary";
+    [Parameter] public string ActiveButtonClass { get; set; } = "btn-primary";
+    
+    private string selectedPreset = "All";
+    
+    private DateTime? customStartDate;
+    private DateTime? customEndDate;
+    
+    private string GetBtnClass(string preset) => selectedPreset == preset ? $"{ActiveButtonClass} fw-bold" : ButtonClass;
+    
+    protected override void OnInitialized()
+    {
+        if (StartDate.HasValue || EndDate.HasValue)
+        {
+            selectedPreset = "Custom";
+            customStartDate = StartDate;
+            customEndDate = EndDate;
+        }
+    }
+
+    private async Task SetPreset(string preset)
+    {
+        selectedPreset = preset;
+        DateTime now = DateTime.UtcNow;
+        
+        if (preset == "All")
+        {
+            await UpdateDates(null, null);
+        }
+        else if (preset == "Today")
+        {
+            await UpdateDates(now.Date, now.Date.AddDays(1).AddTicks(-1));
+        }
+        else if (preset == "7D")
+        {
+            await UpdateDates(now.AddDays(-7), null);
+        }
+        else if (preset == "30D")
+        {
+            await UpdateDates(now.AddDays(-30), null);
+        }
+        else if (preset == "Custom")
+        {
+            // Do not immediately update dates, wait for Apply
+            customStartDate = StartDate;
+            customEndDate = EndDate;
+        }
+    }
+    
+    private async Task ApplyCustom()
+    {
+        // For end date, we include the whole day.
+        DateTime? finalEnd = customEndDate;
+        if (finalEnd.HasValue) 
+        {
+            finalEnd = finalEnd.Value.Date.AddDays(1).AddTicks(-1);
+        }
+        await UpdateDates(customStartDate, finalEnd);
+    }
+    
+    private async Task UpdateDates(DateTime? start, DateTime? end)
+    {
+        await StartDateChanged.InvokeAsync(start);
+        await EndDateChanged.InvokeAsync(end);
+        await OnFilterApplied.InvokeAsync();
+    }
+}
