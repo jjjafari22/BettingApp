@@ -379,9 +379,9 @@
             FreeBetBalance = user.FreeBetBalance;
         }
 
-        totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId && t.Type != "Withdrawal Fulfillment");
+        totalTransactions = await context.Transactions.CountAsync(t => t.UserId == userId);
         myTransactions = await context.Transactions
-            .Where(t => t.UserId == userId && t.Type != "Withdrawal Fulfillment")
+            .Where(t => t.UserId == userId)
             .OrderByDescending(t => t.UpdatedAt)
             .Skip((transPage - 1) * PageSize)
             .Take(PageSize)
