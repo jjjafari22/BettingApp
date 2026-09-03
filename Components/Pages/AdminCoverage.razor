@@ -12,12 +12,16 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <style>
+    .coverage-table {
+        border: 2px solid #343a40 !important;
+    }
     .coverage-table th, .coverage-table td {
         text-align: center;
         vertical-align: middle;
         cursor: pointer;
         height: 50px;
         user-select: none;
+        border: 1px solid #8e959c !important; /* Bolder internal borders */
     }
     .coverage-table td:hover {
         background-color: #f8f9fa;
@@ -33,6 +37,25 @@
         background-color: #f8f9fa;
         white-space: nowrap;
         font-size: 0.9rem;
+    }
+    .current-hour-row > td {
+        background-color: #fff3cd !important;
+        border-top: 3px solid #ff9800 !important;
+        border-bottom: 3px solid #ff9800 !important;
+    }
+    .current-hour-row > th {
+        background-color: #fff3cd !important;
+    }
+    .current-day-col {
+        background-color: #fff3cd !important;
+        border-left: 3px solid #ff9800 !important;
+        border-right: 3px solid #ff9800 !important;
+    }
+    .current-day-header {
+        background-color: #ff9800 !important;
+        color: white !important;
+        border-left: 3px solid #ff9800 !important;
+        border-right: 3px solid #ff9800 !important;
     }
 </style>
 
@@ -79,7 +102,7 @@
                         {
                             var date = startOfDisplayWeek.AddDays(d);
                             bool isToday = date.Date == norwayToday.Date;
-                            <th class="@(isToday ? "bg-primary" : "")">
+                            <th class="@(isToday ? "current-day-header" : "")">
                                 @date.ToString("ddd")<br />
                                 <small>@date.ToString("MM/dd")</small>
                             </th>
@@ -91,7 +114,7 @@
                     {
                         int currentHour = h;
                         bool isCurrentHour = weekOffset == 0 && norwayNow.Hour == currentHour;
-                        <tr class="@(isCurrentHour ? "table-active" : "")">
+                        <tr class="@(isCurrentHour ? "current-hour-row" : "")">
                             <td class="hour-col">
                                 @($"{h:00}:00-{(h + 1 == 24 ? 0 : h + 1):00}:00")<br/>
                                 @if (TimezoneOffset != 0)
@@ -105,8 +128,9 @@
                                 var cellDate = startOfDisplayWeek.AddDays(currentDay).AddHours(currentHour);
                                 var cellShifts = shifts.Where(s => s.StartTimeUtc == TimeHelpers.GetUtcFromNorwayTime(cellDate)).ToList();
                                 
+                                bool isToday = cellDate.Date == norwayToday.Date;
                                 bool isSelected = selectedDates.Contains(cellDate);
-                                string cellClass = isSelected ? "selected-cell" : "";
+                                string cellClass = isSelected ? "selected-cell" : (isToday ? "current-day-col" : "");
                                 
                                 <td class="@cellClass" 
                                     @onmousedown="() => BeginSelect(currentDay, currentHour)"
