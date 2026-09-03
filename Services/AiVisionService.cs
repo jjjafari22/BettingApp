@@ -458,19 +458,36 @@ namespace BettingApp.Services
                         {
                             var outcomes = resultObj.Legs.Select(l => l.Outcome?.ToUpperInvariant() ?? "").ToList();
                             
+                            var originalBet = JsonSerializer.Deserialize<AiVisionExtractionResult>(extractedBetDataJson, resOptions);
+                            bool isBetBuilder = originalBet?.IsBetBuilder ?? false;
+
                             bool hasVoid = outcomes.Any(o => o == "VOID");
                             bool hasWonOrLost = outcomes.Any(o => o == "WON" || o == "LOST");
                             bool hasUnknown = outcomes.Any(o => o == "UNKNOWN");
                             bool hasPending = outcomes.Any(o => o == "PENDING");
                             bool hasLost = outcomes.Any(o => o == "LOST");
 
-                            if (hasUnknown) resultObj.OverallStatus = "UNKNOWN";
-                            else if (hasVoid && hasWonOrLost) resultObj.OverallStatus = "UNKNOWN"; // User rule: Mix of Void with Won/Lost requires manual review for odds recalculation
-                            else if (hasPending) resultObj.OverallStatus = "MATCH IN PROGRESS";
-                            else if (hasLost) resultObj.OverallStatus = "LOST";
-                            else if (outcomes.All(o => o == "WON")) resultObj.OverallStatus = "WON";
-                            else if (outcomes.All(o => o == "VOID")) resultObj.OverallStatus = "VOID";
-                            else resultObj.OverallStatus = "UNKNOWN";
+                            if (!isBetBuilder)
+                            {
+                                // In a standard combo, a single loss kills the entire parlay immediately, regardless of pending or void legs.
+                                if (hasLost) resultObj.OverallStatus = "LOST";
+                                else if (hasUnknown) resultObj.OverallStatus = "UNKNOWN";
+                                else if (hasPending) resultObj.OverallStatus = "MATCH IN PROGRESS";
+                                else if (hasVoid && outcomes.Any(o => o == "WON")) resultObj.OverallStatus = "UNKNOWN"; // Needs manual odds recalculation
+                                else if (outcomes.All(o => o == "WON")) resultObj.OverallStatus = "WON";
+                                else if (outcomes.All(o => o == "VOID")) resultObj.OverallStatus = "VOID";
+                                else resultObj.OverallStatus = "UNKNOWN";
+                            }
+                            else
+                            {
+                                // In a Bet Builder, a Void leg often voids the entire slip. We must wait for all legs to finish (no pending/unknowns) before confirming a loss.
+                                if (hasUnknown) resultObj.OverallStatus = "UNKNOWN";
+                                else if (hasPending) resultObj.OverallStatus = "MATCH IN PROGRESS";
+                                else if (hasVoid) resultObj.OverallStatus = "UNKNOWN"; // Bookmaker BB void rules vary, requires manual review
+                                else if (hasLost) resultObj.OverallStatus = "LOST";
+                                else if (outcomes.All(o => o == "WON")) resultObj.OverallStatus = "WON";
+                                else resultObj.OverallStatus = "UNKNOWN";
+                            }
                             
                             finalJson = JsonSerializer.Serialize(resultObj, new JsonSerializerOptions { WriteIndented = false });
                         }
