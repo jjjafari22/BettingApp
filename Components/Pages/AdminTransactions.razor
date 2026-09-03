@@ -650,6 +650,19 @@ else
                                     </tr>
                                 }
                             </tbody>
+                            <tfoot class="table-light fw-bold" style="border-top: 2px solid #343a40;">
+                                <tr>
+                                    <td colspan="3" class="text-end pe-4">TOTAL:</td>
+                                    @{
+                                        var allCows = GetSortedCashCows().ToList();
+                                        var totalLifetime = allCows.Sum(c => c.Balance);
+                                        var totalPeriod = allCows.Sum(c => GetCashCowPeriodNet(c));
+                                    }
+                                    <td class="@(totalLifetime >= 0 ? "text-success" : "text-danger") fs-6">@totalLifetime.ToString("N0") kr</td>
+                                    <td class="@(totalPeriod >= 0 ? "text-success" : "text-danger") fs-6">@totalPeriod.ToString("N0") kr</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
