@@ -15,9 +15,6 @@ namespace BettingApp.Services
         [JsonPropertyName("bookmaker")]
         public string Bookmaker { get; set; } = "";
         
-        [JsonPropertyName("isCombo")]
-        public bool IsCombo { get; set; }
-        
         [JsonPropertyName("isLive")]
         public bool IsLive { get; set; }
         
@@ -167,18 +164,17 @@ namespace BettingApp.Services
                              "The slip may contain a single bet or a combo (parlay/accumulator) with multiple bets (legs). " +
                              "Extract: " +
                              "1) bookmaker (e.g. 'Unibet', 'Bet365', 'EpicBet', etc. derived from logos or UI style). " +
-                             "2) isCombo (boolean, true if there are multiple bets combined). " +
-                             "3) isLive (boolean, true if the bet was placed LIVE/In-Play. Look for 'LIVE' labels, or current match scores like '0-0', '1-0' printed near the market name or teams). " +
-                             "4) totalOdds (the final combined odds of the slip, if visible). " +
-                             "5) stake (the amount bet, e.g. '100', '1000'). CRITICAL: Often the user will manually draw or write their stake over the image with a digital pen. You MUST look for manual handwritten digits over the image indicating the stake and prioritize that over printed text! " +
-                             "6) legs: an array of objects representing each individual bet, containing: " +
+                             "2) isLive (boolean, true if the bet was placed LIVE/In-Play. Look for 'LIVE' labels, or current match scores like '0-0', '1-0' printed near the market name or teams). " +
+                             "3) totalOdds (the final combined odds of the slip, if visible). " +
+                             "4) stake (the amount bet, e.g. '100', '1000'). CRITICAL: Often the user will manually draw or write their stake over the image with a digital pen. You MUST look for manual handwritten digits over the image indicating the stake and prioritize that over printed text! " +
+                             "5) legs: an array of objects representing each individual bet, containing: " +
                              "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST translate the team names into their standard, globally recognized English names (e.g. you MUST output 'FC Copenhagen' instead of 'FC København', and 'Bayern Munich' instead of 'Bayern München'). This is required for our Odds API to find the match. " +
                              "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! CRITICAL: If the market name includes a team name (e.g., 'FC Midtjylland Total Goals 1'), you MUST include the team name exactly as written. Do NOT summarize it! " +
                              "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! " +
                              "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or visual icons near the bet (e.g., 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost'). IMPORTANT FOR POWER SUB: Some bookmakers do not write the text, but instead use a visual icon next to the player (such as two arrows pointing in opposite directions, a 'swap' symbol, or a substitution icon). If you see a visual icon that clearly represents a player substitution, you MUST add 'Power Sub' to this array. Be careful not to confuse generic UI arrows (like dropdown arrows) with a substitution icon! " +
                              "   - matchDate (e.g. '22.Aug 04:00', 'Tomorrow 18:00', or '2023-10-25'). CRITICAL: Look very carefully for the kickoff date and time for this match printed on the slip, or the date the bet was placed. Extract exactly what you see. If missing, return null. " +
                              "   - odds (e.g. '1.95'). " +
-                             "Return ONLY a raw JSON object with keys: bookmaker, isCombo, isLive, totalOdds, stake, legs. Ensure ALL numeric values (like totalOdds, stake, and odds) are formatted as strings, but keep isCombo and isLive as booleans. Do not include markdown blocks like ```json.";
+                             "Return ONLY a raw JSON object with keys: bookmaker, isLive, totalOdds, stake, legs. Ensure ALL numeric values (like totalOdds, stake, and odds) are formatted as strings, but keep isLive as a boolean. Do not include markdown blocks like ```json.";
 
                 var payload = new
                 {
