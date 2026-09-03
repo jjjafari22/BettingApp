@@ -486,15 +486,8 @@ else
                                                                         string t1 = matchSplit[0].Trim();
                                                                         string t2 = matchSplit[1].Trim();
                                                                         
-                                                                        if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Match))
-                                                                        {
-                                                                            var aiMatchSplit = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
-                                                                            if (aiMatchSplit.Length >= 2)
-                                                                            {
-                                                                                t1 = aiMatchSplit[0].Split('(')[0].Trim();
-                                                                                t2 = aiMatchSplit[1].Split('(')[0].Trim();
-                                                                            }
-                                                                        }
+                                                                        // Removed the forced AI match string override. 
+                                                                        // The user requested to trust Odds Papi's ordering for team 1 and team 2 to prevent mismatched odds.
                                                                         
                                                                         var hcMatch = System.Text.RegularExpressions.Regex.Match(displayOName, @"^(1|X|x|2)\s*\(([^)]+)\)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                                                                         if (hcMatch.Success)
@@ -572,8 +565,36 @@ else
                                                                         if (hcSplit.Length >= 2)
                                                                         {
                                                                             string normSelRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).ToLowerInvariant();
-                                                                            string normT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[0].Split('(')[0].Trim()).ToLowerInvariant();
-                                                                            string normT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[1].Split('(')[0].Trim()).ToLowerInvariant();
+                                                                            string aiT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[0].Split('(')[0].Trim()).ToLowerInvariant();
+                                                                            string aiT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[1].Split('(')[0].Trim()).ToLowerInvariant();
+                                                                            
+                                                                            string opT1 = "";
+                                                                            string opT2 = "";
+                                                                            if (PapiSearchResult != null && !string.IsNullOrEmpty(PapiSearchResult.MatchName))
+                                                                            {
+                                                                                var opMatchSplit = PapiSearchResult.MatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                                                                                if (opMatchSplit.Length >= 2)
+                                                                                {
+                                                                                    opT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(opMatchSplit[0].Trim()).ToLowerInvariant();
+                                                                                    opT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(opMatchSplit[1].Trim()).ToLowerInvariant();
+                                                                                }
+                                                                            }
+                                                                            
+                                                                            bool isSwapped = false;
+                                                                            // Determine if the bookmaker's Team 1 is actually Odds Papi's Team 2
+                                                                            if ((opT2.Contains(aiT1) && aiT1.Length > 3) || (aiT1.Contains(opT2) && opT2.Length > 3) || 
+                                                                                (opT1.Contains(aiT2) && aiT2.Length > 3) || (aiT2.Contains(opT1) && opT1.Length > 3))
+                                                                            {
+                                                                                // Ensure it's not just a generic match like "fc"
+                                                                                if (!opT1.Contains(aiT1) && !aiT1.Contains(opT1))
+                                                                                {
+                                                                                    isSwapped = true;
+                                                                                }
+                                                                            }
+                                                                            
+                                                                            // normT1 represents the team that corresponds to Odds Papi's outcome "1".
+                                                                            string normT1 = isSwapped ? aiT2 : aiT1;
+                                                                            string normT2 = isSwapped ? aiT1 : aiT2;
                                                                             
                                                                             string aiTarget = "";
                                                                             string htftTarget = "";
@@ -774,7 +795,14 @@ else
                                                                                 string lastName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
                                                                                 string firstName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[2].Value).ToLowerInvariant().Replace(" ", "");
                                                                                 
-                                                                                if (normSel.Contains(lastName) || normSel.Contains(firstName))
+                                                                                bool matchLast = normSel.Contains(lastName);
+                                                                                bool matchFirst = normSel.Contains(firstName);
+                                                                                
+                                                                                // Only allow a first-name-only match if the first name is long (e.g. Vinicius), 
+                                                                                // or if the selection string is short enough to imply they didn't type a different last name.
+                                                                                bool isValidNameMatch = matchLast || (matchFirst && (firstName.Length >= 6 || normSel.Length < firstName.Length + 12));
+                                                                                
+                                                                                if (isValidNameMatch)
                                                                                 {
                                                                                     string outcomePart = (displayOName ?? "").Substring(0, parenMatch.Index).Trim();
                                                                                     string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
