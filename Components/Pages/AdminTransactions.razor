@@ -864,6 +864,11 @@ else
                 if (newTrans.Platform == "Vipps") autoFilled = cow.Vipps;
                 else if (newTrans.Platform == "Revolut") autoFilled = cow.Revolut;
                 else if (newTrans.Platform == "Bank Transfer") autoFilled = cow.BankTransfer;
+                else if (newTrans.Platform == "Other") 
+                {
+                    otherPlatformName = cow.OtherPlatformName;
+                    autoFilled = cow.OtherPaymentDetails;
+                }
             }
         }
         else if (addTransReceiverType == "User" && selectedReceiverUser != null)
@@ -880,6 +885,9 @@ else
                             if (split.Length == 2) {
                                 otherPlatformName = split[0].Trim();
                                 autoFilled = split[1].Trim();
+                            } else {
+                                otherPlatformName = "Other";
+                                autoFilled = part.Trim();
                             }
                             break;
                         }
@@ -1508,6 +1516,11 @@ else
                     {
                         editPendingOtherPlatform = split[0].Trim();
                         editPendingOtherDetails = split[1].Trim();
+                    }
+                    else
+                    {
+                        editPendingOtherPlatform = "Other";
+                        editPendingOtherDetails = part.Trim();
                     }
                 }
             }
