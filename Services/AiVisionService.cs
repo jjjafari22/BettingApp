@@ -163,7 +163,7 @@ namespace BettingApp.Services
                 string mimeType = imageUrl.ToLower().EndsWith(".png") ? "image/png" : "image/jpeg";
 
                 // 2. Build the Gemini JSON Payload
-                var prompt = "You are a sports betting OCR bot. Look at this betting slip screenshot and extract the bet details. " +
+                var systemInstruction = "You are a sports betting OCR bot. Look at this betting slip screenshot and extract the bet details. " +
                              "The slip may contain a single bet or a combo (parlay/accumulator) with multiple bets (legs). " +
                              "Extract: " +
                              "1) bookmaker (e.g. 'Unibet', 'Bet365', 'EpicBet', etc. derived from logos or UI style). " +
@@ -176,11 +176,11 @@ namespace BettingApp.Services
                              "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! " +
                              "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or visual icons near the bet (e.g., 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost'). IMPORTANT FOR POWER SUB: Some bookmakers do not write the text, but instead use a visual icon next to the player (such as two arrows pointing in opposite directions, a 'swap' symbol, or a substitution icon). If you see a visual icon that clearly represents a player substitution, you MUST add 'Power Sub' to this array. Be careful not to confuse generic UI arrows (like dropdown arrows) with a substitution icon! " +
                              "   - matchDate (e.g. '22.Aug 04:00', 'Tomorrow 18:00', or '2023-10-25'). CRITICAL: Look very carefully for the kickoff date and time for this match printed on the slip, or the date the bet was placed. Extract exactly what you see. If missing, return null. " +
-                             "   - odds (e.g. '1.95'). CRITICAL: If multiple legs are part of a Bet Builder (grouped together for the same match) and visually share a single combined odds value, you MUST output that shared odds value for the FIRST leg, and output null for the subsequent legs in that Bet Builder. " +
-                             "Return ONLY a raw JSON object with keys: bookmaker, isLive, totalOdds, stake, legs. Ensure ALL numeric values (like totalOdds, stake, and odds) are formatted as strings, but keep isLive as a boolean. Do not include markdown blocks like ```json.";
+                             "   - odds (e.g. '1.95'). CRITICAL: If multiple legs are part of a Bet Builder (grouped together for the same match) and visually share a single combined odds value, you MUST output that shared odds value for the FIRST leg, and output null for the subsequent legs in that Bet Builder.";
 
                 var payload = new
                 {
+                    systemInstruction = new { parts = new[] { new { text = systemInstruction } } },
                     contents = new[]
                     {
                         new
@@ -188,7 +188,7 @@ namespace BettingApp.Services
                             role = "user",
                             parts = new object[]
                             {
-                                new { text = prompt },
+                                new { text = "Please extract the bet details from this screenshot according to the strict system instructions." },
                                 new
                                 {
                                     inlineData = new
@@ -202,8 +202,35 @@ namespace BettingApp.Services
                     },
                     generationConfig = new
                     {
-                        temperature = 0.0,
                         responseMimeType = "application/json",
+                        responseSchema = new
+                        {
+                            type = "OBJECT",
+                            properties = new
+                            {
+                                bookmaker = new { type = "STRING", nullable = true },
+                                isLive = new { type = "BOOLEAN" },
+                                totalOdds = new { type = "STRING", nullable = true },
+                                stake = new { type = "STRING", nullable = true },
+                                legs = new
+                                {
+                                    type = "ARRAY",
+                                    items = new
+                                    {
+                                        type = "OBJECT",
+                                        properties = new
+                                        {
+                                            match = new { type = "STRING", nullable = true },
+                                            market = new { type = "STRING", nullable = true },
+                                            selection = new { type = "STRING", nullable = true },
+                                            badges = new { type = "ARRAY", items = new { type = "STRING" }, nullable = true },
+                                            matchDate = new { type = "STRING", nullable = true },
+                                            odds = new { type = "STRING", nullable = true }
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         thinkingConfig = new { thinkingBudget = 1024 }
                     }
                 };
@@ -211,7 +238,7 @@ namespace BettingApp.Services
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
                 // Hardcoded to the latest available Vertex AI enterprise model
-                var resolvedModel = "gemini-3.7-flash";
+                var resolvedModel = "gemini-3.8-flash";
 
                 var apiUrl = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
@@ -347,7 +374,7 @@ namespace BettingApp.Services
                                  ? $"1. THE EXACT TIMEFRAME: We have ALREADY determined the exact start time for this match from our API: {matchStartTime.Value:yyyy-MM-dd HH:mm} UTC. You MUST find the match that corresponds to this EXACT UTC date and time!\n"
                                  : $"1. THE EXACT TIMEFRAME: The exact match time is unknown, but this bet slip was uploaded at {betPlacedAt:yyyy-MM-dd HH:mm} UTC. You MUST find the VERY FIRST match played chronologically ON OR AFTER this upload time.\n") +
                              $"2. THE TEAMS/PLAYERS ORDER: You must strictly verify the exact order of the players/teams (Home vs Away). A match between 'Player A vs Player B' is fundamentally different from 'Player B vs Player A'. If they played multiple times recently, the Home/Away order is your source of truth to pick the right match!\n" +
-                             $"CRITICAL FOR SOURCES: For every match, explicitly state 'Verified via provided FotMob JSON' or 'Verified via Google Search' directly in the 'stats' field for each leg. If you use Google Search, you MUST include exactly ONE URL to the specific source page you used to find the result. DO NOT just link to the homepage (e.g. https://www.sofascore.com)! You MUST link to the EXACT match or boxscore page (e.g. https://www.sofascore.com/tennis/match/zverev-paul/xyz) where you read the specific statistics.\n" +
+                             $"CRITICAL FOR SOURCES: For every match, explicitly state your source in the 'stats' field. If you used FotMob JSON, write 'Verified via provided FotMob JSON'. If you were provided FotMob JSON but had to use Google Search because FotMob lacked the specific statistic (e.g. 1st half corners), you MUST explicitly state: 'FotMob data lacked this specific stat; Verified via Google Search'. If you use Google Search, you MUST include exactly ONE URL to the specific source page you used (e.g. https://www.sofascore.com/tennis/match/zverev-paul/xyz).\n" +
                              $"CRITICAL FOR PLAYER PROPS (STARTER RULE & VOIDS): ALL player proposition bets (e.g., Goalscorer, Player to be Carded, Shots) have strict void rules! Rule 1: If a player NEVER steps on the pitch (0 minutes played, not in squad, or left on bench), the outcome MUST ALWAYS BE MARKED AS 'Void', regardless of whether it's a live bet or a Power Sub! Rule 2: If the bet slip is NOT marked as `isLive: true`, the player MUST be in the STARTING XI. If they do not start (even if they are subbed on later), it MUST be marked as 'Void'. Rule 3: If `isLive` is true, the starter rule does not apply; if they are subbed on later and play, the bet stands. Rule 4: 'Power Sub' bets ONLY activate if the named player STARTS the match; if the named player does not start, the Power Sub bet is 'Void' (the substitute is ignored).\n" +
                              $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)' (or 'Super Sub'), the bet transfers to the substitute ONLY IF the named player started the match! If they started and are substituted off, the stats of the player who comes on for them MUST be added to their total! To do this, look at the FotMob 'events' array for a 'Substitution' event where 'swap' contains the named player. The other player in the 'swap' array is the substitute. Find both players in 'playerStats' and mathematically add their stats together.\n" +
                              $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
@@ -355,17 +382,14 @@ namespace BettingApp.Services
                              $"CRITICAL FOR SPLIT ASIAN LINES (Half-Win / Half-Loss): If a bet features a split Asian line (e.g., '-0.5, -1.0', 'Over 2.0, 2.5', '2.25', '2.75') AND the final result causes one half of the bet to Win while the other half Voids (a Half-Win), OR one half to Lose while the other half Voids (a Half-Loss), YOU MUST mark the leg outcome as 'UNKNOWN'. Do NOT mark it as Won, Lost, or Void! You may only mark a split Asian line as 'Won' if BOTH halves win completely, or 'Lost' if BOTH halves lose completely. If the result is split/mixed, you must use 'UNKNOWN'.\n" +
                              $"CRITICAL FOR COMBO BETS: Evaluate each leg COMPLETELY INDEPENDENTLY! Even if multiple legs are for the same match, you MUST write a unique, specific 'stats' reasoning for EACH leg based on its specific Market and Selection. Do NOT copy and paste the same stats reasoning across multiple legs. For example, if Leg 1 is a Goalscorer and Leg 2 is a Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.\n" +
                              $"CRITICAL FOR SCHEDULING: If the match has NOT STARTED (e.g. `general.started` is false AND `header.status.started` is false), you MUST NOT grade ANY legs as Won or Lost; all legs must be 'Pending'. You must also determine its exact kickoff time in UTC. If the kickoff time is ALREADY clearly stated in the bet slip data (e.g. 'Starts: 28.Jul 11:00'), you MUST parse it directly and DO NOT use Google Search. Only use Google Search if the start time is missing. Return it in ISO 8601 format in the `matchStartTimeIso` field (e.g. \"2026-07-25T19:00:00Z\").\n" +
-                             $"CRITICAL FOR OUTCOMES: For the 'outcome' field in each leg, you MUST strictly use exactly one of these words: 'Won', 'Lost', 'Void', 'Pending', or 'Unknown'. DO NOT use any emojis! DO NOT add extra text!\n" +
-                             $"Return a strictly formatted JSON object with the following schema:\n" +
-                             $"{{ \"matchStartTimeIso\": \"2026-07-25T19:00:00Z\", \"fullAnalysis\": \"Your detailed reasoning formatted with \n line breaks...\", \"legs\": [ {{ \"match\": \"Team A vs Team B\", \"outcome\": \"Won\", \"stats\": \"e.g. 12 corners, or Match starts in 2 hours.\" }} ] }}\n" +
-                             $"Return ONLY valid JSON. Do not include markdown code blocks.";
+                             $"CRITICAL FOR OUTCOMES: For the 'outcome' field in each leg, you MUST strictly use exactly one of these words: 'Won', 'Lost', 'Void', 'Pending', or 'Unknown'. DO NOT use any emojis! DO NOT add extra text!";
 
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 var extractionResult = JsonSerializer.Deserialize<AiVisionExtractionResult>(extractedBetDataJson, options);
                 
                 var partsList = new List<object>
                 {
-                    new { text = prompt }
+                    new { text = "Please determine the outcome of this bet according to the strict system instructions and the attached FotMob JSON data." }
                 };
 
                 if (extractionResult?.Legs != null)
@@ -391,6 +415,7 @@ namespace BettingApp.Services
 
                 var payload = new
                 {
+                    systemInstruction = new { parts = new[] { new { text = prompt } } },
                     contents = new[]
                     {
                         new { role = "user", parts = partsList.ToArray() }
@@ -401,18 +426,38 @@ namespace BettingApp.Services
                     },
                     generationConfig = new 
                     {
-                        temperature = 0.0,
-                        thinkingConfig = new 
+                        responseMimeType = "application/json",
+                        responseSchema = new
                         {
-                            thinkingBudget = 1024
-                        }
+                            type = "OBJECT",
+                            properties = new
+                            {
+                                matchStartTimeIso = new { type = "STRING", nullable = true },
+                                fullAnalysis = new { type = "STRING", nullable = true },
+                                legs = new
+                                {
+                                    type = "ARRAY",
+                                    items = new
+                                    {
+                                        type = "OBJECT",
+                                        properties = new
+                                        {
+                                            match = new { type = "STRING", nullable = true },
+                                            outcome = new { type = "STRING", nullable = true },
+                                            stats = new { type = "STRING", nullable = true }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        thinkingConfig = new { thinkingBudget = 1024 }
                     }
                 };
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
                 // Hardcoded to the latest available Vertex AI enterprise model
-                var resolvedModel = "gemini-3.7-flash";
+                var resolvedModel = "gemini-3.8-flash";
 
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
@@ -545,7 +590,7 @@ namespace BettingApp.Services
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
                 // Hardcoded to the latest available Vertex AI enterprise model
-                var resolvedModel = "gemini-3.7-flash";
+                var resolvedModel = "gemini-3.8-flash";
 
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 string betLabel = "[Match Start Time] ";
