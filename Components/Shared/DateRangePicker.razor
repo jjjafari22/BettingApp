@@ -17,6 +17,7 @@
     }
 </div>
 
+@inject IJSRuntime JSRuntime
 @code {
     [Parameter] public DateTime? StartDate { get; set; }
     [Parameter] public EventCallback<DateTime?> StartDateChanged { get; set; }
@@ -33,6 +34,8 @@
     
     private DateTime? customStartDate;
     private DateTime? customEndDate;
+    private int timezoneOffset = 0;
+    private bool hasFetchedOffset = false;
     
     private string GetBtnClass(string preset) => selectedPreset == preset ? $"{ActiveButtonClass} fw-bold" : ButtonClass;
     
@@ -46,10 +49,24 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!hasFetchedOffset)
+        {
+            try
+            {
+                timezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                hasFetchedOffset = true;
+            }
+            catch { }
+        }
+    }
+
     private async Task SetPreset(string preset)
     {
         selectedPreset = preset;
-        DateTime now = DateTime.UtcNow;
+        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowLocal = hasFetchedOffset ? nowUtc.AddMinutes(-timezoneOffset) : nowUtc;
         
         if (preset == "All")
         {
@@ -57,15 +74,21 @@
         }
         else if (preset == "Today")
         {
-            await UpdateDates(now.Date, now.Date.AddDays(1).AddTicks(-1));
+            // Calculate boundaries in Local Time, then convert back to UTC boundaries
+            DateTime startLocal = nowLocal.Date;
+            DateTime endLocal = nowLocal.Date.AddDays(1).AddTicks(-1);
+            await UpdateDates(hasFetchedOffset ? startLocal.AddMinutes(timezoneOffset) : startLocal, 
+                              hasFetchedOffset ? endLocal.AddMinutes(timezoneOffset) : endLocal);
         }
         else if (preset == "7D")
         {
-            await UpdateDates(now.AddDays(-7), null);
+            DateTime startLocal = nowLocal.Date.AddDays(-7);
+            await UpdateDates(hasFetchedOffset ? startLocal.AddMinutes(timezoneOffset) : startLocal, null);
         }
         else if (preset == "30D")
         {
-            await UpdateDates(now.AddDays(-30), null);
+            DateTime startLocal = nowLocal.Date.AddDays(-30);
+            await UpdateDates(hasFetchedOffset ? startLocal.AddMinutes(timezoneOffset) : startLocal, null);
         }
         else if (preset == "Custom")
         {
@@ -77,13 +100,22 @@
     
     private async Task ApplyCustom()
     {
-        // For end date, we include the whole day.
-        DateTime? finalEnd = customEndDate;
-        if (finalEnd.HasValue) 
+        DateTime? finalStartUtc = null;
+        DateTime? finalEndUtc = null;
+
+        if (customStartDate.HasValue)
         {
-            finalEnd = finalEnd.Value.Date.AddDays(1).AddTicks(-1);
+            DateTime startLocal = customStartDate.Value.Date;
+            finalStartUtc = hasFetchedOffset ? startLocal.AddMinutes(timezoneOffset) : startLocal;
         }
-        await UpdateDates(customStartDate, finalEnd);
+        
+        if (customEndDate.HasValue) 
+        {
+            DateTime endLocal = customEndDate.Value.Date.AddDays(1).AddTicks(-1);
+            finalEndUtc = hasFetchedOffset ? endLocal.AddMinutes(timezoneOffset) : endLocal;
+        }
+
+        await UpdateDates(finalStartUtc, finalEndUtc);
     }
     
     private async Task UpdateDates(DateTime? start, DateTime? end)

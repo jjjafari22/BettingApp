@@ -690,8 +690,8 @@ else
                 UserId = g.Key,
                 Winnings = g.Sum(b => b.Status == "Won" && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)((b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount) : 0m),
                 SettledStakes = g.Sum(b => (b.Status == "Won" || b.Status == "Lost") && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)((b.AmountNOK ?? 0) - b.FreeBetAmount) : 0m),
-                Handle = g.Sum(b => (b.Status != "Rejected" && b.Status != "Cancelled") && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)(b.AmountNOK ?? 0) : 0m),
-                PeriodBetsCount = g.Sum(b => (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? 1 : 0),
+                Handle = g.Sum(b => (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void") && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)((b.AmountNOK ?? 0) - b.FreeBetAmount) : 0m),
+                PeriodBetsCount = g.Sum(b => (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void") && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? 1 : 0),
                 FirstBetDate = g.Min(b => (DateTime?)b.CreatedAt),
                 LastBetDate = g.Max(b => (DateTime?)b.UpdatedAt)
             })

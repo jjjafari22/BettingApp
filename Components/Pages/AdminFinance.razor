@@ -7,10 +7,13 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
+@inject IJSRuntime JSRuntime
 @attribute [Authorize]
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 
-<h3>Finance Dashboard</h3>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Finance Dashboard</h3>
+</div>
 
 @if (!isAuthorized)
 {
@@ -51,21 +54,28 @@
 
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center flex-wrap">
-        <div class="btn-group mb-2 mb-md-0" role="group">
-            <button type="button" class="btn btn-@(viewMode == ViewMode.Daily ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Daily)">Daily</button>
-            <button type="button" class="btn btn-@(viewMode == ViewMode.Weekly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Weekly)">Weekly</button>
-            <button type="button" class="btn btn-@(viewMode == ViewMode.Monthly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Monthly)">Monthly</button>
-            <button type="button" class="btn btn-@(viewMode == ViewMode.Yearly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Yearly)">Yearly</button>
-            <button type="button" class="btn btn-@(viewMode == ViewMode.Custom ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Custom)">Custom</button>
+        <div class="d-flex align-items-center gap-3 mb-2 mb-md-0">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-@(viewMode == ViewMode.Daily ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Daily)">Daily</button>
+                <button type="button" class="btn btn-@(viewMode == ViewMode.Weekly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Weekly)">Weekly</button>
+                <button type="button" class="btn btn-@(viewMode == ViewMode.Monthly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Monthly)">Monthly</button>
+                <button type="button" class="btn btn-@(viewMode == ViewMode.Yearly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Yearly)">Yearly</button>
+                <button type="button" class="btn btn-@(viewMode == ViewMode.Custom ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Custom)">Custom</button>
+            </div>
+            
+            <div class="form-check form-switch d-none d-md-flex align-items-center gap-2 mb-0" style="margin-top: 2px;">
+                <input class="form-check-input mt-0" type="checkbox" role="switch" id="tzToggleBlue" @bind="showNorwayTimezone" @bind:after="OnTimezoneToggled">
+                <label class="form-check-label small text-white" for="tzToggleBlue">Norway TZ</label>
+            </div>
         </div>
         
         <div class="d-flex align-items-center flex-wrap gap-2 mt-2 mt-md-0">
             @if (viewMode == ViewMode.Custom)
             {
                 <div class="d-flex align-items-center bg-white rounded p-1 shadow-sm">
-                    <input type="date" class="form-control form-control-sm border-0" @bind="customStartDateNorway" @bind:after="OnCustomDateChanged" title="From Date" />
+                    <input type="date" class="form-control form-control-sm border-0" @bind="customStartDate" @bind:after="OnCustomDateChanged" title="From Date" />
                     <span class="mx-2 text-dark fw-bold">-</span>
-                    <input type="date" class="form-control form-control-sm border-0" @bind="customEndDateNorway" @bind:after="OnCustomDateChanged" title="To Date" />
+                    <input type="date" class="form-control form-control-sm border-0" @bind="customEndDate" @bind:after="OnCustomDateChanged" title="To Date" />
                 </div>
             }
             else
@@ -157,12 +167,15 @@
     private HubConnection? hubConnection;
     
     // State
+    private bool showNorwayTimezone = false;
+    private int TimezoneOffset = 0;
+    private bool hasFetchedOffset = false;
+
     private ViewMode viewMode = ViewMode.Daily;
-    private DateTime currentDateNorway; // Tracks the currently viewed date in Norway time
+    private DateTime currentViewDate; 
     
-    // Custom Date Range
-    private DateTime? customStartDateNorway;
-    private DateTime? customEndDateNorway;
+    private DateTime? customStartDate;
+    private DateTime? customEndDate;
     
     // Live Tracker
     private decimal netOpenLiability = 0;
@@ -197,36 +210,62 @@
         if (dbUser == null || !dbUser.IsAdmin) { Nav.NavigateTo("/"); return; }
 
         isAuthorized = true;
-
-        // Time Setup
-        currentDateNorway = TimeHelpers.GetNorwayTime(DateTime.UtcNow);
-
         GoToCurrent();
+    }
 
-        // 3. Setup SignalR for live liability updates
-        try 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!hasFetchedOffset)
         {
-            hubConnection = new HubConnectionBuilder()
-                .WithUrl(Nav.ToAbsoluteUri("/bethub"))
-                .Build();
-
-            hubConnection.On<string>("ReceiveAdminNotification", async (msg) => await RefreshLiveLiability(context));
-            hubConnection.On<string>("ReceiveUpdate", async (msg) => await RefreshLiveLiability(context));
-
-            await hubConnection.StartAsync();
-            await hubConnection.InvokeAsync("JoinAdminGroup");
+            try
+            {
+                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                hasFetchedOffset = true;
+                GoToCurrent(); // Refresh bounds correctly now that we have the offset
+            }
+            catch { }
         }
-        catch (Exception ex)
+
+        if (firstRender && isAuthorized)
         {
-            Console.WriteLine($"Finance SignalR Error: {ex.Message}");
+            // Setup SignalR for live liability updates
+            try 
+            {
+                using var context = DbFactory.CreateDbContext();
+                hubConnection = new HubConnectionBuilder()
+                    .WithUrl(Nav.ToAbsoluteUri("/bethub"))
+                    .Build();
+
+                hubConnection.On<string>("ReceiveAdminNotification", async (msg) => await RefreshLiveLiability(context));
+                hubConnection.On<string>("ReceiveUpdate", async (msg) => await RefreshLiveLiability(context));
+
+                await hubConnection.StartAsync();
+                await hubConnection.InvokeAsync("JoinAdminGroup");
+            }
+            catch { }
         }
+    }
+
+    private void OnTimezoneToggled()
+    {
+        _ = LoadMetricsAsync();
+    }
+
+    private DateTime GetBaseTime()
+    {
+        var nowUtc = DateTime.UtcNow;
+        if (showNorwayTimezone) return TimeHelpers.GetNorwayTime(nowUtc);
+        return hasFetchedOffset ? nowUtc.AddMinutes(-TimezoneOffset) : nowUtc;
+    }
+
+    private DateTime GetUtcFromBaseTime(DateTime baseTime)
+    {
+        if (showNorwayTimezone) return TimeHelpers.GetUtcFromNorwayTime(baseTime);
+        return hasFetchedOffset ? baseTime.AddMinutes(TimezoneOffset) : baseTime;
     }
 
     private async Task RefreshLiveLiability(ApplicationDbContext context)
     {
-        // Net Open Liability = Sum of (Potential Payout - Normal Stake Portion) for active ("Approved") bets.
-        // For free bets, PotentialPayout IS the net liability.
-        // Formula: PotentialPayout - (TotalStake - FreeBetAmount)
         var activeBets = await context.Bets
             .Where(b => b.Status == "Approved" && !context.Users.Any(u => u.Id == b.UserId && u.IsTestUser))
             .AsNoTracking()
@@ -239,7 +278,7 @@
 
     private void GoToCurrent()
     {
-        currentDateNorway = TimeHelpers.GetNorwayTime(DateTime.UtcNow);
+        currentViewDate = GetBaseTime();
         _ = LoadMetricsAsync();
     }
 
@@ -248,22 +287,21 @@
         viewMode = mode;
         if (mode == ViewMode.Custom)
         {
-            customStartDateNorway ??= currentDateNorway.Date.AddDays(-7);
-            customEndDateNorway ??= currentDateNorway.Date;
+            customStartDate ??= currentViewDate.Date.AddDays(-7);
+            customEndDate ??= currentViewDate.Date;
         }
         _ = LoadMetricsAsync();
     }
 
     private void OnCustomDateChanged()
     {
-        if (customStartDateNorway != null && customEndDateNorway != null)
+        if (customStartDate != null && customEndDate != null)
         {
-            if (customStartDateNorway > customEndDateNorway)
+            if (customStartDate > customEndDate)
             {
-                // Auto-correct if start > end
-                var temp = customStartDateNorway;
-                customStartDateNorway = customEndDateNorway;
-                customEndDateNorway = temp;
+                var temp = customStartDate;
+                customStartDate = customEndDate;
+                customEndDate = temp;
             }
             _ = LoadMetricsAsync();
         }
@@ -271,26 +309,26 @@
 
     private void PreviousPeriod()
     {
-        currentDateNorway = viewMode switch
+        currentViewDate = viewMode switch
         {
-            ViewMode.Daily => currentDateNorway.AddDays(-1),
-            ViewMode.Weekly => currentDateNorway.AddDays(-7),
-            ViewMode.Monthly => currentDateNorway.AddMonths(-1),
-            ViewMode.Yearly => currentDateNorway.AddYears(-1),
-            _ => currentDateNorway
+            ViewMode.Daily => currentViewDate.AddDays(-1),
+            ViewMode.Weekly => currentViewDate.AddDays(-7),
+            ViewMode.Monthly => currentViewDate.AddMonths(-1),
+            ViewMode.Yearly => currentViewDate.AddYears(-1),
+            _ => currentViewDate
         };
         _ = LoadMetricsAsync();
     }
 
     private void NextPeriod()
     {
-        currentDateNorway = viewMode switch
+        currentViewDate = viewMode switch
         {
-            ViewMode.Daily => currentDateNorway.AddDays(1),
-            ViewMode.Weekly => currentDateNorway.AddDays(7),
-            ViewMode.Monthly => currentDateNorway.AddMonths(1),
-            ViewMode.Yearly => currentDateNorway.AddYears(1),
-            _ => currentDateNorway
+            ViewMode.Daily => currentViewDate.AddDays(1),
+            ViewMode.Weekly => currentViewDate.AddDays(7),
+            ViewMode.Monthly => currentViewDate.AddMonths(1),
+            ViewMode.Yearly => currentViewDate.AddYears(1),
+            _ => currentViewDate
         };
         _ = LoadMetricsAsync();
     }
@@ -299,12 +337,12 @@
     {
         return viewMode switch
         {
-            ViewMode.Daily => currentDateNorway.ToString("dd MMM yyyy"),
+            ViewMode.Daily => currentViewDate.ToString("dd MMM yyyy"),
             ViewMode.Weekly => 
-                GetStartOfWeek(currentDateNorway).ToString("dd MMM") + " - " + 
-                GetStartOfWeek(currentDateNorway).AddDays(6).ToString("dd MMM yyyy"),
-            ViewMode.Monthly => currentDateNorway.ToString("MMMM yyyy"),
-            ViewMode.Yearly => currentDateNorway.ToString("yyyy"),
+                GetStartOfWeek(currentViewDate).ToString("dd MMM") + " - " + 
+                GetStartOfWeek(currentViewDate).AddDays(6).ToString("dd MMM yyyy"),
+            ViewMode.Monthly => currentViewDate.ToString("MMMM yyyy"),
+            ViewMode.Yearly => currentViewDate.ToString("yyyy"),
             _ => ""
         };
     }
@@ -320,40 +358,39 @@
         using var context = DbFactory.CreateDbContext();
         await RefreshLiveLiability(context);
 
-        // Calculate UTC boundaries based on Norwegian Time
-        DateTime startNorway;
-        DateTime endNorway;
+        DateTime startBase;
+        DateTime endBase;
 
         switch (viewMode)
         {
             case ViewMode.Daily:
-                startNorway = currentDateNorway.Date;
-                endNorway = startNorway.AddDays(1);
+                startBase = currentViewDate.Date;
+                endBase = startBase.AddDays(1);
                 break;
             case ViewMode.Weekly:
-                startNorway = GetStartOfWeek(currentDateNorway);
-                endNorway = startNorway.AddDays(7);
+                startBase = GetStartOfWeek(currentViewDate);
+                endBase = startBase.AddDays(7);
                 break;
             case ViewMode.Monthly:
-                startNorway = new DateTime(currentDateNorway.Year, currentDateNorway.Month, 1);
-                endNorway = startNorway.AddMonths(1);
+                startBase = new DateTime(currentViewDate.Year, currentViewDate.Month, 1);
+                endBase = startBase.AddMonths(1);
                 break;
             case ViewMode.Yearly:
-                startNorway = new DateTime(currentDateNorway.Year, 1, 1);
-                endNorway = startNorway.AddYears(1);
+                startBase = new DateTime(currentViewDate.Year, 1, 1);
+                endBase = startBase.AddYears(1);
                 break;
             case ViewMode.Custom:
-                startNorway = customStartDateNorway?.Date ?? currentDateNorway.Date;
-                endNorway = (customEndDateNorway?.Date ?? currentDateNorway.Date).AddDays(1);
+                startBase = customStartDate?.Date ?? currentViewDate.Date;
+                endBase = (customEndDate?.Date ?? currentViewDate.Date).AddDays(1);
                 break;
             default:
-                startNorway = currentDateNorway.Date;
-                endNorway = startNorway.AddDays(1);
+                startBase = currentViewDate.Date;
+                endBase = startBase.AddDays(1);
                 break;
         }
 
-        DateTime startUtc = TimeHelpers.GetUtcFromNorwayTime(startNorway);
-        DateTime endUtc = TimeHelpers.GetUtcFromNorwayTime(endNorway);
+        DateTime startUtc = GetUtcFromBaseTime(startBase);
+        DateTime endUtc = GetUtcFromBaseTime(endBase);
 
         // Fetch free bet transactions
         var freeBetTransactions = await context.Transactions
