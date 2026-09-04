@@ -90,6 +90,7 @@ namespace BettingApp.Services
         private readonly HttpClient _httpClient;
         private readonly string? _apiKey;
         private readonly FotMobScraperService _fotMob;
+        private readonly SofaScoreScraperService _sofaScore;
         private readonly IConfiguration _config;
         private static Google.Apis.Auth.OAuth2.GoogleCredential? _cachedCredential;
         private static readonly object _credentialLock = new object();
@@ -137,12 +138,13 @@ namespace BettingApp.Services
             return await ((Google.Apis.Auth.OAuth2.ITokenAccess)_cachedCredential).GetAccessTokenForRequestAsync();
         }
 
-        public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob)
+        public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob, SofaScoreScraperService sofaScore)
         {
             _httpClient = httpClient;
             _config = config;
             _apiKey = config["GeminiApiKey"];
             _fotMob = fotMob;
+            _sofaScore = sofaScore;
         }
 
         public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl, int? betId = null)
@@ -265,11 +267,8 @@ namespace BettingApp.Services
                 var candidates = doc.RootElement.GetProperty("candidates");
                 if (candidates.GetArrayLength() > 0)
                 {
-                    var textResponse = candidates[0]
-                        .GetProperty("content")
-                        .GetProperty("parts")[0]
-                        .GetProperty("text")
-                        .GetString()?.Trim() ?? "";
+                    var parts = candidates[0].GetProperty("content").GetProperty("parts");
+                    var textResponse = parts[parts.GetArrayLength() - 1].GetProperty("text").GetString()?.Trim() ?? "";
 
                     // Sometimes the LLM returns ```json ... ``` despite instructions. Strip it.
                     if (textResponse.StartsWith("```json")) textResponse = textResponse.Substring(7);
@@ -362,20 +361,20 @@ namespace BettingApp.Services
 
                 var prompt = $"You are a sports betting expert. Here is the JSON data of a bet slip that was placed at {betPlacedAt:yyyy-MM-dd HH:mm}.\n" +
                              $"{extractedBetDataJson}\n\n" +
-                             $"Please determine the final result for each match (leg) listed in the bet based strictly on the provided FotMob data.\n" +
-                             $"CRITICAL DATE CHECK: The bet was uploaded to our system on {betPlacedAt:yyyy-MM-dd}. The FotMob JSON attached (if any) represents the correct match found within a few days of this upload date. You MUST use the fixture provided in the FotMob JSON, even if its start time is slightly before the upload date (e.g. if the user uploaded the slip a day late or is testing old bets). Do not reject the provided FotMob fixture!\n" +
-                             $"CRITICAL FOR FOTMOB VERIFICATION: In the `fullAnalysis` field, the VERY FIRST line MUST explicitly state whether FotMob data was successfully provided and what it contained. E.g., 'FotMob Status: Match found, but no scores available yet' or 'FotMob Status: Scores found (1-0)'. If FotMob returned an error like 'No scores found' or 'NOT_FOUND', you MUST explicitly state that. If FotMob lacks data (e.g., corners are missing or no scores found), do NOT guess or hallucinate stats. You must strictly use the data provided.\n" +
+                             $"Please determine the final result for each match (leg) listed in the bet based strictly on the provided API JSON data.\n" +
+                             $"CRITICAL DATE CHECK: The bet was uploaded to our system on {betPlacedAt:yyyy-MM-dd}. The JSON data attached (if any) represents the correct match found within a few days of this upload date. You MUST use the fixture provided in the JSON, even if its start time is slightly before the upload date (e.g. if the user uploaded the slip a day late or is testing old bets). Do not reject the provided JSON fixture!\n" +
+                             $"CRITICAL FOR API VERIFICATION: In the `fullAnalysis` field, the VERY FIRST line MUST explicitly state whether API JSON data (FotMob/SofaScore) was successfully provided and what it contained. E.g., 'API Status: Match found, but no scores available yet' or 'API Status: Scores found (1-0)'. If the API lacked data (e.g., corners are missing or no scores found), do NOT guess or hallucinate stats. You must strictly use the data provided or fallback to Google Search.\n" +
                              $"CRITICAL FOR STATS AND SCORES: You MUST differentiate between Half-Time (HT) and Full-Time (FT) results! If the market specifies '1st Half' or 'Half Time', you must check the half-time stats. Otherwise, you MUST use the FINAL FULL-TIME (FT) score and stats! Double check that the stats you are pulling are for the FULL match and not just the first half. A match is definitively finished ONLY if `header.status.reason.short` is 'FT', 'AET', or 'PEN', or if the match clearly reached full time and is not ongoing. IMPORTANT: FotMob's `general.finished` and `header.status.finished` flags are sometimes incorrectly true before post-match verification while the match is still live! You MUST ignore `finished: true` if `header.status.ongoing` is true, if `liveTime` is present, or if `reason.short` indicates a live minute (e.g. '83\\''). Do not grade the bet as finished prematurely!\n" +
                              $"CRITICAL FOR EXTRA TIME: Unless the market explicitly says 'To Qualify', 'To Lift Trophy', or 'Including Extra Time', ALL bets (goals, cards, corners, match result, player props) apply ONLY to Regular Time (90 minutes + injury time). Events that occur in Extra Time (e.g., the 111th minute of a 120-minute match) DO NOT COUNT! For example, if a player receives a yellow card in Extra Time, a standard 'Player Booked' bet is LOST.\n" +
-                             $"CRITICAL FOR SCREENSHOTS: I will attach the RAW JSON statistics fetched directly from the FotMob API for the matches in this bet slip if available. You MUST carefully parse this JSON to find the exact scores for the specific teams requested in the bet legs! This JSON data is your absolute primary source of truth.\n" +
-                             $"CRITICAL FOR FALLBACK / GOOGLE SEARCH: If FotMob lacks data AND the match has started, you MUST use your Google Search tool (checking ESPN, Flashscore, etc.). If the match has NOT STARTED, do NOT use Google Search for stats! DO NOT guess stats. When searching, you MUST strictly follow this HARD GUARDRAIL rule:\n" +
+                             $"CRITICAL FOR SCREENSHOTS: I will attach the RAW JSON statistics fetched directly from our APIs (FotMob/SofaScore) for the matches in this bet slip if available. You MUST carefully parse this JSON to find the exact scores for the specific teams requested in the bet legs! This JSON data is your absolute primary source of truth.\n" +
+                             $"CRITICAL FOR FALLBACK / GOOGLE SEARCH: If the API lacks data AND the match has started, you MUST use your Google Search tool (checking ESPN, Flashscore, etc.). If the match has NOT STARTED, do NOT use Google Search for stats! DO NOT guess stats. When searching, you MUST strictly follow this HARD GUARDRAIL rule:\n" +
                              $"HARD GUARDRAIL: You MUST explicitly verify the exact DATE of the match you find on Google. The match date you pull results from MUST be within 5 days of {betPlacedAt:yyyy-MM-dd} (or the explicitly stated start time if one exists). If the search result does not clearly state the exact date of the match, or if it is an old historical match outside of this 5-day window, you MUST completely reject the result and mark the leg outcome as 'UNKNOWN'. Do NOT mark a bet as Lost or Won using an unverified date or an old historical match score!\n" +
                              $"When searching, you must ALSO strictly verify these two things:\n" +
                              (matchStartTime.HasValue 
                                  ? $"1. THE EXACT TIMEFRAME: We have ALREADY determined the exact start time for this match from our API: {matchStartTime.Value:yyyy-MM-dd HH:mm} UTC. You MUST find the match that corresponds to this EXACT UTC date and time!\n"
                                  : $"1. THE EXACT TIMEFRAME: The exact match time is unknown, but this bet slip was uploaded at {betPlacedAt:yyyy-MM-dd HH:mm} UTC. You MUST find the VERY FIRST match played chronologically ON OR AFTER this upload time.\n") +
                              $"2. THE TEAMS/PLAYERS ORDER: You must strictly verify the exact order of the players/teams (Home vs Away). A match between 'Player A vs Player B' is fundamentally different from 'Player B vs Player A'. If they played multiple times recently, the Home/Away order is your source of truth to pick the right match!\n" +
-                             $"CRITICAL FOR SOURCES: For every match, explicitly state your source in the 'stats' field. If you used FotMob JSON, write 'Verified via provided FotMob JSON'. If you were provided FotMob JSON but had to use Google Search because FotMob lacked the specific statistic (e.g. 1st half corners), you MUST explicitly state: 'FotMob data lacked this specific stat; Verified via Google Search'. If you use Google Search, you MUST include exactly ONE URL to the specific source page you used (e.g. https://www.sofascore.com/tennis/match/zverev-paul/xyz).\n" +
+                             $"CRITICAL FOR SOURCES: For every match, explicitly state your source in the 'stats' field. If you used FotMob or SofaScore JSON, write 'Verified via provided JSON'. If you were provided JSON but had to use Google Search because the JSON lacked the specific statistic, you MUST explicitly state: 'JSON data lacked this specific stat; Verified via Google Search'. If you use Google Search, you MUST include exactly ONE URL to the specific source page you used (e.g. https://www.sofascore.com/tennis/match/zverev-paul/xyz).\n" +
                              $"CRITICAL FOR PLAYER PROPS (STARTER RULE & VOIDS): ALL player proposition bets (e.g., Goalscorer, Player to be Carded, Shots) have strict void rules! Rule 1: If a player NEVER steps on the pitch (0 minutes played, not in squad, or left on bench), the outcome MUST ALWAYS BE MARKED AS 'Void', regardless of whether it's a live bet or a Power Sub! Rule 2: If the bet slip is NOT marked as `isLive: true`, the player MUST be in the STARTING XI. If they do not start (even if they are subbed on later), it MUST be marked as 'Void'. Rule 3: If `isLive` is true, the starter rule does not apply; if they are subbed on later and play, the bet stands. Rule 4: 'Power Sub' bets ONLY activate if the named player STARTS the match; if the named player does not start, the Power Sub bet is 'Void' (the substitute is ignored).\n" +
                              $"CRITICAL FOR POWER SUB: If the selection contains '(Power Sub)' (or 'Super Sub'), the bet transfers to the substitute ONLY IF the named player started the match! If they started and are substituted off, the stats of the player who comes on for them MUST be added to their total! To do this, look at the FotMob 'events' array for a 'Substitution' event where 'swap' contains the named player. The other player in the 'swap' array is the substitute. Find both players in 'playerStats' and mathematically add their stats together.\n" +
                              $"CRITICAL FOR ASIAN HANDICAPS: If a market includes a score in parentheses like '(0-1)', it means this was a live bet placed at that score. For live Asian Handicaps in soccer/football, the handicap applies ONLY to the remainder of the match! You must subtract this starting score from the final score before applying the handicap to determine if the bet won or lost.\n" +
@@ -407,6 +406,18 @@ namespace BettingApp.Services
                             {
                                 text = $"=== FOTMOB RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n========================="
                             });
+                        }
+                        else
+                        {
+                            // If FotMob failed, try SofaScore (e.g. for Tennis)
+                            var sofaJson = await _sofaScore.GetMatchStatsJsonAsync(matchName, betPlacedAt, betId);
+                            if (!string.IsNullOrEmpty(sofaJson))
+                            {
+                                partsList.Add(new
+                                {
+                                    text = $"=== SOFASCORE RAW JSON FOR MATCH {matchName} ===\n{sofaJson}\n========================="
+                                });
+                            }
                         }
                         
                         // Add a small delay to avoid rate limits on combo bets
@@ -479,11 +490,11 @@ namespace BettingApp.Services
                 LogAiUsage(json, betLabel);
 
                 using var doc = JsonDocument.Parse(json);
-                var text = doc.RootElement
+                var parts = doc.RootElement
                     .GetProperty("candidates")[0]
                     .GetProperty("content")
-                    .GetProperty("parts")[0]
-                    .GetProperty("text").GetString();
+                    .GetProperty("parts");
+                var text = parts[parts.GetArrayLength() - 1].GetProperty("text").GetString();
 
                 if (!string.IsNullOrEmpty(text))
                 {
