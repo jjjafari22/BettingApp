@@ -178,9 +178,10 @@ namespace BettingApp.Services
                              "   - matchDate (e.g. '22.Aug 04:00', 'Tomorrow 18:00', or '2023-10-25'). CRITICAL: Look very carefully for the kickoff date and time for this match printed on the slip, or the date the bet was placed. Extract exactly what you see. If missing, return null. " +
                              "   - odds (e.g. '1.95'). CRITICAL: If multiple legs are part of a Bet Builder (grouped together for the same match) and visually share a single combined odds value, you MUST output that shared odds value for the FIRST leg, and output null for the subsequent legs in that Bet Builder.";
 
+                var fullPrompt = systemInstruction + "\n\nPlease extract the bet details from this screenshot according to the strict system instructions.";
+                
                 var payload = new
                 {
-                    systemInstruction = new { parts = new[] { new { text = systemInstruction } } },
                     contents = new[]
                     {
                         new
@@ -188,7 +189,7 @@ namespace BettingApp.Services
                             role = "user",
                             parts = new object[]
                             {
-                                new { text = "Please extract the bet details from this screenshot according to the strict system instructions." },
+                                new { text = fullPrompt },
                                 new
                                 {
                                     inlineData = new
@@ -413,9 +414,11 @@ namespace BettingApp.Services
                     }
                 }
 
+                // Insert the system instructions directly into the user prompt to bypass the Extended Thinking bug
+                partsList.Insert(0, new { text = prompt });
+
                 var payload = new
                 {
-                    systemInstruction = new { parts = new[] { new { text = prompt } } },
                     contents = new[]
                     {
                         new { role = "user", parts = partsList.ToArray() }
