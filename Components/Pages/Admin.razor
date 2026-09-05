@@ -807,8 +807,23 @@ else
                                                                                     string outcomePart = (displayOName ?? "").Substring(0, parenMatch.Index).Trim();
                                                                                     string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
                                                                                     
-                                                                                    if (string.IsNullOrEmpty(normOutcomePart) || normSel.Contains(normOutcomePart) || 
-                                                                                        (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under"))))
+                                                                                    bool isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
+                                                                                                          normSel.Contains(normOutcomePart) || 
+                                                                                                          (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under")));
+                                                                                    
+                                                                                    if (!isOutcomeMatch && normOutcomePart.EndsWith("+"))
+                                                                                    {
+                                                                                        if (int.TryParse(normOutcomePart.TrimEnd('+'), out int plusVal))
+                                                                                        {
+                                                                                            string eqOver = $"over{plusVal - 1}.5";
+                                                                                            if (normSel.Contains(eqOver) || (plusVal == 1 && (normSel.Contains("assist") || normSel.Contains("score") || normSel.Contains("goal") || normSel.Contains("1or"))))
+                                                                                            {
+                                                                                                isOutcomeMatch = true;
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                    
+                                                                                    if (isOutcomeMatch)
                                                                                     {
                                                                                         isMatch = true;
                                                                                     }
@@ -826,8 +841,23 @@ else
                                                                                         string outcomePart = (displayOName ?? "").Substring(0, simpleParenMatch.Index).Trim();
                                                                                         string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
                                                                                         
-                                                                                        if (string.IsNullOrEmpty(normOutcomePart) || normSel.Contains(normOutcomePart) || 
-                                                                                            (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under"))))
+                                                                                        bool isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
+                                                                                                              normSel.Contains(normOutcomePart) || 
+                                                                                                              (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under")));
+                                                                                        
+                                                                                        if (!isOutcomeMatch && normOutcomePart.EndsWith("+"))
+                                                                                        {
+                                                                                            if (int.TryParse(normOutcomePart.TrimEnd('+'), out int plusVal))
+                                                                                            {
+                                                                                                string eqOver = $"over{plusVal - 1}.5";
+                                                                                                if (normSel.Contains(eqOver) || (plusVal == 1 && (normSel.Contains("assist") || normSel.Contains("score") || normSel.Contains("goal") || normSel.Contains("1or"))))
+                                                                                                {
+                                                                                                    isOutcomeMatch = true;
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                        
+                                                                                        if (isOutcomeMatch)
                                                                                         {
                                                                                             isMatch = true;
                                                                                         }
