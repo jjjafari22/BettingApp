@@ -298,11 +298,11 @@ namespace BettingApp.Services
                             {
                                 // We pass DateTime.UtcNow since ExtractBetSlipDataAsync doesn't have the explicit betPlacedAt from DB yet, 
                                 // but the bet slip is freshly uploaded so UtcNow is perfectly fine!
-                                string? resolvedMatch = await _sofaScore.ResolvePlayerMatchAsync(leg.Selection, DateTime.UtcNow, betId);
+                                string? resolvedMatch = await _fotMob.ResolvePlayerMatchAsync(leg.Selection, DateTime.UtcNow, betId);
                                 if (!string.IsNullOrEmpty(resolvedMatch))
                                 {
                                     leg.Match = resolvedMatch;
-                                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}SofaScore Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
+                                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}FotMob Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
                                 }
                             }
                         }

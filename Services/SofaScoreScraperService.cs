@@ -159,7 +159,7 @@ namespace BettingApp.Services
             try
             {
                 // Try to extract just the player name (usually the first part before a dash)
-                string playerName = selection.Split(new[] { " - ", " : ", " to " }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                string playerName = selection.Split(new[] { " - ", ": ", ":", " to " }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
 
                 string searchUrl = $"https://www.sofascore.com/api/v1/search/all?q={Uri.EscapeDataString(playerName)}";
                 var searchResponse = await _httpClient.GetAsync(searchUrl);

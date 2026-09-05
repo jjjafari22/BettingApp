@@ -481,6 +481,83 @@ namespace BettingApp.Services
             return flatStats;
         }
 
+        public async Task<string?> ResolvePlayerMatchAsync(string selection, DateTime? betPlacedAt, int? betId = null)
+        {
+            if (string.IsNullOrEmpty(selection)) return null;
+            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Extraction]";
+            
+            try
+            {
+                // Try to extract just the player name (usually the first part before a dash or colon)
+                string playerName = selection.Split(new[] { " - ", ": ", ":", " to " }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+
+                string searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(playerName)}";
+                var response = await _httpClient.GetAsync(searchUrl);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Player Search API failed with status: {response.StatusCode}");
+                    return null;
+                }
+
+                string json = await response.Content.ReadAsStringAsync();
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                
+                if (!doc.RootElement.TryGetProperty("squadMemberSuggest", out var playerSuggests) || playerSuggests.GetArrayLength() == 0)
+                {
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: No player found for '{playerName}'");
+                    return null;
+                }
+                
+                var options = playerSuggests[0].GetProperty("options");
+                if (options.GetArrayLength() == 0) return null;
+                
+                var payload = options[0].GetProperty("payload");
+                string teamName = payload.GetProperty("teamName").GetString() ?? "";
+                string teamId = payload.GetProperty("teamId").GetInt32().ToString();
+                
+                if (string.IsNullOrEmpty(teamName)) return null;
+
+                // 2. Get team's upcoming matches
+                string teamSearchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(teamName)}";
+                var teamResponse = await _httpClient.GetAsync(teamSearchUrl);
+                if (!teamResponse.IsSuccessStatusCode) return null;
+
+                string teamJson = await teamResponse.Content.ReadAsStringAsync();
+                using var teamDoc = System.Text.Json.JsonDocument.Parse(teamJson);
+                
+                if (!teamDoc.RootElement.TryGetProperty("matchSuggest", out var matchSuggests) || matchSuggests.GetArrayLength() == 0)
+                {
+                    return null;
+                }
+                
+                var matchOptions = matchSuggests[0].GetProperty("options");
+                foreach (var opt in matchOptions.EnumerateArray())
+                {
+                    var matchPayload = opt.GetProperty("payload");
+                    if (matchPayload.TryGetProperty("homeTeamId", out var hIdProp) && matchPayload.TryGetProperty("awayTeamId", out var aIdProp))
+                    {
+                        string homeId = hIdProp.GetString() ?? "";
+                        string awayId = aIdProp.GetString() ?? "";
+                        
+                        if (homeId == teamId || awayId == teamId)
+                        {
+                            string homeName = matchPayload.GetProperty("homeName").GetString() ?? "";
+                            string awayName = matchPayload.GetProperty("awayName").GetString() ?? "";
+                            string resolved = $"{homeName} vs {awayName}";
+                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Resolved player '{playerName}' to match: '{resolved}'");
+                            return resolved;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Exception in ResolvePlayerMatchAsync: {ex.Message}");
+            }
+
+            return null;
+        }
+
         public static bool CheckSubset(string[] tokensA, string[] tokensB)
         {
             if (tokensA.Length == 0) return true;
