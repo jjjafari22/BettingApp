@@ -292,6 +292,21 @@ namespace BettingApp.Services
                     
                     if (result != null && result.Legs != null)
                     {
+                        foreach (var leg in result.Legs)
+                        {
+                            if (leg != null && string.IsNullOrWhiteSpace(leg.Match) && !string.IsNullOrWhiteSpace(leg.Selection))
+                            {
+                                // We pass DateTime.UtcNow since ExtractBetSlipDataAsync doesn't have the explicit betPlacedAt from DB yet, 
+                                // but the bet slip is freshly uploaded so UtcNow is perfectly fine!
+                                string? resolvedMatch = await _sofaScore.ResolvePlayerMatchAsync(leg.Selection, DateTime.UtcNow);
+                                if (!string.IsNullOrEmpty(resolvedMatch))
+                                {
+                                    leg.Match = resolvedMatch;
+                                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}SofaScore Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
+                                }
+                            }
+                        }
+
                         var groups = result.Legs.Where(l => !string.IsNullOrEmpty(l?.Match)).GroupBy(l => l.Match.Trim().ToLowerInvariant());
                         // It is a Bet Builder if there are multiple legs for the same match AND they share odds (indicated by the AI leaving odds null for the subsequent legs)
                         result.IsBetBuilder = groups.Any(g => g.Count() > 1 && g.Any(l => string.IsNullOrWhiteSpace(l.Odds)));

@@ -28,14 +28,9 @@ namespace BettingApp.Services
             try
             {
                 var teams = matchName.Split(new[] { " vs ", "-", " v " }, StringSplitOptions.RemoveEmptyEntries);
-                if (teams.Length < 2)
-                {
-                    // Not a standard format, silently fail and let LLM use search
-                    return null;
-                }
-
+                
                 string player1 = teams[0].Trim();
-                string player2 = teams[1].Trim();
+                string player2 = teams.Length > 1 ? teams[1].Trim() : "";
 
                 // 1. Search for Player 1 to get their entity ID
                 string searchUrl = $"https://api.sofascore.com/api/v1/search/all?q={Uri.EscapeDataString(player1)}";
@@ -88,9 +83,16 @@ namespace BettingApp.Services
 
                 if (eventsDoc.RootElement.TryGetProperty("events", out var eventsArray))
                 {
-                    // 3. Find the event against Player 2
+                    // 3. Find the event
                     foreach (var ev in eventsArray.EnumerateArray())
                     {
+                        if (string.IsNullOrEmpty(player2))
+                        {
+                            // If we only have player1 (no "vs"), return their most recent event
+                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} SofaScore: Found Single-Player Match ID {ev.GetProperty("id").GetInt32()} for {matchName}");
+                            return ev.GetRawText();
+                        }
+
                         string homeTeam = ev.GetProperty("homeTeam").GetProperty("name").GetString() ?? "";
                         string awayTeam = ev.GetProperty("awayTeam").GetProperty("name").GetString() ?? "";
 
@@ -113,6 +115,12 @@ namespace BettingApp.Services
                     {
                         foreach (var ev in nextEventsArray.EnumerateArray())
                         {
+                            if (string.IsNullOrEmpty(player2))
+                            {
+                                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} SofaScore: Found Future Single-Player Match ID {ev.GetProperty("id").GetInt32()} for {matchName}");
+                                return ev.GetRawText();
+                            }
+
                             string homeTeam = ev.GetProperty("homeTeam").GetProperty("name").GetString() ?? "";
                             string awayTeam = ev.GetProperty("awayTeam").GetProperty("name").GetString() ?? "";
 
@@ -133,6 +141,123 @@ namespace BettingApp.Services
             }
 
             return null;
+        }
+
+        public async Task<string?> ResolvePlayerMatchAsync(string selection, DateTime? betPlacedAt)
+        {
+            if (string.IsNullOrEmpty(selection)) return null;
+            
+            // Default to now if not provided
+            var targetDate = betPlacedAt ?? DateTime.UtcNow;
+            Console.WriteLine($"[SofaScore DEBUG] ResolvePlayerMatchAsync started for selection: '{selection}', targetDate: {targetDate}");
+
+            try
+            {
+                // Try to extract just the player name (usually the first part before a dash)
+                string playerName = selection.Split(new[] { " - ", " : ", " to " }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                Console.WriteLine($"[SofaScore DEBUG] Extracted player name: '{playerName}'");
+
+                string searchUrl = $"https://api.sofascore.com/api/v1/search/all?q={Uri.EscapeDataString(playerName)}";
+                var searchResponse = await _httpClient.GetAsync(searchUrl);
+                if (!searchResponse.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[SofaScore DEBUG] Search API failed with status: {searchResponse.StatusCode}");
+                    return null;
+                }
+
+                string searchJson = await searchResponse.Content.ReadAsStringAsync();
+                using var searchDoc = JsonDocument.Parse(searchJson);
+                
+                if (!searchDoc.RootElement.TryGetProperty("results", out var results) || results.GetArrayLength() == 0)
+                {
+                    Console.WriteLine($"[SofaScore DEBUG] No results found for player '{playerName}'");
+                    return null;
+                }
+
+                // Grab the team from the first valid player entity
+                foreach (var result in results.EnumerateArray())
+                {
+                    if (result.TryGetProperty("type", out var type) && type.GetString() == "player")
+                    {
+                        if (result.TryGetProperty("entity", out var entity))
+                        {
+                            if (entity.TryGetProperty("team", out var team) && team.TryGetProperty("id", out var teamIdProp))
+                            {
+                                int teamId = teamIdProp.GetInt32();
+                                Console.WriteLine($"[SofaScore DEBUG] Found Team ID: {teamId}");
+                                return await FindClosestMatchForTeamAsync(teamId, targetDate);
+                            }
+                            else if (entity.TryGetProperty("name", out var playerNameStr))
+                            {
+                                Console.WriteLine($"[SofaScore DEBUG] Found Individual Player: {playerNameStr.GetString()}");
+                                return playerNameStr.GetString(); // e.g. "Carlos Alcaraz"
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SofaScore DEBUG] Exception in ResolvePlayerMatchAsync: {ex.Message}");
+            }
+
+            Console.WriteLine($"[SofaScore DEBUG] Returning null from ResolvePlayerMatchAsync");
+            return null;
+        }
+
+        private async Task<string?> FindClosestMatchForTeamAsync(int teamId, DateTime targetDate)
+        {
+            string? closestMatch = null;
+            double minDiff = double.MaxValue;
+            Console.WriteLine($"[SofaScore DEBUG] FindClosestMatchForTeamAsync started for teamId: {teamId}");
+
+            // Check both past and future events to find the one closest to the bet placement date
+            string[] endpoints = { "last/0", "next/0" };
+            
+            foreach (var endpoint in endpoints)
+            {
+                try 
+                {
+                    string url = $"https://api.sofascore.com/api/v1/team/{teamId}/events/{endpoint}";
+                    var response = await _httpClient.GetAsync(url);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine($"[SofaScore DEBUG] endpoint {endpoint} failed with status {response.StatusCode}");
+                        continue;
+                    }
+
+                    string json = await response.Content.ReadAsStringAsync();
+                    using var doc = JsonDocument.Parse(json);
+
+                    if (doc.RootElement.TryGetProperty("events", out var eventsArray))
+                    {
+                        foreach (var ev in eventsArray.EnumerateArray())
+                        {
+                            if (ev.TryGetProperty("startTimestamp", out var startTs))
+                            {
+                                var eventDate = DateTimeOffset.FromUnixTimeSeconds(startTs.GetInt64()).UtcDateTime;
+                                double diff = Math.Abs((eventDate - targetDate).TotalHours);
+                                
+                                // We assume the bet was placed within 5 days of the match
+                                if (diff < minDiff && diff < 120) 
+                                {
+                                    minDiff = diff;
+                                    string homeTeam = ev.GetProperty("homeTeam").GetProperty("name").GetString() ?? "";
+                                    string awayTeam = ev.GetProperty("awayTeam").GetProperty("name").GetString() ?? "";
+                                    closestMatch = $"{homeTeam} vs {awayTeam}";
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SofaScore DEBUG] Exception in endpoint {endpoint}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine($"[SofaScore DEBUG] FindClosestMatchForTeamAsync returning: '{closestMatch}' (minDiff: {minDiff})");
+            return closestMatch;
         }
 
         private bool FuzzyMatch(string query, string target)
