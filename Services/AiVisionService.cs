@@ -245,7 +245,7 @@ namespace BettingApp.Services
 
                 var apiUrl = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
-                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
+                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
 
                 var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token);
@@ -359,7 +359,7 @@ namespace BettingApp.Services
 
             catch (Exception ex)
             {
-                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
+                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
                 Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}EXCEPTION in ExtractBetSlipDataAsync: {ex.ToString()}");
                 return (null, $"Exception: {ex.Message}");
             }

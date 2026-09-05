@@ -13,24 +13,15 @@ namespace BettingApp.Services
         public SofaScoreScraperService(HttpClient httpClient)
         {
             _httpClient = httpClient;
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            _httpClient.DefaultRequestHeaders.Add("Accept", "*/*");
-            _httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.9");
-            _httpClient.DefaultRequestHeaders.Add("Origin", "https://www.sofascore.com");
-            _httpClient.DefaultRequestHeaders.Add("Referer", "https://www.sofascore.com/");
-            _httpClient.DefaultRequestHeaders.Add("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"");
-            _httpClient.DefaultRequestHeaders.Add("Sec-Ch-Ua-Mobile", "?0");
-            _httpClient.DefaultRequestHeaders.Add("Sec-Ch-Ua-Platform", "\"macOS\"");
-            _httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Dest", "empty");
-            _httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Mode", "cors");
-            _httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Site", "same-origin");
-            _httpClient.DefaultRequestHeaders.Add("Cache-Control", "no-cache");
+            // Trying a non-browser User-Agent to avoid Cloudflare TLS fingerprint mismatch penalties
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", "BettingApp/1.0 (Contact: admin@example.com)");
+            _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
         }
 
         public async Task<string?> GetMatchStatsJsonAsync(string matchName, DateTime? betPlacedAt = null, int? betId = null)
         {
             if (string.IsNullOrEmpty(matchName)) return null;
-            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
+            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Extraction]";
 
             try
             {
@@ -162,7 +153,7 @@ namespace BettingApp.Services
         {
             if (string.IsNullOrEmpty(selection)) return null;
             
-            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
+            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Extraction]";
             var targetDate = betPlacedAt ?? DateTime.UtcNow;
 
             try
@@ -219,7 +210,7 @@ namespace BettingApp.Services
         {
             string? closestMatch = null;
             double minDiff = double.MaxValue;
-            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
+            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Extraction]";
 
             // Check both past and future events to find the one closest to the bet placement date
             string[] endpoints = { "last/0", "next/0" };
