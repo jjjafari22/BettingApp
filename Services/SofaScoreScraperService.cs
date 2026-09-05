@@ -13,11 +13,18 @@ namespace BettingApp.Services
         public SofaScoreScraperService(HttpClient httpClient)
         {
             _httpClient = httpClient;
-            // SofaScore requires standard browser headers
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             _httpClient.DefaultRequestHeaders.Add("Accept", "*/*");
+            _httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.9");
             _httpClient.DefaultRequestHeaders.Add("Origin", "https://www.sofascore.com");
             _httpClient.DefaultRequestHeaders.Add("Referer", "https://www.sofascore.com/");
+            _httpClient.DefaultRequestHeaders.Add("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"");
+            _httpClient.DefaultRequestHeaders.Add("Sec-Ch-Ua-Mobile", "?0");
+            _httpClient.DefaultRequestHeaders.Add("Sec-Ch-Ua-Platform", "\"macOS\"");
+            _httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Dest", "empty");
+            _httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Mode", "cors");
+            _httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Site", "same-origin");
+            _httpClient.DefaultRequestHeaders.Add("Cache-Control", "no-cache");
         }
 
         public async Task<string?> GetMatchStatsJsonAsync(string matchName, DateTime? betPlacedAt = null, int? betId = null)
@@ -33,7 +40,7 @@ namespace BettingApp.Services
                 string player2 = teams.Length > 1 ? teams[1].Trim() : "";
 
                 // 1. Search for Player 1 to get their entity ID
-                string searchUrl = $"https://api.sofascore.com/api/v1/search/all?q={Uri.EscapeDataString(player1)}";
+                string searchUrl = $"https://www.sofascore.com/api/v1/search/all?q={Uri.EscapeDataString(player1)}";
                 var searchResponse = await _httpClient.GetAsync(searchUrl);
                 if (!searchResponse.IsSuccessStatusCode)
                 {
@@ -74,7 +81,7 @@ namespace BettingApp.Services
                 }
 
                 // 2. Fetch recent events for this player
-                string eventsUrl = $"https://api.sofascore.com/api/v1/team/{playerId}/events/last/0";
+                string eventsUrl = $"https://www.sofascore.com/api/v1/team/{playerId}/events/last/0";
                 var eventsResponse = await _httpClient.GetAsync(eventsUrl);
                 if (!eventsResponse.IsSuccessStatusCode) return null;
 
@@ -109,7 +116,7 @@ namespace BettingApp.Services
                 }
                 
                 // 4. Try future/next events just in case it hasn't started yet
-                string nextEventsUrl = $"https://api.sofascore.com/api/v1/team/{playerId}/events/next/0";
+                string nextEventsUrl = $"https://www.sofascore.com/api/v1/team/{playerId}/events/next/0";
                 var nextResponse = await _httpClient.GetAsync(nextEventsUrl);
                 if (nextResponse.IsSuccessStatusCode)
                 {
@@ -151,25 +158,23 @@ namespace BettingApp.Services
             return null;
         }
 
-        public async Task<string?> ResolvePlayerMatchAsync(string selection, DateTime? betPlacedAt)
+        public async Task<string?> ResolvePlayerMatchAsync(string selection, DateTime? betPlacedAt, int? betId = null)
         {
             if (string.IsNullOrEmpty(selection)) return null;
             
-            // Default to now if not provided
+            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
             var targetDate = betPlacedAt ?? DateTime.UtcNow;
-            Console.WriteLine($"[SofaScore DEBUG] ResolvePlayerMatchAsync started for selection: '{selection}', targetDate: {targetDate}");
 
             try
             {
                 // Try to extract just the player name (usually the first part before a dash)
                 string playerName = selection.Split(new[] { " - ", " : ", " to " }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
-                Console.WriteLine($"[SofaScore DEBUG] Extracted player name: '{playerName}'");
 
-                string searchUrl = $"https://api.sofascore.com/api/v1/search/all?q={Uri.EscapeDataString(playerName)}";
+                string searchUrl = $"https://www.sofascore.com/api/v1/search/all?q={Uri.EscapeDataString(playerName)}";
                 var searchResponse = await _httpClient.GetAsync(searchUrl);
                 if (!searchResponse.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"[SofaScore DEBUG] Search API failed with status: {searchResponse.StatusCode}");
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} SofaScore: Search API failed with status: {searchResponse.StatusCode}");
                     return null;
                 }
 
@@ -178,7 +183,7 @@ namespace BettingApp.Services
                 
                 if (!searchDoc.RootElement.TryGetProperty("results", out var results) || results.GetArrayLength() == 0)
                 {
-                    Console.WriteLine($"[SofaScore DEBUG] No results found for player '{playerName}'");
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} SofaScore: No results found for player '{playerName}'");
                     return null;
                 }
 
@@ -192,12 +197,10 @@ namespace BettingApp.Services
                             if (entity.TryGetProperty("team", out var team) && team.TryGetProperty("id", out var teamIdProp))
                             {
                                 int teamId = teamIdProp.GetInt32();
-                                Console.WriteLine($"[SofaScore DEBUG] Found Team ID: {teamId}");
-                                return await FindClosestMatchForTeamAsync(teamId, targetDate);
+                                return await FindClosestMatchForTeamAsync(teamId, targetDate, betId);
                             }
                             else if (entity.TryGetProperty("name", out var playerNameStr))
                             {
-                                Console.WriteLine($"[SofaScore DEBUG] Found Individual Player: {playerNameStr.GetString()}");
                                 return playerNameStr.GetString(); // e.g. "Carlos Alcaraz"
                             }
                         }
@@ -206,18 +209,17 @@ namespace BettingApp.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SofaScore DEBUG] Exception in ResolvePlayerMatchAsync: {ex.Message}");
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} SofaScore: Exception in ResolvePlayerMatchAsync: {ex.Message}");
             }
 
-            Console.WriteLine($"[SofaScore DEBUG] Returning null from ResolvePlayerMatchAsync");
             return null;
         }
 
-        private async Task<string?> FindClosestMatchForTeamAsync(int teamId, DateTime targetDate)
+        private async Task<string?> FindClosestMatchForTeamAsync(int teamId, DateTime targetDate, int? betId = null)
         {
             string? closestMatch = null;
             double minDiff = double.MaxValue;
-            Console.WriteLine($"[SofaScore DEBUG] FindClosestMatchForTeamAsync started for teamId: {teamId}");
+            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
 
             // Check both past and future events to find the one closest to the bet placement date
             string[] endpoints = { "last/0", "next/0" };
@@ -226,11 +228,11 @@ namespace BettingApp.Services
             {
                 try 
                 {
-                    string url = $"https://api.sofascore.com/api/v1/team/{teamId}/events/{endpoint}";
+                    string url = $"https://www.sofascore.com/api/v1/team/{teamId}/events/{endpoint}";
                     var response = await _httpClient.GetAsync(url);
                     if (!response.IsSuccessStatusCode)
                     {
-                        Console.WriteLine($"[SofaScore DEBUG] endpoint {endpoint} failed with status {response.StatusCode}");
+                        Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} SofaScore: endpoint {endpoint} failed with status {response.StatusCode}");
                         continue;
                     }
 
@@ -241,13 +243,14 @@ namespace BettingApp.Services
                     {
                         foreach (var ev in eventsArray.EnumerateArray())
                         {
-                            if (ev.TryGetProperty("startTimestamp", out var startTs))
+                            if (ev.TryGetProperty("startTimestamp", out var startTsProp))
                             {
-                                var eventDate = DateTimeOffset.FromUnixTimeSeconds(startTs.GetInt64()).UtcDateTime;
+                                long ts = startTsProp.GetInt64();
+                                DateTime eventDate = DateTimeOffset.FromUnixTimeSeconds(ts).UtcDateTime;
                                 double diff = Math.Abs((eventDate - targetDate).TotalHours);
                                 
-                                // We assume the bet was placed within 5 days of the match
-                                if (diff < minDiff && diff < 120) 
+                                // Limit to 120 hours to prevent grabbing matches from weeks away
+                                if (diff < minDiff && diff < 120)
                                 {
                                     minDiff = diff;
                                     string homeTeam = ev.GetProperty("homeTeam").GetProperty("name").GetString() ?? "";
@@ -260,11 +263,14 @@ namespace BettingApp.Services
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[SofaScore DEBUG] Exception in endpoint {endpoint}: {ex.Message}");
+                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} SofaScore: Exception in endpoint {endpoint}: {ex.Message}");
                 }
             }
 
-            Console.WriteLine($"[SofaScore DEBUG] FindClosestMatchForTeamAsync returning: '{closestMatch}' (minDiff: {minDiff})");
+            if (!string.IsNullOrEmpty(closestMatch))
+            {
+                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} SofaScore: Found closest match in history: '{closestMatch}'");
+            }
             return closestMatch;
         }
 
