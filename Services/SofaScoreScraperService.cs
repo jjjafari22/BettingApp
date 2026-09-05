@@ -274,12 +274,36 @@ namespace BettingApp.Services
             
             query = query.ToLowerInvariant();
             target = target.ToLowerInvariant();
-            
-            // Often just matching the last name is enough (e.g. "Alcaraz" vs "Carlos Alcaraz")
-            var queryTokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            foreach (var token in queryTokens)
+
+            // Strip punctuation for tokenization
+            var punctuation = new[] { '.', ',', '-', '/' };
+            string cleanQuery = query;
+            string cleanTarget = target;
+            foreach (var p in punctuation)
             {
-                if (token.Length > 3 && target.Contains(token)) return true;
+                cleanQuery = cleanQuery.Replace(p.ToString(), " ");
+                cleanTarget = cleanTarget.Replace(p.ToString(), " ");
+            }
+
+            var qTokens = cleanQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length > 1).ToList();
+            var tTokens = cleanTarget.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length > 1).ToList();
+
+            if (qTokens.Count == 0 || tTokens.Count == 0)
+                return target.Contains(query) || query.Contains(target);
+
+            // If ALL meaningful tokens in query are found in target (or vice-versa), it's a match.
+            // e.g. query="a gea", target="arthur gea" -> "gea" matches "gea". 
+            // Wait, "a" is length 1, so it was filtered out! So qTokens=["gea"], tTokens=["arthur", "gea"].
+            // "gea" is in tTokens, so it matches!
+            bool qInT = qTokens.All(qt => tTokens.Any(tt => tt == qt || tt.Contains(qt) || qt.Contains(tt)));
+            bool tInQ = tTokens.All(tt => qTokens.Any(qt => qt == tt || qt.Contains(tt) || tt.Contains(qt)));
+
+            if (qInT || tInQ) return true;
+
+            // Fallback: If any single token longer than 2 characters exactly matches a token in the target
+            foreach (var token in qTokens)
+            {
+                if (token.Length > 2 && tTokens.Any(tt => tt == token)) return true;
             }
             
             return target.Contains(query) || query.Contains(target);
