@@ -96,6 +96,10 @@ namespace BettingApp.Services
                         string homeTeam = ev.GetProperty("homeTeam").GetProperty("name").GetString() ?? "";
                         string awayTeam = ev.GetProperty("awayTeam").GetProperty("name").GetString() ?? "";
 
+                        bool isDoublesQuery = matchName.Contains("/") || matchName.Contains(",");
+                        bool isDoublesTarget = homeTeam.Contains("/") || awayTeam.Contains("/");
+                        if (isDoublesQuery != isDoublesTarget) continue;
+
                         if (FuzzyMatch(player2, homeTeam) || FuzzyMatch(player2, awayTeam))
                         {
                             Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} SofaScore: Found Match ID {ev.GetProperty("id").GetInt32()} for {matchName}");
@@ -123,6 +127,10 @@ namespace BettingApp.Services
 
                             string homeTeam = ev.GetProperty("homeTeam").GetProperty("name").GetString() ?? "";
                             string awayTeam = ev.GetProperty("awayTeam").GetProperty("name").GetString() ?? "";
+
+                            bool isDoublesQuery = matchName.Contains("/") || matchName.Contains(",");
+                            bool isDoublesTarget = homeTeam.Contains("/") || awayTeam.Contains("/");
+                            if (isDoublesQuery != isDoublesTarget) continue;
 
                             if (FuzzyMatch(player2, homeTeam) || FuzzyMatch(player2, awayTeam))
                             {
