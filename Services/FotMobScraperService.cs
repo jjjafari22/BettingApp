@@ -489,7 +489,9 @@ namespace BettingApp.Services
             try
             {
                 // Try to extract just the player name (usually the first part before a dash or colon)
-                string playerName = selection.Split(new[] { " - ", ": ", ":", " to " }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                string splitStr = selection.Split(new[] { " - ", ": ", ":", " to " }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                // Use regex to strip trailing numbers and modifiers (e.g. 'Marcus Rashford 2+' -> 'Marcus Rashford')
+                string playerName = System.Text.RegularExpressions.Regex.Match(splitStr, @"^([\p{L}\s\-\'\.]+)").Groups[1].Value.Trim();
 
                 string searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(playerName)}";
                 var response = await _httpClient.GetAsync(searchUrl);
