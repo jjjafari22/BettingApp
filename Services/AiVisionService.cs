@@ -168,7 +168,7 @@ namespace BettingApp.Services
                              "Extract: " +
                              "1) bookmaker (e.g. 'Unibet', 'Bet365', 'EpicBet', etc. derived from logos or UI style). " +
                              "2) isLive (boolean, true ONLY if you clearly see an explicit 'LIVE' or 'In-Play' badge, or an ongoing current match score (e.g. '1-0', '0-0') printed prominently near the teams. CRITICAL: Do NOT confuse market modifiers like '1st Half' or lines like 'Over 2.5' as live indicators! Default to false unless you are absolutely certain it is live). " +
-                             "3) totalOdds (the final combined odds of the slip, if visible). " +
+                             "3) totalOdds (the final combined odds of the slip. CRITICAL: Never include UI CSS units like 'px'! Extract ONLY the clean numerical value). " +
                              "4) stake (the amount bet, e.g. '100', '1000'). CRITICAL: Often the user will manually draw or write their stake over the image with a digital pen. You MUST look for manual handwritten digits over the image indicating the stake and prioritize that over printed text! " +
                              "5) legs: an array of objects representing each individual bet, containing: " +
                              "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST translate the team names into their standard, globally recognized English names (e.g. you MUST output 'FC Copenhagen' instead of 'FC København', and 'Bayern Munich' instead of 'Bayern München'). This is required for our Odds API to find the match. " +
@@ -203,6 +203,7 @@ namespace BettingApp.Services
                     },
                     generationConfig = new
                     {
+                        maxOutputTokens = 8192,
                         responseMimeType = "application/json",
                         responseSchema = new
                         {
@@ -262,12 +263,10 @@ namespace BettingApp.Services
 
                 // 4. Parse the response
                 using var doc = JsonDocument.Parse(responseString);
-                var candidates = doc.RootElement.GetProperty("candidates");
-                if (candidates.GetArrayLength() > 0)
-                {
-                    var parts = candidates[0].GetProperty("content").GetProperty("parts");
-                    var textResponse = parts[parts.GetArrayLength() - 1].GetProperty("text").GetString()?.Trim() ?? "";
+                string textResponse = ExtractGeminiText(doc)?.Trim() ?? "";
 
+                if (!string.IsNullOrEmpty(textResponse))
+                {
                     // Sometimes the LLM returns ```json ... ``` despite instructions. Strip it.
                     if (textResponse.StartsWith("```json")) textResponse = textResponse.Substring(7);
                     if (textResponse.StartsWith("```")) textResponse = textResponse.Substring(3);
@@ -449,6 +448,7 @@ namespace BettingApp.Services
                     },
                     generationConfig = new 
                     {
+                        maxOutputTokens = 8192,
                         responseMimeType = "application/json",
                         responseSchema = new
                         {
@@ -499,11 +499,7 @@ namespace BettingApp.Services
                 LogAiUsage(json, betLabel);
 
                 using var doc = JsonDocument.Parse(json);
-                var parts = doc.RootElement
-                    .GetProperty("candidates")[0]
-                    .GetProperty("content")
-                    .GetProperty("parts");
-                var text = parts[parts.GetArrayLength() - 1].GetProperty("text").GetString();
+                var text = ExtractGeminiText(doc);
 
                 if (!string.IsNullOrEmpty(text))
                 {
@@ -628,7 +624,7 @@ namespace BettingApp.Services
                 LogAiUsage(json, betLabel);
 
                 using var doc = JsonDocument.Parse(json);
-                var text = doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
+                var text = ExtractGeminiText(doc);
 
                 if (!string.IsNullOrEmpty(text))
                 {
@@ -674,6 +670,28 @@ namespace BettingApp.Services
                 }
             }
             catch { }
+        }
+
+        private string? ExtractGeminiText(JsonDocument doc)
+        {
+            if (doc.RootElement.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
+            {
+                var candidate = candidates[0];
+                if (candidate.TryGetProperty("content", out var content) && content.TryGetProperty("parts", out var parts) && parts.GetArrayLength() > 0)
+                {
+                    // If thinking is enabled, the actual text is usually the last part
+                    var textProp = parts[parts.GetArrayLength() - 1];
+                    if (textProp.TryGetProperty("text", out var text))
+                    {
+                        return text.GetString();
+                    }
+                }
+                else if (candidate.TryGetProperty("finishReason", out var finishReason))
+                {
+                    Console.WriteLine($"[AI WARNING] Gemini generation stopped due to: {finishReason.GetString()}");
+                }
+            }
+            return null;
         }
 
         private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "", string token = "")
