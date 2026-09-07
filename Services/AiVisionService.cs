@@ -287,6 +287,18 @@ namespace BettingApp.Services
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                     var result = JsonSerializer.Deserialize<AiVisionExtractionResult>(textResponse, options);
                     
+                    if (result != null)
+                    {
+                        if (!string.IsNullOrEmpty(result.TotalOdds))
+                        {
+                            result.TotalOdds = System.Text.RegularExpressions.Regex.Replace(result.TotalOdds, "[^0-9.,]", "").Trim();
+                        }
+                        if (!string.IsNullOrEmpty(result.Stake))
+                        {
+                            result.Stake = System.Text.RegularExpressions.Regex.Replace(result.Stake, "[^0-9.,]", "").Trim();
+                        }
+                    }
+
                     if (result != null && result.Legs != null)
                     {
                         foreach (var leg in result.Legs)
