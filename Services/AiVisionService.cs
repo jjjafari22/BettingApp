@@ -470,8 +470,8 @@ namespace BettingApp.Services
                                 ""type"": ""OBJECT"",
                                 ""properties"": {
                                     ""match"": { ""type"": ""STRING"", ""nullable"": true },
-                                    ""outcome"": { ""type"": ""STRING"", ""nullable"": true },
-                                    ""stats"": { ""type"": ""STRING"", ""nullable"": true }
+                                    ""stats"": { ""type"": ""STRING"", ""nullable"": true },
+                                    ""outcome"": { ""type"": ""STRING"", ""nullable"": true }
                                 }
                             }
                         }
