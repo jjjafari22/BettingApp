@@ -46,7 +46,7 @@
     .current-hour-row > th {
         background-color: #fff3cd !important;
     }
-    .current-day-col {
+    .coverage-table td.current-day-col {
         background-color: #fff3cd !important;
         border-left: 3px solid #ff9800 !important;
         border-right: 3px solid #ff9800 !important;
@@ -63,6 +63,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
         <h2><i class="bi bi-calendar-week me-2 text-primary"></i>Coverage Schedule</h2>
         <div>
+
             <button class="btn btn-outline-secondary me-2" @onclick="PrevWeek"><i class="bi bi-chevron-left"></i> Prev</button>
             <button class="btn btn-primary me-2" @onclick="ThisWeek">This Week</button>
             <button class="btn btn-outline-secondary" @onclick="NextWeek">Next <i class="bi bi-chevron-right"></i></button>
@@ -166,6 +167,12 @@
             <em>Tip: Click and drag your mouse across multiple cells to schedule yourself for multiple hours at once!</em>
         </div>
     }
+
+    <div class="d-md-none position-fixed bottom-0 start-50 translate-middle-x mb-4" style="z-index: 1040;">
+        <button class="btn @(isMobileMultiSelectMode ? "btn-success" : "btn-info text-white") shadow-lg rounded-pill px-4 py-2" @onclick="ToggleMobileMultiSelect">
+            <i class="bi bi-ui-checks-grid me-2"></i> @(isMobileMultiSelectMode ? "Finish Selection" : "Select Multiple")
+        </button>
+    </div>
 </div>
 
 @if (showModal)
@@ -189,7 +196,17 @@
                     {
                         <p><strong>Multiple Times Selected</strong> (See highlighted cells)</p>
                     }
-                    
+
+                    @if (modalOtherShifts != null && modalOtherShifts.Any(s => !string.IsNullOrWhiteSpace(s.Note)))
+                    {
+                        <div class="mb-3 p-2 bg-light rounded border">
+                            <label class="form-label fw-bold mb-1">Other Admins' Notes</label>
+                            @foreach (var os in modalOtherShifts.Where(s => !string.IsNullOrWhiteSpace(s.Note)))
+                            {
+                                <div class="small"><strong>@os.AdminUserName:</strong> @os.Note</div>
+                            }
+                        </div>
+                    }
 
 
                     <div class="mb-3">
@@ -247,6 +264,7 @@
     private string modalAdminUserName = "";
     private string modalNote = "";
     private bool modalIsPartlyAvailable = false;
+    private List<CoverageShift> modalOtherShifts = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -370,9 +388,37 @@
 
     private int dragStartDay = -1;
     private int dragStartHour = -1;
+    private bool isMobileMultiSelectMode = false;
+
+    private void ToggleMobileMultiSelect()
+    {
+        if (isMobileMultiSelectMode)
+        {
+            isMobileMultiSelectMode = false;
+            if (selectedDates.Count > 0)
+            {
+                OpenModalForSelection();
+            }
+        }
+        else
+        {
+            isMobileMultiSelectMode = true;
+            selectedDates.Clear();
+            StateHasChanged();
+        }
+    }
 
     private void BeginSelect(int day, int hour)
     {
+        var targetDate = startOfDisplayWeek.AddDays(day).AddHours(hour);
+        
+        if (isMobileMultiSelectMode)
+        {
+            if (selectedDates.Contains(targetDate)) selectedDates.Remove(targetDate);
+            else selectedDates.Add(targetDate);
+            return;
+        }
+
         selectedDates.Clear();
         isDragging = true;
         dragStartDay = day;
@@ -427,7 +473,10 @@
         // If selecting a single cell with an existing shift, prefill it.
         if (selectedDates.Count == 1)
         {
-            var shift = shifts.FirstOrDefault(s => s.StartTimeUtc == TimeHelpers.GetUtcFromNorwayTime(selectedDates.First()) && s.AdminUserName == currentUserName);
+            var utcTime = TimeHelpers.GetUtcFromNorwayTime(selectedDates.First());
+            var shift = shifts.FirstOrDefault(s => s.StartTimeUtc == utcTime && s.AdminUserName == currentUserName);
+            modalOtherShifts = shifts.Where(s => s.StartTimeUtc == utcTime && s.AdminUserName != currentUserName).ToList();
+
             if (shift != null)
             {
                 modalNote = shift.Note ?? "";
@@ -441,6 +490,7 @@
         }
         else
         {
+            modalOtherShifts.Clear();
             // For multiple selection, always default to current user and blank note
             modalNote = "";
             modalIsPartlyAvailable = false;
