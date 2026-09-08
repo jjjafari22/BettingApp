@@ -2768,15 +2768,15 @@ else
 
             if (newStatus == "Approved" && !string.IsNullOrEmpty(dbBet.AiVisionResultJson))
             {
-                if (dbBet.MatchStartTime == null)
+                if (IsMissingAnyStartTime(dbBet))
                 {
-                    // Fallback to AI scheduling immediately to save OddsPapi API credits
+                    // If ANY legs are missing a start time (or all of them), wake up the AI immediately to find them!
                     dbBet.NextCheckTime = DateTime.UtcNow;
                 }
                 else
                 {
-                    // MatchStartTime was already populated manually via Odds Lookup, just set NextCheckTime!
-                    var twoHoursAfter = dbBet.MatchStartTime.Value.AddHours(2);
+                    // All legs are fully scheduled! The earliest MatchStartTime is safe to use.
+                    var twoHoursAfter = dbBet.MatchStartTime!.Value.AddHours(2);
                     dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
                 }
             }
@@ -3147,7 +3147,11 @@ else
         else
         {
             var now = DateTime.UtcNow;
-            if (bet.MatchStartTime.HasValue && bet.MatchStartTime.Value > now)
+            if (bet.NextCheckTime.HasValue && bet.NextCheckTime.Value <= now)
+            {
+                <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>
+            }
+            else if (bet.MatchStartTime.HasValue && bet.MatchStartTime.Value > now)
             {
                 <div class="d-flex flex-column align-items-start gap-1" title="Match hasn't started yet">
                     <span class="badge bg-warning text-dark shadow-sm">
@@ -3157,10 +3161,6 @@ else
                         Next Check: @ToUserLocal(bet.NextCheckTime.Value).ToString("g")
                     </span>
                 </div>
-            }
-            else if (bet.NextCheckTime.Value <= now)
-            {
-                <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>
             }
             else 
             {
