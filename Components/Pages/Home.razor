@@ -827,6 +827,7 @@ else
 
     private async Task CancelBet(Bet bet)
     {
+        if (bet == null) return;
         if (bet.Status != "Pending" && bet.Status != "Processing") return;
         
         try

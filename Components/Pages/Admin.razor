@@ -1413,7 +1413,11 @@ else
                     dbBet.AiOutcomeResult = "Admin Override";
                 }
                 await context.SaveChangesAsync();
-                reviewingBetModel.AiOutcomeResult = dbBet.AiOutcomeResult;
+                
+                if (reviewingBetModel != null)
+                {
+                    reviewingBetModel.AiOutcomeResult = dbBet.AiOutcomeResult;
+                }
                 
                 await LoadCompletedBets();
                 StateHasChanged();
@@ -3018,8 +3022,8 @@ else
                 if (withTime == total) 
                 {
                     var earliest = res.Legs.Min(l => l.StartTime);
-                    var norwayTime = TimeHelpers.GetNorwayTime(earliest.Value);
-                    return new MarkupString($"<span class='badge bg-light text-dark border shadow-sm px-2 py-1' style='font-size: 0.85rem;'><i class='bi bi-calendar-event text-primary me-1'></i> {norwayTime:MMM d, HH:mm}</span>");
+                    var localTime = ToUserLocal(earliest ?? DateTime.MinValue);
+                    return new MarkupString($"<span class='badge bg-light text-dark border shadow-sm px-2 py-1' style='font-size: 0.85rem;'><i class='bi bi-calendar-event text-primary me-1'></i> {localTime:MMM d, HH:mm}</span>");
                 } 
                 else if (withTime == 0)
                 {
@@ -3158,7 +3162,7 @@ else
                         <i class="bi bi-calendar-event me-1"></i> Starts @ToUserLocal(bet.MatchStartTime.Value).ToString("g")
                     </span>
                     <span class="badge bg-light text-dark border" style="font-size: 0.65em;">
-                        Next Check: @ToUserLocal(bet.NextCheckTime.Value).ToString("g")
+                        Next Check: @(bet.NextCheckTime.HasValue ? ToUserLocal(bet.NextCheckTime.Value).ToString("g") : "Pending")
                     </span>
                 </div>
             }
@@ -3169,7 +3173,7 @@ else
                         <i class="bi bi-activity me-1"></i> Live
                     </span>
                     <span class="badge bg-light text-dark border" style="font-size: 0.65em;">
-                        Next Check: @ToUserLocal(bet.NextCheckTime.Value).ToString("g")
+                        Next Check: @(bet.NextCheckTime.HasValue ? ToUserLocal(bet.NextCheckTime.Value).ToString("g") : "Pending")
                     </span>
                 </div>
             }
