@@ -417,6 +417,68 @@ public class DiscordNotificationService : IHostedService
         }
     }
 
+    public async Task SendWakeUpAlarmAsync(BettingApp.Data.Bet bet)
+    {
+        var webhookUrl = _config["Discord:WebhookUrl"];
+        if (string.IsNullOrEmpty(webhookUrl)) return;
+
+        string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
+        string adminUrl = $"{baseUrl}/admin";
+
+        string userDisplayName = bet.UserName;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var user = await db.Users.FindAsync(bet.UserId);
+            if (user != null)
+            {
+                string discordName = !string.IsNullOrEmpty(user.DiscordUsername) ? user.DiscordUsername : bet.UserName;
+                string fullName = $"{user.FirstName} {user.LastName}".Trim();
+                
+                if (!string.IsNullOrEmpty(fullName))
+                {
+                    userDisplayName = $"{discordName} ({fullName})";
+                }
+                else
+                {
+                    userDisplayName = discordName;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load user details for discord notification.");
+        }
+
+        try 
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            var embed = new
+            {
+                title = "⚠️ Action Required: Match Starts in 1 Hour",
+                description = $"Bet **#{bet.Id}** from **{userDisplayName}** starts in roughly 1 hour. Final review needed!\n\n[Go to Admin Dashboard]({adminUrl})",
+                color = 16711680, // Red/High Priority
+                footer = new { text = "BettingApp Admin Bot" },
+                timestamp = DateTime.UtcNow.ToString("o")
+            };
+
+            var payload = new
+            {
+                content = "@here", // Pings the channel
+                username = "BettingApp AdminBot",
+                embeds = new[] { embed }
+            };
+
+            await client.PostAsJsonAsync(webhookUrl, payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to send wake up alarm reminder: {ex.Message}");
+        }
+    }
+
     // --- MESSAGE BUILDER (Unchanged) ---
     private string BuildBetMessage(Bet bet, string status, bool isUpdate)
     {

@@ -1080,6 +1080,7 @@ else
            
                         <th style="width: 150px;">Action</th>
                         <th>ID</th>
+                        <th>Match Time</th>
                         <th class="text-nowrap">Last Updated</th>
          
                         <th>Discord Username</th>
@@ -1098,6 +1099,7 @@ else
                                 </button>
                              </td>
                             <td><div class="d-flex flex-column align-items-start"><span>@bet.Id</span>@GetLivePlacedBadge(bet, "mt-1")</div></td>
+                            <td>@GetStartTimeDisplay(bet)</td>
                             <td class="text-nowrap">@ToUserLocal(bet.UpdatedAt).ToString("g")</td>
                             <td>
                                 @{
@@ -1673,14 +1675,31 @@ else
     {
         using var context = DbFactory.CreateDbContext();
         var twoMinsAgo = DateTime.UtcNow.AddMinutes(-2);
-        totalPendingBets = await context.Bets.CountAsync(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo));
-        pendingBets = await context.Bets.Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo))
-            .OrderByDescending(b => b.UpdatedAt)
+        var allPendingBets = await context.Bets.Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
+        totalPendingBets = allPendingBets.Count;
+        
+        pendingBets = allPendingBets
+            .OrderBy(b => IsMissingAnyStartTime(b) ? 0 : 1)
+            .ThenBy(b => IsMissingAnyStartTime(b) ? DateTime.MinValue : (b.MatchStartTime ?? DateTime.MaxValue))
+            .ThenByDescending(b => b.CreatedAt)
             .Skip((pendingPage - 1) * pageSize)
             .Take(pageSize)
-            .ToListAsync();
+            .ToList();
+            
         hasMorePendingBets = totalPendingBets > (pendingPage * pageSize);
         await PopulateUserLookup(pendingBets.Select(b => b.UserId));
+    }
+
+    private bool IsMissingAnyStartTime(Bet bet)
+    {
+        if (string.IsNullOrEmpty(bet.AiVisionResultJson)) return true;
+        try {
+            var res = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(bet.AiVisionResultJson);
+            if (res?.Legs != null && res.Legs.Count > 0) {
+                return res.Legs.Any(l => l.StartTime == null || l.StartTime <= DateTime.MinValue);
+            }
+            return true;
+        } catch { return true; }
     }
     
     private async Task LoadApprovedBets()
@@ -2231,6 +2250,16 @@ else
                     }
                 }
                 catch { /* Best effort */ }
+                
+                // Instantly resort the pending bets list in memory so it reflects correctly on the UI
+                if (pendingBets != null && pendingBets.Any(b => b.Id == reviewingBetModel.Id))
+                {
+                    pendingBets = pendingBets
+                        .OrderBy(b => IsMissingAnyStartTime(b) ? 0 : 1)
+                        .ThenBy(b => IsMissingAnyStartTime(b) ? DateTime.MinValue : (b.MatchStartTime ?? DateTime.MaxValue))
+                        .ThenByDescending(b => b.CreatedAt)
+                        .ToList();
+                }
             }
 
             if (result.Markets.Count == 0)
@@ -2971,6 +3000,42 @@ else
         }
         
         return field;
+    }
+
+    private MarkupString GetStartTimeDisplay(Bet bet)
+    {
+        if (string.IsNullOrEmpty(bet.AiVisionResultJson)) 
+            return new MarkupString("<span class='text-muted small'>Pending...</span>");
+            
+        try 
+        {
+            var res = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(bet.AiVisionResultJson);
+            if (res?.Legs != null && res.Legs.Count > 0) 
+            {
+                int total = res.Legs.Count;
+                int withTime = res.Legs.Count(l => l.StartTime > DateTime.MinValue);
+                
+                if (withTime == total) 
+                {
+                    var earliest = res.Legs.Min(l => l.StartTime);
+                    var norwayTime = TimeHelpers.GetNorwayTime(earliest.Value);
+                    return new MarkupString($"<span class='badge bg-light text-dark border shadow-sm px-2 py-1' style='font-size: 0.85rem;'><i class='bi bi-calendar-event text-primary me-1'></i> {norwayTime:MMM d, HH:mm}</span>");
+                } 
+                else if (withTime == 0)
+                {
+                    return new MarkupString($"<span class='badge bg-warning-subtle text-warning-emphasis border border-warning-subtle shadow-sm px-2 py-1' style='font-size: 0.85rem;'><i class='bi bi-search me-1'></i> Requires Lookup</span>");
+                }
+                else 
+                {
+                    return new MarkupString($"<span class='badge bg-warning-subtle text-warning-emphasis border border-warning-subtle shadow-sm px-2 py-1' style='font-size: 0.85rem;'><i class='bi bi-exclamation-triangle-fill text-warning me-1'></i> Missing ({total - withTime}/{total})</span>");
+                }
+            }
+            return new MarkupString("<span class='text-muted'>-</span>");
+        } 
+        catch 
+        { 
+            return new MarkupString("<span class='text-danger'>Error</span>"); 
+        }
     }
 
     private RenderFragment GetAiOutcomeBadge(string? outcomeResult) => builder =>
