@@ -28,6 +28,7 @@ namespace BettingApp.Services
             { "Player Fouls Committed", "Over Under Player Fouls Committed (incl. overtime)|Player Fouls Committed (incl. overtime)|Player Fouls Committed" },
             { "Full Time", "Full Time Result" },
             { "Match Odds", "Full Time Result" },
+            { "Match Winner", "Full Time Result" },
             { "1x2", "Full Time Result" },
             { "Match Result", "Full Time Result" },
             { "Match Result (1X2)", "Full Time Result" },
@@ -163,7 +164,8 @@ namespace BettingApp.Services
             }
 
             // --- Dynamic Player Prop Catch-Alls (handles when AI appends player names to the market) ---
-            if (clean.Contains("Goalscorer", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Scorer", StringComparison.OrdinalIgnoreCase))
+            if (clean.Contains("Goalscorer", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Scorer", StringComparison.OrdinalIgnoreCase) || 
+               (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase)))
             {
                 return new List<string> { "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals" };
             }
