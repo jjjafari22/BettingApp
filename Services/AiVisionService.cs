@@ -426,9 +426,9 @@ namespace BettingApp.Services
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 var extractionResult = JsonSerializer.Deserialize<AiVisionExtractionResult>(extractedBetDataJson, options);
                 
-                var partsList = new List<object>
+                var partsList = new List<Dictionary<string, object>>
                 {
-                    new { text = "Please determine the outcome of this bet according to the strict system instructions and the attached FotMob JSON data." }
+                    new Dictionary<string, object> { { "text", "Please determine the outcome of this bet according to the strict system instructions and the attached FotMob JSON data." } }
                 };
 
                 if (extractionResult?.Legs != null)
@@ -436,17 +436,20 @@ namespace BettingApp.Services
                     var groupedLegs = extractionResult.Legs.GroupBy(l => l.Match);
                     foreach (var group in groupedLegs)
                     {
-                        string matchName = group.Key;
+                        string matchName = group.Key ?? "";
                         
                         var rawJson = await _fotMob.GetMatchStatsJsonAsync(matchName, betPlacedAt, betId);
                         if (!string.IsNullOrEmpty(rawJson))
                         {
-                            partsList.Add(new
+                            partsList.Add(new Dictionary<string, object>
                             {
-                                text = $"=== FOTMOB RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n========================="
+                                { "text", $"=== FOTMOB RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n=========================" }
                             });
                         }
                         else
+                        {
+                            // Explicit empty else block to prevent the delay from binding to it
+                        }
                         
                         // Add a small delay to avoid rate limits on combo bets
                         await Task.Delay(1000);
@@ -454,46 +457,50 @@ namespace BettingApp.Services
                 }
 
                 // Insert the system instructions directly into the user prompt to bypass the Extended Thinking bug
-                partsList.Insert(0, new { text = prompt });
+                partsList.Insert(0, new Dictionary<string, object> { { "text", prompt } });
 
-                var payload = new
-                {
-                    contents = new[]
-                    {
-                        new { role = "user", parts = partsList.ToArray() }
-                    },
-                    tools = new[]
-                    {
-                        new { googleSearch = new { } }
-                    },
-                    generationConfig = new 
-                    {
-                        maxOutputTokens = 8192,
-                        responseMimeType = "application/json",
-                        responseSchema = new
-                        {
-                            type = "OBJECT",
-                            properties = new
-                            {
-                                matchStartTimeIso = new { type = "STRING", nullable = true },
-                                fullAnalysis = new { type = "STRING", nullable = true },
-                                legs = new
-                                {
-                                    type = "ARRAY",
-                                    items = new
-                                    {
-                                        type = "OBJECT",
-                                        properties = new
-                                        {
-                                            match = new { type = "STRING", nullable = true },
-                                            outcome = new { type = "STRING", nullable = true },
-                                            stats = new { type = "STRING", nullable = true }
-                                        }
-                                    }
+                var schemaJson = @"{
+                    ""type"": ""OBJECT"",
+                    ""properties"": {
+                        ""matchStartTimeIso"": { ""type"": ""STRING"", ""nullable"": true },
+                        ""fullAnalysis"": { ""type"": ""STRING"", ""nullable"": true },
+                        ""legs"": {
+                            ""type"": ""ARRAY"",
+                            ""items"": {
+                                ""type"": ""OBJECT"",
+                                ""properties"": {
+                                    ""match"": { ""type"": ""STRING"", ""nullable"": true },
+                                    ""outcome"": { ""type"": ""STRING"", ""nullable"": true },
+                                    ""stats"": { ""type"": ""STRING"", ""nullable"": true }
                                 }
                             }
-                        },
-                        thinkingConfig = new { thinkingBudget = 1024 }
+                        }
+                    }
+                }";
+
+                var payload = new Dictionary<string, object>
+                {
+                    ["contents"] = new[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["role"] = "user",
+                            ["parts"] = partsList
+                        }
+                    },
+                    ["tools"] = new[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["googleSearch"] = new Dictionary<string, object>()
+                        }
+                    },
+                    ["generationConfig"] = new Dictionary<string, object>
+                    {
+                        ["maxOutputTokens"] = 8192,
+                        ["responseMimeType"] = "application/json",
+                        ["responseSchema"] = JsonSerializer.Deserialize<object>(schemaJson, options)!,
+                        ["thinkingConfig"] = new Dictionary<string, object> { ["thinkingBudget"] = 1024 }
                     }
                 };
 
