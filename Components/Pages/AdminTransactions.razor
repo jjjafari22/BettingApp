@@ -587,16 +587,37 @@ else
     <div class="row mb-4">
         <div class="col-12">
             <div class="card shadow-sm border-0">
-                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                    <strong>Cash Cows Overview</strong>
-                    <div class="d-flex gap-3 align-items-center">
-                        <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap">
+                    <strong class="mb-2 mb-md-0">Cash Cows Overview</strong>
+                    <div class="d-flex align-items-center flex-wrap gap-3">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Daily ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Daily)">Daily</button>
+                            <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Weekly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Weekly)">Weekly</button>
+                            <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Monthly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Monthly)">Monthly</button>
+                            <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Yearly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Yearly)">Yearly</button>
+                            <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Custom ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Custom)">Custom</button>
+                        </div>
+                        
+                        <div class="d-flex align-items-center flex-wrap gap-2">
+                            @if (viewMode == ViewMode.Custom)
+                            {
+                                <div class="d-flex align-items-center bg-secondary rounded p-1 shadow-sm">
+                                    <input type="date" class="form-control form-control-sm border-0" @bind="ccStartDate" @bind:after="OnCustomDateChanged" title="From Date" />
+                                    <span class="mx-2 text-white fw-bold">-</span>
+                                    <input type="date" class="form-control form-control-sm border-0" @bind="ccEndDate" @bind:after="OnCustomDateChanged" title="To Date" />
+                                </div>
+                            }
+                            else
+                            {
+                                <button class="btn btn-outline-light btn-sm" @onclick="PreviousPeriod"><i class="bi bi-chevron-left"></i></button>
+                                <span class="fw-bold mx-2" style="min-width: 120px; text-align: center;">@GetPeriodDisplayString()</span>
+                                <button class="btn btn-outline-light btn-sm" @onclick="NextPeriod"><i class="bi bi-chevron-right"></i></button>
+                            }
+                        </div>
+
+                        <div class="form-check form-switch mb-0 d-flex align-items-center gap-2 border-start border-secondary ps-3 ms-md-2 mt-2 mt-md-0">
                             <input class="form-check-input mt-0" type="checkbox" role="switch" id="showInternalToggle" @bind="showInternalAccounts">
                             <label class="form-check-label small" style="padding-top: 2px;" for="showInternalToggle">Show Internal (Misc)</label>
-                        </div>
-                        <div class="d-flex gap-2 align-items-center border-start border-secondary ps-3">
-                            <span class="small fw-bold d-none d-md-inline">Date Filter:</span>
-                            <DateRangePicker @bind-StartDate="ccStartDate" @bind-EndDate="ccEndDate" OnFilterApplied="UpdateCashCowPeriodNet" ButtonClass="btn-outline-light" ActiveButtonClass="btn-light text-dark" />
                         </div>
                     </div>
                 </div>
@@ -958,16 +979,41 @@ else
         
         var query = context.Transactions.Where(t => t.SenderId == cow.Id || t.ReceiverId == cow.Id);
         
-        if (ccStartDate.HasValue)
+        DateTime startBase, endBase;
+        switch (viewMode)
         {
-            var startUtc = DateTime.SpecifyKind(ccStartDate.Value.Date.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
-            query = query.Where(t => t.Date >= startUtc);
+            case ViewMode.Daily:
+                startBase = currentViewDate.Date;
+                endBase = startBase.AddDays(1);
+                break;
+            case ViewMode.Weekly:
+                startBase = GetStartOfWeek(currentViewDate);
+                endBase = startBase.AddDays(7);
+                break;
+            case ViewMode.Monthly:
+                startBase = new DateTime(currentViewDate.Year, currentViewDate.Month, 1);
+                endBase = startBase.AddMonths(1);
+                break;
+            case ViewMode.Yearly:
+                startBase = new DateTime(currentViewDate.Year, 1, 1);
+                endBase = startBase.AddYears(1);
+                break;
+            case ViewMode.Custom:
+                startBase = ccStartDate?.Date ?? currentViewDate.Date;
+                endBase = (ccEndDate?.Date ?? currentViewDate.Date).AddDays(1);
+                break;
+            default:
+                startBase = currentViewDate.Date;
+                endBase = startBase.AddDays(1);
+                break;
         }
-        
-        if (ccEndDate.HasValue)
+
+        bool isFiltering = viewMode != ViewMode.Custom || ccStartDate.HasValue || ccEndDate.HasValue;
+        if (isFiltering)
         {
-            var endUtc = DateTime.SpecifyKind(ccEndDate.Value.Date.AddDays(1).AddMinutes(TimezoneOffset).AddTicks(-1), DateTimeKind.Utc);
-            query = query.Where(t => t.Date <= endUtc);
+            var startUtc = DateTime.SpecifyKind(startBase.AddMinutes(-TimezoneOffset), DateTimeKind.Utc);
+            var endUtc = DateTime.SpecifyKind(endBase.AddMinutes(-TimezoneOffset), DateTimeKind.Utc);
+            query = query.Where(t => t.Date >= startUtc && t.Date < endUtc);
         }
 
         var total = await query.CountAsync();
@@ -1012,6 +1058,10 @@ else
     private string ccSortColumn = "LastUpdated";
     private bool ccSortAscending = false;
     
+    private enum ViewMode { Daily, Weekly, Monthly, Yearly, Custom }
+    private ViewMode viewMode = ViewMode.Daily;
+    private DateTime currentViewDate; 
+
     private string searchTerm = "";
 
     private int? editingTransactionId = null;
@@ -1089,6 +1139,7 @@ else
         }
 
         await LoadTransactions(context);
+        await GoToCurrent();
         isInitializing = false;
     }
     
@@ -1098,8 +1149,9 @@ else
         {
             try {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
-                StateHasChanged();
             } catch { }
+            
+            _ = GoToCurrent();
             
             try { await SetupSignalR(); } catch { }
         }
@@ -1390,7 +1442,8 @@ else
 
     private int GetCashCowPeriodNet(CashCow cow)
     {
-        return (ccStartDate.HasValue || ccEndDate.HasValue) 
+        bool isFiltering = viewMode != ViewMode.Custom || ccStartDate.HasValue || ccEndDate.HasValue;
+        return isFiltering 
             ? (ccPeriodNet.TryGetValue(cow.Id, out var n) ? n : 0) 
             : (int)cow.Balance;
     }
@@ -1432,28 +1485,118 @@ else
         }
     }
 
+    private void SetViewMode(ViewMode mode)
+    {
+        viewMode = mode;
+        if (mode != ViewMode.Custom)
+        {
+            _ = GoToCurrent();
+        }
+    }
+    
+    private async Task GoToCurrent()
+    {
+        currentViewDate = DateTime.UtcNow.AddMinutes(TimezoneOffset).Date;
+        await UpdateCashCowPeriodNet();
+    }
+    
+    private void PreviousPeriod()
+    {
+        currentViewDate = viewMode switch
+        {
+            ViewMode.Daily => currentViewDate.AddDays(-1),
+            ViewMode.Weekly => currentViewDate.AddDays(-7),
+            ViewMode.Monthly => currentViewDate.AddMonths(-1),
+            ViewMode.Yearly => currentViewDate.AddYears(-1),
+            _ => currentViewDate
+        };
+        _ = UpdateCashCowPeriodNet();
+    }
+    
+    private void NextPeriod()
+    {
+        currentViewDate = viewMode switch
+        {
+            ViewMode.Daily => currentViewDate.AddDays(1),
+            ViewMode.Weekly => currentViewDate.AddDays(7),
+            ViewMode.Monthly => currentViewDate.AddMonths(1),
+            ViewMode.Yearly => currentViewDate.AddYears(1),
+            _ => currentViewDate
+        };
+        _ = UpdateCashCowPeriodNet();
+    }
+    
+    private string GetPeriodDisplayString()
+    {
+        return viewMode switch
+        {
+            ViewMode.Daily => currentViewDate.ToString("dd MMM yyyy"),
+            ViewMode.Weekly => 
+                GetStartOfWeek(currentViewDate).ToString("dd MMM") + " - " + 
+                GetStartOfWeek(currentViewDate).AddDays(6).ToString("dd MMM yyyy"),
+            ViewMode.Monthly => currentViewDate.ToString("MMMM yyyy"),
+            ViewMode.Yearly => currentViewDate.ToString("yyyy"),
+            _ => ""
+        };
+    }
+    
+    private DateTime GetStartOfWeek(DateTime dt)
+    {
+        int diff = (7 + (dt.DayOfWeek - DayOfWeek.Monday)) % 7;
+        return dt.Date.AddDays(-1 * diff);
+    }
+
+    private async Task OnCustomDateChanged()
+    {
+        if (viewMode == ViewMode.Custom)
+        {
+            await UpdateCashCowPeriodNet();
+        }
+    }
+
     private async Task UpdateCashCowPeriodNet()
     {
-        if (ccStartDate == null && ccEndDate == null)
-        {
-            await ClearCashCowFilter();
-            return;
-        }
-
         using var context = DbFactory.CreateDbContext();
         var query = context.Transactions.Where(t => t.Status == "Completed");
         
-        if (ccStartDate.HasValue)
+        DateTime startBase, endBase;
+        switch (viewMode)
         {
-            var startUtc = DateTime.SpecifyKind(ccStartDate.Value.Date.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
-            query = query.Where(t => t.Date >= startUtc);
+            case ViewMode.Daily:
+                startBase = currentViewDate.Date;
+                endBase = startBase.AddDays(1);
+                break;
+            case ViewMode.Weekly:
+                startBase = GetStartOfWeek(currentViewDate);
+                endBase = startBase.AddDays(7);
+                break;
+            case ViewMode.Monthly:
+                startBase = new DateTime(currentViewDate.Year, currentViewDate.Month, 1);
+                endBase = startBase.AddMonths(1);
+                break;
+            case ViewMode.Yearly:
+                startBase = new DateTime(currentViewDate.Year, 1, 1);
+                endBase = startBase.AddYears(1);
+                break;
+            case ViewMode.Custom:
+                if (ccStartDate == null && ccEndDate == null)
+                {
+                    await ClearCashCowFilter();
+                    return;
+                }
+                startBase = ccStartDate?.Date ?? currentViewDate.Date;
+                endBase = (ccEndDate?.Date ?? currentViewDate.Date).AddDays(1);
+                break;
+            default:
+                startBase = currentViewDate.Date;
+                endBase = startBase.AddDays(1);
+                break;
         }
-        
-        if (ccEndDate.HasValue)
-        {
-            var endUtc = DateTime.SpecifyKind(ccEndDate.Value.Date.AddDays(1).AddMinutes(TimezoneOffset).AddTicks(-1), DateTimeKind.Utc);
-            query = query.Where(t => t.Date <= endUtc);
-        }
+
+        var startUtc = DateTime.SpecifyKind(startBase.AddMinutes(-TimezoneOffset), DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(endBase.AddMinutes(-TimezoneOffset), DateTimeKind.Utc);
+
+        query = query.Where(t => t.Date >= startUtc && t.Date < endUtc);
         
         var txs = await query.ToListAsync();
         
@@ -1471,6 +1614,8 @@ else
             viewingCowCurrentPage = 1;
             await LoadCowTransactions(viewingCow);
         }
+        
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task ConfirmWithdraw(Transaction t)
