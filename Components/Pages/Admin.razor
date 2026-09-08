@@ -1231,7 +1231,7 @@ else
 
         <div class="d-flex flex-column mb-3 mt-4 gap-2">
             <div class="d-flex justify-content-between align-items-center flex-nowrap gap-2">
-                <h4 class="mb-0 text-truncate" style="font-size: clamp(1rem, 4vw, 1.5rem);">Completed (@totalCompletedBets)</h4>
+                <h4 class="mb-0 text-truncate" style="font-size: clamp(1rem, 4vw, 1.5rem);">Completed</h4>
                 <div class="d-flex gap-2 align-items-center flex-shrink-0">
                     <div class="input-group input-group-sm shadow-sm flex-shrink-0" style="max-width: 200px;">
                         <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
@@ -1824,13 +1824,15 @@ else
             }
         }
         
-        totalCompletedBets = await query.CountAsync();
-        completedBets = await query
+        // Use Take(pageSize + 1) to determine if there is a next page, completely bypassing the massive CountAsync() scan!
+        var fetchedBets = await query
             .OrderByDescending(b => b.UpdatedAt)
             .Skip((completedPage - 1) * pageSize)
-            .Take(pageSize)
+            .Take(pageSize + 1)
             .ToListAsync();
-        hasMoreCompletedBets = totalCompletedBets > (completedPage * pageSize);
+            
+        hasMoreCompletedBets = fetchedBets.Count > pageSize;
+        completedBets = fetchedBets.Take(pageSize).ToList();
         await PopulateUserLookup(completedBets.Select(b => b.UserId));
     }
 
@@ -2666,7 +2668,12 @@ else
                  
                  string otherAdminName = lastAudit != null ? lastAudit.AdminUserName : "another admin";
                  errorMessage = $"Action aborted: Bet #{bet.Id} was already updated to '{dbBet.Status}' by Admin {otherAdminName}.";
-                 await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
+                 _ = InvokeAsync(async () => {
+                     await LoadPendingBets();
+                     await LoadApprovedBets();
+                     await LoadCompletedBets();
+                     StateHasChanged();
+                 });
                  reviewingBetModel = null;
                  StateHasChanged();
                  return;
@@ -2826,14 +2833,26 @@ else
             catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
             {
                 errorMessage = $"Action aborted: Bet #{bet.Id} was modified concurrently.";
-                await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
+                _ = InvokeAsync(async () => {
+                    await LoadPendingBets();
+                    await LoadApprovedBets();
+                    await LoadCompletedBets();
+                    StateHasChanged();
+                });
                 reviewingBetModel = null;
                 StateHasChanged();
                 return;
             }
         }
 
-        await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
+        // Do not block the UI waiting for 3 heavy table scans! 
+        // Run them sequentially in the background to avoid spiking DB DTU, and update UI when done.
+        _ = InvokeAsync(async () => {
+            await LoadPendingBets();
+            await LoadApprovedBets();
+            await LoadCompletedBets();
+            StateHasChanged();
+        });
         if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
         {
             _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet!, newStatus, isUpdate: false);
@@ -2843,6 +2862,15 @@ else
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
         modalSuccessMessage = $"Bet #{bet.Id} updated.";
         
+        // Remove the processed bet from the current UI list immediately if its status changed,
+        // so the queue automatically advances to the next bet without waiting for the background DB reload!
+        if (reviewContext == "Pending" && newStatus != "Pending" && newStatus != "Processing")
+            pendingBets.RemoveAll(b => b.Id == bet.Id);
+        else if (reviewContext == "Approved" && newStatus != "Approved")
+            approvedBets.RemoveAll(b => b.Id == bet.Id);
+        else if (reviewContext == "Completed" && (newStatus == "Pending" || newStatus == "Approved" || newStatus == "Processing"))
+            completedBets.RemoveAll(b => b.Id == bet.Id);
+
         if (reviewContext == "Pending") currentReviewList = pendingBets;
         else if (reviewContext == "Approved") currentReviewList = approvedBets;
         else if (reviewContext == "Completed") currentReviewList = completedBets;
