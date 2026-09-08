@@ -519,35 +519,47 @@ namespace BettingApp.Services
                 
                 if (string.IsNullOrEmpty(teamName)) return null;
 
-                // 2. Get team's upcoming matches
-                string teamSearchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(teamName)}";
-                var teamResponse = await _httpClient.GetAsync(teamSearchUrl);
-                if (!teamResponse.IsSuccessStatusCode) return null;
-
-                string teamJson = await teamResponse.Content.ReadAsStringAsync();
-                using var teamDoc = System.Text.Json.JsonDocument.Parse(teamJson);
-                
-                if (!teamDoc.RootElement.TryGetProperty("matchSuggest", out var matchSuggests) || matchSuggests.GetArrayLength() == 0)
+                // 2. Get team's upcoming matches accurately
+                string html = await _httpClient.GetStringAsync($"https://www.fotmob.com/teams/{teamId}/overview/team");
+                var regexMatch = System.Text.RegularExpressions.Regex.Match(html, @"<script id=""__NEXT_DATA__"" type=""application/json"">(.*?)</script>");
+                if (regexMatch.Success)
                 {
-                    return null;
-                }
-                
-                var matchOptions = matchSuggests[0].GetProperty("options");
-                foreach (var opt in matchOptions.EnumerateArray())
-                {
-                    var matchPayload = opt.GetProperty("payload");
-                    if (matchPayload.TryGetProperty("homeTeamId", out var hIdProp) && matchPayload.TryGetProperty("awayTeamId", out var aIdProp))
+                    using var teamDoc = System.Text.Json.JsonDocument.Parse(regexMatch.Groups[1].Value);
+                    var fallback = teamDoc.RootElement.GetProperty("props").GetProperty("pageProps").GetProperty("fallback");
+                    var teamData = fallback.GetProperty($"team-{teamId}");
+                    var fixturesProp = teamData.GetProperty("fixtures");
+                    
+                    if (fixturesProp.ValueKind == System.Text.Json.JsonValueKind.Object && 
+                        fixturesProp.TryGetProperty("allFixtures", out var allFixtures) &&
+                        allFixtures.TryGetProperty("fixtures", out var fixtures))
                     {
-                        string homeId = hIdProp.GetString() ?? "";
-                        string awayId = aIdProp.GetString() ?? "";
-                        
-                        if (homeId == teamId || awayId == teamId)
+                        DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
+                        TimeSpan smallestTimeDiff = TimeSpan.MaxValue;
+                        string bestMatch = "";
+
+                        foreach (var f in fixtures.EnumerateArray())
                         {
-                            string homeName = matchPayload.GetProperty("homeName").GetString() ?? "";
-                            string awayName = matchPayload.GetProperty("awayName").GetString() ?? "";
-                            string resolved = $"{homeName} vs {awayName}";
-                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Resolved player '{playerName}' to match: '{resolved}'");
-                            return resolved;
+                            string homeName = f.TryGetProperty("home", out var h) && h.TryGetProperty("name", out var hn) ? hn.GetString() ?? "" : "";
+                            string awayName = f.TryGetProperty("away", out var a) && a.TryGetProperty("name", out var an) ? an.GetString() ?? "" : "";
+                            
+                            if (f.TryGetProperty("status", out var statusProp) && statusProp.TryGetProperty("utcTime", out var utcProp))
+                            {
+                                if (DateTime.TryParse(utcProp.GetString(), out DateTime fixtureDate))
+                                {
+                                    TimeSpan diff = (fixtureDate - targetDate).Duration();
+                                    if (diff < smallestTimeDiff)
+                                    {
+                                        smallestTimeDiff = diff;
+                                        bestMatch = $"{homeName} vs {awayName}";
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(bestMatch))
+                        {
+                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Resolved player '{playerName}' to match: '{bestMatch}'");
+                            return bestMatch;
                         }
                     }
                 }
