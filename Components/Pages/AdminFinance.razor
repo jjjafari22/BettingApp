@@ -54,7 +54,7 @@
 
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center flex-wrap">
-        <div class="d-flex align-items-center gap-3 mb-2 mb-md-0">
+        <div class="d-flex align-items-center flex-wrap gap-3 mb-2 mb-md-0">
             <div class="btn-group" role="group">
                 <button type="button" class="btn btn-@(viewMode == ViewMode.Daily ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Daily)">Daily</button>
                 <button type="button" class="btn btn-@(viewMode == ViewMode.Weekly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Weekly)">Weekly</button>
@@ -63,7 +63,7 @@
                 <button type="button" class="btn btn-@(viewMode == ViewMode.Custom ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Custom)">Custom</button>
             </div>
             
-            <div class="form-check form-switch d-none d-md-flex align-items-center gap-2 mb-0" style="margin-top: 2px;">
+            <div class="form-check form-switch d-flex align-items-center gap-2 mb-0" style="margin-top: 2px;">
                 <input class="form-check-input mt-0" type="checkbox" role="switch" id="tzToggleBlue" @bind="showNorwayTimezone" @bind:after="OnTimezoneToggled">
                 <label class="form-check-label small text-white" for="tzToggleBlue">Norway TZ</label>
             </div>
