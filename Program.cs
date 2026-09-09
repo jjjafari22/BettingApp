@@ -165,21 +165,9 @@ app.MapStaticAssets();
 // --- FIX: Prevent Android Chrome from displaying "Showing offline" cached copies
 app.Use(async (context, next) =>
 {
-    // 1. Force a one-time remote cache clear for users stuck on the old cached version
-    // The moment their cached Blazor page connects to SignalR, it wipes the browser's HTTP cache.
-    if (context.Request.Path.StartsWithSegments("/_blazor") && !context.Request.Cookies.ContainsKey("CacheCleared_v1"))
-    {
-        context.Response.OnStarting(() =>
-        {
-            context.Response.Headers.Append("Clear-Site-Data", "\"cache\"");
-            context.Response.Cookies.Append("CacheCleared_v1", "true", new CookieOptions { Expires = DateTimeOffset.UtcNow.AddYears(1) });
-            return Task.CompletedTask;
-        });
-    }
-
     context.Response.OnStarting(() =>
     {
-        // 2. Only apply to HTML documents (Blazor pages) to prevent caching for NEW requests
+        // Only apply to HTML documents (Blazor pages) to prevent caching
         if (context.Response.ContentType?.StartsWith("text/html") == true)
         {
             context.Response.Headers.Append("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
