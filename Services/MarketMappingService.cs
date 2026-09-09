@@ -92,6 +92,11 @@ namespace BettingApp.Services
                     // Corners Team 1/2
                     if (clean.Contains("Corners", StringComparison.OrdinalIgnoreCase))
                     {
+                        if (clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return new List<string> { "Corners - Handicap" + halfSuffix };
+                        }
+
                         if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
                             return new List<string> { "Corners - Over Under Team 1" + halfSuffix };
                         if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
@@ -155,6 +160,11 @@ namespace BettingApp.Services
             if (clean.StartsWith("Total Goals", StringComparison.OrdinalIgnoreCase))
             {
                 return new List<string> { "Over Under Full Time" };
+            }
+            
+            if (clean.Contains("Corners", StringComparison.OrdinalIgnoreCase) && clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Corners - Handicap" + halfSuffix };
             }
 
             if (clean.StartsWith("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Cards Over/Under", StringComparison.OrdinalIgnoreCase))
