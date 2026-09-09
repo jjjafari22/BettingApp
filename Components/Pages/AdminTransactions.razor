@@ -588,8 +588,7 @@ else
         <div class="col-12">
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap">
-                    <strong class="mb-2 mb-md-0">Cash Cows Overview</strong>
-                    <div class="d-flex align-items-center flex-wrap gap-3">
+                    <div class="d-flex align-items-center flex-wrap gap-3 mb-2 mb-md-0">
                         <div class="btn-group" role="group">
                             <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Daily ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Daily)">Daily</button>
                             <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Weekly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Weekly)">Weekly</button>
@@ -598,27 +597,27 @@ else
                             <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Custom ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Custom)">Custom</button>
                         </div>
                         
-                        <div class="d-flex align-items-center flex-wrap gap-2">
-                            @if (viewMode == ViewMode.Custom)
-                            {
-                                <div class="d-flex align-items-center bg-secondary rounded p-1 shadow-sm">
-                                    <input type="date" class="form-control form-control-sm border-0" @bind="ccStartDate" @bind:after="OnCustomDateChanged" title="From Date" />
-                                    <span class="mx-2 text-white fw-bold">-</span>
-                                    <input type="date" class="form-control form-control-sm border-0" @bind="ccEndDate" @bind:after="OnCustomDateChanged" title="To Date" />
-                                </div>
-                            }
-                            else
-                            {
-                                <button class="btn btn-outline-light btn-sm" @onclick="PreviousPeriod"><i class="bi bi-chevron-left"></i></button>
-                                <span class="fw-bold mx-2" style="min-width: 120px; text-align: center;">@GetPeriodDisplayString()</span>
-                                <button class="btn btn-outline-light btn-sm" @onclick="NextPeriod"><i class="bi bi-chevron-right"></i></button>
-                            }
-                        </div>
-
-                        <div class="form-check form-switch mb-0 d-flex align-items-center gap-2 border-start border-secondary ps-3 ms-md-2 mt-2 mt-md-0">
+                        <div class="form-check form-switch d-flex align-items-center gap-2 mb-0" style="margin-top: 2px;">
                             <input class="form-check-input mt-0" type="checkbox" role="switch" id="showInternalToggle" @bind="showInternalAccounts">
-                            <label class="form-check-label small" style="padding-top: 2px;" for="showInternalToggle">Show Internal (Misc)</label>
+                            <label class="form-check-label small text-white" for="showInternalToggle">Show Internal (Misc)</label>
                         </div>
+                    </div>
+                    
+                    <div class="d-flex align-items-center flex-wrap gap-2 mt-2 mt-md-0">
+                        @if (viewMode == ViewMode.Custom)
+                        {
+                            <div class="d-flex align-items-center bg-secondary bg-opacity-25 rounded p-1 shadow-sm">
+                                <input type="date" class="form-control form-control-sm border-0 text-white bg-transparent" @bind="ccStartDate" @bind:after="OnCustomDateChanged" title="From Date" />
+                                <span class="mx-2 text-white fw-bold">-</span>
+                                <input type="date" class="form-control form-control-sm border-0 text-white bg-transparent" @bind="ccEndDate" @bind:after="OnCustomDateChanged" title="To Date" />
+                            </div>
+                        }
+                        else
+                        {
+                            <button class="btn btn-outline-light btn-sm" @onclick="PreviousPeriod"><i class="bi bi-chevron-left"></i></button>
+                            <span class="fw-bold mx-2" style="min-width: 120px; text-align: center;">@GetPeriodDisplayString()</span>
+                            <button class="btn btn-outline-light btn-sm" @onclick="NextPeriod"><i class="bi bi-chevron-right"></i></button>
+                        }
                     </div>
                 </div>
                 <div class="card-body p-0">
@@ -1011,8 +1010,8 @@ else
         bool isFiltering = viewMode != ViewMode.Custom || ccStartDate.HasValue || ccEndDate.HasValue;
         if (isFiltering)
         {
-            var startUtc = DateTime.SpecifyKind(startBase.AddMinutes(-TimezoneOffset), DateTimeKind.Utc);
-            var endUtc = DateTime.SpecifyKind(endBase.AddMinutes(-TimezoneOffset), DateTimeKind.Utc);
+            var startUtc = DateTime.SpecifyKind(startBase.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
+            var endUtc = DateTime.SpecifyKind(endBase.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
             query = query.Where(t => t.Date >= startUtc && t.Date < endUtc);
         }
 
@@ -1239,6 +1238,8 @@ else
                 dbCow.Vipps = newCow.Vipps;
                 dbCow.Revolut = newCow.Revolut;
                 dbCow.BankTransfer = newCow.BankTransfer;
+                dbCow.OtherPlatformName = newCow.OtherPlatformName;
+                dbCow.OtherPaymentDetails = newCow.OtherPaymentDetails;
             }
         }
         await context.SaveChangesAsync();
@@ -1496,7 +1497,7 @@ else
     
     private async Task GoToCurrent()
     {
-        currentViewDate = DateTime.UtcNow.AddMinutes(TimezoneOffset).Date;
+        currentViewDate = DateTime.UtcNow.AddMinutes(-TimezoneOffset).Date;
         await UpdateCashCowPeriodNet();
     }
     
@@ -1593,8 +1594,8 @@ else
                 break;
         }
 
-        var startUtc = DateTime.SpecifyKind(startBase.AddMinutes(-TimezoneOffset), DateTimeKind.Utc);
-        var endUtc = DateTime.SpecifyKind(endBase.AddMinutes(-TimezoneOffset), DateTimeKind.Utc);
+        var startUtc = DateTime.SpecifyKind(startBase.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(endBase.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
 
         query = query.Where(t => t.Date >= startUtc && t.Date < endUtc);
         
