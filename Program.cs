@@ -162,6 +162,24 @@ else
 app.UseStaticFiles();
 app.MapStaticAssets();
 
+// --- FIX: Prevent Android Chrome from displaying "Showing offline" cached copies
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        // Only apply to HTML documents (Blazor pages) to prevent caching
+        if (context.Response.ContentType?.StartsWith("text/html") == true)
+        {
+            context.Response.Headers.Append("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+            context.Response.Headers.Append("Pragma", "no-cache");
+            context.Response.Headers.Append("Expires", "0");
+        }
+        return Task.CompletedTask;
+    });
+    await next();
+});
+// --------------------------------------------------------------------------
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
