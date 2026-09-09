@@ -397,45 +397,33 @@ else
     @if (selectedUserId != null)
     {
         <div class="mt-5 border-top pt-4">
-            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div class="d-flex justify-content-start align-items-center mb-4 flex-wrap gap-4 border-bottom pb-3">
                 <h3 class="mb-0 text-primary">
                     <i class="bi bi-person-lines-fill me-2"></i>History: @selectedUserName
-                  </h3>
+                </h3>
                  
-                 <div class="d-flex gap-2">
-                    <select class="form-select w-auto" @onchange="OnStatusFilterChanged" value="@statusFilter">
-                           <option value="All">All Statuses</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Approved">Approved</option>
-                        <option value="Won">Won</option>
-                          <option value="Lost">Lost</option>
-                        <option value="Void">Void</option>
-                        <option value="Rejected">Rejected</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
-
-                </div>
-               </div>
-
-            <div class="row mb-4">
-                <div class="col-md-3">
-                    <div class="card shadow-sm border-primary">
-                        <div class="card-body text-center">
-                              <h6 class="card-subtitle mb-2 text-muted">Handle (@dateFilterText)</h6>
-                            <h2 class="card-title text-primary">@selectedUserHandle.ToString("N0") kr</h2>
-                        </div>
+                <div class="d-flex gap-3 flex-wrap align-items-center bg-white border rounded shadow-sm px-3 py-2">
+                    <div class="d-flex flex-column align-items-start">
+                        <span class="text-muted small fw-bold text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">Handle (@dateFilterText)</span>
+                        <span class="fs-5 fw-bold text-primary" style="line-height: 1.2;">@selectedUserHandle.ToString("N0") kr</span>
                     </div>
-                  </div>
-                <div class="col-md-3">
-                    <div class="card shadow-sm @(selectedUserProfit >= 0 ? "border-success" : "border-danger")">
-                        <div class="card-body text-center">
-                            <h6 class="card-subtitle mb-2 text-muted">Profit (@dateFilterText)</h6>
-                            <h2 class="card-title @(selectedUserProfit >= 0 ? "text-success" : "text-danger")">
-                                  @selectedUserProfit.ToString("N0") kr
-                            </h2>
-                        </div>
-                      </div>
+                    <div class="vr mx-1 bg-secondary opacity-25"></div>
+                    <div class="d-flex flex-column align-items-start">
+                        <span class="text-muted small fw-bold text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">Profit (@dateFilterText)</span>
+                        <span class="fs-5 fw-bold @(selectedUserProfit >= 0 ? "text-success" : "text-danger")" style="line-height: 1.2;">
+                            @((selectedUserProfit >= 0 ? "+" : "") + selectedUserProfit.ToString("N0")) kr
+                        </span>
+                    </div>
                 </div>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap align-items-center p-2 mb-3 rounded shadow-sm border" style="background-color: #f8f9fa;">
+                <span class="text-muted small fw-bold text-uppercase me-1"><i class="bi bi-funnel-fill"></i> Filter</span>
+                <button class="btn btn-sm rounded-pill @(historyStatusFilters.Contains("Won") ? "btn-dark shadow-sm" : "btn-outline-secondary bg-white text-muted")" style="font-weight: 500;" @onclick="@(() => ToggleHistoryFilter("Won"))">Won</button>
+                <button class="btn btn-sm rounded-pill @(historyStatusFilters.Contains("Lost") ? "btn-dark shadow-sm" : "btn-outline-secondary bg-white text-muted")" style="font-weight: 500;" @onclick="@(() => ToggleHistoryFilter("Lost"))">Lost</button>
+                <button class="btn btn-sm rounded-pill @(historyStatusFilters.Contains("Void") ? "btn-dark shadow-sm" : "btn-outline-secondary bg-white text-muted")" style="font-weight: 500;" @onclick="@(() => ToggleHistoryFilter("Void"))">Void</button>
+                <button class="btn btn-sm rounded-pill @(historyStatusFilters.Contains("Rejected") ? "btn-dark shadow-sm" : "btn-outline-secondary bg-white text-muted")" style="font-weight: 500;" @onclick="@(() => ToggleHistoryFilter("Rejected"))">Rejected</button>
+                <button class="btn btn-sm rounded-pill @(historyStatusFilters.Contains("Cancelled") ? "btn-dark shadow-sm" : "btn-outline-secondary bg-white text-muted")" style="font-weight: 500;" @onclick="@(() => ToggleHistoryFilter("Cancelled"))">Cancelled</button>
             </div>
 
             <div class="table-responsive">
@@ -453,7 +441,7 @@ else
                          </tr>
                     </thead>
                     <tbody>
-                          @foreach (var bet in displayedUserBets)
+                          @foreach (var bet in PaginatedHistoryBets)
                         {
                             var rowClass = bet.Status == "Won" ? "table-success" : (bet.Status == "Lost" ? "table-danger" : "table-secondary");
                              <tr class="@rowClass">
@@ -502,6 +490,16 @@ else
                      </tbody>
                   </table>
             </div>
+            
+            <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
+                <button class="btn btn-sm @(historyPage <= 1 ? "btn-outline-secondary" : "btn-primary shadow-sm") px-3" @onclick="PrevHistoryPage" disabled="@(historyPage <= 1)">
+                    <i class="bi bi-arrow-left me-1"></i> Previous
+                </button>
+                <span class="text-muted fw-bold">Page @historyPage</span>
+                <button class="btn btn-sm @(!hasMoreHistory ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold") px-3" @onclick="NextHistoryPage" disabled="@(!hasMoreHistory)">
+                    Next <i class="bi bi-arrow-right ms-1"></i>
+                </button>
+            </div>
         </div>
     }
 }
@@ -523,8 +521,16 @@ else
     private List<Bet> allSelectedUserBets = new();
     private List<Bet> displayedUserBets = new();
     
+    private int historyPage = 1;
+    private const int HistoryPageSize = 25;
+    private IEnumerable<Bet> PaginatedHistoryBets => displayedUserBets.Skip((historyPage - 1) * HistoryPageSize).Take(HistoryPageSize);
+    private bool hasMoreHistory => displayedUserBets.Count > historyPage * HistoryPageSize;
+
+    private void PrevHistoryPage() { if (historyPage > 1) historyPage--; }
+    private void NextHistoryPage() { if (hasMoreHistory) historyPage++; }
+
     private string dateFilterText = "All Time";
-    private string statusFilter = "All"; 
+    private HashSet<string> historyStatusFilters = new(new[] { "Won", "Lost", "Void", "Rejected", "Cancelled" }); 
     
     private decimal selectedUserHandle;
     private decimal selectedUserProfit;
@@ -688,7 +694,7 @@ else
             .Select(g => new
             {
                 UserId = g.Key,
-                Winnings = g.Sum(b => b.Status == "Won" && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)((b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount) : 0m),
+                Winnings = g.Sum(b => b.Status == "Won" && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)Math.Floor(((b.AmountNOK ?? 0) * b.Odds) - b.FreeBetAmount) : 0m),
                 SettledStakes = g.Sum(b => (b.Status == "Won" || b.Status == "Lost") && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)((b.AmountNOK ?? 0) - b.FreeBetAmount) : 0m),
                 Handle = g.Sum(b => (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void") && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? (decimal?)((b.AmountNOK ?? 0) - b.FreeBetAmount) : 0m),
                 PeriodBetsCount = g.Sum(b => (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void") && (!filterStartDate.HasValue || b.UpdatedAt >= filterStartDate) && (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate) ? 1 : 0),
@@ -792,6 +798,7 @@ else
     {
         selectedUserId = userId;
         selectedUserName = userName;
+        historyPage = 1;
         
         using var context = DbFactory.CreateDbContext();
         allSelectedUserBets = await context.Bets
@@ -802,15 +809,20 @@ else
         ApplyFilters();
     }
 
-    private void OnStatusFilterChanged(ChangeEventArgs e)
+    private void ToggleHistoryFilter(string status)
     {
-        statusFilter = e.Value?.ToString() ?? "All";
+        if (historyStatusFilters.Contains(status))
+            historyStatusFilters.Remove(status);
+        else
+            historyStatusFilters.Add(status);
+            
         ApplyFilters();
     }
 
     private void ApplyFilters()
     {
         if (selectedUserId == null) return;
+        historyPage = 1;
 
         dateFilterText = filterStartDate.HasValue || filterEndDate.HasValue ? "Period" : "All Time";
 
@@ -819,25 +831,20 @@ else
             (!filterEndDate.HasValue || b.UpdatedAt <= filterEndDate)
         ).ToList();
         
-        if (statusFilter == "All")
-        {
-            displayedUserBets = betsInDateRange;
-        }
-        else
-        {
-            displayedUserBets = betsInDateRange.Where(b => b.Status == statusFilter).ToList();
-        }
+        displayedUserBets = betsInDateRange.Where(b => historyStatusFilters.Contains(b.Status)).ToList();
 
         selectedUserHandle = betsInDateRange
-            .Where(b => b.Status != "Rejected" && b.Status != "Cancelled")
-            .Sum(b => (decimal)(b.AmountNOK ?? 0));
+            .Where(b => b.Status == "Won" || b.Status == "Lost" || b.Status == "Void")
+            .Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount);
             
         var periodWinnings = betsInDateRange
             .Where(b => b.Status == "Won")
-            .Sum(b => b.PotentialPayout);
+            .Sum(b => Math.Floor((decimal)(b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount));
+            
         var periodStakes = betsInDateRange
             .Where(b => b.Status == "Won" || b.Status == "Lost")
             .Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount);
+            
         selectedUserProfit = periodWinnings - periodStakes;
 
         StateHasChanged();
