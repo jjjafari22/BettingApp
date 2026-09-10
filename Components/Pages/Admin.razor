@@ -125,14 +125,14 @@ else
 
 @if (successMessage != null)
 {
-    <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
+    <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 9999; min-width: 300px;">
         <i class="bi bi-bell-fill me-2"></i> @successMessage
         <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
     </div>
 }
 @if (errorMessage != null)
 {
-    <div class="alert alert-danger alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
+    <div class="alert alert-danger alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 9999; min-width: 300px;">
         <i class="bi bi-exclamation-triangle-fill me-2"></i> @errorMessage
         <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
     </div>
@@ -258,17 +258,6 @@ else
                         <!-- Right Column: Controls -->
                         <div class="col-lg-6 d-flex flex-column desktop-right-col p-0" style="max-height: 100%; background-color: #f8f9fa;">
                             <div class="desktop-right-scroll p-3 flex-grow-1 overflow-auto bg-white">
-                                @if (!string.IsNullOrEmpty(modalSuccessMessage)) {
-                                <div class="alert alert-success rounded text-center py-2 mb-3 shadow-sm" role="alert" style="background-color: #d1e7dd; color: #0f5132;">
-                                    <i class="bi bi-check-circle-fill me-2"></i> <strong>@modalSuccessMessage</strong>
-                                </div>
-                            }
-                            @if (reviewErrorMessage != null) {
-                                <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
-                                    <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
-                                    <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
-                                </div>
-                            }
 
                             @if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult)) {
                                 <div class="alert alert-info alert-dismissible fade show shadow-sm mb-3" role="alert">
@@ -1522,13 +1511,6 @@ else
         set { _errorMessage = value; if (value != null) AutoClearMessages(); }
     }
 
-    private string? _modalSuccessMessage;
-    private string? modalSuccessMessage
-    {
-        get => _modalSuccessMessage;
-        set { _modalSuccessMessage = value; if (value != null) AutoClearMessages(); }
-    }
-
     private void AutoClearMessages()
     {
         _ = Task.Run(async () =>
@@ -1537,7 +1519,7 @@ else
             var changed = false;
             if (_successMessage != null) { _successMessage = null; changed = true; }
             if (_errorMessage != null) { _errorMessage = null; changed = true; }
-            if (_modalSuccessMessage != null) { _modalSuccessMessage = null; changed = true; }
+            if (_successMessage != null) { _successMessage = null; changed = true; }
             if (changed) await InvokeAsync(StateHasChanged);
         });
     }
@@ -1546,8 +1528,8 @@ else
     private Bet? reviewingBetModel;
     private System.Timers.Timer? uiRefreshTimer;
     private Bet? originalBetModel;
-    private string? reviewErrorMessage;
     private decimal currentReviewUserFreeBalance = 0;
+
     
 
 
@@ -1956,7 +1938,7 @@ else
         var currentOriginal = originalBetModel;
 
         ConfirmingOutcomeBetIds.Add(currentBet.Id);
-        if (reviewingBetModel.Id == currentBet.Id) reviewErrorMessage = null;
+        if (reviewingBetModel.Id == currentBet.Id) errorMessage = null;
         StateHasChanged();
         try { _ = reviewModalRef.FocusAsync(); } catch { }
 
@@ -1971,7 +1953,7 @@ else
                     {
                         await InvokeAsync(() =>
                         {
-                            if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = "No screenshot available to analyze.";
+                            if (reviewingBetModel?.Id == currentBet.Id) errorMessage = "No screenshot available to analyze.";
                         });
                         return;
                     }
@@ -1983,7 +1965,7 @@ else
                         {
                             if (reviewingBetModel?.Id == currentBet.Id) 
                             {
-                                reviewErrorMessage = $"Failed to extract bet data: {error}";
+                                errorMessage = $"Failed to extract bet data: {error}";
                                 reviewingBetModel.AiVisionError = error;
                             }
                             currentBet.AiVisionError = error;
@@ -2076,7 +2058,7 @@ else
                 {
                     await InvokeAsync(() =>
                     {
-                        if (reviewingBetModel?.Id == currentBet.Id) reviewErrorMessage = outcome ?? "Failed to check outcome.";
+                        if (reviewingBetModel?.Id == currentBet.Id) errorMessage = outcome ?? "Failed to check outcome.";
                     });
                 }
             }
@@ -2495,8 +2477,8 @@ else
         }
 
         showModalDropdown = false;
-        modalSuccessMessage = null;
-        reviewErrorMessage = null; errorMessage = null;
+        successMessage = null;
+        errorMessage = null; errorMessage = null;
         AiVisionResult = null;
         AiVisionError = bet.AiVisionError;
         ParsedAiOutcome = null;
@@ -2564,8 +2546,8 @@ else
         
         reviewingBetModel = null; 
         originalBetModel = null;
-        reviewErrorMessage = null; 
-        modalSuccessMessage = null; 
+        errorMessage = null; 
+        successMessage = null; 
     }
 
     private bool CanNavigateReview(int direction)
@@ -2627,7 +2609,7 @@ else
 
         if (newIndex != currentReviewIndex && newIndex >= 0 && newIndex < currentReviewList.Count)
         {
-            modalSuccessMessage = null;
+            successMessage = null;
             AiVisionResult = null;
             AiVisionError = null;
             ShowOddsLookup = false;
@@ -2646,19 +2628,19 @@ else
     private async Task ProcessBet(Bet bet, string newStatus)
     {
         errorMessage = null;
-        reviewErrorMessage = null;
-        modalSuccessMessage = null; 
+        errorMessage = null;
+        successMessage = null; 
         string originalStatus = bet.Status;
         int originalBetId = bet.Id;
         if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
-            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount";
+            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { errorMessage = "Invalid amount";
                 return; }
             
-            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds";
+            if (bet.Odds <= 1) { errorMessage = "Invalid odds";
                 return; }
             
-            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals";
+            if (Math.Round(bet.Odds, 2) != bet.Odds) { errorMessage = "Odds max 2 decimals";
                 return; }
 
             bool isNewOrModified = originalStatus == "Pending" || (originalBetModel != null && (bet.AmountNOK != originalBetModel.AmountNOK || bet.Odds != originalBetModel.Odds));
@@ -2671,7 +2653,7 @@ else
                 if (settings != null)
                 {
                      if ((decimal)(bet.AmountNOK ?? 0) < settings.MinBetAmount) { 
-                         reviewErrorMessage = $"Amount below limit ({settings.MinBetAmount:N0})";
+                         errorMessage = $"Amount below limit ({settings.MinBetAmount:N0})";
                          return; 
                      }
                 }
@@ -2684,7 +2666,7 @@ else
 
                      if (netLiability > userLimit) { 
                          decimal maxBetAmount = Math.Floor(userLimit / (bet.Odds - 1));
-                         reviewErrorMessage = $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {bet.Odds} odds is {maxBetAmount:N0} kr.";
+                         errorMessage = $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {bet.Odds} odds is {maxBetAmount:N0} kr.";
                          return; 
                      }
                 }
@@ -2705,7 +2687,7 @@ else
                 var (allowed, error) = await CheckUserBalance(bet.UserId, (decimal)(bet.AmountNOK ?? 0));
                 if (!allowed)
                 {
-                    reviewErrorMessage = error;
+                    errorMessage = error;
                     StateHasChanged();
                     return;
                 }
@@ -2918,7 +2900,7 @@ else
 
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet status is now: {newStatus}");
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        modalSuccessMessage = $"Bet #{bet.Id} updated.";
+        successMessage = $"Bet #{bet.Id} updated.";
         
         // Remove the processed bet from the current UI list immediately if its status changed,
         // so the queue automatically advances to the next bet without waiting for the background DB reload!
@@ -2945,13 +2927,13 @@ else
             {
                 var actualNextBet = currentReviewList[currentReviewIndex];
                 StartReview(actualNextBet);
-                modalSuccessMessage = null;
+                successMessage = null;
             }
         }
         else
         {
             reviewingBetModel = null;
-            modalSuccessMessage = null; 
+            successMessage = null; 
             successMessage = $"Bet #{bet.Id} processed. Queue empty.";
         }
         StateHasChanged();

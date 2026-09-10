@@ -183,7 +183,7 @@ else
     @* DASHBOARD FOR AUTHENTICATED USERS *@
     @if (!string.IsNullOrEmpty(ErrorMessage))
     {
-        <div class="alert alert-danger alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
+        <div class="alert alert-danger alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 9999; min-width: 300px;">
             <strong>Error:</strong> <pre class="mb-0">@ErrorMessage</pre>
             <button type="button" class="btn-close" @onclick="() => ErrorMessage = null" aria-label="Close"></button>
         </div>
@@ -191,7 +191,7 @@ else
 
     @if (!string.IsNullOrEmpty(SuccessMessage))
     {
-        <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
+        <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 9999; min-width: 300px;">
             <strong>Success!</strong> @SuccessMessage
             <button type="button" class="btn-close" @onclick="() => SuccessMessage = null" aria-label="Close"></button>
         </div>

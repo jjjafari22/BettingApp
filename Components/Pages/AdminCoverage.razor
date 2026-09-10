@@ -70,13 +70,19 @@
         </div>
     </div>
     
-    @if (!string.IsNullOrEmpty(errorMessage))
-    {
-        <div class="alert alert-danger">@errorMessage</div>
-    }
     @if (!string.IsNullOrEmpty(successMessage))
     {
-        <div class="alert alert-success">@successMessage</div>
+        <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 9999; min-width: 300px;">
+            <i class="bi bi-check-circle-fill me-2"></i> @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 9999; min-width: 300px;">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
     }
 
     @if (isLoading)
@@ -249,8 +255,8 @@
     private List<CoverageShift> shifts = new();
     private List<ApplicationUser> allAdmins = new();
     private bool isLoading = true;
-    private string errorMessage = "";
-    private string successMessage = "";
+    private string? errorMessage = null;
+    private string? successMessage = null;
     
     private bool isAdmin = false;
     private string currentUserName = "";

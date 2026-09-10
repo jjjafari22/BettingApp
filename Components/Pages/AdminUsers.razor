@@ -113,18 +113,6 @@
                 </div>
                 
                 <div class="modal-body review-modal-body">
-                   @if (!string.IsNullOrEmpty(modalSuccessMessage)) {
-                       <div class="alert alert-success m-0 rounded-0 text-center py-2 border-0 border-bottom border-success shadow-sm" role="alert" style="background-color: #d1e7dd; color: #0f5132;">
-                           <i class="bi bi-check-circle-fill me-2"></i> <strong>@modalSuccessMessage</strong>
-                       </div>
-                   }
-                   @if (reviewErrorMessage != null) {
-                      <div class="position-absolute w-100 p-2" style="z-index: 1050; top: 0;">
-                           <div class="alert alert-danger alert-dismissible fade show shadow-lg" role="alert">
-                               <i class="bi bi-exclamation-circle-fill me-1"></i> @reviewErrorMessage
-                               <button type="button" class="btn-close" @onclick="() => reviewErrorMessage = null"></button>
-                           </div>
-                       </div>
                    }
                    
                    <div class="review-image-container">
@@ -186,7 +174,7 @@
 
 @if (successMessage != null)
 {
-    <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 1055; min-width: 300px;">
+    <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 9999; min-width: 300px;">
         <i class="bi bi-check-circle-fill me-2"></i> @successMessage
         <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
     </div>
@@ -535,8 +523,7 @@ else
     private decimal selectedUserHandle;
     private decimal selectedUserProfit;
     private Bet? reviewingBetModel;
-    private string? reviewErrorMessage;
-    private string? modalSuccessMessage;
+    private string? errorMessage;
     private ElementReference reviewModalRef;
     private bool shouldFocusReviewModal = false;
     private List<Bet> currentReviewList = new();
@@ -1205,8 +1192,8 @@ else
             currentReviewUserFreeBalance = 0;
         }
 
-        modalSuccessMessage = null; 
-        reviewErrorMessage = null; 
+        successMessage = null; 
+        errorMessage = null; 
         shouldFocusReviewModal = true;
 
         _ = LoadResolvedScreenshotUrlAsync(reviewingBetModel.ScreenshotUrl);
@@ -1225,14 +1212,14 @@ else
         
         reviewingBetModel = null; 
         originalBetModel = null;
-        reviewErrorMessage = null; 
-        modalSuccessMessage = null; 
+        errorMessage = null; 
+        successMessage = null; 
     }
 
     private void NavigateReview(int direction)
     {
         if (currentReviewList == null || currentReviewList.Count == 0) return;
-        modalSuccessMessage = null;
+        successMessage = null;
         int newIndex = currentReviewIndex + direction;
 
         if (newIndex < 0) newIndex = 0;
@@ -1297,15 +1284,15 @@ else
 
     private async Task ProcessBet(Bet bet, string newStatus)
     {
-        reviewErrorMessage = null;
-        modalSuccessMessage = null; 
+        errorMessage = null;
+        successMessage = null; 
         string originalStatus = bet.Status;
 
         if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
-            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { reviewErrorMessage = "Invalid amount"; return; }
-            if (bet.Odds <= 1) { reviewErrorMessage = "Invalid odds"; return; }
-            if (Math.Round(bet.Odds, 2) != bet.Odds) { reviewErrorMessage = "Odds max 2 decimals"; return; }
+            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { errorMessage = "Invalid amount"; return; }
+            if (bet.Odds <= 1) { errorMessage = "Invalid odds"; return; }
+            if (Math.Round(bet.Odds, 2) != bet.Odds) { errorMessage = "Odds max 2 decimals"; return; }
         }
 
         if (new[] { "Won", "Lost", "Void", "Completed", "Cancelled" }.Contains(originalStatus))
@@ -1326,14 +1313,14 @@ else
 
                  if (netLiability > userLimit) { 
                      decimal maxBetAmount = Math.Floor(userLimit / (bet.Odds - 1));
-                     reviewErrorMessage = $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {bet.Odds} odds is {maxBetAmount:N0} kr.";
+                     errorMessage = $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {bet.Odds} odds is {maxBetAmount:N0} kr.";
                      return; 
                  }
             }
             if (originalStatus == "Pending")
             {
                 var (allowed, error) = await CheckUserBalance(bet.UserId, (decimal)(bet.AmountNOK ?? 0));
-                if (!allowed) { reviewErrorMessage = error; return; }
+                if (!allowed) { errorMessage = error; return; }
             }
         }
         
@@ -1404,7 +1391,7 @@ else
         }
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet status is now: {newStatus}");
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        modalSuccessMessage = $"Bet #{bet.Id} updated.";
+        successMessage = $"Bet #{bet.Id} updated.";
         
         if (originalBetModel != null)
         {
