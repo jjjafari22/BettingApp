@@ -611,6 +611,7 @@ else
                 <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap">
                     <div class="d-flex align-items-center flex-wrap gap-3 mb-2 mb-md-0">
                         <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.AllTime ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.AllTime)">All Time</button>
                             <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Daily ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Daily)">Daily</button>
                             <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Weekly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Weekly)">Weekly</button>
                             <button type="button" class="btn btn-sm btn-@(viewMode == ViewMode.Monthly ? "light" : "outline-light")" @onclick="() => SetViewMode(ViewMode.Monthly)">Monthly</button>
@@ -633,7 +634,7 @@ else
                                 <input type="date" class="form-control form-control-sm border-0 text-white bg-transparent" @bind="ccEndDate" @bind:after="OnCustomDateChanged" title="To Date" />
                             </div>
                         }
-                        else
+                        else if (viewMode != ViewMode.AllTime)
                         {
                             <button class="btn btn-outline-light btn-sm" @onclick="PreviousPeriod"><i class="bi bi-chevron-left"></i></button>
                             <span class="fw-bold mx-2" style="min-width: 120px; text-align: center;">@GetPeriodDisplayString()</span>
@@ -1002,6 +1003,10 @@ else
         DateTime startBase, endBase;
         switch (viewMode)
         {
+            case ViewMode.AllTime:
+                startBase = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                endBase = new DateTime(2100, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                break;
             case ViewMode.Daily:
                 startBase = currentViewDate.Date;
                 endBase = startBase.AddDays(1);
@@ -1079,8 +1084,8 @@ else
     private string ccSortColumn = "LastUpdated";
     private bool ccSortAscending = false;
     
-    private enum ViewMode { Daily, Weekly, Monthly, Yearly, Custom }
-    private ViewMode viewMode = ViewMode.Daily;
+    private enum ViewMode { AllTime, Daily, Weekly, Monthly, Yearly, Custom }
+    private ViewMode viewMode = ViewMode.AllTime;
     private DateTime currentViewDate; 
 
     private string searchTerm = "";
@@ -1598,6 +1603,10 @@ else
         DateTime startBase, endBase;
         switch (viewMode)
         {
+            case ViewMode.AllTime:
+                startBase = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                endBase = new DateTime(2100, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                break;
             case ViewMode.Daily:
                 startBase = currentViewDate.Date;
                 endBase = startBase.AddDays(1);
