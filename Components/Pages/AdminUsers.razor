@@ -523,7 +523,6 @@ else
     private decimal selectedUserHandle;
     private decimal selectedUserProfit;
     private Bet? reviewingBetModel;
-    private string? errorMessage;
     private ElementReference reviewModalRef;
     private bool shouldFocusReviewModal = false;
     private List<Bet> currentReviewList = new();
@@ -1118,7 +1117,7 @@ else
         }
     }
 
-    private Bet? originalBetModel;
+
 
     private string resolvedScreenshotUrl = "";
     private Dictionary<string, string> localImageCache = new();
@@ -1169,7 +1168,6 @@ else
 
     private void StartReview(Bet bet)
     {
-        originalBetModel = bet;
         currentReviewList = displayedUserBets;
         currentReviewIndex = displayedUserBets.FindIndex(b => b.Id == bet.Id);
         reviewingBetModel = new Bet 
@@ -1193,7 +1191,7 @@ else
         }
 
         successMessage = null; 
-        errorMessage = null; 
+        
         shouldFocusReviewModal = true;
 
         _ = LoadResolvedScreenshotUrlAsync(reviewingBetModel.ScreenshotUrl);
@@ -1201,18 +1199,8 @@ else
 
     private async Task CancelReview() 
     { 
-        if (reviewingBetModel != null && originalBetModel != null)
-        {
-            if (originalBetModel.Status != "Pending" && (reviewingBetModel.Odds != originalBetModel.Odds || reviewingBetModel.AmountNOK != originalBetModel.AmountNOK))
-            {
-                 bool confirmed = await DialogService.ConfirmAsync( "You have unsaved changes to Odds or Stake.\n\nPlease click a status button (Won, Lost, Void) to save them, or click OK to discard changes and close.");
-                 if (!confirmed) return;
-            }
-        }
-        
         reviewingBetModel = null; 
-        originalBetModel = null;
-        errorMessage = null; 
+        
         successMessage = null; 
     }
 
@@ -1264,144 +1252,8 @@ else
             _ => "bg-secondary"
         };
     }
-    
-    private async Task<(bool allowed, string error)> CheckUserBalance(string userId, decimal newBetAmount)
-    {
-        using var context = DbFactory.CreateDbContext();
-        var targetUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
-        
-        var currentBal = targetUser?.Balance ?? 0;
-        var freeBetBal = targetUser?.FreeBetBalance ?? 0;
-        var creditLimit = targetUser?.CreditLimit ?? 0;
-        
-        var availableCredit = currentBal + freeBetBal + creditLimit - newBetAmount;
-        if (availableCredit < 0)
-        {
-            return (false, $"Insufficient funds. Available: {(currentBal + freeBetBal + creditLimit):N0} kr. Required: {newBetAmount:N0} kr.");
-        }
-        return (true, string.Empty);
-    }
 
-    private async Task ProcessBet(Bet bet, string newStatus)
-    {
-        errorMessage = null;
-        successMessage = null; 
-        string originalStatus = bet.Status;
 
-        if (newStatus != "Rejected" && newStatus != "Cancelled")
-        {
-            if (bet.AmountNOK == null || bet.AmountNOK <= 0) { errorMessage = "Invalid amount"; return; }
-            if (bet.Odds <= 1) { errorMessage = "Invalid odds"; return; }
-            if (Math.Round(bet.Odds, 2) != bet.Odds) { errorMessage = "Odds max 2 decimals"; return; }
-        }
-
-        if (new[] { "Won", "Lost", "Void", "Completed", "Cancelled" }.Contains(originalStatus))
-        {
-             bool confirmed = await DialogService.ConfirmAsync( $"Update Bet #{bet.Id}?\n\n{originalStatus} -> {newStatus}");
-             if (!confirmed) return;
-        }
-
-        if (newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost")
-        {
-            using var valContext = DbFactory.CreateDbContext();
-            var betUser = await valContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == bet.UserId);
-            if (betUser != null)
-            {
-                 decimal currentAmount = (decimal)(bet.AmountNOK ?? 0);
-                 decimal netLiability = Math.Floor(currentAmount * (bet.Odds - 1));
-                 decimal userLimit = betUser.MaxNetLiability;
-
-                 if (netLiability > userLimit) { 
-                     decimal maxBetAmount = Math.Floor(userLimit / (bet.Odds - 1));
-                     errorMessage = $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {bet.Odds} odds is {maxBetAmount:N0} kr.";
-                     return; 
-                 }
-            }
-            if (originalStatus == "Pending")
-            {
-                var (allowed, error) = await CheckUserBalance(bet.UserId, (decimal)(bet.AmountNOK ?? 0));
-                if (!allowed) { errorMessage = error; return; }
-            }
-        }
-        
-        using var context = DbFactory.CreateDbContext();
-        var dbBet = await context.Bets.FindAsync(bet.Id);
-        var dbUser = await context.Users.FindAsync(bet.UserId);
-        if (dbBet != null && dbUser != null)
-        {
-            // REVERSE OLD IMPACT
-            // Statuses that have deducted balance: Approved, Won, Lost
-            if (originalStatus == "Approved" || originalStatus == "Lost")
-            {
-                dbUser.Balance += ((decimal)(dbBet.AmountNOK ?? 0) - dbBet.FreeBetAmount);
-                dbUser.FreeBetBalance += dbBet.FreeBetAmount;
-            }
-            else if (originalStatus == "Won")
-            {
-                dbUser.Balance += ((decimal)(dbBet.AmountNOK ?? 0) - dbBet.FreeBetAmount);
-                dbUser.FreeBetBalance += dbBet.FreeBetAmount;
-                dbUser.Balance -= dbBet.PotentialPayout;
-            }
-            // originalStatus == Void/Rejected/Cancelled/Pending already has balance returned
-
-            // APPLY NEW VALUES
-            dbBet.Status = newStatus;
-            dbBet.AmountNOK = bet.AmountNOK;
-            dbBet.Odds = bet.Odds;
-
-            if (originalStatus == "Pending")
-            {
-                dbBet.FreeBetAmount = Math.Min((decimal)(dbBet.AmountNOK ?? 0), dbUser.FreeBetBalance);
-            }
-            else 
-            {
-                 // Safety: Capping free bet amount if admin reduced the total stake
-                 dbBet.FreeBetAmount = Math.Min(dbBet.FreeBetAmount, (decimal)(dbBet.AmountNOK ?? 0));
-            }
-
-            // APPLY NEW STATUS IMPACT
-            // Statuses that should deduct balance: Approved, Won, Lost
-            if (newStatus == "Approved" || newStatus == "Lost")
-            {
-                dbUser.Balance -= ((decimal)(dbBet.AmountNOK ?? 0) - dbBet.FreeBetAmount);
-                dbUser.FreeBetBalance -= dbBet.FreeBetAmount;
-            }
-            else if (newStatus == "Won")
-            {
-                dbUser.Balance -= ((decimal)(dbBet.AmountNOK ?? 0) - dbBet.FreeBetAmount);
-                dbUser.FreeBetBalance -= dbBet.FreeBetAmount;
-                dbUser.Balance += dbBet.PotentialPayout;
-            }
-            // newStatus == Void/Rejected/Cancelled doesn't deduct stakes
-            
-            dbBet.UpdatedAt = DateTime.UtcNow;
-            context.AuditLogs.Add(new AuditLog
-            {
-                AdminUserName = currentAdminName ?? "Unknown",
-                Action = $"Bet {newStatus}",
-                TargetUserName = bet.UserName,
-                Details = $"Bet ID: {bet.Id}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Payout: {dbBet.PotentialPayout:N0}"
-            });
-            await context.SaveChangesAsync();
-        }
-
-        if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
-        {
-            _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet!, newStatus, isUpdate: false);
-        }
-        await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet status is now: {newStatus}");
-        await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
-        successMessage = $"Bet #{bet.Id} updated.";
-        
-        if (originalBetModel != null)
-        {
-            originalBetModel.Odds = bet.Odds;
-            originalBetModel.AmountNOK = bet.AmountNOK;
-            originalBetModel.Status = newStatus;
-        }
-
-        await RefreshData();
-    }
 
 
     private void Sort(string column)

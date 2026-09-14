@@ -2639,6 +2639,7 @@ else
 
     private async Task ProcessBet(Bet bet, string newStatus)
     {
+        if (isSavingBet) return;
         try
         {
             isSavingBet = true;

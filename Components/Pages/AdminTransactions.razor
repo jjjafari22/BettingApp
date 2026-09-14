@@ -164,7 +164,17 @@ else
 
 <div class="row">
     <div class="col-md-12 mb-4">
-        <div class="card">
+        <div class="card position-relative">
+             @if (isSavingTransaction)
+             {
+                 <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center" style="background-color: rgba(255,255,255,0.75); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 1000; border-radius: var(--bs-card-border-radius, .25rem);">
+                     <div class="spinner-border text-primary mb-3" style="width: 3.5rem; height: 3.5rem; border-width: 0.3em;" role="status">
+                         <span class="visually-hidden">Loading...</span>
+                     </div>
+                     <h4 class="fw-bolder text-dark mb-1" style="text-shadow: 0 0 10px rgba(255,255,255,0.9);">Saving...</h4>
+                     <p class="text-dark fw-bold mb-0">Please wait</p>
+                 </div>
+             }
              <div class="card-header bg-primary text-white">Add Transaction</div>
             <div class="card-body">
                 <div class="row">
@@ -1095,6 +1105,8 @@ else
     
     private string? successMessage;
     private string? errorMessage;
+    private bool isSavingTransaction = false;
+    private bool isProcessingAction = false;
     private string? currentAdminName;
     private HubConnection? hubConnection;
     
@@ -1644,8 +1656,12 @@ else
 
     private async Task ConfirmWithdraw(Transaction t)
     {
-        successMessage = null;
-        errorMessage = null;
+        if (isProcessingAction) return;
+        try
+        {
+            isProcessingAction = true;
+            successMessage = null;
+            errorMessage = null;
         var displayUser = userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName;
         
         var msg = t.AmountNOK <= 0 
@@ -1684,6 +1700,11 @@ else
             }
             
             await LoadTransactions(context);
+        }
+        }
+        finally
+        {
+            isProcessingAction = false;
         }
     }
 
@@ -1801,7 +1822,11 @@ else
 
     private async Task RejectWithdraw(Transaction t)
     {
-        var confirmed = await DialogService.ConfirmAsync( "Reject this withdrawal request?");
+        if (isProcessingAction) return;
+        try
+        {
+            isProcessingAction = true;
+            var confirmed = await DialogService.ConfirmAsync( "Reject this withdrawal request?");
         if (!confirmed) return;
 
         using var context = DbFactory.CreateDbContext();
@@ -1824,14 +1849,26 @@ else
             _ = ShowSuccess("Withdrawal rejected.");
             await LoadTransactions(context);
         }
+        }
+        finally
+        {
+            isProcessingAction = false;
+        }
     }
 
 
 
     private async Task AddTransaction()
     {
-        successMessage = null;
-        errorMessage = null;
+        if (isSavingTransaction) return;
+        try
+        {
+            isSavingTransaction = true;
+            StateHasChanged();
+            await Task.Delay(1);
+
+            successMessage = null;
+            errorMessage = null;
 
         if (string.IsNullOrEmpty(newTrans.Platform) || !adminAddAmount.HasValue || adminAddAmount.Value <= 0)
         {
@@ -2031,6 +2068,12 @@ else
         ClearForm();
         
         await LoadTransactions(context);
+        }
+        finally
+        {
+            isSavingTransaction = false;
+            StateHasChanged();
+        }
     }
 
     private void ClearForm()
