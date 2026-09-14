@@ -72,7 +72,7 @@ else
                         <th>Full Name</th>
                         <th>Payment Method</th>
                         <th>Current Balance</th>
-                        <th>Amount Withdrawn</th>
+                        <th>Remaining to Pay</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -148,7 +148,7 @@ else
                                 else
                                 {
                                     <div class="d-flex flex-nowrap gap-1">
-                                        <button class="btn btn-success btn-sm" @onclick="() => ConfirmWithdraw(w)">Confirm</button>
+                                        <button class="btn btn-success btn-sm" @onclick="() => ConfirmWithdraw(w)" disabled="@(w.AmountNOK > 0)">Clear</button>
                                         <button class="btn btn-warning btn-sm" @onclick="() => StartEditTransaction(w)">Edit</button>
                                         <button class="btn btn-danger btn-sm" @onclick="() => RejectWithdraw(w)">Reject</button>
                                     </div>
