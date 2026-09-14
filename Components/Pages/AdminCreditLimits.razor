@@ -238,7 +238,7 @@ else
     {
         using var context = DbFactory.CreateDbContext();
         
-        var baseQuery = context.Users.Where(u => !u.IsAdmin);
+        var baseQuery = context.Users.AsQueryable();
         
         if (!string.IsNullOrWhiteSpace(_searchTerm))
         {
