@@ -44,12 +44,12 @@ else
 
 <ul class="nav nav-tabs mb-4">
     <li class="nav-item">
-        <a class="nav-link @(activeTab == "pending" ? "active" : "")" style="cursor: pointer;" @onclick='() => activeTab = "pending"'>
+        <a class="nav-link @(activeTab == "pending" ? "active" : "")" style="cursor: pointer; user-select: none; -webkit-user-select: none;" @onclick='() => activeTab = "pending"'>
             <i class="bi bi-list-check me-2"></i> Transactions Overview
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link @(activeTab == "cashcows" ? "active" : "")" style="cursor: pointer;" @onclick='() => activeTab = "cashcows"'>
+        <a class="nav-link @(activeTab == "cashcows" ? "active" : "")" style="cursor: pointer; user-select: none; -webkit-user-select: none;" @onclick='() => activeTab = "cashcows"'>
             <i class="bi bi-wallet2 me-2"></i> Cash Cows
         </a>
     </li>
