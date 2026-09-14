@@ -2838,48 +2838,9 @@ else
 
                     if (!isAiFinished && dbBet.AiOutcomeResult != "Admin Override")
                     {
-                        // Fire AI Check immediately in the background
-                        var betId = dbBet.Id;
-                        ConfirmingOutcomeBetIds.Add(betId);
-                        _ = Task.Run(async () => {
-                            try {
-                                using var scope = ServiceProvider.CreateScope();
-                                var dbFactory = scope.ServiceProvider.GetRequiredService<Microsoft.EntityFrameworkCore.IDbContextFactory<BettingApp.Data.ApplicationDbContext>>();
-                                var aiVision = scope.ServiceProvider.GetRequiredService<BettingApp.Services.AiVisionService>();
-                                
-                                using var bgContext = dbFactory.CreateDbContext();
-                                var b = await bgContext.Bets.FindAsync(betId);
-                                if (b != null)
-                                {
-                                    if (string.IsNullOrEmpty(b.AiVisionResultJson) && !string.IsNullOrEmpty(b.ScreenshotUrl))
-                                    {
-                                        var (res, err) = await aiVision.ExtractBetSlipDataAsync(b.ScreenshotUrl);
-                                        if (err == null && res != null)
-                                        {
-                                            b.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(res);
-                                            await bgContext.SaveChangesAsync();
-                                        }
-                                    }
-
-                                    if (!string.IsNullOrEmpty(b.AiVisionResultJson))
-                                    {
-                                        var outcome = await aiVision.ConfirmOutcomeAsync(b.AiVisionResultJson, b.CreatedAt, b.MatchStartTime, b.Id);
-                                        if (!string.IsNullOrEmpty(outcome) && !outcome.StartsWith("Error") && !outcome.StartsWith("Exception"))
-                                        {
-                                            b.AiOutcomeResult = outcome;
-                                            await bgContext.SaveChangesAsync();
-                                        }
-                                    }
-                                }
-                            }
-                            finally {
-                                await InvokeAsync(async () => {
-                                    ConfirmingOutcomeBetIds.Remove(betId);
-                                    await LoadCompletedBets();
-                                    StateHasChanged();
-                                });
-                            }
-                        });
+                        // Schedule AI Check for 60 minutes later
+                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                        bet.NextCheckTime = dbBet.NextCheckTime;
                     }
                 }
             }

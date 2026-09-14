@@ -55,9 +55,15 @@ namespace BettingApp.Services
             var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>();
             using var context = dbFactory.CreateDbContext();
 
-            // Find active or completed bets where NextCheckTime has passed
+            // Active bets (Approved) are always checked if due.
+            // Completed bets (Won/Lost/Void) are only checked if they were updated in the last 3 days. 
+            // This prevents the system from hammering the API with ancient, dormant bets.
+            var cutoffForCompleted = DateTime.UtcNow.AddDays(-3);
+            
             var dueBets = await context.Bets
-                .Where(b => (b.Status == "Approved" || b.Status == "Won" || b.Status == "Lost" || b.Status == "Void") && b.NextCheckTime.HasValue && b.NextCheckTime.Value <= DateTime.UtcNow)
+                .Where(b => b.NextCheckTime.HasValue && b.NextCheckTime.Value <= DateTime.UtcNow)
+                .Where(b => b.Status == "Approved" || 
+                           ((b.Status == "Won" || b.Status == "Lost" || b.Status == "Void") && b.UpdatedAt >= cutoffForCompleted))
                 .ToListAsync(stoppingToken);
 
             bool anyUpdates = false;
@@ -68,7 +74,7 @@ namespace BettingApp.Services
                 // Refresh bet from DB using a newly scoped context (since DbContext is not thread-safe)
                 using var taskContext = dbFactory.CreateDbContext();
                 var dbBet = await taskContext.Bets.FindAsync(new object[] { bet.Id }, ct);
-                if (dbBet == null || dbBet.Status != "Approved") return;
+                if (dbBet == null || (dbBet.Status != "Approved" && dbBet.Status != "Won" && dbBet.Status != "Lost" && dbBet.Status != "Void")) return;
 
                 if (string.IsNullOrEmpty(dbBet.AiVisionResultJson))
                 {
