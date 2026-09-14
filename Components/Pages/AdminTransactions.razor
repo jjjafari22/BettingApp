@@ -212,7 +212,7 @@ else
                         @if (addTransSenderType == "CashCow")
                         {
                             <select class="form-select" @bind="addTransSenderId">
-                                <option value="">-- Select Cash Cow --</option>
+                                <option value="">-- Select Cash Cow (Scroll for more) --</option>
                                 @foreach (var cow in cashCows) { <option value="@cow.Id">@cow.FirstName @cow.LastName</option> }
                             </select>
                             @if (!string.IsNullOrEmpty(addTransSenderId)) {
@@ -269,7 +269,7 @@ else
                         @if (addTransReceiverType == "CashCow")
                         {
                             <select class="form-select" @bind="addTransReceiverId" @bind:after="AutoFillPaymentDetails">
-                                <option value="">-- Select Cash Cow --</option>
+                                <option value="">-- Select Cash Cow (Scroll for more) --</option>
                                 @foreach (var cow in cashCows) { <option value="@cow.Id">@cow.FirstName @cow.LastName</option> }
                             </select>
                             @if (!string.IsNullOrEmpty(addTransReceiverId)) {
