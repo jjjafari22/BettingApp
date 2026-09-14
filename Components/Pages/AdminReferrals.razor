@@ -582,6 +582,12 @@ else
             Platform = "System",
             PaymentDetails = $"Referral Bonus ({msg}) for inviting {dbRef.ReferredUserName}",
             Status = "Completed",
+            SenderType = "System",
+            SenderId = "System",
+            SenderName = "System",
+            ReceiverType = "User",
+            ReceiverId = referrer.Id,
+            ReceiverName = referrer.UserName ?? "Unknown",
             Date = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         });
