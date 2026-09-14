@@ -142,7 +142,17 @@ else
 {
   <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.85);" tabindex="-1" role="dialog" @ref="reviewModalRef" @onkeydown="OnReviewModalKeyDown">
         <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
-            <div class="modal-content review-modal-content">
+            <div class="modal-content review-modal-content position-relative">
+                @if (isSavingBet)
+                {
+                    <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center" style="background-color: rgba(255,255,255,0.75); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 9999; border-radius: var(--bs-modal-border-radius);">
+                        <div class="spinner-border text-primary mb-3" style="width: 3.5rem; height: 3.5rem; border-width: 0.3em;" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <h4 class="fw-bolder text-dark mb-1" style="text-shadow: 0 0 10px rgba(255,255,255,0.9);">Saving...</h4>
+                        <p class="text-dark fw-bold mb-0">Please wait</p>
+                    </div>
+                }
                 <div class="modal-header py-2 flex-shrink-0">
                     <div class="d-flex align-items-center w-100">
                  
@@ -1373,6 +1383,8 @@ else
 
 @code {
     private bool isInitializing = true;
+    private bool isSavingBet = false;
+
     private List<Bet> pendingBets = new();
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
@@ -2627,12 +2639,17 @@ else
 
     private async Task ProcessBet(Bet bet, string newStatus)
     {
-        errorMessage = null;
-        errorMessage = null;
-        successMessage = null; 
-        string originalStatus = bet.Status;
-        int originalBetId = bet.Id;
-        if (newStatus != "Rejected" && newStatus != "Cancelled")
+        try
+        {
+            isSavingBet = true;
+            StateHasChanged();
+            await Task.Delay(1); // Give Blazor Server time to push UI state to client
+
+            errorMessage = null;
+            successMessage = null; 
+            string originalStatus = bet.Status;
+            int originalBetId = bet.Id;
+            if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
             if (bet.AmountNOK == null || bet.AmountNOK <= 0) { errorMessage = "Invalid amount";
                 return; }
@@ -2937,6 +2954,12 @@ else
             successMessage = $"Bet #{bet.Id} processed. Queue empty.";
         }
         StateHasChanged();
+        }
+        finally
+        {
+            isSavingBet = false;
+            StateHasChanged();
+        }
     }
 
     // --- CSV EXPORT FUNCTIONALITY ---
