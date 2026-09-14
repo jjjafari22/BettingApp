@@ -71,14 +71,15 @@ else
                         <th>Discord Username</th>
                         <th>Full Name</th>
                         <th>Payment Method</th>
-                        <th>Amount</th>
+                        <th>Current Balance</th>
+                        <th>Amount Withdrawn</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (pendingWithdrawals.Count == 0)
                     {
-                        <tr><td colspan="7" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
                     }
                     @foreach (var w in pendingWithdrawals)
                     {
@@ -106,6 +107,16 @@ else
                                     {
                                         <div class="text-muted small">@detail.Trim()</div>
                                     }
+                                }
+                            </td>
+                            <td>
+                                @if (currentBalances.TryGetValue(w.UserId, out var bal))
+                                {
+                                    <span class="fw-bold @(bal < 0 ? "text-danger" : "")">@bal.ToString("N0") kr</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">N/A</span>
                                 }
                             </td>
                             <td>
@@ -1045,6 +1056,7 @@ else
     private List<Transaction> pendingWithdrawals = new();
     
     private Dictionary<string, (string DiscordName, string FirstName, string LastName)> userLookup = new();
+    private Dictionary<string, decimal> currentBalances = new();
     private Transaction newTrans = new() { Type = "Deposit", Platform = "Vipps", Date = DateTime.UtcNow, Status = "Completed" };
     private int? adminAddAmount; 
     private string otherPlatformName = "";
@@ -1416,8 +1428,19 @@ else
             .OrderBy(t => t.Date)
             .AsNoTracking()
             .ToListAsync();
-        var userIds = allTransactions.Select(t => t.UserId).Concat(pendingWithdrawals.Select(t => t.UserId)).Distinct();
+        var userIds = allTransactions.Select(t => t.UserId).Concat(pendingWithdrawals.Select(t => t.UserId)).Distinct().ToList();
         await PopulateUserLookup(userIds);
+        
+        if (pendingWithdrawals.Any())
+        {
+            var pendingUserIds = pendingWithdrawals.Select(t => t.UserId).Distinct().ToList();
+            var balances = await context.Users.Where(u => pendingUserIds.Contains(u.Id)).Select(u => new { u.Id, u.Balance }).ToListAsync();
+            currentBalances.Clear();
+            foreach (var b in balances)
+            {
+                currentBalances[b.Id] = b.Balance;
+            }
+        }
     }
     
     private async Task NextPage() { currentPage++; using var c = DbFactory.CreateDbContext();
