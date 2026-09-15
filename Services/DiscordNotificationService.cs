@@ -146,11 +146,15 @@ public class DiscordNotificationService : IHostedService
         
         if (errors.Any())
         {
-            return $"Warning: Sorted {sortedCount} channels, but encountered errors: {string.Join(", ", errors)}";
+            var warningMsg = $"Warning: Sorted {sortedCount} channels, but encountered errors: {string.Join(", ", errors)}";
+            _logger.LogWarning(warningMsg);
+            return warningMsg;
         }
 
         string missingWarning = categoriesMissing.Any() ? $" (Note: Could not find categories: {string.Join(", ", categoriesMissing)})" : "";
-        return $"Successfully sorted {sortedCount} channels across {categoriesFound.Count} categories!{missingWarning}";
+        var successMsg = $"Successfully sorted {sortedCount} channels across {categoriesFound.Count} categories!{missingWarning}";
+        _logger.LogInformation(successMsg);
+        return successMsg;
     }
 
     // --- USER DM LOGIC (Unchanged) ---
@@ -615,6 +619,7 @@ public class DiscordNotificationService : IHostedService
             _cachedChannels = result;
             _lastChannelCacheTime = DateTime.UtcNow;
             
+            _logger.LogInformation($"Successfully fetched and cached {result.Count} Discord channels.");
             return result;
         }
         catch (Exception ex)
