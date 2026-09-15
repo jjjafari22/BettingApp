@@ -1640,16 +1640,26 @@ else
         return 0; // Void/Rejected/Cancelled don't affect profit
     }
 
+    private static readonly System.Threading.SemaphoreSlim _userLookupLock = new(1, 1);
+
     private async Task PopulateUserLookup(IEnumerable<string> userIds)
     {
-        var missingIds = userIds.Except(userLookup.Keys).Distinct().ToList();
-        if (missingIds.Any())
+        await _userLookupLock.WaitAsync();
+        try
         {
-            using var context = DbFactory.CreateDbContext();
-            var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.LastName, u.DiscordUserId }).ToListAsync();
-            foreach(var u in users) {
-                userLookup[u.Id] = (u.DiscordUsername ?? "", u.LastName ?? "", u.DiscordUserId ?? "");
+            var missingIds = userIds.Except(userLookup.Keys).Distinct().ToList();
+            if (missingIds.Any())
+            {
+                using var context = DbFactory.CreateDbContext();
+                var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.LastName, u.DiscordUserId }).ToListAsync();
+                foreach(var u in users) {
+                    userLookup[u.Id] = (u.DiscordUsername ?? "", u.LastName ?? "", u.DiscordUserId ?? "");
+                }
             }
+        }
+        finally
+        {
+            _userLookupLock.Release();
         }
     }
 
@@ -1697,9 +1707,11 @@ else
         var allPendingBets = await context.Bets.Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
         totalPendingBets = allPendingBets.Count;
         
+        var missingStartTimeCache = allPendingBets.ToDictionary(b => b.Id, b => IsMissingAnyStartTime(b));
+
         pendingBets = allPendingBets
-            .OrderBy(b => IsMissingAnyStartTime(b) ? 0 : 1)
-            .ThenBy(b => IsMissingAnyStartTime(b) ? DateTime.MinValue : (b.MatchStartTime ?? DateTime.MaxValue))
+            .OrderBy(b => missingStartTimeCache[b.Id] ? 0 : 1)
+            .ThenBy(b => missingStartTimeCache[b.Id] ? DateTime.MinValue : (b.MatchStartTime ?? DateTime.MaxValue))
             .ThenByDescending(b => b.CreatedAt)
             .Skip((pendingPage - 1) * pageSize)
             .Take(pageSize)
@@ -2273,9 +2285,10 @@ else
                 // Instantly resort the pending bets list in memory so it reflects correctly on the UI
                 if (pendingBets != null && pendingBets.Any(b => b.Id == reviewingBetModel.Id))
                 {
+                    var missingStartTimeCache = pendingBets.ToDictionary(b => b.Id, b => IsMissingAnyStartTime(b));
                     pendingBets = pendingBets
-                        .OrderBy(b => IsMissingAnyStartTime(b) ? 0 : 1)
-                        .ThenBy(b => IsMissingAnyStartTime(b) ? DateTime.MinValue : (b.MatchStartTime ?? DateTime.MaxValue))
+                        .OrderBy(b => missingStartTimeCache[b.Id] ? 0 : 1)
+                        .ThenBy(b => missingStartTimeCache[b.Id] ? DateTime.MinValue : (b.MatchStartTime ?? DateTime.MaxValue))
                         .ThenByDescending(b => b.CreatedAt)
                         .ToList();
                 }

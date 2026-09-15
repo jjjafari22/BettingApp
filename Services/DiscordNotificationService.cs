@@ -35,8 +35,6 @@ public class DiscordNotificationService : IHostedService
         _client = new DiscordSocketClient(socketConfig);
     }
 
-    private Timer? _sortingTimer;
-
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(_botToken))
@@ -50,15 +48,6 @@ public class DiscordNotificationService : IHostedService
             _logger.LogInformation("Starting Discord Bot...");
             await _client.LoginAsync(TokenType.Bot, _botToken);
             await _client.StartAsync();
-
-            // Automatically sort channels every 60 minutes
-            _sortingTimer = new Timer(async _ => 
-            {
-                if (_client.ConnectionState == ConnectionState.Connected)
-                {
-                    await SortUserChannelsAlphabeticallyAsync();
-                }
-            }, null, TimeSpan.FromMinutes(60), TimeSpan.FromMinutes(60));
         }
         catch (Exception ex)
         {
@@ -69,7 +58,6 @@ public class DiscordNotificationService : IHostedService
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Stopping Discord Bot...");
-        _sortingTimer?.Dispose();
         await _client.StopAsync();
     }
 
@@ -569,7 +557,7 @@ public class DiscordNotificationService : IHostedService
 
     private List<(ulong Id, string Name, string CategoryName)>? _cachedChannels;
     private DateTime _lastChannelCacheTime = DateTime.MinValue;
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(60);
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromDays(365);
 
     public void InvalidateChannelCache()
     {

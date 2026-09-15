@@ -1048,6 +1048,12 @@ else
             if (vm != null) vm.ReferredBy = newReferral;
             var pvm = pendingUsersVM.FirstOrDefault(u => u.Id == userId);
             if (pvm != null) pvm.ReferredBy = newReferral;
+            
+            DiscordService.InvalidateChannelCache();
+            _ = Task.Run(async () => {
+                await DiscordService.GetGuildTextChannelsAsync();
+                await DiscordService.SortUserChannelsAlphabeticallyAsync();
+            });
         }
     }
 
@@ -1081,6 +1087,12 @@ else
             await context.SaveChangesAsync();
             
             if (vm != null) vm.DiscordUserId = newId;
+            
+            DiscordService.InvalidateChannelCache();
+            _ = Task.Run(async () => {
+                await DiscordService.GetGuildTextChannelsAsync();
+                await DiscordService.SortUserChannelsAlphabeticallyAsync();
+            });
         }
     }
 
@@ -1114,6 +1126,12 @@ else
             await context.SaveChangesAsync();
 
             if (vm != null) vm.DiscordUsername = newUsername;
+            
+            DiscordService.InvalidateChannelCache();
+            _ = Task.Run(async () => {
+                await DiscordService.GetGuildTextChannelsAsync();
+                await DiscordService.SortUserChannelsAlphabeticallyAsync();
+            });
         }
     }
 
