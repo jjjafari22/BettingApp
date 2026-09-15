@@ -192,6 +192,7 @@ else
     private void RefreshDiscordCache()
     {
         DiscordService.InvalidateChannelCache();
+        _ = Task.Run(async () => await DiscordService.GetGuildTextChannelsAsync());
         discordMessage = "Discord cache refreshed successfully!";
         showDiscordSuccess = true;
     }

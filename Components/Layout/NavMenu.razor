@@ -6,6 +6,7 @@
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject ILogger<NavMenu> Logger
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <div class="top-row navbar navbar-dark d-flex align-items-center" style="padding-left: 1rem;">
@@ -234,7 +235,7 @@
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"NavMenu SignalR Error: {ex.Message}");
+                    Logger.LogError($"NavMenu SignalR Error: {ex.Message}");
  }
             }
         }
@@ -263,7 +264,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error refreshing admin tasks: {ex.Message}");
+            Logger.LogError($"Error refreshing admin tasks: {ex.Message}");
  }
     }
 

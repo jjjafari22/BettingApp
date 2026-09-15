@@ -13,6 +13,7 @@
 @inject IJSRuntime JSRuntime
 @inject IHubContext<BetHub> HubContext
 @inject DiscordNotificationService DiscordService
+@inject ILogger<DepositWithdraw> Logger
 @attribute [Authorize]
 @implements IAsyncDisposable
 
@@ -349,7 +350,7 @@
                     await SetupSignalR();
                 }
             }
-            catch (Exception ex) { Console.WriteLine(ex); }
+            catch (Exception ex) { Logger.LogError(ex, "An error occurred"); }
             finally { IsLoading = false; StateHasChanged(); }
         }
     }

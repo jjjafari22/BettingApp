@@ -85,6 +85,8 @@ public class DiscordNotificationService : IHostedService
     // --- SORT CHANNELS ALPHABETICALLY ---
     public async Task<string> SortUserChannelsAlphabeticallyAsync()
     {
+        _logger.LogInformation("Triggering Discord channel sorting via API...");
+        
         if (string.IsNullOrEmpty(GuildId) || !ulong.TryParse(GuildId, out var parsedGuildId)) 
             return "Error: Discord Guild ID is not configured.";
         
@@ -583,6 +585,7 @@ public class DiscordNotificationService : IHostedService
 
         try
         {
+            _logger.LogInformation("Fetching Discord channels from API...");
             var guild = await _client.Rest.GetGuildAsync(guildId);
             if (guild == null)
             {

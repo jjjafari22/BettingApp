@@ -136,13 +136,15 @@ namespace BettingApp.Services
 
             return await ((Google.Apis.Auth.OAuth2.ITokenAccess)_cachedCredential).GetAccessTokenForRequestAsync();
         }
+        private readonly ILogger<AiVisionService> _logger;
 
-        public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob)
+        public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob, ILogger<AiVisionService> logger)
         {
             _httpClient = httpClient;
             _config = config;
             _apiKey = config["GeminiApiKey"];
             _fotMob = fotMob;
+            _logger = logger;
         }
 
         public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl, int? betId = null)
@@ -253,7 +255,7 @@ namespace BettingApp.Services
                 var apiUrl = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
+                _logger.LogInformation($" {betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
 
                 var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token);
                 string responseString = await response.Content.ReadAsStringAsync();
@@ -265,7 +267,7 @@ namespace BettingApp.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}AI ERROR: {response.StatusCode} - {responseString}");
+                    _logger.LogError($"{betLabel}AI ERROR: {response.StatusCode} - {responseString}");
                     return (null, $"Gemini API Error: {response?.StatusCode}\nResolved Model: {resolvedModel}\nDetails: {responseString}");
                 }
 
@@ -321,7 +323,7 @@ namespace BettingApp.Services
                                 if (!string.IsNullOrEmpty(resolvedMatch))
                                 {
                                     leg.Match = resolvedMatch;
-                                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}FotMob Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
+                                    _logger.LogInformation($" {betLabel}FotMob Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
                                 }
                             }
                         }
@@ -379,7 +381,7 @@ namespace BettingApp.Services
             catch (Exception ex)
             {
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}EXCEPTION in ExtractBetSlipDataAsync: {ex.ToString()}");
+                _logger.LogError($"{betLabel}EXCEPTION in ExtractBetSlipDataAsync: {ex.ToString()}");
                 return (null, $"Exception: {ex.Message}");
             }
         }
@@ -512,7 +514,7 @@ namespace BettingApp.Services
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
                 betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
+                _logger.LogInformation($" {betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
                 
                 var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token);
                 if (!response.IsSuccessStatusCode)
@@ -589,11 +591,11 @@ namespace BettingApp.Services
                         
                         if (status == "MATCH IN PROGRESS" && hasStartTime)
                         {
-                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {localBetLabel} AI: Found start time -> {resultObj!.MatchStartTimeIso}");
+                            _logger.LogInformation($" {localBetLabel} AI: Found start time -> {resultObj!.MatchStartTimeIso}");
                         }
                         else
                         {
-                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {localBetLabel} AI: Checked outcome -> Status: {status}");
+                            _logger.LogInformation($" {localBetLabel} AI: Checked outcome -> Status: {status}");
                         }
                     }
                     catch { } // ignore parsing errors
@@ -640,7 +642,7 @@ namespace BettingApp.Services
 
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 string betLabel = "[Match Start Time] ";
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}calling Gemini (Model: {resolvedModel})...");
+                _logger.LogInformation($" {betLabel}calling Gemini (Model: {resolvedModel})...");
                 
                 var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token);
                 
@@ -693,7 +695,7 @@ namespace BettingApp.Services
                     string thinkMsg = thinking > 0 ? $" (Thinking: {thinking})" : (hasThought ? " (Thinking: active)" : "");
                     string warning = thinking >= 900 ? " ⚠️ WARNING: Approaching thinking limit!" : "";
 
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel}📊 AI Usage -> Total: {total} | Input: {prompt} | Output: {output}{thinkMsg}{warning}");
+                    _logger.LogInformation($" {betLabel}📊 AI Usage -> Total: {total} | Input: {prompt} | Output: {output}{thinkMsg}{warning}");
                 }
             }
             catch { }
@@ -715,7 +717,7 @@ namespace BettingApp.Services
                 }
                 else if (candidate.TryGetProperty("finishReason", out var finishReason))
                 {
-                    Console.WriteLine($"[AI WARNING] Gemini generation stopped due to: {finishReason.GetString()}");
+                    _logger.LogWarning($"[AI WARNING] Gemini generation stopped due to: {finishReason.GetString()}");
                 }
             }
             return null;
@@ -741,7 +743,7 @@ namespace BettingApp.Services
                     {
                         if (i < maxRetries - 1)
                         {
-                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {logLabel}Gemini API returned {response.StatusCode}. Retrying in {2 * (i + 1)}s... (Attempt {i+1}/{maxRetries-1})");
+                            _logger.LogWarning($"{logLabel}Gemini API returned {response.StatusCode}. Retrying in {2 * (i + 1)}s... (Attempt {i+1}/{maxRetries-1})");
                             await Task.Delay(2000 * (i + 1));
                             continue;
                         }
@@ -752,7 +754,7 @@ namespace BettingApp.Services
                 {
                     if (i < maxRetries - 1)
                     {
-                        Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {logLabel}Gemini API TaskCanceled (Timeout). Retrying in {2 * (i + 1)}s... (Attempt {i+1}/{maxRetries-1})");
+                        _logger.LogWarning($"{logLabel}Gemini API TaskCanceled (Timeout). Retrying in {2 * (i + 1)}s... (Attempt {i+1}/{maxRetries-1})");
                         await Task.Delay(2000 * (i + 1));
                         continue;
                     }

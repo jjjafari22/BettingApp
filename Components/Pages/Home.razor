@@ -18,6 +18,7 @@
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
 @inject Microsoft.Extensions.DependencyInjection.IServiceScopeFactory ScopeFactory
+@inject ILogger<Home> Logger
 
 <PageTitle>Castle of Happiness</PageTitle>
 
@@ -497,7 +498,7 @@ else
         catch (Exception ex) when (ex is not NavigationException)
         {
             ErrorMessage = $"Startup Error: {ex.Message}";
-            Console.WriteLine(ex);
+            Logger.LogError(ex, "An error occurred");
         }
     }
 
@@ -517,7 +518,7 @@ else
             catch (Exception ex)
             {
                 ErrorMessage = $"Error loading data: {ex.Message}";
-                Console.WriteLine(ex);
+                Logger.LogError(ex, "An error occurred");
             }
             finally
             {
@@ -734,7 +735,7 @@ else
                                     if (error != null)
                                     {
                                         System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI ERROR: {error}\n");
-                                        Console.WriteLine($"[AiVisionService] AI Auto-Read failed for bet #{id}: {error}");
+                                        Logger.LogError($"[AiVisionService] AI Auto-Read failed for bet #{id}: {error}");
                                         dbBet.AiVisionError = error;
                                     }
                                     
@@ -799,7 +800,7 @@ else
                     await Task.WhenAll(tasks);
                 } catch (Exception ex) {  
                     System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] EXCEPTION: {ex}\n");
-                    Console.WriteLine($"[AiVisionService] Exception in background processing: {ex}");
+                    Logger.LogError($"[AiVisionService] Exception in background processing: {ex}");
                 }
             });
 
@@ -815,7 +816,7 @@ else
         catch (Exception ex)
         {
             ErrorMessage = $"Submission Error: {ex.Message}";
-            Console.WriteLine(ex);
+            Logger.LogError(ex, "An error occurred");
         }
         finally
         {
@@ -865,7 +866,7 @@ else
         catch (Exception ex)
         {
             ErrorMessage = $"Error cancelling bet: {ex.Message}";
-            Console.WriteLine(ex);
+            Logger.LogError(ex, "An error occurred");
         }
     }
     

@@ -8,11 +8,13 @@ namespace BettingApp.Services
     {
         private readonly HttpClient _httpClient;
         private readonly TeamAliasMappingService _teamAliasMapper;
+        private readonly ILogger<FotMobScraperService> _logger;
 
-        public FotMobScraperService(HttpClient httpClient, TeamAliasMappingService teamAliasMapper)
+        public FotMobScraperService(HttpClient httpClient, TeamAliasMappingService teamAliasMapper, ILogger<FotMobScraperService> logger)
         {
             _httpClient = httpClient;
             _teamAliasMapper = teamAliasMapper;
+            _logger = logger;
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
         }
 
@@ -219,11 +221,11 @@ namespace BettingApp.Services
 
                 if (string.IsNullOrEmpty(eventId))
                 {
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Could not find match '{matchName}'");
+                    _logger.LogInformation($" {betLabel} FotMob: Could not find match '{matchName}'");
                     return null;
                 }
 
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Found Match ID {eventId} for {matchName}");
+                _logger.LogInformation($" {betLabel} FotMob: Found Match ID {eventId} for {matchName}");
 
                 // 2. Fetch Match HTML (Bust CDN cache with a unique timestamp)
                 string matchHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/match/{eventId}?_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}");
@@ -310,7 +312,7 @@ namespace BettingApp.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] Error scraping JSON for {matchName}: {ex.Message}");
+                _logger.LogError($"Error scraping JSON for {matchName}: {ex.Message}");
                 return null;
             }
         }
@@ -497,7 +499,7 @@ namespace BettingApp.Services
                 var response = await _httpClient.GetAsync(searchUrl);
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Player Search API failed with status: {response.StatusCode}");
+                    _logger.LogInformation($" {betLabel} FotMob: Player Search API failed with status: {response.StatusCode}");
                     return null;
                 }
 
@@ -506,7 +508,7 @@ namespace BettingApp.Services
                 
                 if (!doc.RootElement.TryGetProperty("squadMemberSuggest", out var playerSuggests) || playerSuggests.GetArrayLength() == 0)
                 {
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: No player found for '{playerName}'");
+                    _logger.LogInformation($" {betLabel} FotMob: No player found for '{playerName}'");
                     return null;
                 }
                 
@@ -558,7 +560,7 @@ namespace BettingApp.Services
 
                         if (!string.IsNullOrEmpty(bestMatch))
                         {
-                            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Resolved player '{playerName}' to match: '{bestMatch}'");
+                            _logger.LogInformation($" {betLabel} FotMob: Resolved player '{playerName}' to match: '{bestMatch}'");
                             return bestMatch;
                         }
                     }
@@ -566,7 +568,7 @@ namespace BettingApp.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} FotMob: Exception in ResolvePlayerMatchAsync: {ex.Message}");
+                _logger.LogError($"{betLabel} FotMob: Exception in ResolvePlayerMatchAsync: {ex.Message}");
             }
 
             return null;

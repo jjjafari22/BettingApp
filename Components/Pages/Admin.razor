@@ -20,6 +20,7 @@
 @inject AiVisionService AiVision
 @inject MarketMappingService MarketMapper
 @inject IServiceProvider ServiceProvider
+@inject ILogger<Admin> Logger
 @attribute [Authorize]
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 @implements IAsyncDisposable
@@ -1902,7 +1903,7 @@ else
                 
                 StateHasChanged(); 
             }
-            catch (Exception ex) { Console.WriteLine($"Timezone error: {ex.Message}"); }
+            catch (Exception ex) { Logger.LogError($"Timezone error: {ex.Message}"); }
 
             hubConnection = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/bethub")).Build();
             
@@ -2243,7 +2244,7 @@ else
         if (result == null)
         {
             OddsLookupErrorMessage = error ?? "No OddsPapi matches found for that team, or error occurred.";
-            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupErrorMessage} (Searched: '{OddsSearchTeam}')");
+            Logger.LogInformation($" [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupErrorMessage} (Searched: '{OddsSearchTeam}')");
         }
         else
         {
@@ -2297,7 +2298,7 @@ else
             if (result.Markets.Count == 0)
             {
                 OddsLookupWarningMessage = "Match found, but OddsPapi returned 0 markets for Unibet SE, Betsson, and Bet365.";
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
+                Logger.LogInformation($" [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
             }
             else if (!string.IsNullOrEmpty(preSelectCategory))
             {
@@ -2390,7 +2391,7 @@ else
                             if (!lineExists)
                             {
                                 OddsLookupWarningMessage = $"The betslip is for '{preSelectCategory}'. Automatically showing '{bestMatch.MarketName}' instead, but verify if the specific line is available.";
-                                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
+                                Logger.LogInformation($" [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
                             }
                         }
                     }
@@ -2398,7 +2399,7 @@ else
                 else
                 {
                     OddsLookupWarningMessage = $"The betslip is for '{preSelectCategory}', but OddsPapi doesn't offer it for this match.";
-                    Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
+                    Logger.LogInformation($" [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
                 }
             }
             

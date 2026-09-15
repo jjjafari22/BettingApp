@@ -9,13 +9,15 @@ public class OddsApiService
     private readonly string _apiKey;
     private readonly IMemoryCache _cache;
     private readonly TeamAliasMappingService _teamAliasMappingService;
+    private readonly ILogger<OddsApiService> _logger;
 
-    public OddsApiService(HttpClient httpClient, IConfiguration config, IMemoryCache cache, TeamAliasMappingService teamAliasMappingService)
+    public OddsApiService(HttpClient httpClient, IConfiguration config, IMemoryCache cache, TeamAliasMappingService teamAliasMappingService, ILogger<OddsApiService> logger)
     {
         _httpClient = httpClient;
         _apiKey = config["OddsApi:ApiKey"] ?? "";
         _cache = cache;
         _teamAliasMappingService = teamAliasMappingService;
+        _logger = logger;
     }
 
 
@@ -109,7 +111,7 @@ public class OddsApiService
             
             if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
             {
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
+                _logger.LogInformation($" {betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
 
                 using var fResp = await _httpClient.GetAsync(fixturesUrl);
                 if (!fResp.IsSuccessStatusCode) return (null, $"Fixtures API returned status {fResp.StatusCode}");
@@ -225,7 +227,7 @@ public class OddsApiService
 
             if (!bestMatches.Any()) 
             {
-                Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} OddsPapi: Could not find match against '{teamName}'");
+                _logger.LogInformation($" {betLabel} OddsPapi: Could not find match against '{teamName}'");
                 return (null, $"No matching fixtures found for '{teamName}' in the next 7 days.");
             }
             
@@ -236,7 +238,7 @@ public class OddsApiService
             string finalP2 = bestFixture.TryGetProperty("participant2Name", out var fp2) ? (fp2.GetString() ?? "") : "";
             matchName = $"{finalP1} vs {finalP2}";
 
-            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] {betLabel} OddsPapi: Found Match ID {fixtureId} for {matchName}");
+            _logger.LogInformation($" {betLabel} OddsPapi: Found Match ID {fixtureId} for {matchName}");
             
             if (bestFixture.TryGetProperty("startTime", out var st))
             {
@@ -460,7 +462,7 @@ public class OddsApiService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[{DateTime.Now:MM-dd HH:mm:ss}] Exception in SearchOddsComparisonAsync: {ex.Message}");
+            _logger.LogError($"Exception in SearchOddsComparisonAsync: {ex.Message}");
             return (null, $"Exception: {ex.Message}");
         }
     }

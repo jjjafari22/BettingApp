@@ -27,7 +27,8 @@ namespace BettingApp.Tests
         public void Test_AreTeamsMatching(string qHome, string qAway, string oHome, string oAway, bool expected)
         {
             var mapper = new BettingApp.Services.TeamAliasMappingService();
-            var service = new BettingApp.Services.FotMobScraperService(new System.Net.Http.HttpClient(), mapper);
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BettingApp.Services.FotMobScraperService>.Instance;
+            var service = new BettingApp.Services.FotMobScraperService(new System.Net.Http.HttpClient(), mapper, logger);
             bool result = service.AreTeamsMatching(qHome, qAway, oHome, oAway);
             Assert.Equal(expected, result);
         }
