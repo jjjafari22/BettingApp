@@ -102,6 +102,12 @@ namespace BettingApp.Services
                         if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
                             return new List<string> { "Corners - Over Under Team 2" + halfSuffix };
                         
+                        if (clean.Contains("Most Corners", StringComparison.OrdinalIgnoreCase) || clean.Contains("Corners 1X2", StringComparison.OrdinalIgnoreCase) || clean.Contains("More Corners", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Corners - 1X2" + halfSuffix };
+                            return new List<string> { "Corners - 1X2" };
+                        }
+
                         // Otherwise, generic corners (checking for 'Total Corners', 'Corners', or 'Half Corners')
                         if (clean.Contains("Total Corners", StringComparison.OrdinalIgnoreCase) || clean.Contains("Corners", StringComparison.OrdinalIgnoreCase))
                         {
@@ -124,6 +130,15 @@ namespace BettingApp.Services
                             if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Over Under" + halfSuffix };
                             return new List<string> { "Over Under Full Time" };
                         }
+                    }
+
+                    // Cards Team 1/2
+                    if (clean.Contains("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Bookings", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
+                            return new List<string> { $"Bookings - Over/Under [{team1}]" + halfSuffix, "Bookings - Over Under Team 1" + halfSuffix, $"Bookings - Over Under [{team1}]" + halfSuffix };
+                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
+                            return new List<string> { $"Bookings - Over/Under [{team2}]" + halfSuffix, "Bookings - Over Under Team 2" + halfSuffix, $"Bookings - Over Under [{team2}]" + halfSuffix };
                     }
 
                     // To Win At Least One Half
@@ -171,6 +186,15 @@ namespace BettingApp.Services
             {
                 if (halfSuffix == " First Half") return new List<string> { "Bookings - Over Under First Half" };
                 return new List<string> { "Bookings - Over Under Full Time" };
+            }
+
+            if (clean.Contains("Both to Score", StringComparison.OrdinalIgnoreCase) || 
+                clean.Contains("Both Teams to Score", StringComparison.OrdinalIgnoreCase) || 
+                clean.Equals("BTTS", StringComparison.OrdinalIgnoreCase))
+            {
+                if (halfSuffix == " First Half") return new List<string> { "Both Teams To Score - First Half", "Both Teams To Score First Half" };
+                if (halfSuffix == " Second Half") return new List<string> { "Both Teams To Score - Second Half", "Both Teams To Score Second Half" };
+                return new List<string> { "Both Teams To Score" };
             }
 
             // --- Dynamic Player Prop Catch-Alls (handles when AI appends player names to the market) ---
