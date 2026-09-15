@@ -717,7 +717,9 @@ else
                     var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BettingApp.Data.ApplicationDbContext>>();
                     var discord = scope.ServiceProvider.GetRequiredService<BettingApp.Services.DiscordNotificationService>();
                     var hub = scope.ServiceProvider.GetRequiredService<IHubContext<BettingApp.Hubs.BetHub>>();
-                    var semaphore = new SemaphoreSlim(5);
+                    
+                    // Concurrency set to 3: Fast enough for live bets, but prevents 5-burst 429 errors
+                    var semaphore = new SemaphoreSlim(3);
                     var tasks = betIdsToProcess.Select(async id =>
                     {
                         await semaphore.WaitAsync();

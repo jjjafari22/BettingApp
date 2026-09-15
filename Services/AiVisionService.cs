@@ -743,8 +743,9 @@ namespace BettingApp.Services
                     {
                         if (i < maxRetries - 1)
                         {
-                            _logger.LogWarning($"{logLabel}Gemini API returned {response.StatusCode}. Retrying in {2 * (i + 1)}s... (Attempt {i+1}/{maxRetries-1})");
-                            await Task.Delay(2000 * (i + 1));
+                            int delaySec = 5 * (i + 1);
+                            _logger.LogWarning($"{logLabel}Gemini API returned {response.StatusCode}. Retrying in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
+                            await Task.Delay(delaySec * 1000);
                             continue;
                         }
                     }
@@ -754,8 +755,9 @@ namespace BettingApp.Services
                 {
                     if (i < maxRetries - 1)
                     {
-                        _logger.LogWarning($"{logLabel}Gemini API TaskCanceled (Timeout). Retrying in {2 * (i + 1)}s... (Attempt {i+1}/{maxRetries-1})");
-                        await Task.Delay(2000 * (i + 1));
+                        int delaySec = 5 * (i + 1);
+                        _logger.LogWarning($"{logLabel}Gemini API TaskCanceled (Timeout). Retrying in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
+                        await Task.Delay(delaySec * 1000);
                         continue;
                     }
                     throw;
