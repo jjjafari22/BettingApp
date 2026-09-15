@@ -1054,6 +1054,9 @@ else
                 await DiscordService.GetGuildTextChannelsAsync();
                 await DiscordService.SortUserChannelsAlphabeticallyAsync();
             });
+            
+            successMessage = $"Successfully updated Referred By to '{newValueDisplay}'.";
+            StateHasChanged();
         }
     }
 
@@ -1093,6 +1096,9 @@ else
                 await DiscordService.GetGuildTextChannelsAsync();
                 await DiscordService.SortUserChannelsAlphabeticallyAsync();
             });
+            
+            successMessage = $"Successfully updated Discord ID to '{newValueDisplay}'.";
+            StateHasChanged();
         }
     }
 
@@ -1132,6 +1138,9 @@ else
                 await DiscordService.GetGuildTextChannelsAsync();
                 await DiscordService.SortUserChannelsAlphabeticallyAsync();
             });
+            
+            successMessage = $"Successfully updated Discord Username to '{newValueDisplay}'.";
+            StateHasChanged();
         }
     }
 
