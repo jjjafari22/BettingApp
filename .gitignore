@@ -512,3 +512,4 @@ betting.db-wal
 # Google Cloud Service Account Keys
 gen-lang-client*.json
 castle-gemini*.json
+*.zip

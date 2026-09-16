@@ -68,8 +68,8 @@ namespace BettingApp.Services
 
             bool anyUpdates = false;
 
-            // Execute in parallel (up to 5 concurrent checks)
-            await Parallel.ForEachAsync(dueBets, new ParallelOptions { MaxDegreeOfParallelism = 5, CancellationToken = stoppingToken }, async (bet, ct) =>
+            // Execute in parallel (up to 3 concurrent checks to prevent Gemini 429 Rate Limits)
+            await Parallel.ForEachAsync(dueBets, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = stoppingToken }, async (bet, ct) =>
             {
                 // Refresh bet from DB using a newly scoped context (since DbContext is not thread-safe)
                 using var taskContext = dbFactory.CreateDbContext();

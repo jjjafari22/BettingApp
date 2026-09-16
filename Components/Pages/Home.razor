@@ -304,7 +304,7 @@ else
                     <DataAnnotationsValidator />
                     <div class="mb-4">
                         <label class="form-label fw-bold">Upload Screenshots *</label>
-                        <InputFile OnChange="HandleFileSelected" class="form-control form-control-lg" accept="image/*" multiple />
+                        <InputFile @key="inputFileKey" OnChange="HandleFileSelected" class="form-control form-control-lg" accept="image/*" multiple />
                         <div class="form-text text-muted mt-2">Select one or more screenshots of your picks to upload.</div>
                         @if (uploadedFiles.Any())
                         {
@@ -407,6 +407,7 @@ else
     private HubConnection? hubConnection;
     private string userId = string.Empty;
     private string userName = string.Empty;
+    private string inputFileKey = Guid.NewGuid().ToString();
     
     private bool IsLoading = true;
     private bool IsSubmitting = false;
@@ -812,6 +813,7 @@ else
             
             newBet = new Bet { Odds = 1.0m, UserId = userId, UserName = userName };
             uploadedFiles = new List<IBrowserFile>();
+            inputFileKey = Guid.NewGuid().ToString();
             betsPage = 1;
             await LoadData();
         }

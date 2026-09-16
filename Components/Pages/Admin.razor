@@ -1903,6 +1903,7 @@ else
                 
                 StateHasChanged(); 
             }
+            catch (TaskCanceledException) { /* Ignore when user navigates away */ }
             catch (Exception ex) { Logger.LogError($"Timezone error: {ex.Message}"); }
 
             hubConnection = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/bethub")).Build();

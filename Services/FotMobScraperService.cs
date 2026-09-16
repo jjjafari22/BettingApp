@@ -228,7 +228,22 @@ namespace BettingApp.Services
                 _logger.LogInformation($" {betLabel} FotMob: Found Match ID {eventId} for {matchName}");
 
                 // 2. Fetch Match HTML (Bust CDN cache with a unique timestamp)
-                string matchHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/match/{eventId}?_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}");
+                string matchHtml = string.Empty;
+                int maxRetries = 2;
+                for (int i = 0; i < maxRetries; i++)
+                {
+                    try
+                    {
+                        matchHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/match/{eventId}?_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}");
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        if (i == maxRetries - 1) throw;
+                        _logger.LogWarning($" {betLabel} FotMob: HTTP request failed ({ex.Message}). Retrying in 2s... (Attempt {i+1}/{maxRetries-1})");
+                        await Task.Delay(2000);
+                    }
+                }
                 
                 // 3. Extract SSR JSON
                 var match = System.Text.RegularExpressions.Regex.Match(matchHtml, @"<script id=""__NEXT_DATA__"" type=""application/json"">(.*?)</script>");

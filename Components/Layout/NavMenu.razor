@@ -233,6 +233,7 @@
                     await hubConnection.StartAsync();
  await hubConnection.InvokeAsync("JoinAdminGroup");
                 }
+                catch (TaskCanceledException) { }
                 catch (Exception ex)
                 {
                     Logger.LogError($"NavMenu SignalR Error: {ex.Message}");
