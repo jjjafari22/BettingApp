@@ -377,24 +377,32 @@ namespace BettingApp.Services
             var flatStats = new System.Collections.Generic.Dictionary<string, object>();
             try 
             {
-                if (statsObj.TryGetProperty("Periods", out var periods) && periods.TryGetProperty("All", out var all) && all.TryGetProperty("stats", out var statsArr))
+                if (statsObj.TryGetProperty("Periods", out var periods))
                 {
-                    foreach (var category in statsArr.EnumerateArray())
+                    foreach (var period in periods.EnumerateObject())
                     {
-                        if (category.TryGetProperty("stats", out var innerStats))
+                        if (period.Value.TryGetProperty("stats", out var statsArr))
                         {
-                            foreach (var stat in innerStats.EnumerateArray())
+                            var periodStats = new System.Collections.Generic.Dictionary<string, object>();
+                            foreach (var category in statsArr.EnumerateArray())
                             {
-                                string title = stat.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
-                                if (string.IsNullOrEmpty(title)) continue;
-                                
-                                if (stat.TryGetProperty("stats", out var s) && s.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                if (category.TryGetProperty("stats", out var innerStats))
                                 {
-                                    var vals = new System.Collections.Generic.List<string>();
-                                    foreach (var v in s.EnumerateArray()) vals.Add(v.ToString());
-                                    flatStats[title] = vals;
+                                    foreach (var stat in innerStats.EnumerateArray())
+                                    {
+                                        string title = stat.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
+                                        if (string.IsNullOrEmpty(title)) continue;
+                                        
+                                        if (stat.TryGetProperty("stats", out var s) && s.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                        {
+                                            var vals = new System.Collections.Generic.List<string>();
+                                            foreach (var v in s.EnumerateArray()) vals.Add(v.ToString());
+                                            periodStats[title] = vals;
+                                        }
+                                    }
                                 }
                             }
+                            flatStats[period.Name] = periodStats;
                         }
                     }
                 }
