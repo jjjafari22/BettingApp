@@ -25,6 +25,9 @@ namespace BettingApp.Tests
         [InlineData("Vasco da Gama U20", "Palmeiras U20", "Vasco U20", "Palmeiras U20", true)] // U20 vs U20 match should be accepted
         [InlineData("Bayern Munich", "VfB Stuttgart", "Bayern München", "VfB Stuttgart", true)] // English translation of Munich to Munchen
         [InlineData("Olympiacos", "Jagiellonia Bialystok", "Olympiacos", "Jagiellonia Białystok", true)] // Polish diacritics
+        [InlineData("Al-Qadisiyah", "Al-Ettifaq", "Al Qadsiah", "Al Ettifaq", true)] // Saudi aliases
+        [InlineData("Al Qadisiya", "Al Ettifaq", "Al Qadsiah", "Al-Ettifaq", true)] // Saudi aliases variation
+        [InlineData("Eidsvold Turn", "Ullensaker/Kisa", "Eidsvold TF", "Ull/Kisa", true)] // Norwegian aliases
         public void Test_AreTeamsMatching(string qHome, string qAway, string oHome, string oAway, bool expected)
         {
             var mapper = new BettingApp.Services.TeamAliasMappingService();
