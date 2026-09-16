@@ -2256,6 +2256,17 @@ else
                 if (ActiveLookupLeg != null) 
                 {
                     ActiveLookupLeg.StartTime = result.StartTime;
+                    
+                    if (AiVisionResult?.Legs != null)
+                    {
+                        foreach (var leg in AiVisionResult.Legs)
+                        {
+                            if (!string.IsNullOrEmpty(leg.Match) && leg.Match.Equals(ActiveLookupLeg.Match, StringComparison.OrdinalIgnoreCase))
+                            {
+                                leg.StartTime = result.StartTime;
+                            }
+                        }
+                    }
                 }
                 
                 try
