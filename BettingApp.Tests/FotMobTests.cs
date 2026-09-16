@@ -24,6 +24,7 @@ namespace BettingApp.Tests
         [InlineData("Vasco da Gama", "Palmeiras", "Vasco da Gama U20", "Palmeiras U20", false)] // Senior vs U20 match should be rejected
         [InlineData("Vasco da Gama U20", "Palmeiras U20", "Vasco U20", "Palmeiras U20", true)] // U20 vs U20 match should be accepted
         [InlineData("Bayern Munich", "VfB Stuttgart", "Bayern München", "VfB Stuttgart", true)] // English translation of Munich to Munchen
+        [InlineData("Olympiacos", "Jagiellonia Bialystok", "Olympiacos", "Jagiellonia Białystok", true)] // Polish diacritics
         public void Test_AreTeamsMatching(string qHome, string qAway, string oHome, string oAway, bool expected)
         {
             var mapper = new BettingApp.Services.TeamAliasMappingService();

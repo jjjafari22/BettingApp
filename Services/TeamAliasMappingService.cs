@@ -22,7 +22,10 @@ namespace BettingApp.Services
             return result.Replace("ø", "o").Replace("Ø", "O")
                          .Replace("æ", "a").Replace("Æ", "A")
                          .Replace("å", "a").Replace("Å", "A")
-                         .Replace("ı", "i").Replace("İ", "I");
+                         .Replace("ı", "i").Replace("İ", "I")
+                         .Replace("ł", "l").Replace("Ł", "L")
+                         .Replace("đ", "d").Replace("Đ", "D")
+                         .Replace("ß", "ss");
         }
 
         // Maps alternative/bilingual team names to their standard API format.
