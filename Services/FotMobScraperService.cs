@@ -116,6 +116,8 @@ namespace BettingApp.Services
                             string qUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(query)}";
                             string qJson = await _httpClient.GetStringAsync(qUrl);
                             using var qDoc = System.Text.Json.JsonDocument.Parse(qJson);
+                            
+                            bool foundTeam = false;
                             if (qDoc.RootElement.TryGetProperty("teamSuggest", out var teamSuggest) && teamSuggest.GetArrayLength() > 0)
                             {
                                 if (teamSuggest[0].TryGetProperty("options", out var options))
@@ -125,7 +127,37 @@ namespace BettingApp.Services
                                         if (opt.TryGetProperty("payload", out var payload) && payload.TryGetProperty("id", out var tid))
                                         {
                                             string idStr = tid.ValueKind == System.Text.Json.JsonValueKind.Number ? tid.GetInt32().ToString() : tid.GetString() ?? "";
-                                            if (!string.IsNullOrEmpty(idStr)) teamIdsToDeepSearch.Add(idStr);
+                                            if (!string.IsNullOrEmpty(idStr)) 
+                                            {
+                                                teamIdsToDeepSearch.Add(idStr);
+                                                foundTeam = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (!foundTeam && qDoc.RootElement.TryGetProperty("matchSuggest", out var matchSuggest) && matchSuggest.GetArrayLength() > 0)
+                            {
+                                if (matchSuggest[0].TryGetProperty("options", out var options))
+                                {
+                                    foreach (var opt in options.EnumerateArray().Take(4))
+                                    {
+                                        if (opt.TryGetProperty("payload", out var payload))
+                                        {
+                                            string homeName = payload.TryGetProperty("homeName", out var hn) ? hn.GetString() ?? "" : "";
+                                            string awayName = payload.TryGetProperty("awayName", out var an) ? an.GetString() ?? "" : "";
+                                            
+                                            if (CheckTeamMatch(query, homeName) && payload.TryGetProperty("homeTeamId", out var htid))
+                                            {
+                                                string idStr = htid.ValueKind == System.Text.Json.JsonValueKind.Number ? htid.GetInt32().ToString() : htid.GetString() ?? "";
+                                                if (!string.IsNullOrEmpty(idStr)) teamIdsToDeepSearch.Add(idStr);
+                                            }
+                                            if (CheckTeamMatch(query, awayName) && payload.TryGetProperty("awayTeamId", out var atid))
+                                            {
+                                                string idStr = atid.ValueKind == System.Text.Json.JsonValueKind.Number ? atid.GetInt32().ToString() : atid.GetString() ?? "";
+                                                if (!string.IsNullOrEmpty(idStr)) teamIdsToDeepSearch.Add(idStr);
+                                            }
                                         }
                                     }
                                 }

@@ -70,6 +70,8 @@ namespace BettingApp.Services
             { "eidsvold turn", "eidsvold tf" },
             { "ullensaker/kisa", "ull/kisa" },
             { "ullensaker kisa", "ull/kisa" },
+            { "d.c. united", "dc united" },
+            { "ca vinotinto", "vinotinto del ecuador" },
             { "athletic bilbao", "athletic club" },
             { "inter milan", "internazionale" },
             { "sporting lisbon", "sporting cp" },
@@ -93,15 +95,21 @@ namespace BettingApp.Services
             { "spurs", "tottenham hotspur" },
             { "wolves", "wolverhampton wanderers" },
             { "qpr", "queens park rangers" },
-            { "van buyuksehir belediyespor", "van spor kulubu" }
+            { "van buyuksehir belediyespor", "van spor kulubu" },
+            { "deportes union la calera", "union la calera" }
         };
 
-        public static string ApplyTeamAliases(string? normalizedTeamName)
+        public static string ApplyTeamAliases(string name)
         {
-            if (string.IsNullOrWhiteSpace(normalizedTeamName)) return normalizedTeamName ?? "";
+            if (string.IsNullOrEmpty(name)) return name;
 
-            string result = normalizedTeamName;
+            string result = name;
             
+            if (_teamAliases.TryGetValue(result, out var directAlias))
+            {
+                return directAlias;
+            }
+
             foreach (var alias in _teamAliases)
             {
                 result = result.Replace(alias.Key, alias.Value, StringComparison.OrdinalIgnoreCase);
@@ -131,7 +139,7 @@ namespace BettingApp.Services
             {
                 var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
                 { 
-                    "fc", "fk", "united", "city", "cf", "cd", "bk", "women", "sc", "ec" 
+                    "fc", "fk", "united", "city", "cf", "cd", "bk", "women", "sc", "ec", "if" 
                 };
                 
                 var words = System.Linq.Enumerable.Where(
