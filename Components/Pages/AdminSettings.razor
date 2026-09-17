@@ -12,6 +12,7 @@
 @inject NavigationManager Nav
 @inject IHubContext<BetHub> HubContext
 @inject BettingApp.Services.DiscordNotificationService DiscordService
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 
@@ -58,8 +59,35 @@ else
                     </EditForm>
                 </div>
             </div>
+            
+            <div class="card mt-4">
+                <div class="card-header bg-secondary text-white">
+                    <i class="bi bi-phone"></i> My Device Preferences
+                </div>
+                <div class="card-body">
+                    <p class="form-text mb-3">
+                        <strong class="text-danger">⚠️ Applies to THIS browser/device only</strong><br />
+                        By default, external bookmaker links (like Unibet) open in a new browser tab to keep you on the Admin page. If you have the native mobile app or PWA installed and prefer links to open inside the app instead, turn this on. (Note: Desktop computers will always safely ignore this setting).
+                    </p>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="openNativeAppsSwitch" checked="@openInNativeApp" @onchange="ToggleOpenNativeApp">
+                        <label class="form-check-label fw-bold" for="openNativeAppsSwitch">Open bookies in installed apps (Disables new tabs)</label>
+                    </div>
+                    @if (openInNativeApp)
+                    {
+                        <div class="mb-3 mt-3 p-3 bg-light border rounded">
+                            <label for="pwaPackage" class="form-label fw-bold">Unibet Android PWA Package (Optional)</label>
+                            <input type="text" id="pwaPackage" class="form-control" @bind="pwaPackageName" @bind:event="oninput" @onkeyup="SavePwaPackageName" placeholder="e.g. org.chromium.webapk.a123456789" />
+                            <div class="form-text mt-2">
+                                If your Unibet app was installed directly from Google Chrome (a WebAPK), Android blocks normal links. 
+                                Open a new tab in Chrome, go to <strong>chrome://webapks</strong>, find Unibet, and paste its exact Package Name here to force it to open.
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-6 mt-4 mt-md-0">
             <div class="card">
                 <div class="card-header">
                     Discord Integration
@@ -101,6 +129,8 @@ else
     private bool isSorting = false;
     private string? currentAdminName;
     private HubConnection? hubConnection;
+    private bool openInNativeApp = false;
+    private string pwaPackageName = "";
 
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
@@ -144,6 +174,50 @@ else
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
         isLoading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && HttpContext == null)
+        {
+            try
+            {
+                var value = await JS.InvokeAsync<string>("localStorage.getItem", "openInNativeApp");
+                if (!string.IsNullOrEmpty(value))
+                {
+                    openInNativeApp = value == "true";
+                }
+                var pkg = await JS.InvokeAsync<string>("localStorage.getItem", "unibetPwaPackageName");
+                if (!string.IsNullOrEmpty(pkg))
+                {
+                    pwaPackageName = pkg;
+                }
+                if (!string.IsNullOrEmpty(value) || !string.IsNullOrEmpty(pkg))
+                {
+                    StateHasChanged();
+                }
+            }
+            catch { }
+        }
+    }
+
+    private async Task ToggleOpenNativeApp(ChangeEventArgs e)
+    {
+        openInNativeApp = (bool)(e.Value ?? false);
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", "openInNativeApp", openInNativeApp.ToString().ToLower());
+        }
+        catch { }
+    }
+
+    private async Task SavePwaPackageName()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", "unibetPwaPackageName", pwaPackageName.Trim());
+        }
+        catch { }
     }
 
     private async Task LoadSettings(ApplicationDbContext context)

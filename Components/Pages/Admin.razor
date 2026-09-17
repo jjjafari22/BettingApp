@@ -430,30 +430,31 @@ else
                                                     <thead class="table-light sticky-top" style="z-index: 1;">
                                                         <tr>
                                                             <th class="text-start">Outcome</th>
+                                                            @{ var linkTarget = (openInNativeApp && !isDesktop) ? "_self" : "_blank"; }
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("pinnacle+30", out var pinUrl)) {
-                                                                    <a href="@pinUrl" target="_blank" class="text-decoration-none" title="Open match in Pinnacle">Pinnacle</a>
+                                                                    <a href="@FormatBookieUrl(pinUrl, "pinnacle")" target="@linkTarget" class="text-decoration-none" title="Open match in Pinnacle">Pinnacle</a>
                                                                 } else {
                                                                     <span>Pinnacle</span>
                                                                 }
                                                             </th>
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("unibet.se", out var unibetUrl)) {
-                                                                    <a href="@unibetUrl" target="_blank" class="text-decoration-none" title="Open match in Unibet">Unibet SE</a>
+                                                                    <a href="@FormatBookieUrl(unibetUrl, "unibet.se")" target="@linkTarget" class="text-decoration-none" title="Open match in Unibet">Unibet SE</a>
                                                                 } else {
                                                                     <span>Unibet SE</span>
                                                                 }
                                                             </th>
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("bet365", out var bet365Url)) {
-                                                                    <a href="@bet365Url" target="_blank" class="text-decoration-none" title="Open match in Bet365">Bet365</a>
+                                                                    <a href="@FormatBookieUrl(bet365Url, "bet365")" target="@linkTarget" class="text-decoration-none" title="Open match in Bet365">Bet365</a>
                                                                 } else {
                                                                     <span>Bet365</span>
                                                                 }
                                                             </th>
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("1xbet", out var xUrl)) {
-                                                                    <a href="@xUrl" target="_blank" class="text-decoration-none" title="Open match in 1xBet">1xBet</a>
+                                                                    <a href="@FormatBookieUrl(xUrl, "1xbet")" target="@linkTarget" class="text-decoration-none" title="Open match in 1xBet">1xBet</a>
                                                                 } else {
                                                                     <span>1xBet</span>
                                                                 }
@@ -1667,8 +1668,42 @@ else
         }
     }
 
+    private bool openInNativeApp = false;
+    private bool isDesktop = false;
+    private bool isAndroid = false;
+
+    private string unibetPwaPackageName = "";
+
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
+
+    private string FormatBookieUrl(string url, string bookieKey = "")
+    {
+        if (openInNativeApp && isAndroid && !string.IsNullOrEmpty(url))
+        {
+            var strippedUrl = url.Replace("https://", "").Replace("http://", "");
+            string pkgStr = "";
+            if (bookieKey == "unibet.se" && !string.IsNullOrWhiteSpace(unibetPwaPackageName))
+            {
+                var cleanPkg = unibetPwaPackageName.Trim();
+                if (cleanPkg.Contains("org.chromium.webapk."))
+                {
+                    var startIndex = cleanPkg.IndexOf("org.chromium.webapk.");
+                    cleanPkg = cleanPkg.Substring(startIndex).Split(' ')[0];
+                }
+                pkgStr = $";package={cleanPkg}";
+                
+                // The WebAPK will strictly reject intents that don't match its installed manifest scope.
+                // It must perfectly match the URI shown in chrome://webapks (e.g. www.unibet.se)
+                if (strippedUrl.StartsWith("unibet.se"))
+                {
+                    strippedUrl = "www." + strippedUrl;
+                }
+            }
+            return $"intent://{strippedUrl}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;category=android.intent.category.DEFAULT{pkgStr};end";
+        }
+        return url;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -1896,6 +1931,29 @@ else
     {
         if (firstRender)
         {
+            try
+            {
+                var value = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "openInNativeApp");
+                if (!string.IsNullOrEmpty(value))
+                {
+                    openInNativeApp = value == "true";
+                }
+
+                var pkg = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "unibetPwaPackageName");
+                if (!string.IsNullOrEmpty(pkg))
+                {
+                    unibetPwaPackageName = pkg;
+                }
+                
+                var ua = await JSRuntime.InvokeAsync<string>("eval", "navigator.userAgent");
+                var uaLower = ua.ToLowerInvariant();
+                isDesktop = !uaLower.Contains("mobi") && !uaLower.Contains("android") && !uaLower.Contains("iphone");
+                isAndroid = uaLower.Contains("android");
+                
+                StateHasChanged();
+            }
+            catch { }
+
              try
             {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
