@@ -75,6 +75,16 @@ namespace BettingApp.Services
                 using var taskContext = dbFactory.CreateDbContext();
                 var dbBet = await taskContext.Bets.FindAsync(new object[] { bet.Id }, ct);
                 if (dbBet == null || (dbBet.Status != "Approved" && dbBet.Status != "Won" && dbBet.Status != "Lost" && dbBet.Status != "Void")) return;
+                
+                if (dbBet.AiOutcomeResult == "Admin Override")
+                {
+                    if (dbBet.NextCheckTime != null)
+                    {
+                        dbBet.NextCheckTime = null;
+                        await taskContext.SaveChangesAsync(ct);
+                    }
+                    return;
+                }
 
                 if (string.IsNullOrEmpty(dbBet.AiVisionResultJson))
                 {

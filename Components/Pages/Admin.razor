@@ -1430,16 +1430,19 @@ else
                 if (dbBet.AiOutcomeResult == "Admin Override")
                 {
                     dbBet.AiOutcomeResult = ""; // Clear override
+                    dbBet.NextCheckTime = DateTime.UtcNow; // Resume monitoring
                 }
                 else
                 {
                     dbBet.AiOutcomeResult = "Admin Override";
+                    dbBet.NextCheckTime = null; // Stop monitoring
                 }
                 await context.SaveChangesAsync();
                 
                 if (reviewingBetModel != null)
                 {
                     reviewingBetModel.AiOutcomeResult = dbBet.AiOutcomeResult;
+                    reviewingBetModel.NextCheckTime = dbBet.NextCheckTime;
                 }
                 
                 await LoadCompletedBets();
