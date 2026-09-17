@@ -820,15 +820,28 @@ else
                                                                                 bool matchLast = normSel.Contains(lastName);
                                                                                 bool matchFirst = normSel.Contains(firstName);
                                                                                 
-                                                                                // Only allow a first-name-only match if the first name is long (e.g. Vinicius), 
-                                                                                // or if the selection string is short enough to imply they didn't type a different last name.
-                                                                                bool isValidNameMatch = matchLast || (matchFirst && (firstName.Length >= 6 || normSel.Length < firstName.Length + 12));
+                                                                                string outcomePart = (displayOName ?? "").Substring(0, parenMatch.Index).Trim();
+                                                                                string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
+                                                                                
+                                                                                bool isValidNameMatch = matchLast && matchFirst;
+                                                                                
+                                                                                if (!isValidNameMatch && (matchLast || matchFirst))
+                                                                                {
+                                                                                    string matchedName = matchLast ? lastName : firstName;
+                                                                                    // Remove everything except the player's name
+                                                                                    string playerPartOnly = System.Text.RegularExpressions.Regex.Replace(normSel.Replace(normOutcomePart, "").Replace("over", "").Replace("under", "").Replace("yes", "").Replace("no", "").Replace("-", ""), @"\d+(\.\d+)?", "");
+                                                                                    string leftover = playerPartOnly.Replace(matchedName, "");
+                                                                                    
+                                                                                    // If the leftover is long, it means they explicitly typed a DIFFERENT name that contradicts the matched name (e.g. "Martin Satriano" vs "Mario Martin").
+                                                                                    // Allow a small leftover (<= 5) for abbreviations like "Jr".
+                                                                                    if (leftover.Length <= 5)
+                                                                                    {
+                                                                                        isValidNameMatch = true;
+                                                                                    }
+                                                                                }
                                                                                 
                                                                                 if (isValidNameMatch)
                                                                                 {
-                                                                                    string outcomePart = (displayOName ?? "").Substring(0, parenMatch.Index).Trim();
-                                                                                    string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
-                                                                                    
                                                                                     bool isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
                                                                                                           normSel.Contains(normOutcomePart) || 
                                                                                                           (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under")));
