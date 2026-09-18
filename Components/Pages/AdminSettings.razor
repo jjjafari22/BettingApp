@@ -146,13 +146,7 @@ else
                                         <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("betssonPwaPackageName", pwaPackageBetsson)'>Save</button>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">1xBet Android PWA Package</label>
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" @bind="pwaPackage1xBet" placeholder="e.g. org.chromium.webapk..." />
-                                        <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("1xbetPwaPackageName", pwaPackage1xBet)'>Save</button>
-                                    </div>
-                                </div>
+
                             </div>
                             <div class="form-text mt-3">
                                 If your Android app was installed directly from Google Chrome (a WebAPK), Android may block normal links. 
@@ -180,9 +174,8 @@ else
     private bool openInNativeApp = false;
     private string pwaPackageName = "";
     private string pwaPackagePinnacle = "";
-    private string pwaPackageBetsson = "";
     private string pwaPackageBet365 = "";
-    private string pwaPackage1xBet = "";
+    private string pwaPackageBetsson = "";
 
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
@@ -251,8 +244,6 @@ else
                 var pkgBet365 = await JS.InvokeAsync<string>("localStorage.getItem", "bet365PwaPackageName");
                 if (!string.IsNullOrEmpty(pkgBet365)) pwaPackageBet365 = pkgBet365;
 
-                var pkg1xbet = await JS.InvokeAsync<string>("localStorage.getItem", "1xbetPwaPackageName");
-                if (!string.IsNullOrEmpty(pkg1xbet)) pwaPackage1xBet = pkg1xbet;
 
                 if (!string.IsNullOrEmpty(value) || !string.IsNullOrEmpty(pkg) || !string.IsNullOrEmpty(pkgPin))
                 {

@@ -263,8 +263,8 @@ public class OddsApiService
                 }
             }
 
-            // 3. Fetch Odds for Unibet SE, Betsson, Bet365
-            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365,pinnacle%2B30,1xbet";
+            // 3. Fetch Odds for Unibet SE, Betsson, Bet365, Pinnacle
+            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365,pinnacle%2B30";
             var oResp = await _httpClient.GetAsync(oddsUrl);
             
             // Retry once if rate limited

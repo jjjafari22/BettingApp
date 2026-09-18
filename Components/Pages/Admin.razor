@@ -462,13 +462,7 @@ else
                                                                     <span>Bet365</span>
                                                                 }
                                                             </th>
-                                                            <th>
-                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("1xbet", out var xUrl)) {
-                                                                    <a href="@FormatBookieUrl(xUrl, "1xbet")" target="@linkTarget" class="text-decoration-none" title="Open match in 1xBet">1xBet</a>
-                                                                } else {
-                                                                    <span>1xBet</span>
-                                                                }
-                                                            </th>
+
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("betsson", out var betssonUrl)) {
                                                                     <a href="@betssonUrl" target="_blank" class="text-decoration-none" title="Open match in Betsson">Betsson</a>
@@ -963,19 +957,7 @@ else
                                                                             <div class="fw-bold">-</div>
                                                                         }
                                                                     </td>
-                                                                    <td class="text-dark">
-                                                                        @if (bookies.TryGetValue("1xbet", out var x) && x.TryGetValue(oName, out var xd)) {
-                                                                            <div class="fw-bold">
-                                                                                @if (xd.IsSuspended) {
-                                                                                    <span title="Suspended" class="text-muted"><i class="bi bi-lock-fill text-warning"></i> @xd.Price.ToString("0.00")</span>
-                                                                                } else {
-                                                                                    @xd.Price.ToString("0.00")
-                                                                                }
-                                                                            </div>
-                                                                        } else {
-                                                                            <div class="fw-bold">-</div>
-                                                                        }
-                                                                    </td>
+
                                                                     <td class="text-dark">
                                                                         @if (bookies.TryGetValue("betsson", out var c) && c.TryGetValue(oName, out var cd)) {
                                                                             <div class="fw-bold">
@@ -1708,7 +1690,6 @@ else
                 "pinnacle" => pinnaclePwaPackageName,
                 "betsson" => betssonPwaPackageName,
                 "bet365" => bet365PwaPackageName,
-                "1xbet" => xbetPwaPackageName,
                 _ => ""
             };
 
@@ -1966,7 +1947,6 @@ else
     private string pinnaclePwaPackageName = "";
     private string betssonPwaPackageName = "";
     private string bet365PwaPackageName = "";
-    private string xbetPwaPackageName = "";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -1989,8 +1969,6 @@ else
                 var pkgBet365 = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "bet365PwaPackageName");
                 if (!string.IsNullOrEmpty(pkgBet365)) bet365PwaPackageName = pkgBet365;
 
-                var pkg1xbet = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "1xbetPwaPackageName");
-                if (!string.IsNullOrEmpty(pkg1xbet)) xbetPwaPackageName = pkg1xbet;
                 
                 var ua = await JSRuntime.InvokeAsync<string>("eval", "navigator.userAgent");
                 var uaLower = ua.ToLowerInvariant();
