@@ -1191,14 +1191,16 @@ else
     
                         <th style="width: 150px;">Action</th>
                         <th style="width: 110px;">AI Outcome</th>
-                        <th style="width: 130px; cursor: pointer;" @onclick="@(() => SortApproved("NextCheckTime"))">
+                        <th style="width: 130px; cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("NextCheckTime"))">
                             Auto-Tracking 
-                            @if (approvedSortColumn == "NextCheckTime") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                            @if (isSortingApproved && approvedSortColumn == "NextCheckTime") { <span class="spinner-border spinner-border-sm ms-1"></span> }
+                            else if (approvedSortColumn == "NextCheckTime") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
                         </th>
                         <th>ID</th>
-                        <th class="text-nowrap" style="cursor: pointer;" @onclick="@(() => SortApproved("UpdatedAt"))">
+                        <th class="text-nowrap" style="cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("UpdatedAt"))">
                             Last Updated
-                            @if (approvedSortColumn == "UpdatedAt") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                            @if (isSortingApproved && approvedSortColumn == "UpdatedAt") { <span class="spinner-border spinner-border-sm ms-1"></span> }
+                            else if (approvedSortColumn == "UpdatedAt") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
                         </th>
   
                         <th>Discord Username</th>
@@ -1856,6 +1858,8 @@ else
     private async Task NextApprovedPage() { approvedPage++; await LoadApprovedBets(); }
     private async Task PrevApprovedPage() { if (approvedPage > 1) { approvedPage--; await LoadApprovedBets(); } }
     
+    private bool isSortingApproved = false;
+
     private async Task SortApproved(string column)
     {
         if (approvedSortColumn == column)
@@ -1868,7 +1872,15 @@ else
             approvedSortDesc = false; // default to ascending on new column
         }
         approvedPage = 1;
+
+        isSortingApproved = true;
+        StateHasChanged();
+        await Task.Delay(1); // yield to render loading state
+
         await LoadApprovedBets();
+        
+        isSortingApproved = false;
+        StateHasChanged();
     }
 
     private async Task LoadCompletedBets()
