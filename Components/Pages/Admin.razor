@@ -1700,9 +1700,19 @@ else
         {
             var strippedUrl = url.Replace("https://", "").Replace("http://", "");
             string pkgStr = "";
-            if (bookieKey == "unibet.se" && !string.IsNullOrWhiteSpace(unibetPwaPackageName))
+            string rawPkg = bookieKey switch
             {
-                var cleanPkg = unibetPwaPackageName.Trim();
+                "unibet.se" => unibetPwaPackageName,
+                "pinnacle" => pinnaclePwaPackageName,
+                "betsson" => betssonPwaPackageName,
+                "bet365" => bet365PwaPackageName,
+                "1xbet" => xbetPwaPackageName,
+                _ => ""
+            };
+
+            if (!string.IsNullOrWhiteSpace(rawPkg))
+            {
+                var cleanPkg = rawPkg.Trim();
                 if (cleanPkg.Contains("org.chromium.webapk."))
                 {
                     var startIndex = cleanPkg.IndexOf("org.chromium.webapk.");
@@ -1710,9 +1720,7 @@ else
                 }
                 pkgStr = $";package={cleanPkg}";
                 
-                // The WebAPK will strictly reject intents that don't match its installed manifest scope.
-                // It must perfectly match the URI shown in chrome://webapks (e.g. www.unibet.se)
-                if (strippedUrl.StartsWith("unibet.se"))
+                if (bookieKey == "unibet.se" && strippedUrl.StartsWith("unibet.se"))
                 {
                     strippedUrl = "www." + strippedUrl;
                 }
@@ -1943,6 +1951,10 @@ else
 
     private async Task NextPage() { completedPage++; await LoadCompletedBets(); }
     private async Task PrevPage() { if (completedPage > 1) { completedPage--; await LoadCompletedBets(); } }
+    private string pinnaclePwaPackageName = "";
+    private string betssonPwaPackageName = "";
+    private string bet365PwaPackageName = "";
+    private string xbetPwaPackageName = "";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -1951,16 +1963,22 @@ else
             try
             {
                 var value = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "openInNativeApp");
-                if (!string.IsNullOrEmpty(value))
-                {
-                    openInNativeApp = value == "true";
-                }
+                if (!string.IsNullOrEmpty(value)) openInNativeApp = value == "true";
 
                 var pkg = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "unibetPwaPackageName");
-                if (!string.IsNullOrEmpty(pkg))
-                {
-                    unibetPwaPackageName = pkg;
-                }
+                if (!string.IsNullOrEmpty(pkg)) unibetPwaPackageName = pkg;
+
+                var pkgPin = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "pinnaclePwaPackageName");
+                if (!string.IsNullOrEmpty(pkgPin)) pinnaclePwaPackageName = pkgPin;
+
+                var pkgBetsson = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "betssonPwaPackageName");
+                if (!string.IsNullOrEmpty(pkgBetsson)) betssonPwaPackageName = pkgBetsson;
+
+                var pkgBet365 = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "bet365PwaPackageName");
+                if (!string.IsNullOrEmpty(pkgBet365)) bet365PwaPackageName = pkgBet365;
+
+                var pkg1xbet = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "1xbetPwaPackageName");
+                if (!string.IsNullOrEmpty(pkg1xbet)) xbetPwaPackageName = pkg1xbet;
                 
                 var ua = await JSRuntime.InvokeAsync<string>("eval", "navigator.userAgent");
                 var uaLower = ua.ToLowerInvariant();

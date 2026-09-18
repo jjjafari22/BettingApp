@@ -117,14 +117,46 @@ else
                     @if (openInNativeApp)
                     {
                         <div class="mb-3 mt-3 p-3 bg-light border rounded">
-                            <label for="pwaPackage" class="form-label fw-bold">Unibet Android PWA Package (Optional)</label>
-                            <div class="input-group">
-                                <input type="text" id="pwaPackage" class="form-control" @bind="pwaPackageName" placeholder="e.g. org.chromium.webapk.a123456789" />
-                                <button type="button" class="btn btn-primary" @onclick="SavePwaPackageName">Save Package</button>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Unibet SE Android PWA Package</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" @bind="pwaPackageName" placeholder="e.g. org.chromium.webapk.a12345" />
+                                        <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("unibetPwaPackageName", pwaPackageName)'>Save</button>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Pinnacle Android PWA Package</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" @bind="pwaPackagePinnacle" placeholder="e.g. org.chromium.webapk..." />
+                                        <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("pinnaclePwaPackageName", pwaPackagePinnacle)'>Save</button>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Bet365 Android PWA Package</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" @bind="pwaPackageBet365" placeholder="e.g. org.chromium.webapk..." />
+                                        <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("bet365PwaPackageName", pwaPackageBet365)'>Save</button>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Betsson Android PWA Package</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" @bind="pwaPackageBetsson" placeholder="e.g. org.chromium.webapk..." />
+                                        <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("betssonPwaPackageName", pwaPackageBetsson)'>Save</button>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">1xBet Android PWA Package</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" @bind="pwaPackage1xBet" placeholder="e.g. org.chromium.webapk..." />
+                                        <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("1xbetPwaPackageName", pwaPackage1xBet)'>Save</button>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="form-text mt-2">
-                                If your Unibet app was installed directly from Google Chrome (a WebAPK), Android blocks normal links. 
-                                Open a new tab in Chrome, go to <strong>chrome://webapks</strong>, find Unibet, and paste its exact Package Name here to force it to open.
+                            <div class="form-text mt-3">
+                                If your Android app was installed directly from Google Chrome (a WebAPK), Android may block normal links. 
+                                Open a new tab in Chrome, go to <strong>chrome://webapks</strong>, find the bookie, and paste its exact Package Name here to force it to open.
                             </div>
                         </div>
                     }
@@ -147,6 +179,10 @@ else
     private HubConnection? hubConnection;
     private bool openInNativeApp = false;
     private string pwaPackageName = "";
+    private string pwaPackagePinnacle = "";
+    private string pwaPackageBetsson = "";
+    private string pwaPackageBet365 = "";
+    private string pwaPackage1xBet = "";
 
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
@@ -204,11 +240,21 @@ else
                     openInNativeApp = value == "true";
                 }
                 var pkg = await JS.InvokeAsync<string>("localStorage.getItem", "unibetPwaPackageName");
-                if (!string.IsNullOrEmpty(pkg))
-                {
-                    pwaPackageName = pkg;
-                }
-                if (!string.IsNullOrEmpty(value) || !string.IsNullOrEmpty(pkg))
+                if (!string.IsNullOrEmpty(pkg)) pwaPackageName = pkg;
+
+                var pkgPin = await JS.InvokeAsync<string>("localStorage.getItem", "pinnaclePwaPackageName");
+                if (!string.IsNullOrEmpty(pkgPin)) pwaPackagePinnacle = pkgPin;
+
+                var pkgBetsson = await JS.InvokeAsync<string>("localStorage.getItem", "betssonPwaPackageName");
+                if (!string.IsNullOrEmpty(pkgBetsson)) pwaPackageBetsson = pkgBetsson;
+
+                var pkgBet365 = await JS.InvokeAsync<string>("localStorage.getItem", "bet365PwaPackageName");
+                if (!string.IsNullOrEmpty(pkgBet365)) pwaPackageBet365 = pkgBet365;
+
+                var pkg1xbet = await JS.InvokeAsync<string>("localStorage.getItem", "1xbetPwaPackageName");
+                if (!string.IsNullOrEmpty(pkg1xbet)) pwaPackage1xBet = pkg1xbet;
+
+                if (!string.IsNullOrEmpty(value) || !string.IsNullOrEmpty(pkg) || !string.IsNullOrEmpty(pkgPin))
                 {
                     StateHasChanged();
                 }
@@ -229,12 +275,12 @@ else
         catch { }
     }
 
-    private async Task SavePwaPackageName()
+    private async Task SavePwaPackageName(string key, string value)
     {
         showPwaSuccess = false;
         try
         {
-            await JS.InvokeVoidAsync("localStorage.setItem", "unibetPwaPackageName", pwaPackageName.Trim());
+            await JS.InvokeVoidAsync("localStorage.setItem", key, value.Trim());
             showPwaSuccess = true;
             StateHasChanged();
         }
