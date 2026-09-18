@@ -1771,11 +1771,11 @@ else
         var allPendingBets = await context.Bets.Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
         totalPendingBets = allPendingBets.Count;
         
-        var missingStartTimeCache = allPendingBets.ToDictionary(b => b.Id, b => IsMissingAnyStartTime(b));
+
 
         pendingBets = allPendingBets
-            .OrderBy(b => missingStartTimeCache[b.Id] ? 0 : 1)
-            .ThenBy(b => missingStartTimeCache[b.Id] ? DateTime.MinValue : (b.MatchStartTime ?? DateTime.MaxValue))
+            .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
+            .ThenBy(b => b.MatchStartTime)
             .ThenByDescending(b => b.CreatedAt)
             .Skip((pendingPage - 1) * pageSize)
             .Take(pageSize)
@@ -2372,15 +2372,23 @@ else
                     var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
                     if (dbBet != null)
                     {
-                        if (reviewingBetModel.MatchStartTime == null || result.StartTime < reviewingBetModel.MatchStartTime)
-                        {
-                            dbBet.MatchStartTime = result.StartTime;
-                            reviewingBetModel.MatchStartTime = result.StartTime;
-                            if (originalBetModel != null) originalBetModel.MatchStartTime = result.StartTime;
-                        }
-                        
                         if (AiVisionResult != null)
                         {
+                            bool allScheduled = AiVisionResult.Legs != null && AiVisionResult.Legs.Count > 0 && AiVisionResult.Legs.All(l => l.StartTime > DateTime.MinValue);
+                            if (allScheduled)
+                            {
+                                var earliest = AiVisionResult.Legs.Min(l => l.StartTime);
+                                dbBet.MatchStartTime = earliest;
+                                reviewingBetModel.MatchStartTime = earliest;
+                                if (originalBetModel != null) originalBetModel.MatchStartTime = earliest;
+                            }
+                            else
+                            {
+                                dbBet.MatchStartTime = null;
+                                reviewingBetModel.MatchStartTime = null;
+                                if (originalBetModel != null) originalBetModel.MatchStartTime = null;
+                            }
+                            
                             dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(AiVisionResult);
                             reviewingBetModel.AiVisionResultJson = dbBet.AiVisionResultJson;
                             if (originalBetModel != null) originalBetModel.AiVisionResultJson = dbBet.AiVisionResultJson;
@@ -2394,10 +2402,9 @@ else
                 // Instantly resort the pending bets list in memory so it reflects correctly on the UI
                 if (pendingBets != null && pendingBets.Any(b => b.Id == reviewingBetModel.Id))
                 {
-                    var missingStartTimeCache = pendingBets.ToDictionary(b => b.Id, b => IsMissingAnyStartTime(b));
                     pendingBets = pendingBets
-                        .OrderBy(b => missingStartTimeCache[b.Id] ? 0 : 1)
-                        .ThenBy(b => missingStartTimeCache[b.Id] ? DateTime.MinValue : (b.MatchStartTime ?? DateTime.MaxValue))
+                        .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
+                        .ThenBy(b => b.MatchStartTime)
                         .ThenByDescending(b => b.CreatedAt)
                         .ToList();
                 }
