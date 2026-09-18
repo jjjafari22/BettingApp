@@ -45,8 +45,6 @@ namespace BettingApp.Services
         [JsonPropertyName("badges")]
         public List<string> Badges { get; set; } = new();
 
-        [JsonPropertyName("matchDate")]
-        public string MatchDate { get; set; } = "";
 
         [JsonPropertyName("odds")]
         public string Odds { get; set; } = "";
@@ -71,10 +69,9 @@ namespace BettingApp.Services
     {
         [JsonPropertyName("overallStatus")]
         public string OverallStatus { get; set; } = "";
-        
+                
         [JsonPropertyName("matchStartTimeIso")]
         public string? MatchStartTimeIso { get; set; }
-        
         
         [JsonPropertyName("fullAnalysis")]
         public string FullAnalysis { get; set; } = "";
@@ -181,7 +178,6 @@ namespace BettingApp.Services
                              "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! CRITICAL: If the market name includes a team name (e.g., 'FC Midtjylland Total Goals'), you MUST include the team name exactly as written. Do NOT summarize it! CRITICAL: NEVER drop decimals from numbers in the market or selection. CRITICAL: Output ONLY the final translated market name. NEVER output your reasoning or 'Let's check' in this field! " +
                              "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! CRITICAL: Output ONLY the final selection string. NEVER output your reasoning or thoughts in this field! " +
                              "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or visual icons near the bet (e.g., 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost'). IMPORTANT FOR POWER SUB: Some bookmakers do not write the text, but instead use a visual icon next to the player (such as two arrows pointing in opposite directions, a 'swap' symbol, or a substitution icon). If you see a visual icon that clearly represents a player substitution, you MUST add 'Power Sub' to this array. Be careful not to confuse generic UI arrows (like dropdown arrows) with a substitution icon! " +
-                             "   - matchDate (e.g. '22.Aug 04:00', 'Tomorrow 18:00', or '2023-10-25'). CRITICAL: Look very carefully for the kickoff date and time for this match printed on the slip, or the date the bet was placed. Extract exactly what you see. If missing, return null. " +
                              "   - odds (e.g. '1.95'). CRITICAL: If multiple legs are part of a Bet Builder (grouped together for the same match) and visually share a single combined odds value, you MUST output that shared odds value for the FIRST leg, and output null for the subsequent legs in that Bet Builder.";
 
                 var fullPrompt = systemInstruction + "\n\nPlease extract the bet details from this screenshot according to the strict system instructions.";
@@ -233,11 +229,10 @@ namespace BettingApp.Services
                                             match = new { type = "STRING", nullable = true },
                                             market = new { type = "STRING", nullable = true },
                                             selection = new { type = "STRING", nullable = true },
-                                            badges = new { type = "ARRAY", items = new { type = "STRING" }, nullable = true },
-                                            matchDate = new { type = "STRING", nullable = true },
+                                            badges = new { type = "ARRAY", items = new { type = "STRING" } },
                                             odds = new { type = "STRING", nullable = true }
                                         },
-                                        required = new[] { "legThoughtProcess", "match", "market", "selection", "badges", "matchDate", "odds" }
+                                        required = new[] { "legThoughtProcess", "match", "market", "selection", "badges", "odds" }
                                     }
                                 }
                             },
@@ -679,6 +674,7 @@ namespace BettingApp.Services
                 return null;
             }
         }
+
         private void LogAiUsage(string jsonResponse, string betLabel)
         {
             try 
