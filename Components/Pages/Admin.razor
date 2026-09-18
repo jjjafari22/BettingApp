@@ -141,6 +141,13 @@ else
 
 @if (reviewingBetModel != null)
 {
+    @if (showMobileScreenshot && !string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
+        <div class="d-lg-none d-flex align-items-center justify-content-center" 
+             style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 2147483647; padding: 10px; pointer-events: none;">
+            <img src="@GetScreenshotUrl(reviewingBetModel.ScreenshotUrl)" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+        </div>
+    }
+
   <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.85);" tabindex="-1" role="dialog" @ref="reviewModalRef" @onkeydown="OnReviewModalKeyDown">
         <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
             <div class="modal-content review-modal-content position-relative">
@@ -1011,13 +1018,6 @@ else
                                            @oncontextmenu="() => {}" @oncontextmenu:preventDefault="true">
                                        <i class="bi bi-image fs-5"></i>
                                    </button>
-                                   
-                                   @if (showMobileScreenshot) {
-                                       <div class="d-lg-none d-flex align-items-center justify-content-center" 
-                                            style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 9999; padding: 10px; pointer-events: none;">
-                                           <img src="@GetScreenshotUrl(reviewingBetModel.ScreenshotUrl)" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
-                                       </div>
-                                   }
                                }
 
                                <div class="row g-2 mb-3">
