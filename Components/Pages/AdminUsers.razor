@@ -664,6 +664,7 @@ else
             u.CreditLimit,
             u.Balance,
             u.FreeBetBalance,
+            u.LifetimeProfit,
             u.CreatedAt,
             u.UpdatedAt,
             u.DiscordUserId,
@@ -720,7 +721,7 @@ else
             var firstTransDate = tStats?.FirstTransDate;
             var lastTransDate = tStats?.LastTransDate;
 
-            var lifetimeProfit = Math.Floor(winnings) - settledStakes;
+            var lifetimeProfit = (!filterStartDate.HasValue && !filterEndDate.HasValue) ? u.LifetimeProfit : Math.Floor(winnings) - settledStakes;
             var periodActivityCount = bStats?.PeriodBetsCount ?? 0;
 
             DateTime dateJoined = u.CreatedAt;

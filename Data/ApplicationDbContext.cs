@@ -43,6 +43,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .Property(u => u.FreeBetBalance)
             .HasPrecision(18, 2);
 
+        builder.Entity<ApplicationUser>()
+            .Property(u => u.LifetimeProfit)
+            .HasPrecision(18, 2);
+
         builder.Entity<Bet>()
             .Property(b => b.FreeBetAmount)
             .HasPrecision(18, 2);

@@ -23,6 +23,9 @@ public class ApplicationUser : IdentityUser
     // Separate balance for free bets that only pay out net winnings.
     public decimal FreeBetBalance { get; set; } = 0m;
 
+    // Track total lifetime profit for the user
+    public decimal LifetimeProfit { get; set; } = 0m;
+
     public string? DiscordUserId { get; set; }
     public string? DiscordUsername { get; set; }
 

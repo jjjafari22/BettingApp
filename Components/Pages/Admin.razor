@@ -161,7 +161,7 @@ else
                             <span class="badge @GetStatusBadgeClass(reviewingBetModel.Status) me-2 align-middle">@reviewingBetModel.Status</span>
                             @GetLivePlacedBadge(reviewingBetModel, "me-2 align-middle")
                             <span class="align-middle">Bet #@reviewingBetModel.Id</span> 
-                            <span class="text-muted ms-sm-2 fw-normal d-block d-sm-inline mt-1 mt-sm-0" style="font-size: 0.9rem; word-break: break-all;">
+                            <span class="text-muted ms-sm-2 fw-normal d-flex d-sm-inline-flex align-items-center flex-wrap mt-1 mt-sm-0" style="font-size: 0.9rem; word-break: break-all; gap: 0.35rem;">
                                 @{
                                     var uModalExists = userLookup.TryGetValue(reviewingBetModel.UserId, out var uModal);
                                     var uModalName = uModalExists && !string.IsNullOrEmpty(uModal.DiscordName) ? uModal.DiscordName : reviewingBetModel.UserName;
@@ -172,6 +172,9 @@ else
                                         : $"https://discord.com/channels/{DiscordService.GuildId}";
                                 }
                                 <a href="@uModalLink" target="_blank" class="text-decoration-none fw-bold">@uModalName</a>
+                                <span class="badge rounded-pill border @(currentReviewUserLifetimeProfit >= 0 ? "bg-success bg-opacity-10 border-success text-success" : "bg-danger bg-opacity-10 border-danger text-danger")" style="font-size: 0.75rem; font-weight: 600;" title="Lifetime Profit">
+                                    LTP: @(currentReviewUserLifetimeProfit >= 0 ? "+" : "")@currentReviewUserLifetimeProfit.ToString("N0") kr
+                                </span>
                             </span>
                         </h5>
                         <div class="dropdown me-2 flex-shrink-0" style="position: relative;">
@@ -1559,6 +1562,7 @@ else
     private System.Timers.Timer? uiRefreshTimer;
     private Bet? originalBetModel;
     private decimal currentReviewUserFreeBalance = 0;
+    private decimal currentReviewUserLifetimeProfit = 0;
 
     
 
@@ -2643,6 +2647,20 @@ else
         
         resolvedScreenshotUrl = "";
         _ = LoadResolvedScreenshotUrlAsync(bet.ScreenshotUrl);
+        _ = LoadReviewUserStatsAsync(bet.UserId);
+    }
+
+    private async Task LoadReviewUserStatsAsync(string userId)
+    {
+        try {
+            using var context = DbFactory.CreateDbContext();
+            var stats = await context.Users.Where(u => u.Id == userId).Select(u => new { u.FreeBetBalance, u.LifetimeProfit }).FirstOrDefaultAsync();
+            if (stats != null) {
+                currentReviewUserFreeBalance = stats.FreeBetBalance;
+                currentReviewUserLifetimeProfit = stats.LifetimeProfit;
+                await InvokeAsync(StateHasChanged);
+            }
+        } catch { }
     }
 
     private async Task CancelReview() 
@@ -2845,12 +2863,19 @@ else
             {
                 dbUser.Balance += (dbAmount - dbBet.FreeBetAmount);
                 dbUser.FreeBetBalance += dbBet.FreeBetAmount;
+                if (originalStatus == "Lost")
+                {
+                    dbUser.LifetimeProfit += (dbAmount - dbBet.FreeBetAmount);
+                }
             }
             else if (originalStatus == "Won")
             {
                 dbUser.Balance += (dbAmount - dbBet.FreeBetAmount);
                 dbUser.FreeBetBalance += dbBet.FreeBetAmount;
                 dbUser.Balance -= dbBet.PotentialPayout;
+                
+                // Refund the old net profit
+                dbUser.LifetimeProfit -= (dbBet.PotentialPayout - (dbAmount - dbBet.FreeBetAmount));
             }
             // originalStatus == Void/Rejected/Cancelled/Pending already has balance returned
 
@@ -2878,12 +2903,19 @@ else
             {
                 dbUser.Balance -= (newAmount - dbBet.FreeBetAmount);
                 dbUser.FreeBetBalance -= dbBet.FreeBetAmount;
+                if (newStatus == "Lost")
+                {
+                    dbUser.LifetimeProfit -= (newAmount - dbBet.FreeBetAmount);
+                }
             }
             else if (newStatus == "Won")
             {
                 dbUser.Balance -= (newAmount - dbBet.FreeBetAmount);
                 dbUser.FreeBetBalance -= dbBet.FreeBetAmount;
                 dbUser.Balance += dbBet.PotentialPayout;
+                
+                // Add the new net profit
+                dbUser.LifetimeProfit += (dbBet.PotentialPayout - (newAmount - dbBet.FreeBetAmount));
             }
             // newStatus == Void/Rejected/Cancelled doesn't deduct stakes
 
