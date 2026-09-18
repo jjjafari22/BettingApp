@@ -440,7 +440,7 @@ else
                                                     <thead class="table-light sticky-top" style="z-index: 1;">
                                                         <tr>
                                                             <th class="text-start">Outcome</th>
-                                                            @{ var linkTarget = (openInNativeApp && !isDesktop) ? "_self" : "_blank"; }
+                                                            @{ var linkTarget = (openInNativeApp && !isDesktop && isAndroid) ? "_self" : "_blank"; }
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("pinnacle+30", out var pinUrl)) {
                                                                     <a href="@FormatBookieUrl(pinUrl, "pinnacle")" target="@linkTarget" class="text-decoration-none" title="Open match in Pinnacle">Pinnacle</a>
