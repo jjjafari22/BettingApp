@@ -2367,7 +2367,7 @@ else
                             bool allScheduled = AiVisionResult.Legs != null && AiVisionResult.Legs.Count > 0 && AiVisionResult.Legs.All(l => l.StartTime > DateTime.MinValue);
                             if (allScheduled)
                             {
-                                var earliest = AiVisionResult.Legs.Min(l => l.StartTime);
+                                var earliest = AiVisionResult.Legs!.Min(l => l.StartTime);
                                 dbBet.MatchStartTime = earliest;
                                 reviewingBetModel.MatchStartTime = earliest;
                                 if (originalBetModel != null) originalBetModel.MatchStartTime = earliest;
@@ -3171,7 +3171,7 @@ else
                 }
                 else 
                 {
-                    return new MarkupString($"<span class='badge bg-warning-subtle text-warning-emphasis border border-warning-subtle shadow-sm px-2 py-1' style='font-size: 0.85rem;'><i class='bi bi-exclamation-triangle-fill text-warning me-1'></i> Missing ({total - withTime}/{total})</span>");
+                    return new MarkupString($"<span class='badge bg-warning-subtle text-warning-emphasis border border-warning-subtle shadow-sm px-2 py-1' style='font-size: 0.85rem;'><i class='bi bi-exclamation-triangle-fill text-warning me-1'></i> Found {withTime}/{total} Legs</span>");
                 }
             }
             return new MarkupString("<span class='text-muted'>-</span>");
