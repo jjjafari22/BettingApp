@@ -71,6 +71,7 @@ else
                         <th>Discord Username</th>
                         <th>Full Name</th>
                         <th>Payment Method</th>
+                        <th>Requested Amount</th>
                         <th>Current Balance</th>
                         <th>Remaining to Pay</th>
                         <th>Actions</th>
@@ -79,7 +80,7 @@ else
                 <tbody>
                     @if (pendingWithdrawals.Count == 0)
                     {
-                        <tr><td colspan="8" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
+                        <tr><td colspan="9" class="text-center text-muted p-3">No pending withdrawals.</td></tr>
                     }
                     @foreach (var w in pendingWithdrawals)
                     {
@@ -110,16 +111,6 @@ else
                                 }
                             </td>
                             <td>
-                                @if (currentBalances.TryGetValue(w.UserId, out var bal))
-                                {
-                                    <span class="fw-bold @(bal < 0 ? "text-danger" : "")">@bal.ToString("N0") kr</span>
-                                }
-                                else
-                                {
-                                    <span class="text-muted">N/A</span>
-                                }
-                            </td>
-                            <td>
                                 @if (editingTransactionId == w.Id)
                                 {
                                     <div class="input-group input-group-sm" style="max-width: 120px;">
@@ -130,11 +121,27 @@ else
                                 else
                                 {
                                     <strong>@w.AmountNOK.ToString("N0") kr</strong>
-                                    @if(w.FulfilledAmount > 0)
-                                    {
-                                        <div class="text-success small">Fulfilled: @w.FulfilledAmount.ToString("N0") kr</div>
-                                        <div class="text-danger small">Left: @((w.AmountNOK - w.FulfilledAmount).ToString("N0")) kr</div>
-                                    }
+                                }
+                            </td>
+                            <td>
+                                @if (currentBalances.TryGetValue(w.UserId, out var bal))
+                                {
+                                    <span class="@(bal >= 0 ? "text-success" : "text-danger") fw-bold text-nowrap">@bal.ToString("N0") kr</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">N/A</span>
+                                }
+                            </td>
+                            <td>
+                                @if(w.FulfilledAmount > 0)
+                                {
+                                    <strong>@((w.AmountNOK - w.FulfilledAmount).ToString("N0")) kr</strong>
+                                    <div class="text-success small mt-1">Paid: @w.FulfilledAmount.ToString("N0") kr</div>
+                                }
+                                else
+                                {
+                                    <strong>@w.AmountNOK.ToString("N0") kr</strong>
                                 }
                             </td>
                             <td>
