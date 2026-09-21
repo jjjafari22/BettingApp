@@ -183,7 +183,16 @@ public class DiscordNotificationService : IHostedService
         {
             header = "**Withdrawal Rejected**";
             icon = "❌";
-            messageBody = $"Your withdrawal request of **{transaction.AmountNOK:N0} NOK** has been rejected.\nFunds have been returned to your balance.";
+            
+            if (transaction.FulfilledAmount > 0)
+            {
+                var remaining = transaction.AmountNOK - transaction.FulfilledAmount;
+                messageBody = $"The remaining **{remaining:N0} NOK** of your **{transaction.AmountNOK:N0} NOK** withdrawal request has been rejected.\nFunds have been returned to your balance.";
+            }
+            else
+            {
+                messageBody = $"Your withdrawal request of **{transaction.AmountNOK:N0} NOK** has been rejected.\nFunds have been returned to your balance.";
+            }
         }
         else
         {

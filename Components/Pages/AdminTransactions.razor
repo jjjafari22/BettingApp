@@ -155,7 +155,7 @@ else
                                 else
                                 {
                                     <div class="d-flex flex-nowrap gap-1">
-                                        <button class="btn btn-success btn-sm" @onclick="() => ConfirmWithdraw(w)" disabled="@(w.AmountNOK > 0)">Clear</button>
+                                        <button class="btn btn-success btn-sm" @onclick="() => ConfirmWithdraw(w)" disabled="@((w.AmountNOK - w.FulfilledAmount) > 0)">Clear</button>
                                         <button class="btn btn-warning btn-sm" @onclick="() => StartEditTransaction(w)">Edit</button>
                                         <button class="btn btn-danger btn-sm" @onclick="() => RejectWithdraw(w)">Reject</button>
                                     </div>
@@ -1680,9 +1680,10 @@ else
             errorMessage = null;
         var displayUser = userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName;
         
-        var msg = t.AmountNOK <= 0 
+        var remaining = t.AmountNOK - t.FulfilledAmount;
+        var msg = remaining <= 0 
             ? $"This withdrawal has been fully fulfilled. Clear this {t.AmountNOK}kr request for {displayUser}?" 
-            : $"Confirm payout of {t.AmountNOK} kr to {displayUser}?";
+            : $"Confirm payout of {remaining} kr to {displayUser}?";
             
         var confirmed = await DialogService.ConfirmAsync(msg);
         if (!confirmed) return;
@@ -1693,7 +1694,8 @@ else
         var dbTrans = await context.Transactions.FindAsync(t.Id);
         if (dbTrans != null)
         {
-            if (dbTrans.AmountNOK <= 0)
+            var dbRemaining = dbTrans.AmountNOK - dbTrans.FulfilledAmount;
+            if (dbRemaining <= 0)
             {
                 context.Transactions.Remove(dbTrans);
                 context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Cleared Fulfilled Withdrawal", TargetUserName = t.UserName, Details = $"ID: {t.Id}" });
@@ -1853,8 +1855,9 @@ else
             dbTrans.Status = "Rejected";
             dbTrans.UpdatedAt = DateTime.UtcNow;
             
-            user.Balance += t.AmountNOK;
-            context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Rejected Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {t.AmountNOK}, ID: {t.Id}" });
+            var remainingToRefund = dbTrans.AmountNOK - dbTrans.FulfilledAmount;
+            user.Balance += (int)remainingToRefund;
+            context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Rejected Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {remainingToRefund} (Original: {t.AmountNOK}), ID: {t.Id}" });
             await context.SaveChangesAsync();
             
             await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal rejected");
@@ -2003,13 +2006,13 @@ else
                 if (pendingW != null)
                 {
                     // The pending request's original amount was ALREADY deducted from the user's balance.
-                    int pendingAmount = pendingW.AmountNOK > 0 ? pendingW.AmountNOK : 0;
-                    amountAlreadyDeducted = Math.Min(pendingAmount, (int)amount);
+                    decimal remainingToFulfill = pendingW.AmountNOK - pendingW.FulfilledAmount;
+                    decimal pendingAmount = remainingToFulfill > 0 ? remainingToFulfill : 0;
+                    amountAlreadyDeducted = (int)Math.Min(pendingAmount, (decimal)amount);
 
-                    // Deduct the amount from the pending request.
-                    // We explicitly allow this to reach 0 or go negative so admins maintain manual oversight
-                    // and can physically click 'Confirm' themselves.
-                    pendingW.AmountNOK -= (int)amount;
+                    // Increment the FulfilledAmount instead of destructively modifying AmountNOK.
+                    // This preserves the Initial Requested Amount for admin visibility.
+                    pendingW.FulfilledAmount += (decimal)amount;
                 }
             }
 
