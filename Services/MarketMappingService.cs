@@ -24,7 +24,7 @@ namespace BettingApp.Services
             { "1st Half Goals", "Over Under First Half" },
             { "First Half Goals", "Over Under First Half" },
             { "Player Shots on Target", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target|Player Shots on Target|Player Shots on Target (incl. overtime)" },
-            { "Player Shots", "Player Shots (incl. overtime)|Player Shots" },
+            { "Player Shots", "Over Under Player Shots (incl. overtime)|Player Shots (incl. overtime)|Player Shots" },
             { "Player Fouls Committed", "Over Under Player Fouls Committed (incl. overtime)|Player Fouls Committed (incl. overtime)|Player Fouls Committed" },
             { "Full Time", "Full Time Result" },
             { "Match Odds", "Full Time Result" },
@@ -209,7 +209,7 @@ namespace BettingApp.Services
             }
             if (clean.Contains("Shots", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Player Shots (incl. overtime)", "Player Shots" };
+                return new List<string> { "Over Under Player Shots (incl. overtime)", "Player Shots (incl. overtime)", "Player Shots" };
             }
             if (clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase))
             {

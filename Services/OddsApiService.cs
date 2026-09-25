@@ -82,6 +82,19 @@ public class OddsApiService
                             }
                         }
                         
+                        if (baseName.Equals("Player Shots On Goal (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Shots On Goal (incl. overtime)";
+                        }
+                        else if (baseName.Equals("Player Fouls Committed (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Fouls Committed (incl. overtime)";
+                        }
+                        else if (baseName.Equals("Player Shots (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Shots (incl. overtime)";
+                        }
+
                         rawMarketIdToBaseName[mId] = baseName;
                         
                         if (!baseMarketDict.ContainsKey(baseName))
@@ -97,7 +110,17 @@ public class OddsApiService
                             {
                                 var oId = o.GetProperty("outcomeId").ToString();
                                 var oName = o.TryGetProperty("outcomeName", out var on) ? on.GetString() ?? "" : "";
-                                baseMarketObj.OutcomeNames[oId] = oName + handicapSuffix;
+                                
+                                var match = System.Text.RegularExpressions.Regex.Match(oName, @"^(\d+)\+$");
+                                if (match.Success && int.TryParse(match.Groups[1].Value, out int num))
+                                {
+                                    double overVal = num - 0.5;
+                                    oName = $"Over {overVal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}";
+                                }
+
+                                string combined = oName + handicapSuffix;
+                                combined = System.Text.RegularExpressions.Regex.Replace(combined, @"^(Over|Under)\s*\(([^)]+)\)$", "$1 $2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                baseMarketObj.OutcomeNames[oId] = combined;
                             }
                         }
                 }
