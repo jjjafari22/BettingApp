@@ -829,6 +829,11 @@ else
                                                                                 
                                                                                 bool isValidNameMatch = matchLast && matchFirst;
                                                                                 
+                                                                                if (!isValidNameMatch && (ActiveLookupLeg?.Market?.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) == true || ActiveLookupLeg?.Market?.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) == true))
+                                                                                {
+                                                                                    isValidNameMatch = true;
+                                                                                }
+                                                                                
                                                                                 if (!isValidNameMatch && (matchLast || matchFirst))
                                                                                 {
                                                                                     string matchedName = matchLast ? lastName : firstName;
@@ -875,7 +880,9 @@ else
                                                                                 {
                                                                                     string pName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(simpleParenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
                                                                                     
-                                                                                    if (!double.TryParse(pName, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _) && normSel.Contains(pName))
+                                                                                    bool isNameCheckBypassed = ActiveLookupLeg?.Market?.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) == true || ActiveLookupLeg?.Market?.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) == true;
+                                                                                    
+                                                                                    if (isNameCheckBypassed || (!double.TryParse(pName, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _) && normSel.Contains(pName)))
                                                                                     {
                                                                                         string outcomePart = (displayOName ?? "").Substring(0, simpleParenMatch.Index).Trim();
                                                                                         string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
