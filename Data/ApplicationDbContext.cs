@@ -75,5 +75,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<Transaction>().HasIndex(t => t.UserId);
         builder.Entity<Transaction>().HasIndex(t => new { t.Status, t.UpdatedAt });
         builder.Entity<Transaction>().HasIndex(t => t.Type);
+        builder.Entity<AuditLog>().HasIndex(a => a.Timestamp);
     }
 }
