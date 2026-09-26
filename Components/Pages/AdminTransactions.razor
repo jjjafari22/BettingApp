@@ -1440,12 +1440,34 @@ else
         hasMoreTransactions = totalTransactions > (currentPage * PageSize);
         cashCows = await context.CashCows.ToListAsync();
         ccLastUpdated.Clear();
-        foreach (var cow in cashCows) {
-            var lastTx = await context.Transactions
-                .Where(t => (t.SenderType == "CashCow" && t.SenderId == cow.Id) || (t.ReceiverType == "CashCow" && t.ReceiverId == cow.Id))
-                .OrderByDescending(t => t.Date)
-                .FirstOrDefaultAsync();
-            ccLastUpdated[cow.Id] = lastTx?.Date;
+        if (cashCows.Any())
+        {
+            var cowIds = cashCows.Select(c => c.Id).ToList();
+
+            var lastSenderDates = await context.Transactions
+                .Where(t => t.SenderType == "CashCow" && cowIds.Contains(t.SenderId!))
+                .GroupBy(t => t.SenderId)
+                .Select(g => new { CowId = g.Key, LastDate = g.Max(x => x.Date) })
+                .ToListAsync();
+
+            var lastReceiverDates = await context.Transactions
+                .Where(t => t.ReceiverType == "CashCow" && cowIds.Contains(t.ReceiverId!))
+                .GroupBy(t => t.ReceiverId)
+                .Select(g => new { CowId = g.Key, LastDate = g.Max(x => x.Date) })
+                .ToListAsync();
+
+            foreach (var cow in cashCows)
+            {
+                var date1 = lastSenderDates.FirstOrDefault(x => x.CowId == cow.Id)?.LastDate;
+                var date2 = lastReceiverDates.FirstOrDefault(x => x.CowId == cow.Id)?.LastDate;
+                
+                DateTime? maxDate = null;
+                if (date1 != null && date2 != null) maxDate = date1 > date2 ? date1 : date2;
+                else if (date1 != null) maxDate = date1;
+                else if (date2 != null) maxDate = date2;
+
+                ccLastUpdated[cow.Id] = maxDate;
+            }
         }
         pendingWithdrawals = await context.Transactions
             .Where(t => t.Type == "Withdrawal" && t.Status == "Pending")

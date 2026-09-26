@@ -73,5 +73,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<Bet>().HasIndex(b => b.UpdatedAt);
         builder.Entity<Bet>().HasIndex(b => b.UserId);
         builder.Entity<Transaction>().HasIndex(t => t.UserId);
+        builder.Entity<Transaction>().HasIndex(t => new { t.Status, t.UpdatedAt });
+        builder.Entity<Transaction>().HasIndex(t => t.Type);
     }
 }
