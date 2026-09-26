@@ -403,7 +403,7 @@ public class OddsApiService
 
                                                 if (playerProp.Value.TryGetProperty("changedAt", out var changedAtProp) && changedAtProp.ValueKind == System.Text.Json.JsonValueKind.String)
                                                 {
-                                                    if (DateTime.TryParse(changedAtProp.GetString(), out var changedAt))
+                                                    if (DateTime.TryParse(changedAtProp.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var changedAt))
                                                     {
                                                         oddsData.ChangedAt = changedAt;
                                                     }

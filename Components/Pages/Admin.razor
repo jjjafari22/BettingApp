@@ -914,7 +914,7 @@ else
                                                                     }
                                                                 }
                                                                 
-                                                                <tr id="@(isMatch ? "highlighted-odds-row" : "")" class="@(isMatch ? "table-warning" : "")">
+                                                                <tr id="@(isMatch ? "highlighted-odds-row" : "")" class="@(isMatch ? "table-warning" : "") align-top">
                                                                     <td class="text-start fw-bold @(isMatch ? "text-dark" : "")">
                                                                         @if (isMatch)
                                                                         {
@@ -931,8 +931,11 @@ else
                                                                                     @pd.Price.ToString("0.00")
                                                                                 }
                                                                             </div>
+                                                                            @if (pd.ChangedAt.HasValue) {
+                                                                                <div class="badge bg-light text-secondary border mt-1 fw-bold" style="font-size: 0.55rem; padding: 0.15rem 0.25rem; letter-spacing: -0.3px;" title="Last updated">@ToUserLocal(pd.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
+                                                                            }
                                                                             @if (pd.Limit.HasValue) {
-                                                                                <div class="fw-bold text-success text-nowrap" style="font-size: 0.7rem;" title="Max Bet Limit">Max: €@pd.Limit.Value.ToString("0")</div>
+                                                                                <div class="fw-bold text-success text-nowrap mt-1" style="font-size: 0.7rem;" title="Max Bet Limit">Max: €@pd.Limit.Value.ToString("0")</div>
                                                                             }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
@@ -947,6 +950,9 @@ else
                                                                                     @ud.Price.ToString("0.00")
                                                                                 }
                                                                             </div>
+                                                                            @if (ud.ChangedAt.HasValue) {
+                                                                                <div class="badge bg-light text-secondary border mt-1 fw-bold" style="font-size: 0.55rem; padding: 0.15rem 0.25rem; letter-spacing: -0.3px;" title="Last updated">@ToUserLocal(ud.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
+                                                                            }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
                                                                         }
@@ -960,6 +966,9 @@ else
                                                                                     @bd.Price.ToString("0.00")
                                                                                 }
                                                                             </div>
+                                                                            @if (bd.ChangedAt.HasValue) {
+                                                                                <div class="badge bg-light text-secondary border mt-1 fw-bold" style="font-size: 0.55rem; padding: 0.15rem 0.25rem; letter-spacing: -0.3px;" title="Last updated">@ToUserLocal(bd.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
+                                                                            }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
                                                                         }
@@ -974,6 +983,9 @@ else
                                                                                     @cd.Price.ToString("0.00")
                                                                                 }
                                                                             </div>
+                                                                            @if (cd.ChangedAt.HasValue) {
+                                                                                <div class="badge bg-light text-secondary border mt-1 fw-bold" style="font-size: 0.55rem; padding: 0.15rem 0.25rem; letter-spacing: -0.3px;" title="Last updated">@ToUserLocal(cd.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
+                                                                            }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
                                                                         }
