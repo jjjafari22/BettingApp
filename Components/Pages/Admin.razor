@@ -2102,15 +2102,31 @@ else
                     
                     var json = System.Text.Json.JsonSerializer.Serialize(result);
                     currentBet.AiVisionResultJson = json;
-                    if (currentOriginal != null) currentOriginal.AiVisionResultJson = json;
+                    currentBet.AiVisionError = null;
+                    if (currentOriginal != null) 
+                    {
+                        currentOriginal.AiVisionResultJson = json;
+                        currentOriginal.AiVisionError = null;
+                    }
                     
                     using var context = DbFactory.CreateDbContext();
                     var dbBet = await context.Bets.FindAsync(currentBet.Id);
                     if (dbBet != null)
                     {
                         dbBet.AiVisionResultJson = json;
+                        dbBet.AiVisionError = null;
                         await context.SaveChangesAsync();
                     }
+                    
+                    await InvokeAsync(() =>
+                    {
+                        if (reviewingBetModel?.Id == currentBet.Id) 
+                        {
+                            reviewingBetModel.AiVisionError = null;
+                            AiVisionError = null;
+                            StateHasChanged();
+                        }
+                    });
                 }
 
                 // 2. We now have the JSON payload for the legs. Ask Gemini to search Google for the outcome.

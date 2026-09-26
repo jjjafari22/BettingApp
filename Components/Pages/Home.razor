@@ -746,6 +746,7 @@ else
                                     {
                                         System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI SUCCESS. Serializing result...\n");
                                         dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(result);
+                                        dbBet.AiVisionError = null;
                                         
                                         // Auto-populate Stake and Odds right away so they appear in the Admin table!
                                         if (!string.IsNullOrEmpty(result.TotalOdds))
