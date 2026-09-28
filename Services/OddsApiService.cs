@@ -32,124 +32,42 @@ public class OddsApiService
             string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Manual Lookup]";
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             
-            // 1. Get markets metadata to map IDs to Names
-            var marketsUrl = $"https://api.oddspapi.io/v4/markets?apiKey={_apiKey}&language=en";
-            
-            if (!_cache.TryGetValue("OddspapiMarketsJson", out string? mJson))
-            {
-                using var mResp = await _httpClient.GetAsync(marketsUrl);
-                if (mResp.IsSuccessStatusCode)
-                {
-                    mJson = await mResp.Content.ReadAsStringAsync();
-                    _cache.Set("OddspapiMarketsJson", mJson, TimeSpan.FromHours(24));
-                }
-                else
-                {
-                    mJson = "[]";
-                }
-            }
-            
-            var rawMarketIdToBaseName = new Dictionary<string, string>();
-            var baseMarketDict = new Dictionary<string, BettingApp.Models.OddsPapiMarket>();
-            if (!string.IsNullOrEmpty(mJson) && mJson != "[]")
-            {
-                using var mDoc = JsonDocument.Parse(mJson);
-                if (mDoc.RootElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var m in mDoc.RootElement.EnumerateArray())
-                    {
-                        var mId = m.GetProperty("marketId").ToString();
-                        var baseName = m.TryGetProperty("marketName", out var mn) ? mn.GetString() ?? "Unknown" : "Unknown";
-                        
-                        string handicapSuffix = "";
-                        if (m.TryGetProperty("handicap", out var hc))
-                        {
-                            if (hc.ValueKind == JsonValueKind.Number && hc.GetDouble() != 0) handicapSuffix = $" ({hc.GetDouble()})";
-                            else if (hc.ValueKind == JsonValueKind.String && hc.GetString() != "0") handicapSuffix = $" ({hc.GetString()})";
-                        }
-                        
-                        if (baseName.Contains("European Handicap", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = baseName.Replace("European Handicap", "3-Way Handicap", StringComparison.OrdinalIgnoreCase);
-                            
-                            if (handicapSuffix.StartsWith(" (-") && handicapSuffix.EndsWith(")"))
-                            {
-                                handicapSuffix = $" (0-{handicapSuffix.Substring(3, handicapSuffix.Length - 4)})";
-                            }
-                            else if (handicapSuffix.StartsWith(" (") && handicapSuffix.EndsWith(")") && !handicapSuffix.Contains("-"))
-                            {
-                                handicapSuffix = $" ({handicapSuffix.Substring(2, handicapSuffix.Length - 3)}-0)";
-                            }
-                        }
-                        
-                        if (baseName.Equals("Player Shots On Goal (incl. overtime)", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = "Over Under Player Shots On Goal (incl. overtime)";
-                        }
-                        else if (baseName.Equals("Player Fouls Committed (incl. overtime)", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = "Over Under Player Fouls Committed (incl. overtime)";
-                        }
-                        else if (baseName.Equals("Player Shots (incl. overtime)", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = "Over Under Player Shots (incl. overtime)";
-                        }
-
-                        rawMarketIdToBaseName[mId] = baseName;
-                        
-                        if (!baseMarketDict.ContainsKey(baseName))
-                        {
-                            baseMarketDict[baseName] = new BettingApp.Models.OddsPapiMarket { MarketId = baseName, MarketName = baseName };
-                        }
-                    
-                        var baseMarketObj = baseMarketDict[baseName];
-                        
-                        if (m.TryGetProperty("outcomes", out var outcomes))
-                        {
-                            foreach (var o in outcomes.EnumerateArray())
-                            {
-                                var oId = o.GetProperty("outcomeId").ToString();
-                                var oName = o.TryGetProperty("outcomeName", out var on) ? on.GetString() ?? "" : "";
-                                
-                                var match = System.Text.RegularExpressions.Regex.Match(oName, @"^(\d+)\+$");
-                                if (match.Success && int.TryParse(match.Groups[1].Value, out int num))
-                                {
-                                    double overVal = num - 0.5;
-                                    oName = $"Over {overVal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}";
-                                }
-
-                                string combined = oName + handicapSuffix;
-                                combined = System.Text.RegularExpressions.Regex.Replace(combined, @"^(Over|Under)\s*\(([^)]+)\)$", "$1 $2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                                baseMarketObj.OutcomeNames[oId] = combined;
-                            }
-                        }
-                }
-                }
-            }
-
             // 2. Find Fixture
-            string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
-            string toDate = DateTime.UtcNow.AddDays(8).ToString("yyyy-MM-dd");
-            var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId=10&from={fromDate}&to={toDate}";
-            
-            if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
-            {
-                _logger.LogInformation($" {betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
-
-                using var fResp = await _httpClient.GetAsync(fixturesUrl);
-                if (!fResp.IsSuccessStatusCode) return (null, $"Fixtures API returned status {fResp.StatusCode}");
-                
-                fJson = await fResp.Content.ReadAsStringAsync();
-                _cache.Set($"OddspapiFixtures_{fromDate}", fJson, TimeSpan.FromHours(6));
-            }
-            
-            using var doc = JsonDocument.Parse(fJson ?? "[]");
-            
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return (null, "Fixtures API returned invalid JSON format.");
-
             string? fixtureId = null;
             string matchName = "";
             DateTime startTime = DateTime.MinValue;
+            bool isLive = false;
+            string? flashscoreId = null;
+            
+            bool skipParse = _cache.TryGetValue($"OddspapiMatch3_{teamName}", out (string fid, string mn, DateTime st, bool il, string? fsid) cachedMatch);
+            if (skipParse)
+            {
+                fixtureId = cachedMatch.fid;
+                matchName = cachedMatch.mn;
+                startTime = cachedMatch.st;
+                isLive = cachedMatch.il;
+                flashscoreId = cachedMatch.fsid;
+            }
+            else
+            {
+                string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
+                string toDate = DateTime.UtcNow.AddDays(8).ToString("yyyy-MM-dd");
+                var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId=10&from={fromDate}&to={toDate}";
+                
+                if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
+                {
+                    _logger.LogInformation($" {betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
+    
+                    using var fResp = await _httpClient.GetAsync(fixturesUrl);
+                    if (!fResp.IsSuccessStatusCode) return (null, $"Fixtures API returned status {fResp.StatusCode}");
+                    
+                    fJson = await fResp.Content.ReadAsStringAsync();
+                    _cache.Set($"OddspapiFixtures_{fromDate}", fJson, TimeSpan.FromHours(6));
+                }
+                
+                using var doc = JsonDocument.Parse(fJson ?? "[]");
+                
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) return (null, "Fixtures API returned invalid JSON format.");
 
             string[] split = teamName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
             string homeTeam = split[0].Trim();
@@ -271,7 +189,7 @@ public class OddsApiService
                 }
             }
             
-            bool isLive = false;
+            
             if (bestFixture.TryGetProperty("statusId", out var sid) && sid.ValueKind == JsonValueKind.Number)
             {
                 int statusId = sid.GetInt32();
@@ -286,28 +204,6 @@ public class OddsApiService
                 }
             }
 
-            // 3. Fetch Odds for Unibet SE, Betsson, Bet365, Pinnacle
-            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365,pinnacle%2B30";
-            var oResp = await _httpClient.GetAsync(oddsUrl);
-            
-            // Retry once if rate limited
-            if (!oResp.IsSuccessStatusCode)
-            {
-                oResp.Dispose();
-                await Task.Delay(1000); // Wait 1s
-                oResp = await _httpClient.GetAsync(oddsUrl);
-                if (!oResp.IsSuccessStatusCode)
-                {
-                    oResp.Dispose();
-                    return (null, $"Odds API returned status {oResp.StatusCode}");
-                }
-            }
-
-            var oJson = await oResp.Content.ReadAsStringAsync();
-            oResp.Dispose();
-            using var oddsDoc = JsonDocument.Parse(oJson);
-            
-            string? flashscoreId = null;
             if (bestFixture.TryGetProperty("externalProviders", out var ep))
             {
                 if (ep.TryGetProperty("flashscoreId", out var fsid) && fsid.ValueKind == System.Text.Json.JsonValueKind.String)
@@ -315,6 +211,136 @@ public class OddsApiService
                     flashscoreId = fsid.GetString();
                 }
             }
+            
+            _cache.Set($"OddspapiMatch3_{teamName}", (fixtureId, matchName, startTime, isLive, flashscoreId), TimeSpan.FromHours(2));
+            }
+            if (_cache.TryGetValue($"OddspapiParsedResult_{fixtureId}", out BettingApp.Models.OddsPapiSearchResult? cachedResult) && cachedResult != null)
+            {
+                return (cachedResult, null);
+            }
+            
+            // 1. Get markets metadata to map IDs to Names
+            var marketsUrl = $"https://api.oddspapi.io/v4/markets?apiKey={_apiKey}&language=en";
+            
+            if (!_cache.TryGetValue("OddspapiMarketsJson", out string? mJson))
+            {
+                using var mResp = await _httpClient.GetAsync(marketsUrl);
+                if (mResp.IsSuccessStatusCode)
+                {
+                    mJson = await mResp.Content.ReadAsStringAsync();
+                    _cache.Set("OddspapiMarketsJson", mJson, TimeSpan.FromHours(24));
+                }
+                else
+                {
+                    mJson = "[]";
+                }
+            }
+            
+            var rawMarketIdToBaseName = new Dictionary<string, string>();
+            var baseMarketDict = new Dictionary<string, BettingApp.Models.OddsPapiMarket>();
+            if (!string.IsNullOrEmpty(mJson) && mJson != "[]")
+            {
+                using var mDoc = JsonDocument.Parse(mJson);
+                if (mDoc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var m in mDoc.RootElement.EnumerateArray())
+                    {
+                        var mId = m.GetProperty("marketId").ToString();
+                        var baseName = m.TryGetProperty("marketName", out var mn) ? mn.GetString() ?? "Unknown" : "Unknown";
+                        
+                        string handicapSuffix = "";
+                        if (m.TryGetProperty("handicap", out var hc))
+                        {
+                            if (hc.ValueKind == JsonValueKind.Number && hc.GetDouble() != 0) handicapSuffix = $" ({hc.GetDouble()})";
+                            else if (hc.ValueKind == JsonValueKind.String && hc.GetString() != "0") handicapSuffix = $" ({hc.GetString()})";
+                        }
+                        
+                        if (baseName.Contains("European Handicap", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = baseName.Replace("European Handicap", "3-Way Handicap", StringComparison.OrdinalIgnoreCase);
+                            
+                            if (handicapSuffix.StartsWith(" (-") && handicapSuffix.EndsWith(")"))
+                            {
+                                handicapSuffix = $" (0-{handicapSuffix.Substring(3, handicapSuffix.Length - 4)})";
+                            }
+                            else if (handicapSuffix.StartsWith(" (") && handicapSuffix.EndsWith(")") && !handicapSuffix.Contains("-"))
+                            {
+                                handicapSuffix = $" ({handicapSuffix.Substring(2, handicapSuffix.Length - 3)}-0)";
+                            }
+                        }
+                        
+                        if (baseName.Equals("Player Shots On Goal (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Shots On Goal (incl. overtime)";
+                        }
+                        else if (baseName.Equals("Player Fouls Committed (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Fouls Committed (incl. overtime)";
+                        }
+                        else if (baseName.Equals("Player Shots (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Shots (incl. overtime)";
+                        }
+
+                        rawMarketIdToBaseName[mId] = baseName;
+                        
+                        if (!baseMarketDict.ContainsKey(baseName))
+                        {
+                            baseMarketDict[baseName] = new BettingApp.Models.OddsPapiMarket { MarketId = baseName, MarketName = baseName };
+                        }
+                    
+                        var baseMarketObj = baseMarketDict[baseName];
+                        
+                        if (m.TryGetProperty("outcomes", out var outcomes))
+                        {
+                            foreach (var o in outcomes.EnumerateArray())
+                            {
+                                var oId = o.GetProperty("outcomeId").ToString();
+                                var oName = o.TryGetProperty("outcomeName", out var on) ? on.GetString() ?? "" : "";
+                                
+                                var match = System.Text.RegularExpressions.Regex.Match(oName, @"^(\d+)\+$");
+                                if (match.Success && int.TryParse(match.Groups[1].Value, out int num))
+                                {
+                                    double overVal = num - 0.5;
+                                    oName = $"Over {overVal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}";
+                                }
+
+                                string combined = oName + handicapSuffix;
+                                combined = System.Text.RegularExpressions.Regex.Replace(combined, @"^(Over|Under)\s*\(([^)]+)\)$", "$1 $2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                baseMarketObj.OutcomeNames[oId] = combined;
+                            }
+                        }
+                }
+                }
+            }
+
+            // 3. Fetch Odds for Unibet SE, Betsson, Bet365, Pinnacle
+            var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365,pinnacle%2B30";
+            
+            if (!_cache.TryGetValue($"OddspapiOdds_{fixtureId}", out string? oJson))
+            {
+                var oResp = await _httpClient.GetAsync(oddsUrl);
+                
+                // Retry once if rate limited
+                if (!oResp.IsSuccessStatusCode)
+                {
+                    oResp.Dispose();
+                    await Task.Delay(1000); // Wait 1s
+                    oResp = await _httpClient.GetAsync(oddsUrl);
+                    if (!oResp.IsSuccessStatusCode)
+                    {
+                        oResp.Dispose();
+                        return (null, $"Odds API returned status {oResp.StatusCode}");
+                    }
+                }
+    
+                oJson = await oResp.Content.ReadAsStringAsync();
+                oResp.Dispose();
+                
+                // Cache the odds JSON for 15 seconds to make multi-leg Bet Builder lookups instantaneous
+                _cache.Set($"OddspapiOdds_{fixtureId}", oJson, TimeSpan.FromSeconds(15));
+            }
+            using var oddsDoc = JsonDocument.Parse(oJson ?? "{}");
 
             var result = new BettingApp.Models.OddsPapiSearchResult
             {
@@ -480,6 +506,8 @@ public class OddsApiService
                     .ToDictionary(x => x.Key, x => x.Value);
             }
             result.Markets.Sort((a, b) => a.MarketName.CompareTo(b.MarketName));
+            
+            _cache.Set($"OddspapiParsedResult_{fixtureId}", result, TimeSpan.FromSeconds(15));
 
             return (result, null);
         }

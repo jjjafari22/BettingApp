@@ -2360,11 +2360,7 @@ else
 
         BettingApp.Models.OddsPapiSearchResult? result;
         string? error;
-        
-        var swApi = System.Diagnostics.Stopwatch.StartNew();
         (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
-        swApi.Stop();
-        Logger.LogWarning($"[SPEED_TEST] OddsApi took {swApi.ElapsedMilliseconds} ms");
         
         if (result == null)
         {
@@ -2414,7 +2410,6 @@ else
 
                 _ = Task.Run(async () => 
                 {
-                    var swDB = System.Diagnostics.Stopwatch.StartNew();
                     try
                     {
                         using var context = DbFactory.CreateDbContext();
@@ -2430,8 +2425,6 @@ else
                         }
                     }
                     catch { /* Best effort */ }
-                    swDB.Stop();
-                    Logger.LogWarning($"[SPEED_TEST] DB Save took {swDB.ElapsedMilliseconds} ms (Background)");
                 });
                 
                 // Instantly resort the pending bets list in memory so it reflects correctly on the UI
