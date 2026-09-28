@@ -118,39 +118,53 @@ namespace BettingApp.Services
             return result;
         }
 
-        public string NormalizeTeamName(string name, bool removeStopWords = true)
-        {
-            if (string.IsNullOrEmpty(name)) return "";
-            
-            string result = RemoveDiacritics(name).ToLowerInvariant();
-                       
-            result = ApplyTeamAliases(result);
+            private static readonly HashSet<string> _stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
+            { 
+                "fc", "fk", "united", "city", "cf", "cd", "bk", "women", "sc", "ec", "if" 
+            };
 
-            result = result.Replace("ø", "o")
-                       .Replace("æ", "a")
-                       .Replace("å", "a")
-                       .Replace("oe", "o")
-                       .Replace("ae", "a")
-                       .Replace("aa", "a")
-                       .Replace(" (w)", "")
-                       .Replace("-", " ");
-                       
-            if (removeStopWords)
-            {
-                var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
-                { 
-                    "fc", "fk", "united", "city", "cf", "cd", "bk", "women", "sc", "ec", "if" 
-                };
-                
-                var words = System.Linq.Enumerable.Where(
-                    result.Split(new[] { ' ', '.' }, StringSplitOptions.RemoveEmptyEntries),
-                    w => !stopWords.Contains(w)
-                );
-                                  
-                return string.Join(" ", words).Trim();
-            }
+            private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _normalizationCache = new();
             
-            return result.Trim();
-        }
+            public string NormalizeTeamName(string name, bool removeStopWords = true)
+            {
+                if (string.IsNullOrEmpty(name)) return "";
+                
+                string cacheKey = removeStopWords ? name : name + "_noStop";
+                if (_normalizationCache.TryGetValue(cacheKey, out var cachedValue))
+                {
+                    return cachedValue;
+                }
+                
+                string result = RemoveDiacritics(name).ToLowerInvariant();
+                           
+                result = ApplyTeamAliases(result);
+    
+                result = result.Replace("ø", "o")
+                           .Replace("æ", "a")
+                           .Replace("å", "a")
+                           .Replace("oe", "o")
+                           .Replace("ae", "a")
+                           .Replace("aa", "a")
+                           .Replace(" (w)", "")
+                           .Replace("-", " ");
+                           
+                if (removeStopWords)
+                {
+                    var stopWords = _stopWords;
+                
+                    var words = System.Linq.Enumerable.Where(
+                        result.Split(new[] { ' ', '.' }, StringSplitOptions.RemoveEmptyEntries),
+                        w => !stopWords.Contains(w)
+                    );
+                                  
+                    var finalRes = string.Join(" ", words).Trim();
+                    _normalizationCache[cacheKey] = finalRes;
+                    return finalRes;
+                }
+            
+                var finalResNoStop = result.Trim();
+                _normalizationCache[cacheKey] = finalResNoStop;
+                return finalResNoStop;
+            }
     }
 }

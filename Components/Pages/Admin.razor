@@ -2361,7 +2361,10 @@ else
         BettingApp.Models.OddsPapiSearchResult? result;
         string? error;
         
+        var swApi = System.Diagnostics.Stopwatch.StartNew();
         (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
+        swApi.Stop();
+        Logger.LogWarning($"[SPEED_TEST] OddsApi took {swApi.ElapsedMilliseconds} ms");
         
         if (result == null)
         {
@@ -2391,38 +2394,45 @@ else
                     }
                 }
                 
-                try
+                var bId = reviewingBetModel.Id;
+                var currentAiVisionResultJson = AiVisionResult != null ? System.Text.Json.JsonSerializer.Serialize(AiVisionResult) : null;
+                DateTime? matchStartTime = null;
+                
+                if (AiVisionResult != null)
                 {
-                    using var context = DbFactory.CreateDbContext();
-                    var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
-                    if (dbBet != null)
+                    bool allScheduled = AiVisionResult.Legs != null && AiVisionResult.Legs.Count > 0 && AiVisionResult.Legs.All(l => l.StartTime > DateTime.MinValue);
+                    if (allScheduled)
                     {
-                        if (AiVisionResult != null)
-                        {
-                            bool allScheduled = AiVisionResult.Legs != null && AiVisionResult.Legs.Count > 0 && AiVisionResult.Legs.All(l => l.StartTime > DateTime.MinValue);
-                            if (allScheduled)
-                            {
-                                var earliest = AiVisionResult.Legs!.Min(l => l.StartTime);
-                                dbBet.MatchStartTime = earliest;
-                                reviewingBetModel.MatchStartTime = earliest;
-                                if (originalBetModel != null) originalBetModel.MatchStartTime = earliest;
-                            }
-                            else
-                            {
-                                dbBet.MatchStartTime = null;
-                                reviewingBetModel.MatchStartTime = null;
-                                if (originalBetModel != null) originalBetModel.MatchStartTime = null;
-                            }
-                            
-                            dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(AiVisionResult);
-                            reviewingBetModel.AiVisionResultJson = dbBet.AiVisionResultJson;
-                            if (originalBetModel != null) originalBetModel.AiVisionResultJson = dbBet.AiVisionResultJson;
-                        }
-                        
-                        await context.SaveChangesAsync();
+                        matchStartTime = AiVisionResult.Legs!.Min(l => l.StartTime);
                     }
+                    reviewingBetModel.MatchStartTime = matchStartTime;
+                    if (originalBetModel != null) originalBetModel.MatchStartTime = matchStartTime;
+                    
+                    reviewingBetModel.AiVisionResultJson = currentAiVisionResultJson;
+                    if (originalBetModel != null) originalBetModel.AiVisionResultJson = currentAiVisionResultJson;
                 }
-                catch { /* Best effort */ }
+
+                _ = Task.Run(async () => 
+                {
+                    var swDB = System.Diagnostics.Stopwatch.StartNew();
+                    try
+                    {
+                        using var context = DbFactory.CreateDbContext();
+                        var dbBet = await context.Bets.FindAsync(bId);
+                        if (dbBet != null)
+                        {
+                            if (currentAiVisionResultJson != null)
+                            {
+                                dbBet.MatchStartTime = matchStartTime;
+                                dbBet.AiVisionResultJson = currentAiVisionResultJson;
+                            }
+                            await context.SaveChangesAsync();
+                        }
+                    }
+                    catch { /* Best effort */ }
+                    swDB.Stop();
+                    Logger.LogWarning($"[SPEED_TEST] DB Save took {swDB.ElapsedMilliseconds} ms (Background)");
+                });
                 
                 // Instantly resort the pending bets list in memory so it reflects correctly on the UI
                 if (pendingBets != null && pendingBets.Any(b => b.Id == reviewingBetModel.Id))
