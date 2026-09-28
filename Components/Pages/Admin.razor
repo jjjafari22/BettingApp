@@ -2518,23 +2518,55 @@ else
                         var lineMatch = lineRegex.Match(ActiveLookupLeg?.Selection ?? "");
                         if (lineMatch.Success && double.TryParse(lineMatch.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double aiVal))
                         {
-                            bool lineExists = bestMatch.OutcomeNames.Values.Any(v => {
-                                string translatedV = GetTranslatedOutcomeName(v, result.MatchName ?? "");
-                                var vMatches = lineRegex.Matches(translatedV);
-                                foreach (System.Text.RegularExpressions.Match match in vMatches)
+                            bool isTeamNumber = false;
+                            
+                            bool isLineMarket = bestMatch.MarketName.IndexOf("Handicap", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                bestMatch.MarketName.IndexOf("Over", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                bestMatch.MarketName.IndexOf("Under", StringComparison.OrdinalIgnoreCase) >= 0;
+                            
+                            if (!isLineMarket)
+                            {
+                                isTeamNumber = true;
+                            }
+                            
+                            if (!string.IsNullOrEmpty(result.MatchName) && !isTeamNumber)
+                            {
+                                var matchSplit = result.MatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                                if (matchSplit.Length >= 2)
                                 {
-                                    if (double.TryParse(match.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double vVal))
+                                    string t1 = matchSplit[0].Trim();
+                                    string t2 = matchSplit[1].Trim();
+                                    string sel = ActiveLookupLeg?.Selection ?? "";
+                                    if ((t1.Contains(lineMatch.Value) && sel.Contains(t1)) || 
+                                        (t2.Contains(lineMatch.Value) && sel.Contains(t2)) ||
+                                        sel.Equals(t1, StringComparison.OrdinalIgnoreCase) ||
+                                        sel.Equals(t2, StringComparison.OrdinalIgnoreCase))
                                     {
-                                        if (Math.Abs(aiVal - vVal) < 0.001) return true;
+                                        isTeamNumber = true;
                                     }
                                 }
-                                return false;
-                            });
-                            
-                            if (!lineExists)
+                            }
+
+                            if (!isTeamNumber)
                             {
-                                OddsLookupWarningMessage = $"The betslip is for '{preSelectCategory}'. Automatically showing '{bestMatch.MarketName}' instead, but verify if the specific line is available.";
-                                Logger.LogInformation($" [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
+                                bool lineExists = bestMatch.OutcomeNames.Values.Any(v => {
+                                    string translatedV = GetTranslatedOutcomeName(v, result.MatchName ?? "");
+                                    var vMatches = lineRegex.Matches(translatedV);
+                                    foreach (System.Text.RegularExpressions.Match match in vMatches)
+                                    {
+                                        if (double.TryParse(match.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double vVal))
+                                        {
+                                            if (Math.Abs(aiVal - vVal) < 0.001) return true;
+                                        }
+                                    }
+                                    return false;
+                                });
+                                
+                                if (!lineExists)
+                                {
+                                    OddsLookupWarningMessage = $"The betslip is for '{preSelectCategory}'. Automatically showing '{bestMatch.MarketName}' instead, but verify if the specific line is available.";
+                                    Logger.LogInformation($" [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupWarningMessage} (Match: {result.MatchName})");
+                                }
                             }
                         }
                     }
