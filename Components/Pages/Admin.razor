@@ -317,50 +317,136 @@ else
                                     @if (AiVisionError != null) {
                                         <i class="bi bi-exclamation-triangle-fill me-1"></i> @AiVisionError
                                     } else {
-                                        <div class="fw-bold mb-2"><i class="bi bi-check-circle-fill me-1"></i> AI Extraction Successful:</div>
-                                        <div class="mb-2">
-                                            <strong>Bookmaker:</strong> @AiVisionResult!.Bookmaker <br/>
-                                            <strong>Is Bet Builder:</strong> @AiVisionResult!.IsBetBuilder <br/>
-                                            <strong>Is Live Placed:</strong> @AiVisionResult!.IsLive <br/>
-                                            <strong>Stake:</strong> @AiVisionResult!.Stake <br/>
-                                            <strong>Total Odds:</strong> @AiVisionResult!.TotalOdds
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <div class="fw-bold text-success"><i class="bi bi-check-circle-fill me-1"></i> AI Extraction Successful</div>
+                                            <button class="btn btn-sm btn-outline-secondary py-0 px-1" @onclick="() => showAiExtractionDetails = !showAiExtractionDetails" title="Debug details">
+                                                <i class="bi bi-bug"></i>
+                                            </button>
                                         </div>
+                                        @if (showAiExtractionDetails) {
+                                            <div class="mb-2 p-2 bg-light bg-opacity-75 rounded border" style="font-size: 0.85em;">
+                                                <strong>Bookmaker:</strong> @AiVisionResult!.Bookmaker <br/>
+                                                <strong>Is Bet Builder:</strong> @AiVisionResult!.IsBetBuilder <br/>
+                                                <strong>Is Live Placed:</strong> @AiVisionResult!.IsLive <br/>
+                                                <strong>Stake:</strong> @AiVisionResult!.Stake <br/>
+                                                <strong>Total Odds:</strong> @AiVisionResult!.TotalOdds
+                                            </div>
+                                        }
                                         @if (AiVisionResult!.Legs != null)
                                         {
+                                            @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing")
+                                            {
+                                                
+                                                    bool hasCheckedOdds = LegOddsCache.Count > 0;
+                                                    string btnClass = hasCheckedOdds ? "btn-warning text-dark" : "btn-primary text-white";
+                                                    string btnGradient = hasCheckedOdds ? "linear-gradient(135deg, #ffca2c, #ffb300)" : "linear-gradient(135deg, #0d6efd, #0b5ed7)";
+                                                    string btnText = hasCheckedOdds ? "Re-Check All Odds" : "Check All Odds";
+                                                
+                                                <button class="btn @btnClass btn-sm mb-2 w-100 fw-bold shadow-sm border-0" style="background: @btnGradient;" @onclick="CheckAllOddsAsync" disabled="@IsCheckingAllOdds">
+                                                    @if(IsCheckingAllOdds) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                                                    <i class="bi bi-robot me-1"></i> @btnText
+                                                </button>
+                                                @if(IsCheckingAllOdds) {
+                                                    <div class="progress mb-3 shadow-sm bg-dark" style="height: 12px; border-radius: 6px;">
+                                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: @((int)((float)CheckedLegsCount / AiVisionResult.Legs.Count * 100))%"></div>
+                                                    </div>
+                                                }
+                                            }
                                             @for (int i = 0; i < AiVisionResult!.Legs.Count; i++)
                                             {
                                                 var leg = AiVisionResult!.Legs[i];
                                                 var matchingOutcome = (ParsedAiOutcome?.Legs?.Count > i) ? ParsedAiOutcome.Legs[i] : ParsedAiOutcome?.Legs?.FirstOrDefault(l => l.Match == leg.Match);
                                                 bool isActive = (leg == ActiveLookupLeg);
-                                                <div class="card mb-1 @(isActive ? "border-primary shadow" : "shadow-sm border-0")">
-                                                    <div class="card-body py-1 px-2" style="font-family: monospace; font-size: 0.85em;">
-                                                        Match: @leg.Match 
-                                                        @if (leg.StartTime != null) {
-                                                            <span class="text-primary ms-1">(Starts: @ToUserLocal(leg.StartTime.Value).ToString("g"))</span>
-                                                        }
-                                                        <br/>
-                                                        Market: @leg.Market <br/>
-                                                        Selection: @leg.Selection <br/>
-                                                        Odds: @leg.Odds <br/>
+                                                                                                                                                <div class="card mb-1 @(isActive ? "border-primary shadow" : "shadow-sm border-0")">
+                                                    <div class="card-body p-2">
+                                                        <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-1">
+                                                            <div class="fw-bold lh-sm text-dark text-truncate me-2" style="font-size: 0.85em;">@leg.Match</div>
+                                                            @if (leg.StartTime != null) {
+                                                                <div class="text-primary lh-1 text-nowrap" style="font-size: 0.75em;"><i class="bi bi-clock me-1"></i>@ToUserLocal(leg.StartTime.Value).ToString("dd.MMM HH:mm")</div>
+                                                            }
+                                                        </div>
+                                                        <div class="d-flex flex-column mb-1">
+                                                            <div class="d-flex align-items-center mb-1">
+                                                                <div class="text-muted lh-1 text-truncate" style="font-size: 0.65em; text-transform: uppercase;">@leg.Market</div>
+                                                                @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") {
+                                                                    <button class="btn btn-outline-secondary ms-2 d-flex align-items-center justify-content-center" style="font-size: 0.6em; padding: 0.05rem 0.2rem; border-width: 1px; line-height: 1;" title="Manual Search" @onclick="() => SearchOddsForLeg(leg)">
+                                                                        <i class="bi @(isActive ? "bi-check2-circle text-primary" : "bi-search")"></i>
+                                                                    </button>
+                                                                }
+                                                            </div>
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <div class="fw-bold text-dark lh-sm text-truncate" style="font-size: 0.8em;">@leg.Selection</div>
+                                                                <div class="fw-bold bg-dark text-white rounded px-2 shadow-sm text-nowrap d-flex align-items-center justify-content-center" style="font-size: 0.75em; height: 1.6em; letter-spacing: 0.3px;">@leg.Odds</div>
+                                                            </div>
+                                                        </div>
                                                         @if (matchingOutcome != null && !string.IsNullOrEmpty(matchingOutcome.Outcome)) {
                                                             var color = matchingOutcome.Outcome.ToLower().Contains("won") ? "text-success" : 
                                                                         matchingOutcome.Outcome.ToLower().Contains("lost") ? "text-danger" : "text-warning";
                                                             var emoji = matchingOutcome.Outcome.ToLower().Contains("won") ? "✅" : 
                                                                         matchingOutcome.Outcome.ToLower().Contains("lost") ? "❌" : "➖";
-                                                            <div class="mt-1 p-1 bg-light rounded border border-secondary border-opacity-25">
+                                                            <div class="mt-1 p-1 bg-light rounded border border-secondary border-opacity-25 lh-sm" style="font-size: 0.75em;">
                                                                 <strong>Outcome:</strong> <span class="@color fw-bold">@emoji @matchingOutcome.Outcome</span><br/>
                                                                 <strong>Stats:</strong> @matchingOutcome.Stats
                                                             </div>
                                                         }
-                                                        @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") {
-                                                            <button class="btn btn-sm mt-1 py-0 px-2 @(isActive ? "btn-primary fw-bold" : "btn-outline-primary")" 
-                                                                    @onclick="() => SearchOddsForLeg(leg)">
-                                                                <i class="bi @(isActive ? "bi-check2-circle" : "bi-search")"></i> 
-                                                                @(isActive ? "Active Lookup" : "Lookup Odds")
-                                                            </button>
+
+                                                        @if (LegOddsCache.TryGetValue(i, out var legResult)) {
+                                                            <div class="mt-1 bg-white rounded border shadow-sm">
+                                                                @if (legResult.IsLoading) {
+                                                                    <div class="text-center p-1" style="font-size: 0.75em;"><span class="spinner-border spinner-border-sm text-primary" style="width: 0.8rem; height: 0.8rem;"></span> Loading...</div>
+                                                                } else if (!string.IsNullOrEmpty(legResult.ErrorMessage)) {
+                                                                    <div class="text-danger p-1 lh-sm fw-bold" style="font-size: 0.75em;"><i class="bi bi-exclamation-circle-fill me-1"></i>@legResult.ErrorMessage</div>
+                                                                } else {
+                                                                    @if (!string.IsNullOrEmpty(legResult.WarningMessage)) {
+                                                                        <div class="bg-warning bg-opacity-25 text-dark p-1 lh-sm border-bottom border-warning fw-semibold" style="font-size: 0.7em;"><i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>@legResult.WarningMessage</div>
+                                                                    }
+                                                                    <div class="d-flex justify-content-between text-center lh-1" style="background-color: #f8f9fa;">
+                                                                        @foreach (var bookie in new[] { ("pinnacle+30", "Pinnacle"), ("unibet.se", "Unibet"), ("bet365", "Bet365"), ("betsson", "Betsson") }) {
+                                                                            <div class="flex-fill border-end last-child-no-border p-1">
+                                                                                <div class="text-secondary fw-semibold mb-1" style="font-size: 0.55em; letter-spacing: 0.2px; text-transform: uppercase;">
+                                                                                    @if (legResult.SearchResult?.BookmakerUrls != null && legResult.SearchResult.BookmakerUrls.TryGetValue(bookie.Item1, out var bUrl)) {
+                                                                                        <a href="@bUrl" target="_blank" class="text-decoration-none text-primary">@bookie.Item2</a>
+                                                                                    } else {
+                                                                                        @bookie.Item2
+                                                                                    }
+                                                                                </div>
+                                                                                <div class="fw-bold @(legResult.MatchedBookieOdds.ContainsKey(bookie.Item1) ? "text-dark" : "text-muted")" style="font-size: 0.85em;">
+                                                                                    @if (legResult.MatchedBookieOdds.TryGetValue(bookie.Item1, out var p)) {
+                                                                                        <div class="d-flex flex-column align-items-center justify-content-center">
+                                                                                            <div class="d-flex align-items-center justify-content-center">
+                                                                                                @if (p.IsSuspended) { <i class="bi bi-lock-fill text-warning me-1" style="font-size: 0.7em;"></i> }
+                                                                                                <span>@p.Price.ToString("0.00")</span>
+                                                                                                @if (p.Limit.HasValue) {
+                                                                                                    <span class="text-success ms-1" style="font-size: 0.7em;" title="Max Bet Limit">€@p.Limit.Value.ToString("0")</span>
+                                                                                                }
+                                                                                            </div>
+                                                                                            @if (p.ChangedAt.HasValue) {
+                                                                                                <div class="text-muted fw-normal" style="font-size: 0.5em; margin-top: 2px;">@ToUserLocal(p.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
+                                                                                            }
+                                                                                        </div>
+                                                                                    } else {
+                                                                                        <span>-</span>
+                                                                                    }
+                                                                                </div>
+                                                                            </div>
+                                                                        }
+                                                                    </div>
+                                                                    <div class="bg-light px-1 py-1 d-flex justify-content-between align-items-center border-top text-muted" style="font-size: 0.65em; background-color: #fdfdfd;">
+                                                                        <div class="text-truncate">
+                                                                            @if (!string.IsNullOrEmpty(legResult.HighlightedOutcome)) {
+                                                                                <span><i class="bi bi-check2-circle text-success me-1"></i>Matched: <strong>@legResult.HighlightedOutcome</strong></span>
+                                                                            } else {
+                                                                                <span><i class="bi bi-dash-circle text-secondary me-1"></i>No match</span>
+                                                                            }
+                                                                        </div>
+                                                                    </div>
+                                                                }
+                                                            </div>
                                                         }
                                                     </div>
                                                 </div>
+
+
                                             }
                                         }
                                     }
@@ -925,18 +1011,18 @@ else
                                                                     </td>
                                                                     <td class="text-dark">
                                                                         @if (bookies.TryGetValue("pinnacle+30", out var p) && p.TryGetValue(oName, out var pd)) {
-                                                                            <div class="fw-bold">
+                                                                            <div class="fw-bold d-flex align-items-center justify-content-center">
                                                                                 @if (pd.IsSuspended) {
                                                                                     <span title="Suspended" class="text-muted"><i class="bi bi-lock-fill text-warning"></i> @pd.Price.ToString("0.00")</span>
                                                                                 } else {
-                                                                                    @pd.Price.ToString("0.00")
+                                                                                    <span>@pd.Price.ToString("0.00")</span>
+                                                                                }
+                                                                                @if (pd.Limit.HasValue) {
+                                                                                    <span class="badge bg-success-subtle text-success ms-1" style="font-size: 0.75rem; padding: 0.25rem 0.4rem; line-height: 1;" title="Max Bet Limit">€@pd.Limit.Value.ToString("0")</span>
                                                                                 }
                                                                             </div>
                                                                             @if (pd.ChangedAt.HasValue) {
                                                                                 <div class="badge bg-light text-secondary border mt-1 fw-bold" style="font-size: 0.55rem; padding: 0.15rem 0.25rem; letter-spacing: -0.3px;" title="Last updated">@ToUserLocal(pd.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
-                                                                            }
-                                                                            @if (pd.Limit.HasValue) {
-                                                                                <div class="fw-bold text-success text-nowrap mt-1" style="font-size: 0.7rem;" title="Max Bet Limit">Max: €@pd.Limit.Value.ToString("0")</div>
                                                                             }
                                                                         } else {
                                                                             <div class="fw-bold">-</div>
@@ -1563,6 +1649,203 @@ else
     private HubConnection? hubConnection;
     private string? currentAdminName;
     private Bet? reviewingBetModel;
+    private bool showAiExtractionDetails = false;
+
+    public class LegOddsResult
+    {
+        public bool IsLoading { get; set; }
+        public string? ErrorMessage { get; set; }
+        public string? WarningMessage { get; set; }
+        public BettingApp.Models.OddsPapiSearchResult? SearchResult { get; set; }
+        public string? SelectedMarketId { get; set; }
+        public string? HighlightedOutcome { get; set; }
+        public Dictionary<string, BettingApp.Models.OddsData> MatchedBookieOdds { get; set; } = new();
+    }
+
+    private Dictionary<int, LegOddsResult> LegOddsCache = new();
+    private bool IsCheckingAllOdds = false;
+    private int CheckedLegsCount = 0;
+
+    private async Task CheckAllOddsAsync()
+    {
+        if (AiVisionResult?.Legs == null || reviewingBetModel == null) return;
+        
+        int runningBetId = reviewingBetModel.Id;
+        IsCheckingAllOdds = true;
+        CheckedLegsCount = 0;
+        LegOddsCache.Clear();
+        StateHasChanged();
+
+        for (int i = 0; i < AiVisionResult.Legs.Count; i++)
+        {
+            if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) break;
+            
+            var leg = AiVisionResult.Legs[i];
+            LegOddsCache[i] = new LegOddsResult { IsLoading = true };
+            StateHasChanged();
+
+            await ProcessLegOddsAsync(leg, i);
+            
+            if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) 
+            {
+                LegOddsCache.Clear();
+                break;
+            }
+
+            CheckedLegsCount++;
+            StateHasChanged();
+        }
+
+        if (reviewingBetModel != null && reviewingBetModel.Id == runningBetId)
+        {
+            IsCheckingAllOdds = false;
+
+            // Save the newly found start times back to the DB!
+            SaveAiVisionResultToDatabase();
+
+            StateHasChanged();
+            try { await reviewModalRef.FocusAsync(); } catch { }
+        }
+    }
+
+    private async Task ProcessLegOddsAsync(BettingApp.Services.AiVisionLeg leg, int index)
+    {
+        var resultData = LegOddsCache[index];
+        
+        string teamToSearch = leg.Match ?? leg.Selection ?? "";
+
+        var (apiResult, error) = await OddsApi.SearchOddsComparisonAsync(teamToSearch, reviewingBetModel?.Id);
+        
+        if (apiResult == null)
+        {
+            resultData.ErrorMessage = error ?? "No OddsPapi matches found.";
+            resultData.IsLoading = false;
+            return;
+        }
+
+        resultData.SearchResult = apiResult;
+
+        if (apiResult.StartTime > DateTime.MinValue)
+        {
+            leg.StartTime = apiResult.StartTime;
+            if (AiVisionResult?.Legs != null)
+            {
+                foreach (var otherLeg in AiVisionResult.Legs)
+                {
+                    if (!string.IsNullOrEmpty(otherLeg.Match) && otherLeg.Match.Equals(leg.Match, StringComparison.OrdinalIgnoreCase))
+                    {
+                        otherLeg.StartTime = apiResult.StartTime;
+                    }
+                }
+            }
+        }
+
+        // Auto Select Market
+        string preSelectCategory = leg.Market ?? "";
+        
+        var bestMatch = FindBestMarket(apiResult.Markets, preSelectCategory, leg.Match, leg.Selection);
+
+        bool isCanonicalTranslation = true;
+        if (bestMatch != null)
+        {
+            resultData.SelectedMarketId = bestMatch.MarketId;
+            
+            // Check line matching logic
+            if (!isCanonicalTranslation)
+            {
+                var lineRegex = new System.Text.RegularExpressions.Regex(@"\d+(?:\.\d+)?");
+                var lineMatch = lineRegex.Match(leg.Selection ?? "");
+                if (lineMatch.Success && double.TryParse(lineMatch.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double aiVal))
+                {
+                    bool isTeamNumber = false;
+                    bool isLineMarket = bestMatch.MarketName.IndexOf("Handicap", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        bestMatch.MarketName.IndexOf("Over", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        bestMatch.MarketName.IndexOf("Under", StringComparison.OrdinalIgnoreCase) >= 0;
+                    
+                    if (!isLineMarket) isTeamNumber = true;
+                    
+                    if (!string.IsNullOrEmpty(apiResult.MatchName) && !isTeamNumber)
+                    {
+                        var matchSplit = apiResult.MatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                        if (matchSplit.Length >= 2)
+                        {
+                            string t1 = matchSplit[0].Trim();
+                            string t2 = matchSplit[1].Trim();
+                            string sel = leg.Selection ?? "";
+                            if ((t1.Contains(lineMatch.Value) && sel.Contains(t1)) || 
+                                (t2.Contains(lineMatch.Value) && sel.Contains(t2)) ||
+                                sel.Equals(t1, StringComparison.OrdinalIgnoreCase) ||
+                                sel.Equals(t2, StringComparison.OrdinalIgnoreCase))
+                            {
+                                isTeamNumber = true;
+                            }
+                        }
+                    }
+
+                    if (!isTeamNumber)
+                    {
+                        bool lineExists = bestMatch.OutcomeNames.Values.Any(v => {
+                            string translatedV = GetTranslatedOutcomeName(v, apiResult.MatchName ?? "");
+                            var vMatches = lineRegex.Matches(translatedV);
+                            foreach (System.Text.RegularExpressions.Match match in vMatches)
+                            {
+                                if (double.TryParse(match.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double vVal))
+                                {
+                                    if (Math.Abs(aiVal - vVal) < 0.001) return true;
+                                }
+                            }
+                            return false;
+                        });
+                        
+                        if (!lineExists)
+                        {
+                            resultData.WarningMessage = $"The betslip is for '{preSelectCategory}'. Automatically showing '{bestMatch.MarketName}' instead, but verify if the specific line is available.";
+                        }
+                    }
+                }
+            }
+
+            // Figure out the highlighted outcome!
+            if (apiResult.BookmakerOdds.TryGetValue(bestMatch.MarketId, out var bookiesDict))
+            {
+                string? bestOutcome = null;
+
+                foreach (var kvp in bestMatch.OutcomeNames)
+                {
+                    string oId = kvp.Key;
+                    string oName = kvp.Value;
+                    string displayOName = GetTranslatedOutcomeName(oName, apiResult.MatchName ?? "");
+                    
+                    bool isMatch = IsOutcomeMatch(oName, displayOName, leg, apiResult);
+
+                    if (isMatch)
+                    {
+                        bestOutcome = oName;
+                        resultData.HighlightedOutcome = displayOName;
+                        break;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(bestOutcome))
+                {
+                    var targets = new[] { "pinnacle+30", "unibet.se", "bet365", "betsson" };
+                    foreach (var tb in targets)
+                    {
+                        if (bookiesDict.TryGetValue(tb, out var bData) && bData.TryGetValue(bestOutcome, out var pd))
+                        {
+                            resultData.MatchedBookieOdds[tb] = pd;
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            resultData.WarningMessage = $"The betslip is for '{preSelectCategory}', but OddsPapi doesn't offer it for this match.";
+        }
+
+        resultData.IsLoading = false;
+    }
     private System.Timers.Timer? uiRefreshTimer;
     private Bet? originalBetModel;
     private decimal currentReviewUserFreeBalance = 0;
@@ -1800,6 +2083,48 @@ else
         } catch { return true; }
     }
     
+    private void SaveAiVisionResultToDatabase()
+    {
+        if (reviewingBetModel == null) return;
+        
+        var bId = reviewingBetModel.Id;
+        var currentAiVisionResultJson = AiVisionResult != null ? System.Text.Json.JsonSerializer.Serialize(AiVisionResult) : null;
+        DateTime? matchStartTime = null;
+        
+        if (AiVisionResult != null)
+        {
+            bool allScheduled = AiVisionResult.Legs != null && AiVisionResult.Legs.Count > 0 && AiVisionResult.Legs.All(l => l.StartTime > DateTime.MinValue);
+            if (allScheduled)
+            {
+                matchStartTime = AiVisionResult.Legs!.Min(l => l.StartTime);
+            }
+            reviewingBetModel.MatchStartTime = matchStartTime;
+            if (originalBetModel != null) originalBetModel.MatchStartTime = matchStartTime;
+            
+            reviewingBetModel.AiVisionResultJson = currentAiVisionResultJson;
+            if (originalBetModel != null) originalBetModel.AiVisionResultJson = currentAiVisionResultJson;
+        }
+
+        _ = Task.Run(async () => 
+        {
+            try
+            {
+                using var context = DbFactory.CreateDbContext();
+                var dbBet = await context.Bets.FindAsync(bId);
+                if (dbBet != null)
+                {
+                    if (currentAiVisionResultJson != null)
+                    {
+                        if (matchStartTime.HasValue) dbBet.MatchStartTime = matchStartTime;
+                        dbBet.AiVisionResultJson = currentAiVisionResultJson;
+                    }
+                    await context.SaveChangesAsync();
+                }
+            }
+            catch { /* Best effort */ }
+        });
+    }
+
     private async Task LoadApprovedBets()
     {
         using var context = DbFactory.CreateDbContext();
@@ -2391,42 +2716,7 @@ else
                     }
                 }
                 
-                var bId = reviewingBetModel.Id;
-                var currentAiVisionResultJson = AiVisionResult != null ? System.Text.Json.JsonSerializer.Serialize(AiVisionResult) : null;
-                DateTime? matchStartTime = null;
-                
-                if (AiVisionResult != null)
-                {
-                    bool allScheduled = AiVisionResult.Legs != null && AiVisionResult.Legs.Count > 0 && AiVisionResult.Legs.All(l => l.StartTime > DateTime.MinValue);
-                    if (allScheduled)
-                    {
-                        matchStartTime = AiVisionResult.Legs!.Min(l => l.StartTime);
-                    }
-                    reviewingBetModel.MatchStartTime = matchStartTime;
-                    if (originalBetModel != null) originalBetModel.MatchStartTime = matchStartTime;
-                    
-                    reviewingBetModel.AiVisionResultJson = currentAiVisionResultJson;
-                    if (originalBetModel != null) originalBetModel.AiVisionResultJson = currentAiVisionResultJson;
-                }
-
-                _ = Task.Run(async () => 
-                {
-                    try
-                    {
-                        using var context = DbFactory.CreateDbContext();
-                        var dbBet = await context.Bets.FindAsync(bId);
-                        if (dbBet != null)
-                        {
-                            if (currentAiVisionResultJson != null)
-                            {
-                                dbBet.MatchStartTime = matchStartTime;
-                                dbBet.AiVisionResultJson = currentAiVisionResultJson;
-                            }
-                            await context.SaveChangesAsync();
-                        }
-                    }
-                    catch { /* Best effort */ }
-                });
+                SaveAiVisionResultToDatabase();
                 
                 // Instantly resort the pending bets list in memory so it reflects correctly on the UI
                 if (pendingBets != null && pendingBets.Any(b => b.Id == reviewingBetModel.Id))
@@ -2446,68 +2736,9 @@ else
             }
             else if (!string.IsNullOrEmpty(preSelectCategory))
             {
-                var normalizedTargets = MarketMapper.NormalizeMarketName(preSelectCategory, ActiveLookupLeg?.Match);
-                
-                // Simple fuzzy matching against OddsPapi MarketName
-                var simplify = (string s) => 
-                {
-                    var clean = s.ToLowerInvariant()
-                                 .Replace("players", "player")
-                                 .Replace("player's", "player")
-                                 .Replace("shots", "shot")
-                                 .Replace("cards", "card")
-                                 .Replace("goals", "goal")
-                                 .Replace("corners", "corner")
-                                 .Replace("halves", "half");
-                    return new string(clean.Where(char.IsLetterOrDigit).ToArray());
-                };
-                
-                var simplifiedTargets = normalizedTargets.Select(t => simplify(t)).ToList();
-                
-                // 1. Try exact match first by respecting the priority order from MarketMappingService
-                BettingApp.Models.OddsPapiMarket? bestMatch = null;
-                foreach (var target in simplifiedTargets)
-                {
-                    bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == target);
-                    if (bestMatch != null) break;
-                }
-                
-                // 2. Fallback to contains match if no exact match is found (respecting priority)
-                if (bestMatch == null)
-                {
-                    foreach (var target in simplifiedTargets)
-                    {
-                        bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(target) || target.Contains(simplify(m.MarketName)));
-                        if (bestMatch != null) break;
-                    }
-                }
+                var bestMatch = FindBestMarket(result.Markets, preSelectCategory, ActiveLookupLeg?.Match, ActiveLookupLeg?.Selection);
+                bool isCanonicalTranslation = true; // We abstract this away
 
-                bool isCanonicalTranslation = false;
-                // 4. Fallback for Team Total Goals -> Over/Under [Team]
-                if (bestMatch == null && simplifiedTargets.Any(t => t.Contains("teamtotalgoal")))
-                {
-                    if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Match) && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
-                    {
-                        var hcSplit = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
-                        if (hcSplit.Length >= 2)
-                        {
-                            string normSelRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).ToLowerInvariant();
-                            string normT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[0].Split('(')[0].Trim()).ToLowerInvariant();
-                            string normT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[1].Split('(')[0].Trim()).ToLowerInvariant();
-                            
-                            string expectedTeamMarket = "";
-                            if (normSelRaw.Contains(normT1)) expectedTeamMarket = simplify("Over Under Team 1");
-                            else if (normSelRaw.Contains(normT2)) expectedTeamMarket = simplify("Over Under Team 2");
-                            
-                            if (!string.IsNullOrEmpty(expectedTeamMarket))
-                            {
-                                bestMatch = result.Markets.FirstOrDefault(m => simplify(m.MarketName) == expectedTeamMarket) ?? 
-                                            result.Markets.FirstOrDefault(m => simplify(m.MarketName).Contains(expectedTeamMarket));
-                                if (bestMatch != null) isCanonicalTranslation = true;
-                            }
-                        }
-                    }
-                }
                     
                 if (bestMatch != null)
                 {
@@ -2595,6 +2826,7 @@ else
         }
 
         IsSearchingOdds = false;
+        try { await reviewModalRef.FocusAsync(); } catch { }
         StateHasChanged();
         
         if (ActiveLookupLeg != null && !string.IsNullOrEmpty(SelectedPapiMarketId))
@@ -2684,6 +2916,9 @@ else
         AiVisionResult = null;
         AiVisionError = bet.AiVisionError;
         ParsedAiOutcome = null;
+        LegOddsCache.Clear();
+        IsCheckingAllOdds = false;
+        CheckedLegsCount = 0;
         
         if (!string.IsNullOrEmpty(reviewingBetModel.AiVisionResultJson))
         {
@@ -2764,6 +2999,9 @@ else
         originalBetModel = null;
         errorMessage = null; 
         successMessage = null; 
+        LegOddsCache.Clear();
+        IsCheckingAllOdds = false;
+        CheckedLegsCount = 0; 
     }
 
     private bool CanNavigateReview(int direction)
@@ -2833,6 +3071,7 @@ else
             var nextBet = currentReviewList[newIndex];
             StartReview(nextBet);
         }
+        try { await reviewModalRef.FocusAsync(); } catch { }
     }
 
     private async Task OnReviewModalKeyDown(KeyboardEventArgs e) 
@@ -3452,10 +3691,446 @@ else
                     if (displayOName == "1") displayOName = t1;
                     else if (displayOName == "2") displayOName = t2;
                     else if (displayOName == "X" || displayOName.Equals("Draw", StringComparison.OrdinalIgnoreCase)) displayOName = "Draw";
+                    else if (displayOName.Equals("1X", StringComparison.OrdinalIgnoreCase)) displayOName = $"{t1} or Draw";
+                    else if (displayOName.Equals("X2", StringComparison.OrdinalIgnoreCase) || displayOName.Equals("2X", StringComparison.OrdinalIgnoreCase)) displayOName = $"{t2} or Draw";
+                    else if (displayOName == "12") displayOName = $"{t1} or {t2}";
+                    else {
+                        if (displayOName.StartsWith("1 ")) displayOName = t1 + displayOName.Substring(1);
+                        else if (displayOName.StartsWith("2 ")) displayOName = t2 + displayOName.Substring(1);
+                        
+                        displayOName = displayOName.Replace("1/", $"{t1}/").Replace("/1", $"/{t1}");
+                        displayOName = displayOName.Replace("2/", $"{t2}/").Replace("/2", $"/{t2}");
+                        displayOName = displayOName.Replace("X/", "Draw/").Replace("x/", "Draw/");
+                        displayOName = displayOName.Replace("/X", "/Draw").Replace("/x", "/Draw");
+                    }
                 }
             }
         }
         return displayOName;
+    }
+
+    private bool IsOutcomeMatch(string oName, string displayOName, BettingApp.Services.AiVisionLeg? ActiveLookupLeg, BettingApp.Models.OddsPapiSearchResult? PapiSearchResult)
+    {
+        bool isMatch = false;
+        if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
+        {
+            bool logicallyMatched = false;
+            if (ActiveLookupLeg.Match != null)
+            {
+                var hcSplit = ActiveLookupLeg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                if (hcSplit.Length >= 2)
+                {
+                    string normSelRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Selection).ToLowerInvariant();
+                    string aiT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[0].Split('(')[0].Trim()).ToLowerInvariant();
+                    string aiT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[1].Split('(')[0].Trim()).ToLowerInvariant();
+                    
+                    string opT1 = "";
+                    string opT2 = "";
+                    if (PapiSearchResult != null && !string.IsNullOrEmpty(PapiSearchResult.MatchName))
+                    {
+                        var opMatchSplit = PapiSearchResult.MatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                        if (opMatchSplit.Length >= 2)
+                        {
+                            opT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(opMatchSplit[0].Trim()).ToLowerInvariant();
+                            opT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(opMatchSplit[1].Trim()).ToLowerInvariant();
+                        }
+                    }
+                    
+                    bool isSwapped = false;
+                    // Determine if the bookmaker's Team 1 is actually Odds Papi's Team 2
+                    if ((opT2.Contains(aiT1) && aiT1.Length > 3) || (aiT1.Contains(opT2) && opT2.Length > 3) || 
+                        (opT1.Contains(aiT2) && aiT2.Length > 3) || (aiT2.Contains(opT1) && opT1.Length > 3))
+                    {
+                        // Ensure it's not just a generic match like "fc"
+                        if (!opT1.Contains(aiT1) && !aiT1.Contains(opT1))
+                        {
+                            isSwapped = true;
+                        }
+                    }
+                    
+                    // normT1 represents the team that corresponds to Odds Papi's outcome "1".
+                    string normT1 = isSwapped ? aiT2 : aiT1;
+                    string normT2 = isSwapped ? aiT1 : aiT2;
+                    
+                    string aiTarget = "";
+                    string htftTarget = "";
+                    
+                    if (normSelRaw.Contains(" / ") || normSelRaw.Contains(" - "))
+                    {
+                        var htftSplit = normSelRaw.Split(new[] { " / ", " - " }, StringSplitOptions.RemoveEmptyEntries);
+                        if (htftSplit.Length == 2)
+                        {
+                            string ht = htftSplit[0].Trim();
+                            string ft = htftSplit[1].Trim();
+                            string htCode = ht.Contains(normT1) ? "1" : (ht.Contains(normT2) ? "2" : (ht.Contains("draw") || ht.Contains("tie") ? "X" : ""));
+                            string ftCode = ft.Contains(normT1) ? "1" : (ft.Contains(normT2) ? "2" : (ft.Contains("draw") || ft.Contains("tie") ? "X" : ""));
+                            if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
+                            {
+                                htftTarget = $"{htCode}/{ftCode}";
+                            }
+                        }
+                    }
+                    
+                    if (string.IsNullOrEmpty(htftTarget))
+                    {
+                        if (normSelRaw.Contains(normT1) && normSelRaw.Contains(normT2)) aiTarget = "12";
+                        else if (normSelRaw.Contains(normT1) && (normSelRaw.Contains("draw") || normSelRaw.Contains("tie"))) aiTarget = "1X";
+                        else if (normSelRaw.Contains(normT2) && (normSelRaw.Contains("draw") || normSelRaw.Contains("tie"))) aiTarget = "X2";
+                        else if (normSelRaw.Contains(normT1)) aiTarget = "1";
+                        else if (normSelRaw.Contains(normT2)) aiTarget = "2";
+                        else if (normSelRaw.Contains("draw") || normSelRaw.Contains("tie")) aiTarget = "X";
+                    }
+                    
+                    if (!string.IsNullOrEmpty(htftTarget) && string.Equals(oName, htftTarget, StringComparison.OrdinalIgnoreCase))
+                    {
+                        logicallyMatched = true;
+                    }
+                    else if (!string.IsNullOrEmpty(aiTarget))
+                    {
+                        var basicHcMatch = System.Text.RegularExpressions.Regex.Match(oName, @"^(1|X|x|2|1X|X2|12)(?:\s*\(([^)]+)\))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (basicHcMatch.Success)
+                        {
+                            string opTarget = basicHcMatch.Groups[1].Value.ToUpperInvariant();
+                            if (aiTarget == opTarget)
+                            {
+                                string hcStr = basicHcMatch.Groups[2].Value.Trim();
+                                double? opHc = null;
+                                if (!string.IsNullOrEmpty(hcStr))
+                                {
+                                    if (hcStr.Contains("-") && hcStr.Length > 2)
+                                    {
+                                        var parts = hcStr.Split('-');
+                                        if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                        {
+                                            opHc = opTarget == "1" ? (p1 - p2) : (opTarget == "2" ? (p2 - p1) : (p1 - p2));
+                                        }
+                                    }
+                                    else if (hcStr.Contains(":"))
+                                    {
+                                        var parts = hcStr.Split(':');
+                                        if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                        {
+                                            opHc = opTarget == "1" ? (p1 - p2) : (opTarget == "2" ? (p2 - p1) : (p1 - p2));
+                                        }
+                                    }
+                                    else if (double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                                    {
+                                        opHc = opTarget == "1" ? val : (opTarget == "2" ? -val : val);
+                                    }
+                                }
+                                
+                                double? aiHc = null;
+                                var aiHcRegex = new System.Text.RegularExpressions.Regex(@"([+-]\d+(?:\.\d+)?)$");
+                                var aiHcMatch = aiHcRegex.Match(normSelRaw.Replace(" ", "").Replace("(", "").Replace(")", ""));
+                                if (aiHcMatch.Success && double.TryParse(aiHcMatch.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedAiHc))
+                                {
+                                    aiHc = parsedAiHc;
+                                }
+                                else if (ActiveLookupLeg?.Market != null)
+                                {
+                                    var mktRegex = new System.Text.RegularExpressions.Regex(@"(?:starts|\()(\d+[-:]\d+|[+-]\d+(?:\.\d+)?)\)?$");
+                                    var mktMatch = mktRegex.Match(ActiveLookupLeg.Market.Replace(" ", "").ToLowerInvariant());
+                                    if (mktMatch.Success)
+                                    {
+                                        string extractedHc = mktMatch.Groups[1].Value;
+                                        if (extractedHc.Contains("-") && extractedHc.Length > 2 && extractedHc[0] != '-') // e.g. "0-2"
+                                        {
+                                            var parts = extractedHc.Split('-');
+                                            if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                            {
+                                                aiHc = aiTarget == "1" ? (p1 - p2) : (aiTarget == "2" ? (p2 - p1) : (p1 - p2));
+                                            }
+                                        }
+                                        else if (extractedHc.Contains(":")) // e.g. "0:2"
+                                        {
+                                            var parts = extractedHc.Split(':');
+                                            if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                                            {
+                                                aiHc = aiTarget == "1" ? (p1 - p2) : (aiTarget == "2" ? (p2 - p1) : (p1 - p2));
+                                            }
+                                        }
+                                        else if (double.TryParse(extractedHc, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedMktHc))
+                                        {
+                                            aiHc = aiTarget == "1" ? parsedMktHc : (aiTarget == "2" ? -parsedMktHc : parsedMktHc);
+                                        }
+                                    }
+                                }
+                                
+                                if (opHc.HasValue && aiHc.HasValue && Math.Abs(opHc.Value - aiHc.Value) < 0.001) logicallyMatched = true;
+                                else if (!opHc.HasValue && !aiHc.HasValue) logicallyMatched = true;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (logicallyMatched)
+            {
+                isMatch = true;
+            }
+            else
+            {
+                string rawSel = ActiveLookupLeg?.Selection ?? "";
+                rawSel = System.Text.RegularExpressions.Regex.Replace(rawSel, @"(\d+)\+", m => $"over {double.Parse(m.Groups[1].Value) - 0.5}");
+                rawSel = System.Text.RegularExpressions.Regex.Replace(rawSel, @"\btie\b", "draw", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayOName ?? "").ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
+                string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(rawSel).ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
+                
+                if (normOName == normSel)
+                {
+                    isMatch = true;
+                }
+                else if ((normSel == "yes" || normSel == "no" || normSel == "over05") && !string.IsNullOrEmpty(ActiveLookupLeg?.Market))
+                {
+                    string normMarket = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg.Market).ToLowerInvariant().Replace(" ", "").Replace("toscore", "").Replace("anytimegoalscorer", "");
+                    string playerNameFromOdds = normOName.Replace("yes", "").Replace("no", "").Replace("over05", "").Replace("under05", "");
+                    if (!string.IsNullOrEmpty(normMarket) && !string.IsNullOrEmpty(playerNameFromOdds) && normMarket.Length > 3 && playerNameFromOdds.Length > 3 && (normMarket.Contains(playerNameFromOdds) || playerNameFromOdds.Contains(normMarket)))
+                    {
+                        isMatch = true;
+                    }
+                }
+                else
+                {
+                    var hcRegex = new System.Text.RegularExpressions.Regex(@"([+-]\d+(?:\.\d+)?)$");
+                var matchOName = hcRegex.Match(normOName);
+                var matchSel = hcRegex.Match(normSel);
+                
+                if (matchOName.Success && matchSel.Success)
+                {
+                    if (matchOName.Value == matchSel.Value)
+                    {
+                        string teamOName = normOName.Substring(0, matchOName.Index);
+                        string teamSel = normSel.Substring(0, matchSel.Index);
+                        
+                        if (!string.IsNullOrEmpty(teamOName) && !string.IsNullOrEmpty(teamSel) && 
+                            (teamOName.Contains(teamSel) || teamSel.Contains(teamOName)))
+                        {
+                            isMatch = true;
+                        }
+                    }
+                }
+                else if (!matchOName.Success && !matchSel.Success)
+                {
+                    var numRegex = new System.Text.RegularExpressions.Regex(@"(\d+(?:\.\d+)?)$");
+                    var numOName = numRegex.Match(normOName);
+                    var numSel = numRegex.Match(normSel);
+                    
+                    if (numOName.Success && numSel.Success)
+                    {
+                        if (numOName.Value == numSel.Value)
+                        {
+                            string baseOName = normOName.Substring(0, numOName.Index);
+                            string baseSel = normSel.Substring(0, numSel.Index);
+                            if (!string.IsNullOrEmpty(baseOName) && !string.IsNullOrEmpty(baseSel) && 
+                                (baseOName.Contains(baseSel) || baseSel.Contains(baseOName)))
+                            {
+                                isMatch = true;
+                            }
+                        }
+                    }
+                    else if (!numOName.Success && !numSel.Success)
+                    {
+                        if (normOName.Contains(normSel))
+                        {
+                            if ((normSel == "yes" || normSel == "no") && normOName.Length > normSel.Length + 3)
+                            {
+                                string normMarket = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(ActiveLookupLeg?.Market ?? "").ToLowerInvariant().Replace(" ", "").Replace("toscore", "").Replace("anytimegoalscorer", "");
+                                string playerNameFromOdds = normOName.Replace("yes", "").Replace("no", "");
+                                if (!string.IsNullOrEmpty(normMarket) && !string.IsNullOrEmpty(playerNameFromOdds) && (normMarket.Contains(playerNameFromOdds) || playerNameFromOdds.Contains(normMarket)))
+                                {
+                                    isMatch = true;
+                                }
+                            }
+                            else
+                            {
+                                isMatch = true;
+                            }
+                        }
+                        else if (normSel.Contains(normOName))
+                        {
+                            if (normOName.Length >= 4)
+                            {
+                                isMatch = true;
+                            }
+                            else
+                            {
+                                if (normSel.EndsWith("-" + normOName) || normSel.StartsWith(normOName + "-") || normSel.Contains("-" + normOName + "-"))
+                                {
+                                    isMatch = true;
+                                }
+                            }
+                        }
+                    }
+                    }
+                }
+                
+                if (!isMatch)
+                {
+                    var parenMatch = System.Text.RegularExpressions.Regex.Match(displayOName ?? "", @"\(([^,()]+),\s*([^()]+)\)");
+                    if (parenMatch.Success)
+                    {
+                        string lastName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
+                        string firstName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[2].Value).ToLowerInvariant().Replace(" ", "");
+                        
+                        bool matchLast = normSel.Contains(lastName);
+                        bool matchFirst = normSel.Contains(firstName);
+                        
+                        string outcomePart = (displayOName ?? "").Substring(0, parenMatch.Index).Trim();
+                        string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
+                        
+                        bool isValidNameMatch = matchLast && matchFirst;
+                        
+                        if (!isValidNameMatch && (ActiveLookupLeg?.Market?.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) == true || ActiveLookupLeg?.Market?.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) == true))
+                        {
+                            isValidNameMatch = true;
+                        }
+                        
+                        if (!isValidNameMatch && (matchLast || matchFirst))
+                        {
+                            string matchedName = matchLast ? lastName : firstName;
+                            // Remove everything except the player's name
+                            string playerPartOnly = System.Text.RegularExpressions.Regex.Replace(normSel.Replace(normOutcomePart, "").Replace("over", "").Replace("under", "").Replace("yes", "").Replace("no", "").Replace("-", ""), @"\d+(\.\d+)?", "");
+                            string leftover = playerPartOnly.Replace(matchedName, "");
+                            
+                            // If the leftover is long, it means they explicitly typed a DIFFERENT name that contradicts the matched name (e.g. "Martin Satriano" vs "Mario Martin").
+                            // Allow a small leftover (<= 5) for abbreviations like "Jr".
+                            if (leftover.Length <= 5)
+                            {
+                                isValidNameMatch = true;
+                            }
+                        }
+                        
+                        if (isValidNameMatch)
+                        {
+                            bool isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
+                                                  normSel.Contains(normOutcomePart) || 
+                                                  (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under")));
+                            
+                            if (!isOutcomeMatch && normOutcomePart.EndsWith("+"))
+                            {
+                                if (int.TryParse(normOutcomePart.TrimEnd('+'), out int plusVal))
+                                {
+                                    string eqOver = $"over{plusVal - 1}.5";
+                                    if (normSel.Contains(eqOver) || (plusVal == 1 && (normSel.Contains("assist") || normSel.Contains("score") || normSel.Contains("goal") || normSel.Contains("1or"))))
+                                    {
+                                        isOutcomeMatch = true;
+                                    }
+                                }
+                            }
+                            
+                            if (isOutcomeMatch)
+                            {
+                                isMatch = true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var simpleParenMatch = System.Text.RegularExpressions.Regex.Match(displayOName ?? "", @"\(([^()]+)\)$");
+                        if (simpleParenMatch.Success)
+                        {
+                            string pName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(simpleParenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
+                            
+                            bool isNameCheckBypassed = ActiveLookupLeg?.Market?.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) == true || ActiveLookupLeg?.Market?.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) == true;
+                            
+                            if (isNameCheckBypassed || (!double.TryParse(pName, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _) && normSel.Contains(pName)))
+                            {
+                                string outcomePart = (displayOName ?? "").Substring(0, simpleParenMatch.Index).Trim();
+                                string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
+                                
+                                bool isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
+                                                      normSel.Contains(normOutcomePart) || 
+                                                      (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under")));
+                                
+                                if (!isOutcomeMatch && normOutcomePart.EndsWith("+"))
+                                {
+                                    if (int.TryParse(normOutcomePart.TrimEnd('+'), out int plusVal))
+                                    {
+                                        string eqOver = $"over{plusVal - 1}.5";
+                                        if (normSel.Contains(eqOver) || (plusVal == 1 && (normSel.Contains("assist") || normSel.Contains("score") || normSel.Contains("goal") || normSel.Contains("1or"))))
+                                        {
+                                            isOutcomeMatch = true;
+                                        }
+                                    }
+                                }
+                                
+                                if (isOutcomeMatch)
+                                {
+                                    isMatch = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return isMatch;
+    }
+
+    private BettingApp.Models.OddsPapiMarket? FindBestMarket(List<BettingApp.Models.OddsPapiMarket> markets, string marketCategory, string? matchName, string? selectionName)
+    {
+        if (markets == null || !markets.Any() || string.IsNullOrEmpty(marketCategory)) return null;
+        
+        var normalizedTargets = MarketMapper.NormalizeMarketName(marketCategory, matchName);
+        
+        var simplify = (string s) => 
+        {
+            var clean = s.ToLowerInvariant()
+                         .Replace("players", "player")
+                         .Replace("player's", "player")
+                         .Replace("shots", "shot")
+                         .Replace("cards", "card")
+                         .Replace("goals", "goal")
+                         .Replace("corners", "corner")
+                         .Replace("halves", "half");
+            return new string(clean.Where(char.IsLetterOrDigit).ToArray());
+        };
+        
+        var simplifiedTargets = normalizedTargets.Select(t => simplify(t)).ToList();
+        
+        BettingApp.Models.OddsPapiMarket? bestMatch = null;
+        foreach (var target in simplifiedTargets)
+        {
+            bestMatch = markets.FirstOrDefault(m => simplify(m.MarketName) == target);
+            if (bestMatch != null) break;
+        }
+        
+        if (bestMatch == null)
+        {
+            foreach (var target in simplifiedTargets)
+            {
+                bestMatch = markets.FirstOrDefault(m => simplify(m.MarketName).Contains(target) || target.Contains(simplify(m.MarketName)));
+                if (bestMatch != null) break;
+            }
+        }
+        
+        if (bestMatch == null && simplifiedTargets.Any(t => t.Contains("teamtotalgoal")))
+        {
+            if (!string.IsNullOrEmpty(matchName) && !string.IsNullOrEmpty(selectionName))
+            {
+                var hcSplit = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                if (hcSplit.Length >= 2)
+                {
+                    string normSelRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(selectionName).ToLowerInvariant();
+                    string normT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[0].Split('(')[0].Trim()).ToLowerInvariant();
+                    string normT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[1].Split('(')[0].Trim()).ToLowerInvariant();
+                    
+                    string expectedTeamMarket = "";
+                    if (normSelRaw.Contains(normT1)) expectedTeamMarket = simplify("Over Under Team 1");
+                    else if (normSelRaw.Contains(normT2)) expectedTeamMarket = simplify("Over Under Team 2");
+                    
+                    if (!string.IsNullOrEmpty(expectedTeamMarket))
+                    {
+                        bestMatch = markets.FirstOrDefault(m => simplify(m.MarketName) == expectedTeamMarket) ?? 
+                                    markets.FirstOrDefault(m => simplify(m.MarketName).Contains(expectedTeamMarket));
+                    }
+                }
+            }
+        }
+        
+        return bestMatch;
     }
 
     public static string GetSortKey(string input)
