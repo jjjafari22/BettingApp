@@ -1675,6 +1675,7 @@ else
         CheckedLegsCount = 0;
         LegOddsCache.Clear();
         StateHasChanged();
+        await Task.Delay(1);
 
         for (int i = 0; i < AiVisionResult.Legs.Count; i++)
         {
@@ -2683,6 +2684,7 @@ else
         PapiSearchResult = null;
         SelectedPapiMarketId = "";
         StateHasChanged();
+        await Task.Delay(1);
 
         BettingApp.Models.OddsPapiSearchResult? result;
         string? error;
