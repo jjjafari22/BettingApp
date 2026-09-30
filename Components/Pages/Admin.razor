@@ -397,7 +397,8 @@ else
                                                             </div>
                                                         }
                                                     </div>
-                                                    <div class="card-body p-2 pt-1">
+                                                    <div class="card-body p-0 d-flex flex-row">
+                                                        <div class="flex-grow-1 p-2 pt-1" style="min-width: 0;">
                                                         @foreach (var item in group)
                                                         {
                                                             var leg = item.Leg;
@@ -418,11 +419,6 @@ else
                                                                     </div>
                                                                     <div class="d-flex align-items-center justify-content-between gap-2">
                                                                         <div class="fw-bold text-dark lh-sm text-truncate" style="font-size: 0.85em;">@leg.Selection</div>
-                                                                        @if (!string.IsNullOrEmpty(leg.Odds)) {
-                                                                            <div class="fw-bold bg-dark text-white rounded px-2 shadow-sm text-nowrap d-flex align-items-center justify-content-center" style="font-size: 0.75em; height: 1.6em; letter-spacing: 0.3px;">@leg.Odds</div>
-                                                                        } else {
-                                                                            <div class="fw-bold bg-secondary text-white rounded px-2 shadow-sm text-nowrap d-flex align-items-center justify-content-center" style="font-size: 0.7em; height: 1.6em; opacity: 0.7;">BB</div>
-                                                                        }
                                                                     </div>
                                                                 </div>
                                                                 
@@ -492,6 +488,19 @@ else
                                                                 }
                                                             </div>
                                                         }
+                                                        </div>
+                                                        @{
+                                                            string displayOdds = group.FirstOrDefault(x => !string.IsNullOrEmpty(x.Leg.Odds)).Leg?.Odds ?? "-";
+                                                            double oddsFontSize = Math.Min(1.6, 0.75 + (group.Count * 0.15));
+                                                        }
+                                                        <div class="d-flex flex-column align-items-center justify-content-center bg-light border-start p-2" style="min-width: 65px;">
+                                                            <div class="fw-bold bg-dark text-white rounded px-2 shadow-sm d-flex flex-column align-items-center justify-content-center text-nowrap" style="padding: 0.3rem; letter-spacing: 0.5px;">
+                                                                @if(group.Count > 1) {
+                                                                    <span class="text-uppercase mb-1" style="font-size: 0.55em; color: #adb5bd; letter-spacing: 0.5px;">BB</span>
+                                                                }
+                                                                <span style="font-size: @(oddsFontSize)em; line-height: 1;">@displayOdds</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             }
