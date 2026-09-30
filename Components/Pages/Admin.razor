@@ -352,101 +352,148 @@ else
                                                     </div>
                                                 }
                                             }
-                                            @for (int i = 0; i < AiVisionResult!.Legs.Count; i++)
+                                            
+                                                // Group ONLY adjacent legs with the same Match name
+                                                var groupedLegs = new List<List<(BettingApp.Services.AiVisionLeg Leg, int Index)>>();
+                                                List<(BettingApp.Services.AiVisionLeg Leg, int Index)> currentGroup = null;
+                                                string currentMatch = null;
+                                                string currentGroupOdds = null;
+
+                                                for (int i = 0; i < AiVisionResult!.Legs.Count; i++)
+                                                {
+                                                    var leg = AiVisionResult!.Legs[i];
+                                                    string matchName = leg.Match ?? "Unknown Match";
+                                                    
+                                                    bool isSameMatch = currentGroup != null && matchName == currentMatch;
+                                                    bool isSameOdds = isSameMatch && (string.IsNullOrEmpty(leg.Odds) || string.IsNullOrEmpty(currentGroupOdds) || leg.Odds == currentGroupOdds);
+
+                                                    if (!isSameOdds)
+                                                    {
+                                                        currentGroup = new List<(BettingApp.Services.AiVisionLeg Leg, int Index)>();
+                                                        groupedLegs.Add(currentGroup);
+                                                        currentMatch = matchName;
+                                                        currentGroupOdds = leg.Odds;
+                                                    }
+                                                    else if (!string.IsNullOrEmpty(leg.Odds) && string.IsNullOrEmpty(currentGroupOdds))
+                                                    {
+                                                        currentGroupOdds = leg.Odds;
+                                                    }
+                                                    
+                                                    currentGroup.Add((leg, i));
+                                                }
+                                            
+                                            foreach (var group in groupedLegs)
                                             {
-                                                var leg = AiVisionResult!.Legs[i];
-                                                var matchingOutcome = (ParsedAiOutcome?.Legs?.Count > i) ? ParsedAiOutcome.Legs[i] : ParsedAiOutcome?.Legs?.FirstOrDefault(l => l.Match == leg.Match);
-                                                bool isActive = (leg == ActiveLookupLeg);
-                                                                                                                                                <div class="card mb-1 @(isActive ? "border-primary shadow" : "shadow-sm border-0")">
-                                                    <div class="card-body p-2">
-                                                        <div class="d-flex justify-content-between align-items-center border-bottom pb-1 mb-1">
-                                                            <div class="fw-bold lh-sm text-dark text-truncate me-2" style="font-size: 0.85em;">@leg.Match</div>
-                                                            @if (leg.StartTime != null) {
-                                                                <div class="text-primary lh-1 text-nowrap" style="font-size: 0.75em;"><i class="bi bi-clock me-1"></i>@ToUserLocal(leg.StartTime.Value).ToString("dd.MMM HH:mm")</div>
-                                                            }
-                                                        </div>
-                                                        <div class="d-flex flex-column mb-1">
-                                                            <div class="d-flex align-items-center mb-1">
-                                                                <div class="text-muted lh-1 text-truncate" style="font-size: 0.65em; text-transform: uppercase;">@leg.Market</div>
-                                                                @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") {
-                                                                    <button class="btn btn-outline-secondary ms-2 d-flex align-items-center justify-content-center" style="font-size: 0.6em; padding: 0.05rem 0.2rem; border-width: 1px; line-height: 1;" title="Manual Search" @onclick="() => SearchOddsForLeg(leg)">
-                                                                        <i class="bi @(isActive ? "bi-check2-circle text-primary" : "bi-search")"></i>
-                                                                    </button>
-                                                                }
-                                                            </div>
-                                                            <div class="d-flex align-items-center gap-2">
-                                                                <div class="fw-bold text-dark lh-sm text-truncate" style="font-size: 0.8em;">@leg.Selection</div>
-                                                                <div class="fw-bold bg-dark text-white rounded px-2 shadow-sm text-nowrap d-flex align-items-center justify-content-center" style="font-size: 0.75em; height: 1.6em; letter-spacing: 0.3px;">@leg.Odds</div>
-                                                            </div>
-                                                        </div>
-                                                        @if (matchingOutcome != null && !string.IsNullOrEmpty(matchingOutcome.Outcome)) {
-                                                            var color = matchingOutcome.Outcome.ToLower().Contains("won") ? "text-success" : 
-                                                                        matchingOutcome.Outcome.ToLower().Contains("lost") ? "text-danger" : "text-warning";
-                                                            var emoji = matchingOutcome.Outcome.ToLower().Contains("won") ? "✅" : 
-                                                                        matchingOutcome.Outcome.ToLower().Contains("lost") ? "❌" : "➖";
-                                                            <div class="mt-1 p-1 bg-light rounded border border-secondary border-opacity-25 lh-sm" style="font-size: 0.75em;">
-                                                                <strong>Outcome:</strong> <span class="@color fw-bold">@emoji @matchingOutcome.Outcome</span><br/>
-                                                                <strong>Stats:</strong> @matchingOutcome.Stats
+                                                var firstItem = group.First();
+                                                bool hasActive = group.Any(x => x.Leg == ActiveLookupLeg);
+                                                string groupKey = firstItem.Leg.Match ?? "Unknown Match";
+                                                
+                                                <div class="card mb-2 @(hasActive ? "border-primary shadow" : "shadow-sm border-0")">
+                                                    <div class="card-header bg-white p-2 d-flex justify-content-between align-items-center border-bottom">
+                                                        <div class="fw-bold lh-sm text-dark text-truncate me-2" style="font-size: 0.85em;">@groupKey</div>
+                                                        @if (firstItem.Leg.StartTime != null) {
+                                                            <div class="text-primary lh-1 text-nowrap fw-semibold" style="font-size: 0.75em;">
+                                                                <i class="bi bi-clock me-1"></i>@ToUserLocal(firstItem.Leg.StartTime.Value).ToString("dd.MMM HH:mm")
                                                             </div>
                                                         }
+                                                    </div>
+                                                    <div class="card-body p-2 pt-1">
+                                                        @foreach (var item in group)
+                                                        {
+                                                            var leg = item.Leg;
+                                                            var i = item.Index;
+                                                            var matchingOutcome = (ParsedAiOutcome?.Legs?.Count > i) ? ParsedAiOutcome.Legs[i] : ParsedAiOutcome?.Legs?.FirstOrDefault(l => l.Match == leg.Match);
+                                                            bool isActive = (leg == ActiveLookupLeg);
+                                                            bool isLast = item == group.Last();
 
-                                                        @if (LegOddsCache.TryGetValue(i, out var legResult)) {
-                                                            <div class="mt-1 bg-white rounded border shadow-sm">
-                                                                @if (legResult.IsLoading) {
-                                                                    <div class="text-center p-1" style="font-size: 0.75em;"><span class="spinner-border spinner-border-sm text-primary" style="width: 0.8rem; height: 0.8rem;"></span> Loading...</div>
-                                                                } else if (!string.IsNullOrEmpty(legResult.ErrorMessage)) {
-                                                                    <div class="text-danger p-1 lh-sm fw-bold" style="font-size: 0.75em;"><i class="bi bi-exclamation-circle-fill me-1"></i>@legResult.ErrorMessage</div>
-                                                                } else {
-                                                                    @if (!string.IsNullOrEmpty(legResult.WarningMessage)) {
-                                                                        <div class="bg-warning bg-opacity-25 text-dark p-1 lh-sm border-bottom border-warning fw-semibold" style="font-size: 0.7em;"><i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>@legResult.WarningMessage</div>
-                                                                    }
-                                                                    <div class="d-flex justify-content-between text-center lh-1" style="background-color: #f8f9fa;">
-                                                                        @foreach (var bookie in new[] { ("pinnacle+30", "Pinnacle"), ("unibet.se", "Unibet"), ("bet365", "Bet365"), ("betsson", "Betsson") }) {
-                                                                            <div class="flex-fill border-end last-child-no-border p-1">
-                                                                                <div class="text-secondary fw-semibold mb-1" style="font-size: 0.55em; letter-spacing: 0.2px; text-transform: uppercase;">
-                                                                                    @if (legResult.SearchResult?.BookmakerUrls != null && legResult.SearchResult.BookmakerUrls.TryGetValue(bookie.Item1, out var bUrl)) {
-                                                                                        <a href="@bUrl" target="_blank" class="text-decoration-none text-primary">@bookie.Item2</a>
-                                                                                    } else {
-                                                                                        @bookie.Item2
-                                                                                    }
-                                                                                </div>
-                                                                                <div class="fw-bold @(legResult.MatchedBookieOdds.ContainsKey(bookie.Item1) ? "text-dark" : "text-muted")" style="font-size: 0.85em;">
-                                                                                    @if (legResult.MatchedBookieOdds.TryGetValue(bookie.Item1, out var p)) {
-                                                                                        <div class="d-flex flex-column align-items-center justify-content-center">
-                                                                                            <div class="d-flex align-items-center justify-content-center">
-                                                                                                @if (p.IsSuspended) { <i class="bi bi-lock-fill text-warning me-1" style="font-size: 0.7em;"></i> }
-                                                                                                <span>@p.Price.ToString("0.00")</span>
-                                                                                                @if (p.Limit.HasValue) {
-                                                                                                    <span class="text-success ms-1" style="font-size: 0.7em;" title="Max Bet Limit">€@p.Limit.Value.ToString("0")</span>
-                                                                                                }
-                                                                                            </div>
-                                                                                            @if (p.ChangedAt.HasValue) {
-                                                                                                <div class="text-muted fw-normal" style="font-size: 0.5em; margin-top: 2px;">@ToUserLocal(p.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
+                                                            <div class="@(!isLast ? "border-bottom mb-2 pb-2" : "")">
+                                                                <div class="d-flex flex-column mb-1">
+                                                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                                                        <div class="text-muted lh-1 text-truncate fw-semibold" style="font-size: 0.65em; text-transform: uppercase; letter-spacing: 0.5px;">@leg.Market</div>
+                                                                        @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") {
+                                                                            <button class="btn btn-outline-secondary d-flex align-items-center justify-content-center" style="font-size: 0.6em; padding: 0.15rem 0.3rem; border-width: 1px; line-height: 1;" title="Manual Search" @onclick="() => SearchOddsForLeg(leg)">
+                                                                                <i class="bi @(isActive ? "bi-check2-circle text-primary" : "bi-search")"></i>
+                                                                            </button>
+                                                                        }
+                                                                    </div>
+                                                                    <div class="d-flex align-items-center justify-content-between gap-2">
+                                                                        <div class="fw-bold text-dark lh-sm text-truncate" style="font-size: 0.85em;">@leg.Selection</div>
+                                                                        @if (!string.IsNullOrEmpty(leg.Odds)) {
+                                                                            <div class="fw-bold bg-dark text-white rounded px-2 shadow-sm text-nowrap d-flex align-items-center justify-content-center" style="font-size: 0.75em; height: 1.6em; letter-spacing: 0.3px;">@leg.Odds</div>
+                                                                        } else {
+                                                                            <div class="fw-bold bg-secondary text-white rounded px-2 shadow-sm text-nowrap d-flex align-items-center justify-content-center" style="font-size: 0.7em; height: 1.6em; opacity: 0.7;">BB</div>
+                                                                        }
+                                                                    </div>
+                                                                </div>
+                                                                
+                                                                @if (matchingOutcome != null && !string.IsNullOrEmpty(matchingOutcome.Outcome)) {
+                                                                    var color = matchingOutcome.Outcome.ToLower().Contains("won") ? "text-success" : 
+                                                                                matchingOutcome.Outcome.ToLower().Contains("lost") ? "text-danger" : "text-warning";
+                                                                    var emoji = matchingOutcome.Outcome.ToLower().Contains("won") ? "✅" : 
+                                                                                matchingOutcome.Outcome.ToLower().Contains("lost") ? "❌" : "➖";
+                                                                    <div class="mt-1 p-1 bg-light rounded border border-secondary border-opacity-25 lh-sm" style="font-size: 0.75em;">
+                                                                        <strong>Outcome:</strong> <span class="@color fw-bold">@emoji @matchingOutcome.Outcome</span><br/>
+                                                                        <strong>Stats:</strong> @matchingOutcome.Stats
+                                                                    </div>
+                                                                }
+
+                                                                @if (LegOddsCache.TryGetValue(i, out var legResult)) {
+                                                                    <div class="mt-1 bg-white rounded border shadow-sm">
+                                                                        @if (legResult.IsLoading) {
+                                                                            <div class="text-center p-1" style="font-size: 0.75em;"><span class="spinner-border spinner-border-sm text-primary" style="width: 0.8rem; height: 0.8rem;"></span> Loading...</div>
+                                                                        } else if (!string.IsNullOrEmpty(legResult.ErrorMessage)) {
+                                                                            <div class="text-danger p-1 lh-sm fw-bold" style="font-size: 0.75em;"><i class="bi bi-exclamation-circle-fill me-1"></i>@legResult.ErrorMessage</div>
+                                                                        } else {
+                                                                            @if (!string.IsNullOrEmpty(legResult.WarningMessage)) {
+                                                                                <div class="bg-warning bg-opacity-25 text-dark p-1 lh-sm border-bottom border-warning fw-semibold" style="font-size: 0.7em;"><i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>@legResult.WarningMessage</div>
+                                                                            }
+                                                                            <div class="d-flex justify-content-between text-center lh-1" style="background-color: #f8f9fa;">
+                                                                                @foreach (var bookie in new[] { ("pinnacle+30", "Pinnacle"), ("unibet.se", "Unibet"), ("bet365", "Bet365"), ("betsson", "Betsson") }) {
+                                                                                    <div class="flex-fill border-end last-child-no-border p-1">
+                                                                                        <div class="text-secondary fw-semibold mb-1" style="font-size: 0.55em; letter-spacing: 0.2px; text-transform: uppercase;">
+                                                                                            @if (legResult.SearchResult?.BookmakerUrls != null && legResult.SearchResult.BookmakerUrls.TryGetValue(bookie.Item1, out var bUrl)) {
+                                                                                                <a href="@bUrl" target="_blank" class="text-decoration-none text-primary">@bookie.Item2</a>
+                                                                                            } else {
+                                                                                                @bookie.Item2
                                                                                             }
                                                                                         </div>
+                                                                                        <div class="fw-bold @(legResult.MatchedBookieOdds.ContainsKey(bookie.Item1) ? "text-dark" : "text-muted")" style="font-size: 0.85em;">
+                                                                                            @if (legResult.MatchedBookieOdds.TryGetValue(bookie.Item1, out var p)) {
+                                                                                                <div class="d-flex flex-column align-items-center justify-content-center">
+                                                                                                    <div class="d-flex align-items-center justify-content-center">
+                                                                                                        @if (p.IsSuspended) { <i class="bi bi-lock-fill text-warning me-1" style="font-size: 0.7em;"></i> }
+                                                                                                        <span>@p.Price.ToString("0.00")</span>
+                                                                                                        @if (p.Limit.HasValue) {
+                                                                                                            <span class="text-success ms-1" style="font-size: 0.7em;" title="Max Bet Limit">€@p.Limit.Value.ToString("0")</span>
+                                                                                                        }
+                                                                                                    </div>
+                                                                                                    @if (p.ChangedAt.HasValue) {
+                                                                                                        <div class="text-muted fw-normal" style="font-size: 0.5em; margin-top: 2px;">@ToUserLocal(p.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
+                                                                                                    }
+                                                                                                </div>
+                                                                                            } else {
+                                                                                                <span>-</span>
+                                                                                            }
+                                                                                        </div>
+                                                                                    </div>
+                                                                                }
+                                                                            </div>
+                                                                            <div class="bg-light px-1 py-1 d-flex justify-content-between align-items-center border-top text-muted" style="font-size: 0.65em; background-color: #fdfdfd;">
+                                                                                <div class="text-truncate">
+                                                                                    @if (!string.IsNullOrEmpty(legResult.HighlightedOutcome)) {
+                                                                                        <span><i class="bi bi-check2-circle text-success me-1"></i>Matched: <strong>@legResult.HighlightedOutcome</strong></span>
                                                                                     } else {
-                                                                                        <span>-</span>
+                                                                                        <span><i class="bi bi-dash-circle text-secondary me-1"></i>No match</span>
                                                                                     }
                                                                                 </div>
                                                                             </div>
                                                                         }
-                                                                    </div>
-                                                                    <div class="bg-light px-1 py-1 d-flex justify-content-between align-items-center border-top text-muted" style="font-size: 0.65em; background-color: #fdfdfd;">
-                                                                        <div class="text-truncate">
-                                                                            @if (!string.IsNullOrEmpty(legResult.HighlightedOutcome)) {
-                                                                                <span><i class="bi bi-check2-circle text-success me-1"></i>Matched: <strong>@legResult.HighlightedOutcome</strong></span>
-                                                                            } else {
-                                                                                <span><i class="bi bi-dash-circle text-secondary me-1"></i>No match</span>
-                                                                            }
-                                                                        </div>
                                                                     </div>
                                                                 }
                                                             </div>
                                                         }
                                                     </div>
                                                 </div>
-
-
                                             }
                                         }
                                     }
