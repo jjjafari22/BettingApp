@@ -36,7 +36,7 @@ namespace BettingApp.Tests
         [InlineData("Lyon Women", "Chelsea Women", "Lyon (W)", "Chelsea (W)", "Women's Champions League", true)]
         [InlineData("Benfica Women", "Bayern Munich Women", "Benfica (W)", "Bayern Munich (W)", "Women's Champions League", true)]
         [InlineData("SL Benfica Women", "Bayern Munich Women", "Benfica (W)", "Bayern Munich (W)", "Women's Champions League", true)]
-        public void Test_AreTeamsMatching(string qHome, string qAway, string oHome, string oAway, string optLeague, bool expected)
+        public void Test_AreTeamsMatching(string qHome, string qAway, string oHome, string oAway, string? optLeague, bool expected)
         {
             var mapper = new BettingApp.Services.TeamAliasMappingService();
             var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BettingApp.Services.FotMobScraperService>.Instance;
