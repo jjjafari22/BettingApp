@@ -492,14 +492,51 @@ else
                                                         @{
                                                             string displayOdds = group.FirstOrDefault(x => !string.IsNullOrEmpty(x.Leg.Odds)).Leg?.Odds ?? "-";
                                                             double oddsFontSize = Math.Min(1.6, 0.75 + (group.Count * 0.15));
+                                                            
+                                                            var bbOdds = new System.Collections.Generic.Dictionary<string, (string Label, double? MultipliedOdds)>();
+                                                            if (group.Count > 1)
+                                                            {
+                                                                var bookies = new[] { ("pinnacle+30", "Pin"), ("unibet.se", "Uni"), ("bet365", "B365"), ("betsson", "Bson") };
+                                                                foreach (var b in bookies)
+                                                                {
+                                                                    double combined = 1.0;
+                                                                    bool missing = false;
+                                                                    foreach (var legItem in group)
+                                                                    {
+                                                                        if (LegOddsCache.TryGetValue(legItem.Index, out var res) && res.MatchedBookieOdds != null && res.MatchedBookieOdds.TryGetValue(b.Item1, out var p) && p.Price > 0)
+                                                                        {
+                                                                            combined *= (double)p.Price;
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            missing = true;
+                                                                            break;
+                                                                        }
+                                                                    }
+                                                                    bbOdds[b.Item1] = (b.Item2, missing ? null : combined);
+                                                                }
+                                                            }
                                                         }
-                                                        <div class="d-flex flex-column align-items-center justify-content-center bg-light border-start p-2" style="min-width: 65px;">
-                                                            <div class="fw-bold bg-dark text-white rounded px-2 shadow-sm d-flex flex-column align-items-center justify-content-center text-nowrap" style="padding: 0.3rem; letter-spacing: 0.5px;">
+                                                        <div class="d-flex flex-column align-items-center justify-content-center bg-light border-start p-2" style="min-width: 80px;">
+                                                            <div class="fw-bold bg-dark text-white rounded px-2 shadow-sm d-flex flex-column align-items-center justify-content-center text-nowrap w-100" style="padding: 0.3rem; letter-spacing: 0.5px;">
                                                                 @if(group.Count > 1) {
                                                                     <span class="text-uppercase mb-1" style="font-size: 0.55em; color: #adb5bd; letter-spacing: 0.5px;">BB</span>
                                                                 }
                                                                 <span style="font-size: @(oddsFontSize)em; line-height: 1;">@displayOdds</span>
                                                             </div>
+                                                            
+                                                            @if (group.Count > 1 && bbOdds.Values.Any(v => v.MultipliedOdds.HasValue)) {
+                                                                <div class="mt-2 w-100 d-flex flex-column gap-1">
+                                                                    @foreach (var bo in bbOdds.Values) {
+                                                                        <div class="bg-white border rounded shadow-sm d-flex flex-column align-items-center justify-content-center py-1 w-100">
+                                                                            <span class="text-secondary fw-semibold mb-1" style="font-size: 0.5em; letter-spacing: 0.5px; text-transform: uppercase; line-height: 1;">@bo.Label</span>
+                                                                            <span class="fw-bold @(bo.MultipliedOdds.HasValue ? "text-dark" : "text-muted")" style="font-size: 0.85em; line-height: 1;">
+                                                                                @(bo.MultipliedOdds.HasValue ? bo.MultipliedOdds.Value.ToString("0.00") : "-")
+                                                                            </span>
+                                                                        </div>
+                                                                    }
+                                                                </div>
+                                                            }
                                                         </div>
                                                     </div>
                                                 </div>
