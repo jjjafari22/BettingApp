@@ -1768,7 +1768,7 @@ else
         CheckedLegsCount = 0;
         LegOddsCache.Clear();
         StateHasChanged();
-        await Task.Delay(1);
+        await Task.Delay(16);
 
         for (int i = 0; i < AiVisionResult.Legs.Count; i++)
         {
@@ -1808,7 +1808,7 @@ else
         
         string teamToSearch = leg.Match ?? leg.Selection ?? "";
 
-        var (apiResult, error) = await OddsApi.SearchOddsComparisonAsync(teamToSearch, reviewingBetModel?.Id);
+        var (apiResult, error) = await Task.Run(async () => await OddsApi.SearchOddsComparisonAsync(teamToSearch, reviewingBetModel?.Id));
         
         if (apiResult == null)
         {
@@ -2777,11 +2777,11 @@ else
         PapiSearchResult = null;
         SelectedPapiMarketId = "";
         StateHasChanged();
-        await Task.Delay(1);
+        await Task.Delay(16);
 
         BettingApp.Models.OddsPapiSearchResult? result;
         string? error;
-        (result, error) = await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id);
+        (result, error) = await Task.Run(async () => await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id));
         
         if (result == null)
         {
