@@ -96,8 +96,8 @@
         <div class="row text-center align-items-stretch">
             <div class="col-md-3 mb-3">
                  <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
-                    <h6 class="text-muted">Total Stakes (Real)</h6>
-                    <h4 class="mb-0">@totalStakes.ToString("N0") kr</h4>
+                    <h6 class="text-muted">Handle (Real + FB)</h6>
+                    <h4 class="mb-0">@handle.ToString("N0") kr</h4>
                     <small class="text-muted mt-1">From @totalBets bets</small>
                 </div>
             </div>
@@ -112,7 +112,7 @@
                 <div class="p-3 border rounded bg-light h-100 d-flex flex-column justify-content-center">
                     <h6 class="text-muted">Hold %</h6>
                     <h4 class="mb-0">@holdPercentage.ToString("0.00")%</h4>
-                    <small class="text-muted mt-1">Profit on real stakes</small>
+                    <small class="text-muted mt-1">Profit / Handle</small>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
@@ -183,6 +183,7 @@
     
     // Period Metrics
     private decimal totalStakes = 0;
+    private decimal handle = 0;
     private decimal totalFreeBetsAmount = 0;
     private int totalFreeBetsCount = 0;
     private decimal netProfit = 0;
@@ -428,6 +429,7 @@
         {
             totalBets = 0;
             totalStakes = 0;
+            handle = 0;
             netProfit = 0;
             holdPercentage = 0;
             avgOdds = 0;
@@ -439,9 +441,10 @@
         {
             totalBets = stats.Count;
             totalStakes = stats.TotalStakes;
+            handle = stats.TotalAmountNOK;
             decimal totalPayouts = Math.Floor(stats.WonPayouts) + stats.VoidRefunds;
             netProfit = totalStakes - totalPayouts;
-            holdPercentage = totalStakes > 0 ? (netProfit / totalStakes) * 100 : 0;
+            holdPercentage = handle > 0 ? (netProfit / handle) * 100 : 0;
             
             if (stats.TotalWageredForOdds > 0)
             {
