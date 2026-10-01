@@ -120,7 +120,7 @@ namespace BettingApp.Services
 
             private static readonly HashSet<string> _stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
             { 
-                "fc", "fk", "united", "city", "cf", "cd", "bk", "women", "sc", "ec", "if" 
+                "fc", "fk", "united", "city", "cf", "cd", "bk", "sc", "ec", "if" 
             };
 
             private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _normalizationCache = new();
@@ -145,8 +145,9 @@ namespace BettingApp.Services
                            .Replace("oe", "o")
                            .Replace("ae", "a")
                            .Replace("aa", "a")
-                           .Replace(" (w)", "")
-                           .Replace("-", " ");
+                           .Replace("-", " ")
+                           .Replace(" women", " (w)")
+                           .Replace("women", "(w)");
                            
                 if (removeStopWords)
                 {

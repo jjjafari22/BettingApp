@@ -31,7 +31,7 @@ namespace BettingApp.Services
                 string homeSearchStr = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: true);
                 if (string.IsNullOrEmpty(homeSearchStr)) homeSearchStr = homeTeam; // Fallback if it was ONLY stop words
                 
-                string matchQuery = Uri.EscapeDataString(homeTeam); // Search the full home team first to guarantee specific results like "Sheffield United" instead of just "Sheffield"
+                string matchQuery = Uri.EscapeDataString(_teamAliasMapper.NormalizeTeamName(homeTeam, removeStopWords: false)); // Search the full home team first to guarantee specific results like "Sheffield United", but normalized (e.g. Women -> (W))
                 
                 // 1. Search FotMob API
                 string searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={matchQuery}";
@@ -75,10 +75,14 @@ namespace BettingApp.Services
                     if (string.IsNullOrEmpty(eventId) && !string.IsNullOrEmpty(awayTeam))
                     {
                         string cleanAwayTeam = awayTeam;
-                        var dateMatch = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        if (dateMatch.Success)
+                        var awayDateMatch = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (awayDateMatch.Success)
                         {
-                            cleanAwayTeam = awayTeam.Substring(0, dateMatch.Index).Trim();
+                            string dmVal = awayDateMatch.Groups[1].Value.ToLowerInvariant();
+                            if (dmVal != "w" && dmVal != "m" && dmVal != "n")
+                            {
+                                cleanAwayTeam = awayTeam.Substring(0, awayDateMatch.Index).Trim();
+                            }
                         }
                         
                         string awaySearchStr = _teamAliasMapper.NormalizeTeamName(cleanAwayTeam, removeStopWords: true);
@@ -168,7 +172,11 @@ namespace BettingApp.Services
                     string longestHome = homeSearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
                     string cleanAway = awayTeam;
                     var dm = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    if (dm.Success) cleanAway = awayTeam.Substring(0, dm.Index).Trim();
+                    if (dm.Success)
+                    {
+                        string dmVal = dm.Groups[1].Value.ToLowerInvariant();
+                        if (dmVal != "w" && dmVal != "m" && dmVal != "n") cleanAway = awayTeam.Substring(0, dm.Index).Trim();
+                    }
                     
                     string awaySearchStr = _teamAliasMapper.NormalizeTeamName(cleanAway, removeStopWords: true);
                     if (string.IsNullOrEmpty(awaySearchStr)) awaySearchStr = cleanAway;
@@ -218,7 +226,8 @@ namespace BettingApp.Services
                                     string homeName = f.TryGetProperty("home", out var h) && h.TryGetProperty("name", out var hn) ? hn.GetString() ?? "" : "";
                                     string awayName = f.TryGetProperty("away", out var a) && a.TryGetProperty("name", out var an) ? an.GetString() ?? "" : "";
                                     
-                                    int matchScore = GetTeamMatchScore(homeTeam, awayTeam ?? "", homeName, awayName);
+                                    string leagueName = f.TryGetProperty("tournament", out var t) && t.TryGetProperty("name", out var tn) ? tn.GetString() ?? "" : "";
+                                    int matchScore = GetTeamMatchScore(homeTeam, awayTeam ?? "", homeName, awayName, leagueName);
                                     if (matchScore == 0) continue;
 
                                     if (f.TryGetProperty("status", out var statusProp) && statusProp.TryGetProperty("utcTime", out var utcProp))
@@ -644,7 +653,7 @@ namespace BettingApp.Services
                    text.Contains("u18") || text.Contains("u20") || text.Contains("reserves") || text.Contains("youth");
         }
 
-        public bool CheckTeamMatch(string query, string option)
+        public bool CheckTeamMatch(string query, string option, string? leagueName = null)
         {
             query = _teamAliasMapper.NormalizeTeamName(query, removeStopWords: false);
             option = _teamAliasMapper.NormalizeTeamName(option, removeStopWords: false);
@@ -660,7 +669,8 @@ namespace BettingApp.Services
             bool qInO = CheckSubset(qTokens, oTokens);
             bool oInQ = CheckSubset(oTokens, qTokens);
 
-            if (HasSpecialModifier(option) != HasSpecialModifier(query))
+            bool optHasModifier = HasSpecialModifier(option) || (!string.IsNullOrEmpty(leagueName) && HasSpecialModifier(leagueName));
+            if (optHasModifier != HasSpecialModifier(query))
             {
                 return false;
             }
@@ -668,22 +678,22 @@ namespace BettingApp.Services
             return qInO || oInQ;
         }
 
-        public int GetTeamMatchScore(string queryHome, string queryAway, string optHome, string optAway)
+        public int GetTeamMatchScore(string queryHome, string queryAway, string optHome, string optAway, string? optLeague = null)
         {
             if (string.IsNullOrEmpty(queryHome)) return 0;
             
-            bool straightMatch = CheckTeamMatch(queryHome, optHome) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optAway));
+            bool straightMatch = CheckTeamMatch(queryHome, optHome, optLeague) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optAway, optLeague));
             if (straightMatch) return 200;
 
-            bool swappedMatch = CheckTeamMatch(queryHome, optAway) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optHome));
+            bool swappedMatch = CheckTeamMatch(queryHome, optAway, optLeague) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optHome, optLeague));
             if (swappedMatch) return 100;
 
             return 0;
         }
 
-        public bool AreTeamsMatching(string queryHome, string queryAway, string optHome, string optAway)
+        public bool AreTeamsMatching(string queryHome, string queryAway, string optHome, string optAway, string? optLeague = null)
         {
-            return GetTeamMatchScore(queryHome, queryAway, optHome, optAway) > 0;
+            return GetTeamMatchScore(queryHome, queryAway, optHome, optAway, optLeague) > 0;
         }
 
         private (string? id, int score) ExtractEventIdWithScore(System.Text.Json.JsonDocument doc, string homeTeam, string awayTeam, DateTime? betPlacedAt)
@@ -701,7 +711,11 @@ namespace BettingApp.Services
                 if (dateMatch.Success)
                 {
                     string dateStr = dateMatch.Groups[1].Value;
-                    awayTeam = awayTeam.Substring(0, dateMatch.Index).Trim();
+                    string dmVal = dateStr.ToLowerInvariant();
+                    if (dmVal != "w" && dmVal != "m" && dmVal != "n")
+                    {
+                        awayTeam = awayTeam.Substring(0, dateMatch.Index).Trim();
+                    }
                     
                     if (DateTime.TryParse(dateStr, out DateTime dt1)) parsedTargetDate = dt1;
                     else if (DateTime.TryParseExact(dateStr, "dd.MMM HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime dt2)) parsedTargetDate = dt2;
@@ -727,8 +741,9 @@ namespace BettingApp.Services
                 var payload = option.GetProperty("payload");
                 string optionHomeName = payload.TryGetProperty("homeName", out var h) ? h.GetString() ?? "" : "";
                 string optionAwayName = payload.TryGetProperty("awayName", out var a) ? a.GetString() ?? "" : "";
+                string optionLeagueName = payload.TryGetProperty("leagueName", out var l) ? l.GetString() ?? "" : "";
 
-                int score = GetTeamMatchScore(homeTeam, awayTeam ?? "", optionHomeName, optionAwayName);
+                int score = GetTeamMatchScore(homeTeam, awayTeam ?? "", optionHomeName, optionAwayName, optionLeagueName);
                 if (score == 0)
                 {
                     continue;
