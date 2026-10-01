@@ -200,7 +200,8 @@ namespace BettingApp.Services
 
             // --- Dynamic Player Prop Catch-Alls (handles when AI appends player names to the market) ---
             if (clean.Contains("Goalscorer", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Scorer", StringComparison.OrdinalIgnoreCase) || 
-               (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase)))
+               (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase)) ||
+               clean.Contains("Will/Will not Score", StringComparison.OrdinalIgnoreCase))
             {
                 return new List<string> { "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals" };
             }
