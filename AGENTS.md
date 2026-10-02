@@ -6,6 +6,7 @@
 2. **NEVER use `curl` or `python`** in bash to fetch URLs. It triggers security popups that block execution. ALWAYS use your built-in `read_url_content` tool.
 3. **NEVER use `cat` (e.g. `cat << EOF > file`)** in bash to create or edit files. It triggers severe security popups that spam the user. ALWAYS use your built-in `write_to_file` and `replace_file_content` tools to modify code or scripts.
 4. **NEVER commit code automatically** to Git. Always leave changes in the working directory for the user to review and commit themselves.
+5. **NEVER execute Git commands that modify state (e.g. `git checkout`, `git reset`, `git clean`)**. You may use `git status`, `git diff`, and `git log` to READ information, but you are strictly forbidden from reverting, overwriting, or discarding the user's uncommitted work.
 ---
 
 - **High-Stakes Environment**: This project is an important project that has a lot of users live in production. 
