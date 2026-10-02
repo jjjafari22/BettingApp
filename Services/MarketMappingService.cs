@@ -240,15 +240,19 @@ namespace BettingApp.Services
 
             // Strip off any trailing scores (like "0 - 1") for 3-Way Handicaps
             if (clean.StartsWith("Handicap (3 Way)", StringComparison.OrdinalIgnoreCase) || 
-                clean.StartsWith("3-Way Handicap", StringComparison.OrdinalIgnoreCase))
+                clean.StartsWith("3-Way Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("3 Way Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Handicap 3 Way", StringComparison.OrdinalIgnoreCase))
             {
                 return new List<string> { "3-Way Handicap" };
             }
 
             // Strip off any trailing scores (like "-1.0" or "(0-1)") for Asian Handicaps
             if (clean.StartsWith("Asian Handicap", StringComparison.OrdinalIgnoreCase) ||
-                clean.StartsWith("Goals Handicap", StringComparison.OrdinalIgnoreCase))
+                clean.StartsWith("Goals Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.StartsWith("Handicap", StringComparison.OrdinalIgnoreCase))
             {
+                if (halfSuffix == " First Half") return new List<string> { "Asian Handicap First Half", "Asian Handicap - First Half" };
                 return new List<string> { "Asian Handicap", "3-Way Handicap" };
             }
 
