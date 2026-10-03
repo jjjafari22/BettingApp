@@ -515,6 +515,10 @@ public class DiscordNotificationService : IHostedService
                 header = $"**Bet Cancelled{updateTag}**";
                 icon = "🚫";
                 break;
+            case "Undone":
+                header = $"**Bet Re-Opened{updateTag}**";
+                icon = "ℹ️";
+                break;
             default:
                 header = $"**Bet Update{updateTag}**";
                 icon = "ℹ️";

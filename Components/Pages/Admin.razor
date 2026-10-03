@@ -3210,6 +3210,7 @@ else
             errorMessage = null;
             successMessage = null; 
             string originalStatus = bet.Status;
+            bool isUndo = originalStatus != "Pending" && newStatus == "Approved";
             int originalBetId = bet.Id;
             if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
@@ -3362,11 +3363,12 @@ else
             }
             // newStatus == Void/Rejected/Cancelled doesn't deduct stakes
 
+
             dbBet.UpdatedAt = DateTime.UtcNow;
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = currentAdminName ?? "Unknown",
-                Action = $"Bet {newStatus}",
+                Action = isUndo ? "Bet Undone (Reverted to Approved)" : $"Bet {newStatus}",
                 TargetUserName = bet.UserName,
                 Details = $"Bet ID: {bet.Id}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Payout: {dbBet.PotentialPayout:N0}"
             });
@@ -3449,7 +3451,7 @@ else
         });
         if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
         {
-            _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet!, newStatus, isUpdate: false);
+            _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet!, isUndo ? "Undone" : newStatus, isUpdate: isUndo);
         }
 
         await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet status is now: {newStatus}");
