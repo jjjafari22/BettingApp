@@ -15,6 +15,8 @@ namespace BettingApp.Tests
         [InlineData("Janover Underhagen - Over 2.5", "Janover Underhagen - Under 2.5", false)]
         [InlineData("Bruno Fernandes", "Bruno Miguel Borges Fernandes", true)]
         [InlineData("Bruno Fernandes", "Bruno Silva", false)]
+        [InlineData("Martin Ødegaard - To Provide An Assist", "Martin Ødegaard - Over 0.5", true)]
+        [InlineData("Martin Ødegaard - To Provide An Assist", "Martin Ødegaard - Under 0.5", false)]
         public void Test_FuzzyPlayerMatch(string aiSelection, string opOutcome, bool expected)
         {
             bool result = OddsMatchingLogic.IsFuzzyPlayerMatch(aiSelection, opOutcome);

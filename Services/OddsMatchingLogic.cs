@@ -92,6 +92,17 @@ namespace BettingApp.Services
         string norm1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(str1).ToLowerInvariant();
         string norm2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(str2).ToLowerInvariant();
 
+        Func<string, string> injectImplicitOdds = (string norm) => {
+            if (norm.Contains("to provide") || norm.Contains("to score") || norm.Contains("to get") || norm.Contains("anytime") || norm.Contains("carded") || norm.Contains("booked"))
+            {
+                if (!norm.Contains("not ")) return norm + " over 0.5";
+                else return norm + " under 0.5";
+            }
+            return norm;
+        };
+        norm1 = injectImplicitOdds(norm1);
+        norm2 = injectImplicitOdds(norm2);
+
         // 1. Extract and compare numbers
         var numRegex = new System.Text.RegularExpressions.Regex(@"\d+(?:\.\d+)?");
         var nums1 = numRegex.Matches(norm1).Cast<System.Text.RegularExpressions.Match>().Select(m => m.Value).ToList();
@@ -498,6 +509,11 @@ namespace BettingApp.Services
                     }
                 }
             }
+        }
+        
+        if (!isMatch && !string.IsNullOrEmpty(displayOName) && ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
+        {
+            isMatch = IsFuzzyPlayerMatch(ActiveLookupLeg.Selection, displayOName);
         }
         
         return isMatch;
