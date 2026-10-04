@@ -414,7 +414,7 @@ namespace BettingApp.Services
 
 # 3. GOOGLE SEARCH ANTI-HALLUCINATION
 - NEVER use prediction articles, previews, or odds sites (lines.com, actionnetwork).
-- You MUST explicitly read the ACTUAL FINAL SCORE and/or EXACT PLAYER STAT from the snippet. If vague or missing, output 'Unknown'. DO NOT invent '4-0' or guess player stats based on team scores.
+- You MUST explicitly read the ACTUAL FINAL SCORE and/or EXACT PLAYER STAT from the snippet. If the search reveals the match has NOT STARTED or is CURRENTLY IN PROGRESS, output 'Pending'. If the match is FINISHED but stats are vague or missing, output 'Unknown'. DO NOT invent '4-0' or guess player stats based on team scores.
 - EXACT DATE: You must verify the match date is within 5 days of {betPlacedAt:yyyy-MM-dd}. Reject old/historical matches and mark 'Unknown'. Do NOT grade based on unverified dates.
 - EXACT TIME: If the leg has a 'startTime', find the exact UTC match. If no 'startTime', find the FIRST match chronologically on/after the upload time.
 - TEAMS: Verify the exact Home vs Away order.
@@ -432,7 +432,7 @@ namespace BettingApp.Services
 - '1' AND '2' TOTALS: If a market says 'Total Goals 1' with selection 'Over 1.0', the '1' might be a truncation of the Asian Line (1.0), not Team 1. If no specific team is named, treat it as TOTAL match goals.
 
 # 6. FORMATTING & SCHEDULING
-- If the match has NOT STARTED (e.g. `general.started` is false AND `header.status.started` is false), grade all legs as 'Pending' and do NOT use Google Search for stats.
+- If the match has NOT STARTED or is CURRENTLY IN PROGRESS (e.g. `general.started` is false, or `header.status.finished` is false), grade all legs as 'Pending'. DO NOT grade live matches as 'Unknown' or 'Void' just because final stats are missing.
 - `matchStartTimeIso`: Return the absolute EARLIEST UTC start time across all PENDING/UNFINISHED legs (e.g. '2026-07-25T19:00:00Z'). Ignore finished legs. Parse it directly if provided in JSON; only Google Search if missing.
 - `stats`: Start with EXACTLY ONE of: 'Verified via FotMob: ', 'FotMob lacked stat; Verified via Google Search: ', or 'Verified via Google Search: '. Include EXACTLY ONE source URL if you used Google. COMBO BETS: Evaluate each leg COMPLETELY INDEPENDENTLY! You MUST write a unique, specific 'stats' reasoning for EACH leg. Do NOT copy and paste the same stats across multiple legs. For example, if Leg 1 is Goalscorer and Leg 2 is Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.
 - `outcome`: Strictly use EXACTLY ONE of: 'Won', 'Lost', 'Void', 'Pending', or 'Unknown'. NO EMOJIS! NO EXTRA TEXT!";
