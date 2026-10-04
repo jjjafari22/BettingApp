@@ -727,12 +727,33 @@ namespace BettingApp.Services
                     {
                         return text.GetString();
                     }
+                    else
+                    {
+                        return $"Error: Gemini returned a part without a 'text' property. Raw part: {textProp.ToString()}";
+                    }
                 }
                 else if (candidate.TryGetProperty("finishReason", out var finishReason))
                 {
-                    _logger.LogWarning($"[AI WARNING] Gemini generation stopped due to: {finishReason.GetString()}");
+                    string reason = finishReason.GetString() ?? "Unknown";
+                    _logger.LogWarning($"[AI WARNING] Gemini generation stopped due to: {reason}");
+                    return $"Error: Gemini generation stopped due to {reason}";
                 }
             }
+            else if (doc.RootElement.TryGetProperty("promptFeedback", out var feedback))
+            {
+                if (feedback.TryGetProperty("blockReason", out var blockReason))
+                {
+                    return $"Error: Gemini blocked the prompt due to {blockReason.GetString()}";
+                }
+            }
+            else if (doc.RootElement.TryGetProperty("error", out var errorObj))
+            {
+                if (errorObj.TryGetProperty("message", out var errMsg))
+                {
+                    return $"Error: Gemini API error - {errMsg.GetString()}";
+                }
+            }
+            
             return null;
         }
 

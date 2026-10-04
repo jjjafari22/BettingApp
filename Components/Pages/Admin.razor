@@ -2646,9 +2646,24 @@ else
                 }
                 else
                 {
-                    await InvokeAsync(() =>
+                    string errText = outcome ?? "Failed to check outcome.";
+                    await InvokeAsync(async () =>
                     {
-                        if (reviewingBetModel?.Id == currentBet.Id) errorMessage = outcome ?? "Failed to check outcome.";
+                        if (reviewingBetModel?.Id == currentBet.Id) 
+                        {
+                            reviewingBetModel.AiVisionError = errText;
+                            AiVisionError = errText;
+                        }
+                        currentBet.AiVisionError = errText;
+                        if (currentOriginal != null) currentOriginal.AiVisionError = errText;
+                        
+                        using var errContext = DbFactory.CreateDbContext();
+                        var errBet = await errContext.Bets.FindAsync(currentBet.Id);
+                        if (errBet != null)
+                        {
+                            errBet.AiVisionError = errText;
+                            await errContext.SaveChangesAsync();
+                        }
                     });
                 }
             }
