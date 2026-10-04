@@ -104,14 +104,31 @@ namespace BettingApp.Services
         norm2 = injectImplicitOdds(norm2);
 
         // 1. Extract and compare numbers
-        var numRegex = new System.Text.RegularExpressions.Regex(@"\d+(?:\.\d+)?");
+        var numRegex = new System.Text.RegularExpressions.Regex(@"([+-]?\d+(?:\.\d+)?)");
         var nums1 = numRegex.Matches(norm1).Cast<System.Text.RegularExpressions.Match>().Select(m => m.Value).ToList();
         var nums2 = numRegex.Matches(norm2).Cast<System.Text.RegularExpressions.Match>().Select(m => m.Value).ToList();
         
         if (nums1.Any() && nums2.Any())
         {
-            if (nums1.Last() != nums2.Last()) return false;
+            if (double.TryParse(nums1.Last(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double n1) && 
+                double.TryParse(nums2.Last(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double n2))
+            {
+                if (Math.Abs(n1 - n2) > 0.01) return false;
+            }
+            else
+            {
+                if (nums1.Last() != nums2.Last()) return false;
+            }
         }
+        else if (nums1.Any() != nums2.Any())
+        {
+            var signedRegex = new System.Text.RegularExpressions.Regex(@"^[+-]\d+(?:\.\d+)?$");
+            if (nums1.Any(n => signedRegex.IsMatch(n)) || nums2.Any(n => signedRegex.IsMatch(n)))
+            {
+                return false;
+            }
+        }
+
 
         var allTokens1 = norm1.Split(new[] { ' ', '-', '.', ',', ':', '/', '+' }, StringSplitOptions.RemoveEmptyEntries).ToList();
         var allTokens2 = norm2.Split(new[] { ' ', '-', '.', ',', ':', '/', '+' }, StringSplitOptions.RemoveEmptyEntries).ToList();
@@ -260,7 +277,7 @@ namespace BettingApp.Services
                                     }
                                     else if (double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
                                     {
-                                        opHc = opTarget == "1" ? val : (opTarget == "2" ? -val : val);
+                                        opHc = val;
                                     }
                                 }
                                 
