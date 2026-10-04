@@ -405,31 +405,33 @@ namespace BettingApp.Services
 - MATCH FINISHED LOGIC: A match is definitively finished ONLY if `header.status.reason.short` is 'FT', 'AET', or 'PEN', or if the match clearly reached full time and is not ongoing. FotMob's `general.finished` and `header.status.finished` flags are sometimes incorrectly true while the match is still live! You MUST ignore `finished: true` if `header.status.ongoing` is true, if `liveTime` is present, or if `reason.short` indicates a live minute (e.g. '83\\''). Do not grade bets as finished prematurely!
 - EXTRA TIME: Events in Extra Time (e.g. 111th minute) DO NOT COUNT unless the market says 'To Qualify', 'To Lift Trophy', or 'Including Extra Time'. Regular time is 90 mins + injury time. For example, if a player receives a yellow card in Extra Time, a standard 'Player Booked' bet is LOST.
 
-# 2. GOOGLE SEARCH (ANTI-HALLUCINATION)
+# 2. GOOGLE SEARCH STRATEGY & SITES
+- SITES: To ensure conclusive results, use the 'OR' operator to check multiple reputable domains simultaneously! Do NOT search FlashScore, LiveScore, or SofaScore.
+   - NFL/NBA/NHL/MLB: Append '(site:espn.com OR site:cbssports.com OR site:foxsports.com OR site:sports.yahoo.com)'
+   - Soccer/Football: Append '(site:espn.com/soccer OR site:skysports.com/football OR site:bbc.com/sport/football OR site:foxsports.com/soccer)'
+   - CS/Esports: Append 'site:hltv.org/matches'
+- PLAYER PROPS: Text snippets rarely have full box scores. You MUST force Google to find the exact player by wrapping their name in quotes (e.g., 'Eagles vs Cowboys ""Jalen Hurts"" passing yards').
+
+# 3. GOOGLE SEARCH ANTI-HALLUCINATION
 - NEVER use prediction articles, previews, or odds sites (lines.com, actionnetwork).
-- You MUST explicitly read the ACTUAL FINAL SCORE from the snippet. If vague or missing, output 'Unknown'. DO NOT invent '4-0' or fake scores.
+- You MUST explicitly read the ACTUAL FINAL SCORE and/or EXACT PLAYER STAT from the snippet. If vague or missing, output 'Unknown'. DO NOT invent '4-0' or guess player stats based on team scores.
 - EXACT DATE: You must verify the match date is within 5 days of {betPlacedAt:yyyy-MM-dd}. Reject old/historical matches and mark 'Unknown'. Do NOT grade based on unverified dates.
 - EXACT TIME: If the leg has a 'startTime', find the exact UTC match. If no 'startTime', find the FIRST match chronologically on/after the upload time.
 - TEAMS: Verify the exact Home vs Away order.
-- PLAYER PROPS: Search using quotes (e.g., 'Eagles vs Cowboys ""Jalen Hurts"" passing yards site:espn.com'). Text snippets rarely have full box scores. If the player's exact stat is NOT explicitly written in the snippet, DO NOT guess based on the team's final score. Output 'Unknown'.
-- SITES: Prioritize official sites. Do NOT search FlashScore, LiveScore, or SofaScore.
-   - NFL/NBA/NHL/MLB: Append 'site:espn.com' or 'site:cbssports.com'.
-   - Soccer/Football: Append 'site:espn.com/soccer' or 'site:skysports.com/football'.
-   - CS/Esports: Append 'site:hltv.org/matches'.
 
-# 3. PLAYER PROPS & VOIDS
+# 4. PLAYER PROPS & VOIDS
 - RULE 1: If a player plays 0 minutes (not in squad, left on bench), outcome is ALWAYS 'Void' (even for live/Power Sub).
 - RULE 2: If `isLive: false`, the player MUST START. If they are subbed on later, it is 'Void'.
 - RULE 3: If `isLive: true`, the starter rule does not apply; if they play at all, the bet stands.
 - POWER SUB: If selection contains '(Power Sub)' and the named player STARTED, stats of their substitute are ADDED to theirs. Find this in the 'Substitution' events array ('swap'). If the named player didn't start, Power Sub is ignored (evaluate via rules above).
 
-# 4. MARKETS & LINES
+# 5. MARKETS & LINES
 - ASIAN LINES (.0): Any line ending in exactly '.0', '.25', or '.75' is Asian. If it lands exactly on a '.0' line (tie), outcome is 'Void' (Refund), unless it explicitly says '3-way'.
 - SPLIT ASIAN LINES (Half-Win/Half-Loss): If a line like '-0.5, -1.0' or '2.25' results in a Half-Win or Half-Loss, mark it as 'Unknown'.
 - LIVE ASIAN HANDICAPS: If a market has a score like '(0-1)', subtract this starting score from the final score BEFORE applying the handicap.
 - '1' AND '2' TOTALS: If a market says 'Total Goals 1' with selection 'Over 1.0', the '1' might be a truncation of the Asian Line (1.0), not Team 1. If no specific team is named, treat it as TOTAL match goals.
 
-# 5. FORMATTING & SCHEDULING
+# 6. FORMATTING & SCHEDULING
 - If the match has NOT STARTED (e.g. `general.started` is false AND `header.status.started` is false), grade all legs as 'Pending' and do NOT use Google Search for stats.
 - `matchStartTimeIso`: Return the absolute EARLIEST UTC start time across all PENDING/UNFINISHED legs (e.g. '2026-07-25T19:00:00Z'). Ignore finished legs. Parse it directly if provided in JSON; only Google Search if missing.
 - `stats`: Start with EXACTLY ONE of: 'Verified via FotMob: ', 'FotMob lacked stat; Verified via Google Search: ', or 'Verified via Google Search: '. Include EXACTLY ONE source URL if you used Google. COMBO BETS: Evaluate each leg COMPLETELY INDEPENDENTLY! You MUST write a unique, specific 'stats' reasoning for EACH leg. Do NOT copy and paste the same stats across multiple legs. For example, if Leg 1 is Goalscorer and Leg 2 is Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.
