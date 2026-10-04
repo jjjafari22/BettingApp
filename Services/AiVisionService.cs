@@ -63,6 +63,9 @@ namespace BettingApp.Services
         
         [JsonPropertyName("stats")]
         public string Stats { get; set; } = "";
+        
+        [JsonPropertyName("matchStartTimeIso")]
+        public string? MatchStartTimeIso { get; set; }
     }
 
     public class AiOutcomeResultData
@@ -163,7 +166,7 @@ namespace BettingApp.Services
 
                 // 2. Build the Gemini JSON Payload
                 var systemInstruction = "You are a sports betting OCR bot. Look at this betting slip screenshot and extract the bet details. " +
-                             "The slip may contain a single bet or a combo (parlay/accumulator) with multiple bets (legs). " +
+                             "The slip may contain a single bet or a Bet Builder (multiple legs from the same match). " +
                              "Extract: " +
                              "1) bookmaker (e.g. 'Unibet', 'Bet365', 'Coolbet', 'EpicBet'). CRITICAL: If the logo is missing, you MUST guess based on UI colors: \n" +
                              "   - Coolbet: Dark theme, odds inside cyan/light-blue rounded boxes, 'PLACE BET' button is bright green, 'YOUR STAKE' input has a bright green border, potential return is yellow/orange.\n" +
@@ -433,8 +436,8 @@ namespace BettingApp.Services
 
 # 6. FORMATTING & SCHEDULING
 - If the match has NOT STARTED or is CURRENTLY IN PROGRESS (e.g. `general.started` is false, or `header.status.finished` is false), grade all legs as 'Pending'. DO NOT grade live matches as 'Unknown' or 'Void' just because final stats are missing.
-- `matchStartTimeIso`: Return the absolute EARLIEST UTC start time across all PENDING/UNFINISHED legs (e.g. '2026-07-25T19:00:00Z'). Ignore finished legs. Parse it directly if provided in JSON; only Google Search if missing.
-- `stats`: Start with EXACTLY ONE of: 'Verified via FotMob: ', 'FotMob lacked stat; Verified via Google Search: ', or 'Verified via Google Search: '. Include EXACTLY ONE source URL if you used Google. COMBO BETS: Evaluate each leg COMPLETELY INDEPENDENTLY! You MUST write a unique, specific 'stats' reasoning for EACH leg. Do NOT copy and paste the same stats across multiple legs. For example, if Leg 1 is Goalscorer and Leg 2 is Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.
+- `matchStartTimeIso`: DO NOT PUT THIS AT THE ROOT! You MUST put this inside EACH object in the `legs` array! For EVERY leg (whether finished, live, or pending), return the absolute UTC start time of that specific match (e.g. '2026-07-25T19:00:00Z'). Parse it directly from FotMob JSON if available; if not available, search Google for the match start time.
+- `stats`: Start with EXACTLY ONE of: 'Verified via FotMob: ', 'FotMob lacked stat; Verified via Google Search: ', or 'Verified via Google Search: '. Include EXACTLY ONE source URL if you used Google. BET BUILDERS: Evaluate each leg COMPLETELY INDEPENDENTLY! You MUST write a unique, specific 'stats' reasoning for EACH leg. Do NOT copy and paste the same stats across multiple legs. For example, if Leg 1 is Goalscorer and Leg 2 is Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.
 - `outcome`: Strictly use EXACTLY ONE of: 'Won', 'Lost', 'Void', 'Pending', or 'Unknown'. NO EMOJIS! NO EXTRA TEXT!";
 
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -465,7 +468,7 @@ namespace BettingApp.Services
                             // Explicit empty else block to prevent the delay from binding to it
                         }
                         
-                        // Add a small delay to avoid rate limits on combo bets
+                        // Add a small delay to avoid rate limits on slips with multiple matches
                         await Task.Delay(1000);
                     }
                 }
@@ -476,7 +479,6 @@ namespace BettingApp.Services
                 var schemaJson = @"{
                     ""type"": ""OBJECT"",
                     ""properties"": {
-                        ""matchStartTimeIso"": { ""type"": ""STRING"", ""nullable"": true },
                         ""fullAnalysis"": { ""type"": ""STRING"", ""nullable"": true },
                         ""legs"": {
                             ""type"": ""ARRAY"",
@@ -485,7 +487,8 @@ namespace BettingApp.Services
                                 ""properties"": {
                                     ""match"": { ""type"": ""STRING"", ""nullable"": true },
                                     ""stats"": { ""type"": ""STRING"", ""nullable"": true },
-                                    ""outcome"": { ""type"": ""STRING"", ""nullable"": true }
+                                    ""outcome"": { ""type"": ""STRING"", ""nullable"": true },
+                                    ""matchStartTimeIso"": { ""type"": ""STRING"", ""nullable"": true }
                                 }
                             }
                         }
@@ -572,12 +575,31 @@ namespace BettingApp.Services
                             bool hasPending = outcomes.Any(o => o == "PENDING");
                             bool hasLost = outcomes.Any(o => o == "LOST");
 
+                            string pendingStatus = "MATCH IN PROGRESS";
+                            if (hasPending && resultObj.Legs != null) 
+                            {
+                                var pendingLegs = resultObj.Legs.Where(l => l.Outcome?.ToUpperInvariant() == "PENDING").ToList();
+                                bool allFuture = true;
+                                foreach (var leg in pendingLegs)
+                                {
+                                    if (DateTime.TryParse(leg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
+                                    {
+                                        if (st <= DateTime.UtcNow) { allFuture = false; break; }
+                                    }
+                                    else
+                                    {
+                                        allFuture = false; break;
+                                    }
+                                }
+                                if (allFuture && pendingLegs.Count > 0) pendingStatus = "MATCH NOT STARTED";
+                            }
+
                             if (!isBetBuilder)
                             {
-                                // In a standard combo, a single loss kills the entire parlay immediately, regardless of pending or void legs.
+                                // In a standard bet slip, a single loss kills the entire slip immediately, regardless of pending or void legs.
                                 if (hasLost) resultObj.OverallStatus = "LOST";
                                 else if (hasUnknown) resultObj.OverallStatus = "UNKNOWN";
-                                else if (hasPending) resultObj.OverallStatus = "MATCH IN PROGRESS";
+                                else if (hasPending) resultObj.OverallStatus = pendingStatus;
                                 else if (hasVoid && outcomes.Any(o => o == "WON")) resultObj.OverallStatus = "UNKNOWN"; // Needs manual odds recalculation
                                 else if (outcomes.All(o => o == "WON")) resultObj.OverallStatus = "WON";
                                 else if (outcomes.All(o => o == "VOID")) resultObj.OverallStatus = "VOID";
@@ -587,7 +609,7 @@ namespace BettingApp.Services
                             {
                                 // In a Bet Builder, a Void leg often voids the entire slip. We must wait for all legs to finish (no pending/unknowns) before confirming a loss.
                                 if (hasUnknown) resultObj.OverallStatus = "UNKNOWN";
-                                else if (hasPending) resultObj.OverallStatus = "MATCH IN PROGRESS";
+                                else if (hasPending) resultObj.OverallStatus = pendingStatus;
                                 else if (hasVoid) resultObj.OverallStatus = "UNKNOWN"; // Bookmaker BB void rules vary, requires manual review
                                 else if (hasLost) resultObj.OverallStatus = "LOST";
                                 else if (outcomes.All(o => o == "WON")) resultObj.OverallStatus = "WON";

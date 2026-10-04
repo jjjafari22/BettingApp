@@ -400,16 +400,11 @@ else
                                                             if (displayStartTime == null && ParsedAiOutcome?.Legs != null)
                                                             {
                                                                 var outcomeLeg = ParsedAiOutcome.Legs.FirstOrDefault(l => l.Match == firstItem.Leg.Match);
-                                                                if (outcomeLeg != null && !string.IsNullOrEmpty(outcomeLeg.Stats))
+                                                                if (outcomeLeg != null && !string.IsNullOrEmpty(outcomeLeg.MatchStartTimeIso))
                                                                 {
-                                                                    var match = System.Text.RegularExpressions.Regex.Match(outcomeLeg.Stats, @"([A-Z][a-z]+ \d{1,2}, \d{4}).*?(?:at|@).*?(\d{2}:\d{2})\s*UTC");
-                                                                    if (match.Success)
+                                                                    if (DateTime.TryParse(outcomeLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime parsedUtc))
                                                                     {
-                                                                        string dateStr = $"{match.Groups[1].Value} at {match.Groups[2].Value}";
-                                                                        if (DateTime.TryParseExact(dateStr, "MMMM d, yyyy 'at' HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime parsedUtc))
-                                                                        {
-                                                                            displayStartTime = parsedUtc;
-                                                                        }
+                                                                        displayStartTime = parsedUtc;
                                                                     }
                                                                 }
                                                             }
@@ -2191,10 +2186,23 @@ else
                                     status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
                                     status == "UNKNOWN";
 
-                                if (status == "MATCH NOT STARTED" && DateTime.TryParse(parsedData.MatchStartTimeIso, out DateTime st))
+                                string? bestStartTimeIso = parsedData.Legs?
+                                    .Where(l => l.Outcome?.ToUpperInvariant() == "PENDING" && !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                                    .FirstOrDefault()?.MatchStartTimeIso;
+                                    
+                                if (string.IsNullOrEmpty(bestStartTimeIso))
+                                {
+                                    bestStartTimeIso = parsedData.Legs?.FirstOrDefault(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))?.MatchStartTimeIso;
+                                }
+
+                                if (!string.IsNullOrEmpty(bestStartTimeIso) && DateTime.TryParse(bestStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
                                 {
                                     dbBet.MatchStartTime = st;
-                                    var twoHoursAfter = st.AddHours(2);
+                                }
+
+                                if (status == "MATCH NOT STARTED" && dbBet.MatchStartTime.HasValue)
+                                {
+                                    var twoHoursAfter = dbBet.MatchStartTime.Value.AddHours(2);
                                     dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
                                 }
                                 else if (!isFinished)
@@ -3315,6 +3323,17 @@ else
                 <div class="d-flex flex-column align-items-start gap-1" title="Match hasn't started yet">
                     <span class="badge bg-warning text-dark shadow-sm">
                         <i class="bi bi-calendar-event me-1"></i> Starts @ToUserLocal(bet.MatchStartTime.Value).ToString("g")
+                    </span>
+                    <span class="badge bg-light text-dark border" style="font-size: 0.65em;">
+                        Next Check: @(bet.NextCheckTime.HasValue ? ToUserLocal(bet.NextCheckTime.Value).ToString("g") : "Pending")
+                    </span>
+                </div>
+            }
+            else if (!bet.MatchStartTime.HasValue)
+            {
+                <div class="d-flex flex-column align-items-start gap-1">
+                    <span class="badge bg-secondary shadow-sm">
+                        <i class="bi bi-calendar-x me-1"></i> Unknown Start
                     </span>
                     <span class="badge bg-light text-dark border" style="font-size: 0.65em;">
                         Next Check: @(bet.NextCheckTime.HasValue ? ToUserLocal(bet.NextCheckTime.Value).ToString("g") : "Pending")

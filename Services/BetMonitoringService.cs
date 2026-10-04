@@ -122,42 +122,48 @@ namespace BettingApp.Services
                     }
                     else
                     {
-                        var doc = JsonDocument.Parse(result);
-                        if (doc.RootElement.TryGetProperty("overallStatus", out var statusElement))
+                        BettingApp.Services.AiOutcomeResultData? parsedData = null;
+                        try 
                         {
-                            var status = statusElement.GetString()?.Trim().ToUpperInvariant() ?? "";
-                            var isFinished = status == "WON" || status == "LOST" || status == "VOID" || status == "UNKNOWN";
+                            parsedData = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
+                                result, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                            );
+                        }
+                        catch { }
+
+                        if (parsedData != null)
+                        {
+                            var status = parsedData.OverallStatus?.Trim().ToUpperInvariant() ?? "";
+                            var isFinished = status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
+                                             status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
+                                             status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
+                                             status == "UNKNOWN";
+
+                            string? bestStartTimeIso = parsedData.Legs?
+                                .Where(l => l.Outcome?.ToUpperInvariant() == "PENDING" && !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                                .FirstOrDefault()?.MatchStartTimeIso;
+                                
+                            if (string.IsNullOrEmpty(bestStartTimeIso))
+                            {
+                                bestStartTimeIso = parsedData.Legs?.FirstOrDefault(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))?.MatchStartTimeIso;
+                            }
+                            if (!string.IsNullOrEmpty(bestStartTimeIso) && DateTime.TryParse(bestStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime parsedStart))
+                            {
+                                dbBet.MatchStartTime = parsedStart;
+                            }
 
                             if (isFinished)
                             {
-                                // Match is finished, stop checking
                                 dbBet.NextCheckTime = null;
                             }
-                            else 
+                            else if (status == "MATCH NOT STARTED" && dbBet.MatchStartTime.HasValue)
                             {
-                                // Match is still running.
-                                // First check if the AI provided a precise kickoff time (e.g. OddsPapi failed earlier)
-                                if (doc.RootElement.TryGetProperty("matchStartTimeIso", out var startTimeElement) && 
-                                    !string.IsNullOrEmpty(startTimeElement.GetString()))
-                                {
-                                    if (DateTime.TryParse(startTimeElement.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var parsedStart))
-                                    {
-                                        dbBet.MatchStartTime = parsedStart;
-                                        
-                                        // If game hasn't started yet or just started, sleep until 2 hours after kickoff
-                                        var nextCheck = parsedStart.AddHours(2);
-                                        dbBet.NextCheckTime = nextCheck <= DateTime.UtcNow ? DateTime.UtcNow.AddMinutes(60) : nextCheck;
-                                    }
-                                    else
-                                    {
-                                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
-                                    }
-                                }
-                                else
-                                {
-                                    // Fallback: check again in 60 minutes
-                                    dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
-                                }
+                                var twoHoursAfter = dbBet.MatchStartTime.Value.AddHours(2);
+                                dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
+                            }
+                            else
+                            {
+                                dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
                             }
                         }
                     }
