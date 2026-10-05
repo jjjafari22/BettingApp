@@ -130,8 +130,8 @@ namespace BettingApp.Services
         }
 
 
-        var allTokens1 = norm1.Split(new[] { ' ', '-', '.', ',', ':', '/', '+' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-        var allTokens2 = norm2.Split(new[] { ' ', '-', '.', ',', ':', '/', '+' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+        var allTokens1 = norm1.Split(new[] { ' ', '-', '.', ',', ':', '/', '+', '(', ')' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+        var allTokens2 = norm2.Split(new[] { ' ', '-', '.', ',', ':', '/', '+', '(', ')' }, StringSplitOptions.RemoveEmptyEntries).ToList();
 
         // 2. Extract and compare directions
         bool hasOver1 = allTokens1.Contains("over");

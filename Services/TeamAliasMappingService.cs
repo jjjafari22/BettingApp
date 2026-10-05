@@ -112,7 +112,7 @@ namespace BettingApp.Services
 
             foreach (var alias in _teamAliases)
             {
-                result = result.Replace(alias.Key, alias.Value, StringComparison.OrdinalIgnoreCase);
+                result = System.Text.RegularExpressions.Regex.Replace(result, $@"\b{System.Text.RegularExpressions.Regex.Escape(alias.Key)}\b", alias.Value, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             }
             
             return result;

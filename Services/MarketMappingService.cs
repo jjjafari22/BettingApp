@@ -203,31 +203,31 @@ namespace BettingApp.Services
                (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase)) ||
                clean.Contains("Will/Will not Score", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals" };
+                return new List<string> { "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals", "Goals", "Goal" };
             }
             if (clean.Contains("Shots on Target", StringComparison.OrdinalIgnoreCase) || clean.Contains("Shots On Goal", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Over Under Player Shots On Goal (incl. overtime)", "Player Shots On Goal (incl. overtime)", "Player's shot on target", "Player Shots on Target", "Player Shots on Target (incl. overtime)" };
+                return new List<string> { "Over Under Player Shots On Goal (incl. overtime)", "Player Shots On Goal (incl. overtime)", "Player's shot on target", "Player Shots on Target", "Player Shots on Target (incl. overtime)", "Shots on Target", "Shots On Goal" };
             }
             if (clean.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Over Under Player Goalkeeper Saves (incl. overtime)", "Player Goalkeeper Saves (incl. overtime)", "Player Goalkeeper Saves" };
+                return new List<string> { "Over Under Player Goalkeeper Saves (incl. overtime)", "Player Goalkeeper Saves (incl. overtime)", "Player Goalkeeper Saves", "Goalkeeper Saves", "Goal Keeper Saves", "Saves" };
             }
             if (clean.Contains("Shots", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Over Under Player Shots (incl. overtime)", "Player Shots (incl. overtime)", "Player Shots" };
+                return new List<string> { "Over Under Player Shots (incl. overtime)", "Player Shots (incl. overtime)", "Player Shots", "Shots", "Shot" };
             }
             if (clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Over Under Player Fouls Committed (incl. overtime)", "Player Fouls Committed (incl. overtime)", "Player Fouls Committed" };
+                return new List<string> { "Over Under Player Fouls Committed (incl. overtime)", "Player Fouls Committed (incl. overtime)", "Player Fouls Committed", "Fouls Committed", "Fouls", "Foul" };
             }
             if (clean.Contains("Assists", StringComparison.OrdinalIgnoreCase) || clean.Contains("Assist", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Player Assists (incl. overtime)", "Player Assists", "To Provide An Assist", "Anytime Assist" };
+                return new List<string> { "Player Assists (incl. overtime)", "Player Assists", "To Provide An Assist", "Anytime Assist", "Assists", "Assist" };
             }
             if (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) || (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Card", StringComparison.OrdinalIgnoreCase)))
             {
-                return new List<string> { "Player To Be Carded (incl. overtime)", "Player To Be Carded", "Player Cards" };
+                return new List<string> { "Player To Be Carded (incl. overtime)", "Player To Be Carded", "Player Cards", "To Be Carded", "To Be Booked", "Cards", "Card" };
             }
             // -----------------------------------------------------------------------------------------
 
