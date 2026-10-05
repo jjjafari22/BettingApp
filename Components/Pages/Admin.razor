@@ -2216,6 +2216,44 @@ else
                                 
                                 currentBet.MatchStartTime = dbBet.MatchStartTime;
                                 currentBet.NextCheckTime = dbBet.NextCheckTime;
+                                
+                                // Securely store start times found by Google into the actual extraction legs
+                                bool aiVisionUpdated = false;
+                                BettingApp.Services.AiVisionExtractionResult? currentAiVision = null;
+                                if (!string.IsNullOrEmpty(dbBet.AiVisionResultJson))
+                                {
+                                    try { currentAiVision = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(dbBet.AiVisionResultJson); } catch {}
+                                }
+
+                                if (parsedData.Legs != null && currentAiVision?.Legs != null)
+                                {
+                                    foreach (var parsedLeg in parsedData.Legs)
+                                    {
+                                        if (!string.IsNullOrEmpty(parsedLeg.Match) && !string.IsNullOrEmpty(parsedLeg.MatchStartTimeIso))
+                                        {
+                                            if (DateTime.TryParse(parsedLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime parsedUtc))
+                                            {
+                                                foreach (var vLeg in currentAiVision.Legs.Where(l => !string.IsNullOrEmpty(l.Match) && string.Equals(l.Match, parsedLeg.Match, StringComparison.OrdinalIgnoreCase)))
+                                                {
+                                                    if (vLeg.StartTime == null || vLeg.StartTime == DateTime.MinValue)
+                                                    {
+                                                        vLeg.StartTime = parsedUtc;
+                                                        aiVisionUpdated = true;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (aiVisionUpdated)
+                                {
+                                    var updatedJson = System.Text.Json.JsonSerializer.Serialize(currentAiVision);
+                                    dbBet.AiVisionResultJson = updatedJson;
+                                    currentBet.AiVisionResultJson = updatedJson;
+                                    if (currentOriginal != null) currentOriginal.AiVisionResultJson = updatedJson;
+                                    if (reviewingBetModel?.Id == currentBet.Id) AiVisionResult = currentAiVision;
+                                }
                             }
 
                             await context.SaveChangesAsync();
