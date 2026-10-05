@@ -103,6 +103,10 @@ namespace BettingApp.Services
         norm1 = injectImplicitOdds(norm1);
         norm2 = injectImplicitOdds(norm2);
 
+        // Handle "Power Sub" or "Super Sub" promotions as whole phrases before tokenization so we don't break players named "Power" (e.g. Max Power)
+        norm1 = norm1.Replace("(power sub)", "").Replace("power sub", "").Replace("(super sub)", "").Replace("super sub", "");
+        norm2 = norm2.Replace("(power sub)", "").Replace("power sub", "").Replace("(super sub)", "").Replace("super sub", "");
+
         // 1. Extract and compare numbers
         var numRegex = new System.Text.RegularExpressions.Regex(@"([+-]?\d+(?:\.\d+)?)");
         var nums1 = numRegex.Matches(norm1).Cast<System.Text.RegularExpressions.Match>().Select(m => m.Value).ToList();
@@ -129,7 +133,6 @@ namespace BettingApp.Services
             }
         }
 
-
         var allTokens1 = norm1.Split(new[] { ' ', '-', '.', ',', ':', '/', '+', '(', ')' }, StringSplitOptions.RemoveEmptyEntries).ToList();
         var allTokens2 = norm2.Split(new[] { ' ', '-', '.', ',', ':', '/', '+', '(', ')' }, StringSplitOptions.RemoveEmptyEntries).ToList();
 
@@ -155,20 +158,44 @@ namespace BettingApp.Services
         }
 
         // 3. Compare name tokens
-        var ignoreWords = new HashSet<string> { "over", "under", "yes", "no", "player", "shots", "target", "score", "anytime", "goalscorer", "fouls", "assists", "assist", "cards", "booked", "carded", "booking", "points", "provide", "make", "have" };
+        var ignoreWords = new HashSet<string> { "over", "under", "yes", "no", "player", "shots", "target", "score", "anytime", "goalscorer", "fouls", "assists", "assist", "cards", "booked", "carded", "booking", "points", "provide", "make", "have", "to", "be", "shown", "a", "card", "on" };
         
         var tokens1 = allTokens1
-            .Where(t => t.Length >= 3 && !ignoreWords.Contains(t) && !double.TryParse(t, out _))
+            .Where(t => t.Length >= 1 && !ignoreWords.Contains(t) && !double.TryParse(t, out _))
             .ToList();
             
         var tokens2 = allTokens2
-            .Where(t => t.Length >= 3 && !ignoreWords.Contains(t) && !double.TryParse(t, out _))
+            .Where(t => t.Length >= 1 && !ignoreWords.Contains(t) && !double.TryParse(t, out _))
             .ToList();
             
         if (!tokens1.Any() || !tokens2.Any()) return false;
         
-        var intersectCount = tokens1.Intersect(tokens2).Count();
-        return intersectCount == tokens1.Count || intersectCount == tokens2.Count;
+        int matchCount = 0;
+        foreach (var t1 in tokens1)
+        {
+            if (tokens2.Contains(t1))
+            {
+                matchCount++;
+            }
+            else if (t1.Length == 1) // Initial
+            {
+                if (tokens2.Any(o => o.StartsWith(t1))) matchCount++;
+            }
+        }
+        if (matchCount == tokens1.Count) return true;
+        
+        int reverseMatch = 0;
+        foreach(var t2 in tokens2)
+        {
+            if (tokens1.Contains(t2)) reverseMatch++;
+            else if (t2.Length == 1)
+            {
+                if (tokens1.Any(o => o.StartsWith(t2))) reverseMatch++;
+            }
+        }
+        if (reverseMatch == tokens2.Count) return true;
+        
+        return false;
     }
 
     public static bool IsOutcomeMatch(string oName, string displayOName, BettingApp.Services.AiVisionLeg? ActiveLookupLeg, BettingApp.Models.OddsPapiSearchResult? PapiSearchResult, string? opMarketName = null)
@@ -543,9 +570,12 @@ namespace BettingApp.Services
             }
         }
         
+        string fallbackSel = ActiveLookupLeg?.Selection ?? "";
+        fallbackSel = System.Text.RegularExpressions.Regex.Replace(fallbackSel, @"(\d+)\+", m => $"over {double.Parse(m.Groups[1].Value) - 0.5}");
+        
         if (!isMatch && !string.IsNullOrEmpty(displayOName) && ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
         {
-            isMatch = IsFuzzyPlayerMatch(ActiveLookupLeg.Selection, displayOName);
+            isMatch = IsFuzzyPlayerMatch(fallbackSel, displayOName);
         }
         
         return isMatch;
