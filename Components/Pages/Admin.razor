@@ -280,7 +280,7 @@ else
                         <div class="col-lg-6 d-flex flex-column desktop-right-col p-0" style="max-height: 100%; background-color: #f8f9fa;">
                             <div class="desktop-right-scroll p-3 flex-grow-1 overflow-auto bg-white">
 
-                            @if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult)) {
+                            @if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) && (ParsedAiOutcome == null || (!ParsedAiOutcome.OverallStatus.ToLower().Contains("not started") && !ParsedAiOutcome.OverallStatus.ToLower().Contains("pending")))) {
                                 <div class="alert alert-info alert-dismissible fade show shadow-sm mb-3" role="alert">
                                     @if (ParsedAiOutcome != null) {
                                         var statusLower = ParsedAiOutcome.OverallStatus.ToLower();
@@ -3212,8 +3212,8 @@ else
         if (outcomeResult == "Admin Override")
         {
             builder.OpenElement(0, "span");
-            builder.AddAttribute(1, "class", "badge bg-success text-light shadow-sm");
-            builder.AddContent(2, "✅ Admin Override");
+            builder.AddAttribute(1, "class", "badge bg-primary text-light shadow-sm");
+            builder.AddContent(2, "🛡️ Admin Override");
             builder.CloseElement();
             return;
         }
@@ -3247,11 +3247,6 @@ else
                     builder.OpenElement(0, "span");
                     builder.AddAttribute(1, "class", "badge bg-warning text-dark shadow-sm");
                     builder.AddContent(2, "❓ Unknown");
-                    builder.CloseElement();
-                } else if (lowerStatus.Contains("match in progress") || lowerStatus.Contains("pending") || lowerStatus.Contains("match not started")) {
-                    builder.OpenElement(0, "span");
-                    builder.AddAttribute(1, "class", "badge bg-info text-dark shadow-sm");
-                    builder.AddContent(2, "⏳ Pending");
                     builder.CloseElement();
                 }
                 return;
