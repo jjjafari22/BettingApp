@@ -223,7 +223,7 @@ namespace BettingApp.Services
             }
             if (clean.Contains("Assists", StringComparison.OrdinalIgnoreCase) || clean.Contains("Assist", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Player Assists (incl. overtime)", "Player Assists" };
+                return new List<string> { "Player Assists (incl. overtime)", "Player Assists", "To Provide An Assist", "Anytime Assist" };
             }
             if (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) || (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Card", StringComparison.OrdinalIgnoreCase)))
             {

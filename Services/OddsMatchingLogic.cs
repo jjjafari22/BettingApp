@@ -155,7 +155,7 @@ namespace BettingApp.Services
         }
 
         // 3. Compare name tokens
-        var ignoreWords = new HashSet<string> { "over", "under", "yes", "no", "player", "shots", "target", "score", "anytime", "goalscorer", "fouls", "assists", "cards", "booked", "carded", "booking", "points" };
+        var ignoreWords = new HashSet<string> { "over", "under", "yes", "no", "player", "shots", "target", "score", "anytime", "goalscorer", "fouls", "assists", "assist", "cards", "booked", "carded", "booking", "points", "provide", "make", "have" };
         
         var tokens1 = allTokens1
             .Where(t => t.Length >= 3 && !ignoreWords.Contains(t) && !double.TryParse(t, out _))
@@ -171,7 +171,7 @@ namespace BettingApp.Services
         return intersectCount == tokens1.Count || intersectCount == tokens2.Count;
     }
 
-    public static bool IsOutcomeMatch(string oName, string displayOName, BettingApp.Services.AiVisionLeg? ActiveLookupLeg, BettingApp.Models.OddsPapiSearchResult? PapiSearchResult)
+    public static bool IsOutcomeMatch(string oName, string displayOName, BettingApp.Services.AiVisionLeg? ActiveLookupLeg, BettingApp.Models.OddsPapiSearchResult? PapiSearchResult, string? opMarketName = null)
     {
         bool isMatch = false;
         if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
@@ -352,6 +352,16 @@ namespace BettingApp.Services
                         isMatch = true;
                     }
                 }
+                else if ((normOName == "yes" || normOName == "over05") && !string.IsNullOrEmpty(opMarketName))
+                {
+                    string normOpMarket = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(opMarketName).ToLowerInvariant().Replace(" ", "").Replace("toscore", "").Replace("anytimegoalscorer", "");
+                    string playerNameFromAiSel = normSel.Replace("yes", "").Replace("no", "").Replace("over05", "").Replace("under05", "").Replace("toprovideanassist", "").Replace("powersub", "").Replace("-", "");
+                    
+                    if (!string.IsNullOrEmpty(normOpMarket) && !string.IsNullOrEmpty(playerNameFromAiSel) && normOpMarket.Length > 3 && playerNameFromAiSel.Length > 3 && (normOpMarket.Contains(playerNameFromAiSel) || playerNameFromAiSel.Contains(normOpMarket) || IsFuzzyPlayerMatch(opMarketName, ActiveLookupLeg?.Selection ?? "")))
+                    {
+                        isMatch = true;
+                    }
+                }
                 else
                 {
                     var hcRegex = new System.Text.RegularExpressions.Regex(@"([+-]\d+(?:\.\d+)?)$");
@@ -424,6 +434,10 @@ namespace BettingApp.Services
                             }
                         }
                     }
+                    else if (IsFuzzyPlayerMatch(displayOName ?? "", ActiveLookupLeg?.Selection ?? ""))
+                    {
+                        isMatch = true;
+                    }
                     }
                 }
                 
@@ -467,7 +481,8 @@ namespace BettingApp.Services
                         {
                             bool isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
                                                   normSel.Contains(normOutcomePart) || 
-                                                  (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under")));
+                                                  (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under"))) ||
+                                                  (normOutcomePart == "over0.5" && normSel.Contains("yes") && !normSel.Contains("no") && !normSel.Contains("under"));
                             
                             if (!isOutcomeMatch && normOutcomePart.EndsWith("+"))
                             {
@@ -544,7 +559,7 @@ namespace BettingApp.Services
         
         var simplify = (string s) => 
         {
-            var clean = s.ToLowerInvariant()
+            var clean = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(s).ToLowerInvariant()
                          .Replace("players", "player")
                          .Replace("player's", "player")
                          .Replace("shots", "shot")
@@ -568,8 +583,27 @@ namespace BettingApp.Services
         {
             foreach (var target in simplifiedTargets)
             {
-                bestMatch = markets.FirstOrDefault(m => simplify(m.MarketName).Contains(target) || target.Contains(simplify(m.MarketName)));
-                if (bestMatch != null) break;
+                var potentialMatches = markets.Where(m => simplify(m.MarketName).Contains(target) || target.Contains(simplify(m.MarketName))).ToList();
+                if (potentialMatches.Count == 1)
+                {
+                    bestMatch = potentialMatches.First();
+                    break;
+                }
+                else if (potentialMatches.Count > 1 && !string.IsNullOrEmpty(selectionName))
+                {
+                    string normSel = simplify(selectionName).Replace("yes", "").Replace("no", "").Replace("over05", "").Replace("under05", "");
+                    if (normSel.Length > 3) 
+                    {
+                        bestMatch = potentialMatches.FirstOrDefault(m => IsFuzzyPlayerMatch(selectionName, m.MarketName) || simplify(m.MarketName).Contains(normSel) || normSel.Contains(simplify(m.MarketName)));
+                    }
+                    if (bestMatch == null) bestMatch = potentialMatches.First();
+                    break;
+                }
+                else if (potentialMatches.Count > 1)
+                {
+                    bestMatch = potentialMatches.First();
+                    break;
+                }
             }
         }
         
