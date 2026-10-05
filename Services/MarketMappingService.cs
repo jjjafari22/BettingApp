@@ -57,7 +57,7 @@ namespace BettingApp.Services
             { "Player Assists", "Player Assists (incl. overtime)|Player Assists" }
         };
 
-        public List<string> NormalizeMarketName(string rawMarketName, string? matchName = null)
+        public List<string> NormalizeMarketName(string rawMarketName, string? matchName = null, string? selectionName = null)
         {
             if (string.IsNullOrWhiteSpace(rawMarketName)) return new List<string>();
 
@@ -98,9 +98,9 @@ namespace BettingApp.Services
                             return new List<string> { "Corners - Handicap" + halfSuffix };
                         }
 
-                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team1, selectionName)))
                             return new List<string> { "Corners - Over Under Team 1" + halfSuffix };
-                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team2, selectionName)))
                             return new List<string> { "Corners - Over Under Team 2" + halfSuffix };
                         
                         if (clean.Contains("Most Corners", StringComparison.OrdinalIgnoreCase) || clean.Contains("Corners 1X2", StringComparison.OrdinalIgnoreCase) || clean.Contains("More Corners", StringComparison.OrdinalIgnoreCase))
@@ -120,9 +120,9 @@ namespace BettingApp.Services
                     // Goals Team 1/2
                     if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goals", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team1, selectionName)))
                             return new List<string> { "Over Under Team 1" + halfSuffix };
-                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team2, selectionName)))
                             return new List<string> { "Over Under Team 2" + halfSuffix };
                             
                         // Otherwise, generic total goals for the match
@@ -136,27 +136,27 @@ namespace BettingApp.Services
                     // Cards Team 1/2
                     if (clean.Contains("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Bookings", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team1, selectionName)))
                             return new List<string> { $"Bookings - Over/Under [{team1}]" + halfSuffix, "Bookings - Over Under Team 1" + halfSuffix, $"Bookings - Over Under [{team1}]" + halfSuffix };
-                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team2, selectionName)))
                             return new List<string> { $"Bookings - Over/Under [{team2}]" + halfSuffix, "Bookings - Over Under Team 2" + halfSuffix, $"Bookings - Over Under [{team2}]" + halfSuffix };
                     }
 
                     // To Win At Least One Half
                     if (clean.Contains("To Win At Least One Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("To Win Either Half", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team1, selectionName)))
                             return new List<string> { "Team 1 To Win Either Halves" };
-                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team2, selectionName)))
                             return new List<string> { "Team 2 To Win Either Halves" };
                     }
 
                     // To Win Both Halves
                     if (clean.Contains("To Win Both Halves", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team1, selectionName)))
                             return new List<string> { "Team 1 to win both halves" };
-                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase))
+                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team2, selectionName)))
                             return new List<string> { "Team 2 to win both halves" };
                     }
                 }
@@ -183,7 +183,7 @@ namespace BettingApp.Services
                 return new List<string> { "Corners - Handicap" + halfSuffix };
             }
 
-            if (clean.StartsWith("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Cards Over/Under", StringComparison.OrdinalIgnoreCase))
+            if (clean.StartsWith("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Cards Over/Under", StringComparison.OrdinalIgnoreCase) || clean.Contains("Number of Cards", StringComparison.OrdinalIgnoreCase))
             {
                 if (halfSuffix == " First Half") return new List<string> { "Bookings - Over Under First Half" };
                 return new List<string> { "Bookings - Over Under Full Time" };

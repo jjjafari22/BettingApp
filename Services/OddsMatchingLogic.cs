@@ -555,7 +555,7 @@ namespace BettingApp.Services
     {
         if (markets == null || !markets.Any() || string.IsNullOrEmpty(marketCategory)) return null;
         
-        var normalizedTargets = marketMapper.NormalizeMarketName(marketCategory, matchName);
+        var normalizedTargets = marketMapper.NormalizeMarketName(marketCategory, matchName, selectionName);
         
         var simplify = (string s) => 
         {
