@@ -10,6 +10,7 @@ public class OddsApiService
     private readonly IMemoryCache _cache;
     private readonly TeamAliasMappingService _teamAliasMappingService;
     private readonly ILogger<OddsApiService> _logger;
+    private static readonly SemaphoreSlim _apiRateLimiter = new SemaphoreSlim(1, 1);
 
     public OddsApiService(HttpClient httpClient, IConfiguration config, IMemoryCache cache, TeamAliasMappingService teamAliasMappingService, ILogger<OddsApiService> logger)
     {
@@ -27,6 +28,7 @@ public class OddsApiService
     {
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return (null, "API Key is missing or team name is empty.");
 
+        await _apiRateLimiter.WaitAsync();
         try
         {
             string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Manual Lookup]";
@@ -515,6 +517,10 @@ public class OddsApiService
         {
             _logger.LogError($"Exception in SearchOddsComparisonAsync: {ex.Message}");
             return (null, $"Exception: {ex.Message}");
+        }
+        finally
+        {
+            _apiRateLimiter.Release();
         }
     }
     private bool HasSpecialModifier(string input)

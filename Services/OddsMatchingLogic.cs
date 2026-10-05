@@ -105,9 +105,10 @@ namespace BettingApp.Services
         norm1 = injectImplicitOdds(norm1);
         norm2 = injectImplicitOdds(norm2);
 
-        // Handle "Power Sub" or "Super Sub" promotions as whole phrases before tokenization so we don't break players named "Power" (e.g. Max Power)
-        norm1 = norm1.Replace("(power sub)", "").Replace("power sub", "").Replace("(super sub)", "").Replace("super sub", "");
-        norm2 = norm2.Replace("(power sub)", "").Replace("power sub", "").Replace("(super sub)", "").Replace("super sub", "");
+        // Handle "power sub" or "super sub" promotions as whole phrases using word boundaries
+        // This ensures "Max Power" doesn't lose his name, while "Power Sub" gets ignored.
+        norm1 = System.Text.RegularExpressions.Regex.Replace(norm1, @"\b(power sub|super sub)\b", "");
+        norm2 = System.Text.RegularExpressions.Regex.Replace(norm2, @"\b(power sub|super sub)\b", "");
 
         // 1. Extract and compare numbers
         var numRegex = new System.Text.RegularExpressions.Regex(@"([+-]?\d+(?:\.\d+)?)");
@@ -364,8 +365,11 @@ namespace BettingApp.Services
                 string rawSel = ActiveLookupLeg?.Selection ?? "";
                 rawSel = System.Text.RegularExpressions.Regex.Replace(rawSel, @"(\d+)\+", m => $"over {double.Parse(m.Groups[1].Value) - 0.5}");
                 rawSel = System.Text.RegularExpressions.Regex.Replace(rawSel, @"\btie\b", "draw", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                rawSel = System.Text.RegularExpressions.Regex.Replace(rawSel, @"\b(power sub|super sub)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-                string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayOName ?? "").ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
+                string displayONameSafe = System.Text.RegularExpressions.Regex.Replace(displayOName ?? "", @"\b(power sub|super sub)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayONameSafe).ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
                 string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(rawSel).ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
                 
                 if (normOName == normSel)
