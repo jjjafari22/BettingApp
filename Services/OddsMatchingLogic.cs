@@ -93,6 +93,8 @@ namespace BettingApp.Services
         string norm2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(str2).ToLowerInvariant();
 
         Func<string, string> injectImplicitOdds = (string norm) => {
+            norm = System.Text.RegularExpressions.Regex.Replace(norm, @"(\d+)\+", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
+
             if (norm.Contains("to provide") || norm.Contains("to score") || norm.Contains("to get") || norm.Contains("anytime") || norm.Contains("carded") || norm.Contains("booked"))
             {
                 if (!norm.Contains("not ")) return norm + " over 0.5";
