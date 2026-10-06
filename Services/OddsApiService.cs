@@ -10,7 +10,7 @@ public class OddsApiService
     private readonly IMemoryCache _cache;
     private readonly TeamAliasMappingService _teamAliasMappingService;
     private readonly ILogger<OddsApiService> _logger;
-    private static readonly SemaphoreSlim _apiRateLimiter = new SemaphoreSlim(1, 1);
+    private static readonly SemaphoreSlim _apiRateLimiter = new SemaphoreSlim(10, 10);
 
     public OddsApiService(HttpClient httpClient, IConfiguration config, IMemoryCache cache, TeamAliasMappingService teamAliasMappingService, ILogger<OddsApiService> logger)
     {
@@ -27,7 +27,7 @@ public class OddsApiService
     public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null)
     {
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return (null, "API Key is missing or team name is empty.");
-
+        
         await _apiRateLimiter.WaitAsync();
         try
         {
@@ -53,19 +53,13 @@ public class OddsApiService
             else
             {
                 string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
-                string toDate = DateTime.UtcNow.AddDays(8).ToString("yyyy-MM-dd");
+                string toDate = DateTime.UtcNow.AddDays(4).ToString("yyyy-MM-dd");
                 var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId=10&from={fromDate}&to={toDate}";
                 
-                if (!_cache.TryGetValue($"OddspapiFixtures_{fromDate}", out string? fJson))
-                {
-                    _logger.LogInformation($" {betLabel} OddsPapi: Fetching fresh fixtures from API (Cache Miss)");
-    
-                    using var fResp = await _httpClient.GetAsync(fixturesUrl);
-                    if (!fResp.IsSuccessStatusCode) return (null, $"Fixtures API returned status {fResp.StatusCode}");
-                    
-                    fJson = await fResp.Content.ReadAsStringAsync();
-                    _cache.Set($"OddspapiFixtures_{fromDate}", fJson, TimeSpan.FromHours(6));
-                }
+                string cacheKey = $"OddspapiFixtures_{fromDate}";
+                string? fJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKey, TimeSpan.FromHours(6), () => _httpClient.GetAsync(fixturesUrl), _logger);
+                
+                if (fJson == null) return (null, "Fixtures API failed or returned 429");
                 
                 using var doc = JsonDocument.Parse(fJson ?? "[]");
                 
@@ -224,19 +218,9 @@ public class OddsApiService
             // 1. Get markets metadata to map IDs to Names
             var marketsUrl = $"https://api.oddspapi.io/v4/markets?apiKey={_apiKey}&language=en";
             
-            if (!_cache.TryGetValue("OddspapiMarketsJson", out string? mJson))
-            {
-                using var mResp = await _httpClient.GetAsync(marketsUrl);
-                if (mResp.IsSuccessStatusCode)
-                {
-                    mJson = await mResp.Content.ReadAsStringAsync();
-                    _cache.Set("OddspapiMarketsJson", mJson, TimeSpan.FromHours(24));
-                }
-                else
-                {
-                    mJson = "[]";
-                }
-            }
+            string? mJson = await HttpCacheHelper.GetOrCreateAsync(_cache, "OddspapiMarketsJson", TimeSpan.FromHours(24), () => _httpClient.GetAsync(marketsUrl), _logger);
+            
+            if (mJson == null) return (null, "Markets API failed or returned 429");
             
             var rawMarketIdToBaseName = new Dictionary<string, string>();
             var baseMarketDict = new Dictionary<string, BettingApp.Models.OddsPapiMarket>();
@@ -319,29 +303,10 @@ public class OddsApiService
             // 3. Fetch Odds for Unibet SE, Betsson, Bet365, Pinnacle
             var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365,pinnacle%2B30";
             
-            if (!_cache.TryGetValue($"OddspapiOdds_{fixtureId}", out string? oJson))
-            {
-                var oResp = await _httpClient.GetAsync(oddsUrl);
-                
-                // Retry once if rate limited
-                if (!oResp.IsSuccessStatusCode)
-                {
-                    oResp.Dispose();
-                    await Task.Delay(1000); // Wait 1s
-                    oResp = await _httpClient.GetAsync(oddsUrl);
-                    if (!oResp.IsSuccessStatusCode)
-                    {
-                        oResp.Dispose();
-                        return (null, $"Odds API returned status {oResp.StatusCode}");
-                    }
-                }
-    
-                oJson = await oResp.Content.ReadAsStringAsync();
-                oResp.Dispose();
-                
-                // Cache the odds JSON for 15 seconds to make multi-leg Bet Builder lookups instantaneous
-                _cache.Set($"OddspapiOdds_{fixtureId}", oJson, TimeSpan.FromSeconds(15));
-            }
+            string cacheKeyOdds = $"OddspapiOdds_{fixtureId}";
+            string? oJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKeyOdds, TimeSpan.FromSeconds(15), () => _httpClient.GetAsync(oddsUrl), _logger);
+            
+            if (oJson == null) return (null, "Odds API failed or returned 429");
             using var oddsDoc = JsonDocument.Parse(oJson ?? "{}");
 
             var result = new BettingApp.Models.OddsPapiSearchResult

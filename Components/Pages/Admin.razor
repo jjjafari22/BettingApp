@@ -1358,24 +1358,36 @@ else
         StateHasChanged();
         await Task.Delay(16);
 
+        var tasks = new List<Task>();
+        var syncLock = new object();
+
         for (int i = 0; i < AiVisionResult.Legs.Count; i++)
         {
-            if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) break;
-            
             var leg = AiVisionResult.Legs[i];
             LegOddsCache[i] = new LegOddsResult { IsLoading = true };
-            StateHasChanged();
-
-            await ProcessLegOddsAsync(leg, i);
             
-            if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) 
+            int index = i;
+            tasks.Add(Task.Run(async () => 
             {
-                LegOddsCache.Clear();
-                break;
-            }
+                if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) return;
 
-            CheckedLegsCount++;
-            StateHasChanged();
+                await ProcessLegOddsAsync(leg, index);
+
+                lock (syncLock)
+                {
+                    CheckedLegsCount++;
+                }
+                
+                await InvokeAsync(StateHasChanged);
+            }));
+        }
+        
+        StateHasChanged();
+        await Task.WhenAll(tasks);
+        
+        if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) 
+        {
+            LegOddsCache.Clear();
         }
 
         if (reviewingBetModel != null && reviewingBetModel.Id == runningBetId)
