@@ -2188,11 +2188,15 @@ else
 
                                 string? bestStartTimeIso = parsedData.Legs?
                                     .Where(l => l.Outcome?.ToUpperInvariant() == "PENDING" && !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                                    .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
                                     .FirstOrDefault()?.MatchStartTimeIso;
                                     
                                 if (string.IsNullOrEmpty(bestStartTimeIso))
                                 {
-                                    bestStartTimeIso = parsedData.Legs?.FirstOrDefault(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))?.MatchStartTimeIso;
+                                    bestStartTimeIso = parsedData.Legs?
+                                        .Where(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                                        .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
+                                        .FirstOrDefault()?.MatchStartTimeIso;
                                 }
 
                                 if (!string.IsNullOrEmpty(bestStartTimeIso) && DateTime.TryParse(bestStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
