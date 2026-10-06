@@ -594,26 +594,90 @@ namespace BettingApp.Services
                                 if (allFuture && pendingLegs.Count > 0) pendingStatus = "MATCH NOT STARTED";
                             }
 
-                            if (!isBetBuilder)
+                            // Group legs to evaluate sub-betbuilders and single legs independently.
+                            // We chunk them contiguously. If adjacent legs have the same match, they form a BetBuilder group.
+                            // We also use originalBet's odds to detect if a new distinct bet starts for the same match.
+                            var groupsByMatch = new List<List<AiOutcomeLegResult>>();
+                            List<AiOutcomeLegResult>? currentGroup = null;
+                            string? currentMatch = null;
+
+                            for (int i = 0; i < resultObj.Legs!.Count; i++)
                             {
-                                // In a standard bet slip, a single loss kills the entire slip immediately, regardless of pending or void legs.
-                                if (hasLost) resultObj.OverallStatus = "LOST";
-                                else if (hasUnknown) resultObj.OverallStatus = "UNKNOWN";
-                                else if (hasPending) resultObj.OverallStatus = pendingStatus;
-                                else if (hasVoid && outcomes.Any(o => o == "WON")) resultObj.OverallStatus = "UNKNOWN"; // Needs manual odds recalculation
-                                else if (outcomes.All(o => o == "WON")) resultObj.OverallStatus = "WON";
-                                else if (outcomes.All(o => o == "VOID")) resultObj.OverallStatus = "VOID";
-                                else resultObj.OverallStatus = "UNKNOWN";
+                                var leg = resultObj.Legs[i];
+                                var origLeg = (originalBet?.Legs != null && i < originalBet.Legs.Count) ? originalBet.Legs[i] : null;
+                                string match = leg.Match ?? "";
+
+                                bool startNewGroup = false;
+                                if (currentGroup == null || match != currentMatch)
+                                {
+                                    startNewGroup = true;
+                                }
+                                else if (origLeg != null && !string.IsNullOrWhiteSpace(origLeg.Odds))
+                                {
+                                    // Even if the match is the same, explicit odds mean a new bet on the slip
+                                    startNewGroup = true;
+                                }
+
+                                if (startNewGroup)
+                                {
+                                    currentGroup = new List<AiOutcomeLegResult>();
+                                    groupsByMatch.Add(currentGroup);
+                                    currentMatch = match;
+                                }
+                                
+                                currentGroup!.Add(leg);
+                            }
+                            
+                            bool anyGroupDefinitivelyLost = false;
+
+                            foreach (var group in groupsByMatch)
+                            {
+                                bool gHasPending = group.Any(l => l.Outcome?.ToUpperInvariant() == "PENDING");
+                                bool gHasUnknown = group.Any(l => l.Outcome?.ToUpperInvariant() == "UNKNOWN");
+                                bool gHasVoid = group.Any(l => l.Outcome?.ToUpperInvariant() == "VOID");
+                                bool gHasLost = group.Any(l => l.Outcome?.ToUpperInvariant() == "LOST");
+
+                                // A group is definitively lost if it is fully finished, has no voids, and has at least one loss.
+                                if (!gHasPending && !gHasUnknown && !gHasVoid && gHasLost)
+                                {
+                                    anyGroupDefinitivelyLost = true;
+                                    break;
+                                }
+                            }
+
+                            // Determine Overall Status
+                            if (anyGroupDefinitivelyLost)
+                            {
+                                // If ANY group is definitively lost, the entire betslip is immediately LOST
+                                resultObj.OverallStatus = "LOST";
+                            }
+                            else if (hasUnknown)
+                            {
+                                resultObj.OverallStatus = "UNKNOWN";
+                            }
+                            else if (hasPending)
+                            {
+                                resultObj.OverallStatus = pendingStatus;
+                            }
+                            else if (hasVoid)
+                            {
+                                if (isBetBuilder)
+                                {
+                                    resultObj.OverallStatus = "UNKNOWN"; // Bookmaker BB void rules vary, requires manual review
+                                }
+                                else
+                                {
+                                    if (outcomes.All(o => o == "VOID")) resultObj.OverallStatus = "VOID";
+                                    else resultObj.OverallStatus = "UNKNOWN"; // Needs manual odds recalculation for won/void mix
+                                }
+                            }
+                            else if (outcomes.All(o => o == "WON"))
+                            {
+                                resultObj.OverallStatus = "WON";
                             }
                             else
                             {
-                                // In a Bet Builder, a Void leg often voids the entire slip. We must wait for all legs to finish (no pending/unknowns) before confirming a loss.
-                                if (hasUnknown) resultObj.OverallStatus = "UNKNOWN";
-                                else if (hasPending) resultObj.OverallStatus = pendingStatus;
-                                else if (hasVoid) resultObj.OverallStatus = "UNKNOWN"; // Bookmaker BB void rules vary, requires manual review
-                                else if (hasLost) resultObj.OverallStatus = "LOST";
-                                else if (outcomes.All(o => o == "WON")) resultObj.OverallStatus = "WON";
-                                else resultObj.OverallStatus = "UNKNOWN";
+                                resultObj.OverallStatus = "UNKNOWN";
                             }
                             
                             finalJson = JsonSerializer.Serialize(resultObj, new JsonSerializerOptions { WriteIndented = false });
