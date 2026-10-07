@@ -44,7 +44,10 @@ namespace BettingApp.Services
                     return cachedValue;
                 }
 
-                logger.LogInformation($"OddsPapi: Fetching fresh data for {cacheKey} (Cache Miss)");
+                string durationStr = absoluteExpirationRelativeToNow.TotalHours >= 1 
+                    ? $"{absoluteExpirationRelativeToNow.TotalHours}h" 
+                    : $"{absoluteExpirationRelativeToNow.TotalSeconds}sec";
+                logger.LogInformation($"OddsPapi: Fetching fresh data for {cacheKey} (Cache Miss - {durationStr})");
 
                 await _globalThrottle.WaitAsync();
                 try { await Task.Delay(600); } finally { _globalThrottle.Release(); }
