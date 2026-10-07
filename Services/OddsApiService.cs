@@ -254,7 +254,7 @@ public class OddsApiService
                                 handicapSuffix = $" ({handicapSuffix.Substring(2, handicapSuffix.Length - 3)}-0)";
                             }
                         }
-                        
+                        bool isPlayerGoalsMerge = false;
                         if (baseName.Equals("Player Shots On Goal (incl. overtime)", StringComparison.OrdinalIgnoreCase))
                         {
                             baseName = "Over Under Player Shots On Goal (incl. overtime)";
@@ -266,6 +266,12 @@ public class OddsApiService
                         else if (baseName.Equals("Player Shots (incl. overtime)", StringComparison.OrdinalIgnoreCase))
                         {
                             baseName = "Over Under Player Shots (incl. overtime)";
+                        }
+                        else if (baseName.Equals("Player Goals (incl. overtime)", StringComparison.OrdinalIgnoreCase) || 
+                                 baseName.Equals("Anytime Goal Scorer", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Goals (incl. overtime)";
+                            isPlayerGoalsMerge = true;
                         }
 
                         rawMarketIdToBaseName[mId] = baseName;
@@ -289,6 +295,15 @@ public class OddsApiService
                                 {
                                     double overVal = num - 0.5;
                                     oName = $"Over {overVal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}";
+                                }
+
+                                if (isPlayerGoalsMerge && string.IsNullOrEmpty(handicapSuffix))
+                                {
+                                    if (oName == "1" || oName.Equals("Yes", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        oName = "Over";
+                                        handicapSuffix = " 0.5";
+                                    }
                                 }
 
                                 string combined = oName + handicapSuffix;

@@ -48,7 +48,7 @@ namespace BettingApp.Services
             { "Early Win", "2Up - Full Time Result" },
             { "Early Win (Anytime 2 Goal Lead)", "2Up - Full Time Result" },
             { "Early Payout", "2Up - Full Time Result" },
-            { "Anytime Goalscorer", "Anytime Goal Scorer|Player Goals (incl. overtime)|Player Goals" },
+            { "Anytime Goalscorer", "Over Under Player Goals (incl. overtime)|Anytime Goal Scorer|Player Goals (incl. overtime)|Player Goals" },
             { "To Be Booked", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
             { "Player to be Booked", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
             { "Player To Receive A Card", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
@@ -203,7 +203,7 @@ namespace BettingApp.Services
                (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase)) ||
                clean.Contains("Will/Will not Score", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals", "Goals", "Goal" };
+                return new List<string> { "Over Under Player Goals (incl. overtime)", "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals", "Goals", "Goal" };
             }
             if (clean.Contains("Shots on Target", StringComparison.OrdinalIgnoreCase) || clean.Contains("Shots On Goal", StringComparison.OrdinalIgnoreCase))
             {
