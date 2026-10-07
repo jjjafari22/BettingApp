@@ -462,11 +462,13 @@ else
                                                                                 <div class="bg-warning bg-opacity-25 text-dark p-1 lh-sm border-bottom border-warning fw-semibold" style="font-size: 0.7em;"><i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>@legResult.WarningMessage</div>
                                                                             }
                                                                             <div class="d-flex justify-content-between text-center lh-1" style="background-color: #f8f9fa;">
-                                                                                @foreach (var bookie in new[] { ("pinnacle+30", "Pinnacle"), ("unibet.se", "Unibet"), ("bet365", "Bet365"), ("betsson", "Betsson") }) {
+                                                                                @foreach (var bookie in new[] { ("pinnacle+30", "Pinnacle"), ("unibet.se", "Unibet"), ("coolbet", "Coolbet"), ("bet365", "Bet365"), ("betsson", "Betsson") }) {
                                                                                     <div class="flex-fill border-end last-child-no-border p-1">
                                                                                         <div class="text-secondary fw-semibold mb-1" style="font-size: 0.55em; letter-spacing: 0.2px; text-transform: uppercase;">
                                                                                             @if (legResult.SearchResult?.BookmakerUrls != null && legResult.SearchResult.BookmakerUrls.TryGetValue(bookie.Item1, out var bUrl)) {
-                                                                                                <a href="@bUrl" target="_blank" class="text-decoration-none text-primary">@bookie.Item2</a>
+                                                                                                <a href="@FormatBookieUrl(bUrl, bookie.Item1)" target="@(openInNativeApp && !isDesktop && isAndroid ? "_self" : "_blank")" class="text-decoration-none text-primary">@bookie.Item2</a>
+                                                                                            } else if (!string.IsNullOrEmpty(GetFallbackBookieUrl(bookie.Item1, legResult.SearchResult?.MatchName ?? ""))) {
+                                                                                                <a href="@FormatBookieUrl(GetFallbackBookieUrl(bookie.Item1, legResult.SearchResult?.MatchName ?? ""), bookie.Item1)" target="@(openInNativeApp && !isDesktop && isAndroid ? "_self" : "_blank")" class="text-decoration-none text-primary">@bookie.Item2</a>
                                                                                             } else {
                                                                                                 @bookie.Item2
                                                                                             }
@@ -514,7 +516,7 @@ else
                                                             var bbOdds = new System.Collections.Generic.Dictionary<string, (string Label, double? MultipliedOdds)>();
                                                             if (group.Count > 1)
                                                             {
-                                                                var bookies = new[] { ("pinnacle+30", "Pin"), ("unibet.se", "Uni"), ("bet365", "B365"), ("betsson", "Bson") };
+                                                                var bookies = new[] { ("pinnacle+30", "Pin"), ("unibet.se", "Uni"), ("coolbet", "Cool"), ("bet365", "B365"), ("betsson", "Bson") };
                                                                 foreach (var b in bookies)
                                                                 {
                                                                     double combined = 1.0;
@@ -653,16 +655,24 @@ else
                                                                 }
                                                             </th>
                                                             <th>
+                                                                @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("coolbet", out var coolbetUrl)) {
+                                                                    <a href="@FormatBookieUrl(coolbetUrl, "coolbet")" target="@linkTarget" class="text-decoration-none" title="Open match in Coolbet">Coolbet</a>
+                                                                } else if (!string.IsNullOrEmpty(GetFallbackBookieUrl("coolbet", PapiSearchResult?.MatchName ?? ""))) {
+                                                                    <a href="@FormatBookieUrl(GetFallbackBookieUrl("coolbet", PapiSearchResult?.MatchName ?? ""), "coolbet")" target="@linkTarget" class="text-decoration-none" title="Open match in Coolbet">Coolbet</a>
+                                                                } else {
+                                                                    <span>Coolbet</span>
+                                                                }
+                                                            </th>
+                                                            <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("bet365", out var bet365Url)) {
                                                                     <a href="@FormatBookieUrl(bet365Url, "bet365")" target="@linkTarget" class="text-decoration-none" title="Open match in Bet365">Bet365</a>
                                                                 } else {
                                                                     <span>Bet365</span>
                                                                 }
                                                             </th>
-
                                                             <th>
                                                                 @if (PapiSearchResult != null && PapiSearchResult.BookmakerUrls.TryGetValue("betsson", out var betssonUrl)) {
-                                                                    <a href="@betssonUrl" target="_blank" class="text-decoration-none" title="Open match in Betsson">Betsson</a>
+                                                                    <a href="@FormatBookieUrl(betssonUrl, "betsson")" target="@linkTarget" class="text-decoration-none" title="Open match in Betsson">Betsson</a>
                                                                 } else {
                                                                     <span>Betsson</span>
                                                                 }
@@ -726,6 +736,22 @@ else
                                                                         }
                                                                     </td>
                                                                     <td class="text-dark">
+                                                                        @if (bookies.TryGetValue("coolbet", out var cooldict) && cooldict.TryGetValue(oName, out var coold)) {
+                                                                            <div class="fw-bold">
+                                                                                @if (coold.IsSuspended) {
+                                                                                    <span title="Suspended" class="text-muted"><i class="bi bi-lock-fill text-warning"></i> @coold.Price.ToString("0.00")</span>
+                                                                                } else {
+                                                                                    @coold.Price.ToString("0.00")
+                                                                                }
+                                                                            </div>
+                                                                            @if (coold.ChangedAt.HasValue) {
+                                                                                <div class="badge bg-light text-secondary border mt-1 fw-bold" style="font-size: 0.55rem; padding: 0.15rem 0.25rem; letter-spacing: -0.3px;" title="Last updated">@ToUserLocal(coold.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
+                                                                            }
+                                                                        } else {
+                                                                            <div class="fw-bold">-</div>
+                                                                        }
+                                                                    </td>
+                                                                    <td class="text-dark">
                                                                         @if (bookies.TryGetValue("bet365", out var b) && b.TryGetValue(oName, out var bd)) {
                                                                             <div class="fw-bold">
                                                                                 @if (bd.IsSuspended) {
@@ -741,7 +767,6 @@ else
                                                                             <div class="fw-bold">-</div>
                                                                         }
                                                                     </td>
-
                                                                     <td class="text-dark">
                                                                         @if (bookies.TryGetValue("betsson", out var c) && c.TryGetValue(oName, out var cd)) {
                                                                             <div class="fw-bold">
@@ -1521,7 +1546,7 @@ else
 
                 if (!string.IsNullOrEmpty(bestOutcome))
                 {
-                    var targets = new[] { "pinnacle+30", "unibet.se", "bet365", "betsson" };
+                    var targets = new[] { "pinnacle+30", "unibet.se", "coolbet", "bet365", "betsson" };
                     foreach (var tb in targets)
                     {
                         if (bookiesDict.TryGetValue(tb, out var bData) && bData.TryGetValue(bestOutcome, out var pd))
@@ -1674,6 +1699,23 @@ else
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
 
+    private string GetFallbackBookieUrl(string bookieKey, string matchName)
+    {
+        if (bookieKey == "coolbet" || bookieKey == "Coolbet")
+        {
+            if (!string.IsNullOrEmpty(matchName))
+            {
+                var tokens = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.RemoveEmptyEntries);
+                if (tokens.Length > 0)
+                {
+                    return $"https://www.coolbet.com/en/sports/search?q={Uri.EscapeDataString(tokens[0].Trim())}";
+                }
+            }
+            return "https://www.coolbet.com/en/sports";
+        }
+        return "";
+    }
+
     private string FormatBookieUrl(string url, string bookieKey = "")
     {
         if (openInNativeApp && isAndroid && !string.IsNullOrEmpty(url))
@@ -1686,6 +1728,7 @@ else
                 "pinnacle" => pinnaclePwaPackageName,
                 "betsson" => betssonPwaPackageName,
                 "bet365" => bet365PwaPackageName,
+                "coolbet" => coolbetPwaPackageName,
                 _ => ""
             };
 
@@ -1985,6 +2028,7 @@ else
     private string pinnaclePwaPackageName = "";
     private string betssonPwaPackageName = "";
     private string bet365PwaPackageName = "";
+    private string coolbetPwaPackageName = "";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -2006,6 +2050,9 @@ else
 
                 var pkgBet365 = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "bet365PwaPackageName");
                 if (!string.IsNullOrEmpty(pkgBet365)) bet365PwaPackageName = pkgBet365;
+
+                var pkgCoolbet = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "coolbetPwaPackageName");
+                if (!string.IsNullOrEmpty(pkgCoolbet)) coolbetPwaPackageName = pkgCoolbet;
 
                 
                 var ua = await JSRuntime.InvokeAsync<string>("eval", "navigator.userAgent");

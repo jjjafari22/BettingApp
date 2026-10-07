@@ -146,6 +146,13 @@ else
                                         <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("betssonPwaPackageName", pwaPackageBetsson)'>Save</button>
                                     </div>
                                 </div>
+                                <div class="col-md-6 mt-3 mt-md-0">
+                                    <label class="form-label fw-bold">Coolbet Android PWA Package</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" @bind="pwaPackageCoolbet" placeholder="e.g. org.chromium.webapk..." />
+                                        <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("coolbetPwaPackageName", pwaPackageCoolbet)'>Save</button>
+                                    </div>
+                                </div>
 
                             </div>
                             <div class="form-text mt-3">
@@ -176,6 +183,7 @@ else
     private string pwaPackagePinnacle = "";
     private string pwaPackageBet365 = "";
     private string pwaPackageBetsson = "";
+    private string pwaPackageCoolbet = "";
 
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
@@ -244,6 +252,8 @@ else
                 var pkgBet365 = await JS.InvokeAsync<string>("localStorage.getItem", "bet365PwaPackageName");
                 if (!string.IsNullOrEmpty(pkgBet365)) pwaPackageBet365 = pkgBet365;
 
+                var pkgCoolbet = await JS.InvokeAsync<string>("localStorage.getItem", "coolbetPwaPackageName");
+                if (!string.IsNullOrEmpty(pkgCoolbet)) pwaPackageCoolbet = pkgCoolbet;
 
                 if (!string.IsNullOrEmpty(value) || !string.IsNullOrEmpty(pkg) || !string.IsNullOrEmpty(pkgPin))
                 {
