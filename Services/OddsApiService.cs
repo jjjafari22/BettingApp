@@ -24,7 +24,7 @@ public class OddsApiService
 
 
 
-    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null)
+    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null, bool isLiveRequest = false)
     {
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return (null, "API Key is missing or team name is empty.");
         
@@ -304,7 +304,8 @@ public class OddsApiService
             var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365,pinnacle%2B30";
             
             string cacheKeyOdds = $"OddspapiOdds_{fixtureId}";
-            string? oJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKeyOdds, TimeSpan.FromSeconds(15), () => _httpClient.GetAsync(oddsUrl), _logger);
+            TimeSpan cacheDuration = isLiveRequest ? TimeSpan.Zero : TimeSpan.FromSeconds(75);
+            string? oJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKeyOdds, cacheDuration, () => _httpClient.GetAsync(oddsUrl), _logger);
             
             if (oJson == null) return (null, "Odds API failed or returned 429");
             using var oddsDoc = JsonDocument.Parse(oJson ?? "{}");

@@ -13,14 +13,14 @@ namespace BettingApp.Services
     public static class HttpCacheHelper
     {
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
+        private static readonly SemaphoreSlim _globalThrottle = new SemaphoreSlim(1, 1);
+        private static DateTime _lastRequestStart = DateTime.MinValue;
 
         /// <summary>
         /// Attempts to get the value from cache. If not found, acquires a lock specific to the cache key,
         /// checks the cache again, and if still not found, executes the fetchFactory.
-        /// Handles 429 rate limit retries automatically.
+        /// Handles 429 rate limit retries automatically with exponential backoff.
         /// </summary>
-        private static readonly SemaphoreSlim _globalThrottle = new SemaphoreSlim(1, 1);
-
         public static async Task<string?> GetOrCreateAsync(
             IMemoryCache cache,
             string cacheKey,
@@ -28,7 +28,7 @@ namespace BettingApp.Services
             Func<Task<HttpResponseMessage>> fetchFactory,
             ILogger logger)
         {
-            if (cache.TryGetValue(cacheKey, out string? cachedValue))
+            if (absoluteExpirationRelativeToNow > TimeSpan.Zero && cache.TryGetValue(cacheKey, out string? cachedValue))
             {
                 return cachedValue;
             }
@@ -39,7 +39,7 @@ namespace BettingApp.Services
             try
             {
                 // Double-check cache inside lock
-                if (cache.TryGetValue(cacheKey, out cachedValue))
+                if (absoluteExpirationRelativeToNow > TimeSpan.Zero && cache.TryGetValue(cacheKey, out cachedValue))
                 {
                     return cachedValue;
                 }
@@ -49,46 +49,62 @@ namespace BettingApp.Services
                     : $"{absoluteExpirationRelativeToNow.TotalSeconds}sec";
                 logger.LogInformation($"OddsPapi: Fetching fresh data for {cacheKey} (Cache Miss - {durationStr})");
 
-                await _globalThrottle.WaitAsync();
-                try { await Task.Delay(600); } finally { _globalThrottle.Release(); }
-
-                using var response = await fetchFactory();
+                int maxRetries = 3;
                 
-                if (!response.IsSuccessStatusCode)
+                for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
-                    if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                    await _globalThrottle.WaitAsync();
+                    HttpResponseMessage response;
+                    try 
                     {
-                        logger.LogWarning($"OddsPapi: 429 Too Many Requests for {cacheKey}. Retrying in 1.5s...");
-                        await Task.Delay(1500);
-                        
-                        await _globalThrottle.WaitAsync();
-                        try { await Task.Delay(600); } finally { _globalThrottle.Release(); }
-
-                        using var retryResponse = await fetchFactory();
-                        if (retryResponse.IsSuccessStatusCode)
+                        var elapsed = DateTime.UtcNow - _lastRequestStart;
+                        if (elapsed.TotalMilliseconds < 1050)
                         {
-                            cachedValue = await retryResponse.Content.ReadAsStringAsync();
-                            cache.Set(cacheKey, cachedValue, absoluteExpirationRelativeToNow);
+                            await Task.Delay(1050 - (int)elapsed.TotalMilliseconds);
+                        }
+                        
+                        _lastRequestStart = DateTime.UtcNow;
+                        response = await fetchFactory();
+                    }
+                    finally
+                    {
+                        _globalThrottle.Release();
+                    }
+
+                    using (response)
+                    {
+                        if (response.IsSuccessStatusCode)
+                        {
+                            cachedValue = await response.Content.ReadAsStringAsync();
+                            if (absoluteExpirationRelativeToNow > TimeSpan.Zero)
+                            {
+                                cache.Set(cacheKey, cachedValue, absoluteExpirationRelativeToNow);
+                            }
                             return cachedValue;
                         }
-                        logger.LogError($"OddsPapi: Retry failed for {cacheKey} with status {retryResponse.StatusCode}");
-                        return null;
-                    }
-                    else
-                    {
-                        logger.LogError($"OddsPapi: HTTP request failed for {cacheKey} with status {response.StatusCode}");
-                        return null;
+                        else if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                        {
+                            if (attempt == maxRetries)
+                            {
+                                logger.LogError($"OddsPapi: 429 Too Many Requests for {cacheKey}. Max retries reached.");
+                                return null;
+                            }
+                            
+                            logger.LogWarning($"OddsPapi: 429 Too Many Requests for {cacheKey}. Retrying... (Attempt {attempt} of {maxRetries - 1})");
+                            await Task.Delay(500); // Small wait before re-queueing
+                        }
+                        else
+                        {
+                            logger.LogError($"OddsPapi: HTTP request failed for {cacheKey} with status {response.StatusCode}");
+                            return null;
+                        }
                     }
                 }
-
-                cachedValue = await response.Content.ReadAsStringAsync();
-                cache.Set(cacheKey, cachedValue, absoluteExpirationRelativeToNow);
-                return cachedValue;
+                return null;
             }
             finally
             {
                 myLock.Release();
-                // We could remove the lock from the dictionary, but it's small and prevents race conditions on removal.
             }
         }
     }
