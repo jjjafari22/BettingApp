@@ -533,10 +533,6 @@ namespace BettingApp.Services
                         
                         bool isValidNameMatch = matchLast && matchFirst;
                         
-                        if (!isValidNameMatch && (ActiveLookupLeg?.Market?.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) == true || ActiveLookupLeg?.Market?.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) == true))
-                        {
-                            isValidNameMatch = true;
-                        }
                         
                         if (!isValidNameMatch && (matchLast || matchFirst))
                         {
@@ -585,9 +581,7 @@ namespace BettingApp.Services
                         {
                             string pName = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(simpleParenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
                             
-                            bool isNameCheckBypassed = ActiveLookupLeg?.Market?.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) == true || ActiveLookupLeg?.Market?.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) == true;
-                            
-                            if (isNameCheckBypassed || (!double.TryParse(pName, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _) && normSel.Contains(pName)))
+                            if (!double.TryParse(pName, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _) && normSel.Contains(pName))
                             {
                                 string outcomePart = (displayOName ?? "").Substring(0, simpleParenMatch.Index).Trim();
                                 string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
