@@ -136,6 +136,12 @@ namespace BettingApp.Services
                     // Cards Team 1/2
                     if (clean.Contains("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Bookings", StringComparison.OrdinalIgnoreCase))
                     {
+                        if (clean.Contains("Most Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards 1X2", StringComparison.OrdinalIgnoreCase) || clean.Contains("More Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Most Bookings", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Bookings - 1X2" + halfSuffix };
+                            return new List<string> { "Bookings - 1X2" };
+                        }
+
                         if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team1, selectionName)))
                             return new List<string> { $"Bookings - Over/Under [{team1}]" + halfSuffix, "Bookings - Over Under Team 1" + halfSuffix, $"Bookings - Over Under [{team1}]" + halfSuffix };
                         if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team2, selectionName)))
