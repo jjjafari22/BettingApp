@@ -1760,51 +1760,68 @@ else
         var user = authState.User;
         currentAdminName = user.Identity?.Name;
 
-        using var context = DbFactory.CreateDbContext();
-        var currentUserName = user.Identity?.Name;
-        var dbUser = currentUserName != null ? await context.Users.FirstOrDefaultAsync(u => u.UserName == currentUserName) : null;
-        if (dbUser == null || !dbUser.IsAdmin)
+        try
         {
-            Nav.NavigateTo("/");
-            return;
-        }
-        await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
-        discordChannels = await DiscordService.GetGuildTextChannelsAsync();
-        if (ReviewBetId.HasValue)
-        {
-            var targetBet = pendingBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
-            if (targetBet == null) targetBet = approvedBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
-
-            if (targetBet != null) StartReview(targetBet);
-            else 
+            using var context = DbFactory.CreateDbContext();
+            var currentUserName = user.Identity?.Name;
+            var dbUser = currentUserName != null ? await context.Users.FirstOrDefaultAsync(u => u.UserName == currentUserName) : null;
+            if (dbUser == null || !dbUser.IsAdmin)
             {
-                var exists = await context.Bets.AnyAsync(b => b.Id == ReviewBetId.Value);
-                if (exists) errorMessage = $"Bet #{ReviewBetId.Value} is already reviewed.";
-                else errorMessage = $"Bet #{ReviewBetId.Value} not found.";
+                Nav.NavigateTo("/");
+                return;
+            }
+            await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
+            discordChannels = await DiscordService.GetGuildTextChannelsAsync();
+            if (ReviewBetId.HasValue)
+            {
+                var targetBet = pendingBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
+                if (targetBet == null) targetBet = approvedBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
+
+                if (targetBet != null) StartReview(targetBet);
+                else 
+                {
+                    var exists = await context.Bets.AnyAsync(b => b.Id == ReviewBetId.Value);
+                    if (exists) errorMessage = $"Bet #{ReviewBetId.Value} is already reviewed.";
+                    else errorMessage = $"Bet #{ReviewBetId.Value} not found.";
+                }
             }
         }
-        isInitializing = false;
+        catch (Exception ex)
+        {
+            errorMessage = "A database connection error occurred during initialization. Please refresh the page.";
+            Console.WriteLine($"[Admin.razor] OnInitializedAsync DB Error: {ex.Message}");
+        }
+        finally
+        {
+            isInitializing = false;
+        }
     }
     
     private async Task LoadPendingBets()
     {
-        using var context = DbFactory.CreateDbContext();
-        var twoMinsAgo = DateTime.UtcNow.AddMinutes(-2);
-        var allPendingBets = await context.Bets.Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
-        totalPendingBets = allPendingBets.Count;
-        
-
-
-        pendingBets = allPendingBets
-            .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
-            .ThenBy(b => b.MatchStartTime)
-            .ThenByDescending(b => b.CreatedAt)
-            .Skip((pendingPage - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            var twoMinsAgo = DateTime.UtcNow.AddMinutes(-2);
+            var allPendingBets = await context.Bets.Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
+            totalPendingBets = allPendingBets.Count;
             
-        hasMorePendingBets = totalPendingBets > (pendingPage * pageSize);
-        await PopulateUserLookup(pendingBets.Select(b => b.UserId));
+            pendingBets = allPendingBets
+                .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
+                .ThenBy(b => b.MatchStartTime)
+                .ThenByDescending(b => b.CreatedAt)
+                .Skip((pendingPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+                
+            hasMorePendingBets = totalPendingBets > (pendingPage * pageSize);
+            await PopulateUserLookup(pendingBets.Select(b => b.UserId));
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to load pending bets due to database error.";
+            Console.WriteLine($"[Admin.razor] LoadPendingBets Error: {ex.Message}");
+        }
     }
 
     private bool IsMissingAnyStartTime(Bet bet)
@@ -1863,55 +1880,63 @@ else
 
     private async Task LoadApprovedBets()
     {
-        using var context = DbFactory.CreateDbContext();
-        var query = context.Bets.Where(b => b.Status == "Approved");
-
-        if (!string.IsNullOrWhiteSpace(approvedSearchTerm))
+        try
         {
-            var searchStr = approvedSearchTerm.Trim().ToLower();
-            if (int.TryParse(searchStr, out int searchId))
+            using var context = DbFactory.CreateDbContext();
+            var query = context.Bets.Where(b => b.Status == "Approved");
+
+            if (!string.IsNullOrWhiteSpace(approvedSearchTerm))
             {
-                query = query.Where(b => b.Id == searchId);
+                var searchStr = approvedSearchTerm.Trim().ToLower();
+                if (int.TryParse(searchStr, out int searchId))
+                {
+                    query = query.Where(b => b.Id == searchId);
+                }
+                else
+                {
+                    var matchingUserIds = await context.Users
+                        .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(searchStr)) 
+                                 || (u.FirstName != null && u.FirstName.ToLower().Contains(searchStr))
+                                 || (u.LastName != null && u.LastName.ToLower().Contains(searchStr)))
+                        .Select(u => u.Id)
+                        .ToListAsync();
+                    query = query.Where(b => matchingUserIds.Contains(b.UserId));
+                }
+            }
+
+            totalApprovedBets = await query.CountAsync();
+            
+            if (approvedSortColumn == "NextCheckTime")
+            {
+                if (approvedSortDesc)
+                {
+                    query = query.OrderByDescending(b => b.NextCheckTime.HasValue).ThenByDescending(b => b.NextCheckTime);
+                }
+                else
+                {
+                    query = query.OrderBy(b => b.NextCheckTime.HasValue).ThenBy(b => b.NextCheckTime);
+                }
             }
             else
             {
-                var matchingUserIds = await context.Users
-                    .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(searchStr)) 
-                             || (u.FirstName != null && u.FirstName.ToLower().Contains(searchStr))
-                             || (u.LastName != null && u.LastName.ToLower().Contains(searchStr)))
-                    .Select(u => u.Id)
-                    .ToListAsync();
-                query = query.Where(b => matchingUserIds.Contains(b.UserId));
+                if (approvedSortDesc)
+                    query = query.OrderByDescending(b => b.UpdatedAt);
+                else
+                    query = query.OrderBy(b => b.UpdatedAt);
             }
-        }
 
-        totalApprovedBets = await query.CountAsync();
-        
-        if (approvedSortColumn == "NextCheckTime")
-        {
-            if (approvedSortDesc)
-            {
-                query = query.OrderByDescending(b => b.NextCheckTime.HasValue).ThenByDescending(b => b.NextCheckTime);
-            }
-            else
-            {
-                query = query.OrderBy(b => b.NextCheckTime.HasValue).ThenBy(b => b.NextCheckTime);
-            }
+            approvedBets = await query
+                .Skip((approvedPage - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            hasMoreApprovedBets = totalApprovedBets > (approvedPage * pageSize);
+            await PopulateUserLookup(approvedBets.Select(b => b.UserId));
         }
-        else
+        catch (Exception ex)
         {
-            if (approvedSortDesc)
-                query = query.OrderByDescending(b => b.UpdatedAt);
-            else
-                query = query.OrderBy(b => b.UpdatedAt);
+            errorMessage = "Failed to load approved bets due to database error.";
+            Console.WriteLine($"[Admin.razor] LoadApprovedBets Error: {ex.Message}");
         }
-
-        approvedBets = await query
-            .Skip((approvedPage - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-        hasMoreApprovedBets = totalApprovedBets > (approvedPage * pageSize);
-        await PopulateUserLookup(approvedBets.Select(b => b.UserId));
     }
     
     private async Task NextPendingPage() { pendingPage++; await LoadPendingBets(); }
@@ -1947,80 +1972,88 @@ else
 
     private async Task LoadCompletedBets()
     {
-        using var context = DbFactory.CreateDbContext();
-        
-        var query = context.Bets.AsQueryable();
-
-        if (showOnlyMismatch)
+        try
         {
-            // Evaluate complex text matching locally to avoid massive 20-second PostgreSQL LIKE query table scans
-            var allCompleted = await context.Bets
-                .Where(b => b.AiOutcomeResult != null && b.AiOutcomeResult != "" && b.AiOutcomeResult != "Admin Override" && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void"))
-                .Select(b => new { b.Id, b.Status, b.AiOutcomeResult })
-                .ToListAsync();
+            using var context = DbFactory.CreateDbContext();
+            
+            var query = context.Bets.AsQueryable();
 
-            var mismatchedIds = allCompleted.Where(b => 
+            if (showOnlyMismatch)
             {
-                string aiStatus = "";
-                try {
-                    var doc = System.Text.Json.JsonDocument.Parse(b.AiOutcomeResult!);
-                    if (doc.RootElement.TryGetProperty("overallStatus", out var prop))
-                    {
-                        aiStatus = prop.GetString()?.Trim().ToUpperInvariant() ?? "";
-                    }
-                } catch {}
+                // Evaluate complex text matching locally to avoid massive 20-second PostgreSQL LIKE query table scans
+                var allCompleted = await context.Bets
+                    .Where(b => b.AiOutcomeResult != null && b.AiOutcomeResult != "" && b.AiOutcomeResult != "Admin Override" && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void"))
+                    .Select(b => new { b.Id, b.Status, b.AiOutcomeResult })
+                    .ToListAsync();
 
-                if (string.IsNullOrEmpty(aiStatus)) return false;
-                
-                if (aiStatus.Contains("WON")) aiStatus = "WON";
-                else if (aiStatus.Contains("LOST")) aiStatus = "LOST";
-                else if (aiStatus.Contains("VOID")) aiStatus = "VOID";
-                // UNKNOWN remains UNKNOWN
+                var mismatchedIds = allCompleted.Where(b => 
+                {
+                    string aiStatus = "";
+                    try {
+                        var doc = System.Text.Json.JsonDocument.Parse(b.AiOutcomeResult!);
+                        if (doc.RootElement.TryGetProperty("overallStatus", out var prop))
+                        {
+                            aiStatus = prop.GetString()?.Trim().ToUpperInvariant() ?? "";
+                        }
+                    } catch {}
 
-                return b.Status.ToUpperInvariant() != aiStatus;
-            }).Select(b => b.Id).ToList();
+                    if (string.IsNullOrEmpty(aiStatus)) return false;
+                    
+                    if (aiStatus.Contains("WON")) aiStatus = "WON";
+                    else if (aiStatus.Contains("LOST")) aiStatus = "LOST";
+                    else if (aiStatus.Contains("VOID")) aiStatus = "VOID";
+                    // UNKNOWN remains UNKNOWN
 
-            query = query.Where(b => mismatchedIds.Contains(b.Id));
-        }
-        else if (showOnlyAdminOverride)
-        {
-            query = query.Where(b => b.AiOutcomeResult == "Admin Override");
-        }
-        else
-        {
-            // Base filter: only show bets that are in the completed statuses we currently have checked.
-            query = query.Where(b => completedStatusFilters.Contains(b.Status));
-        }
+                    return b.Status.ToUpperInvariant() != aiStatus;
+                }).Select(b => b.Id).ToList();
 
-        if (!string.IsNullOrWhiteSpace(completedSearchTerm))
-        {
-            var searchStr = completedSearchTerm.Trim().ToLower();
-            if (int.TryParse(searchStr, out int searchId))
+                query = query.Where(b => mismatchedIds.Contains(b.Id));
+            }
+            else if (showOnlyAdminOverride)
             {
-                query = query.Where(b => b.Id == searchId);
+                query = query.Where(b => b.AiOutcomeResult == "Admin Override");
             }
             else
             {
-                var matchingUserIds = await context.Users
-                    .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(searchStr)) 
-                             || (u.FirstName != null && u.FirstName.ToLower().Contains(searchStr))
-                             || (u.LastName != null && u.LastName.ToLower().Contains(searchStr)))
-                    .Select(u => u.Id)
-                    .ToListAsync();
-                query = query.Where(b => matchingUserIds.Contains(b.UserId));
+                // Base filter: only show bets that are in the completed statuses we currently have checked.
+                query = query.Where(b => completedStatusFilters.Contains(b.Status));
             }
-        }
-        
-        // Use Take(pageSize + 1) to determine if there is a next page, completely bypassing the massive CountAsync() scan!
-        var fetchedBets = await query
-            .OrderByDescending(b => b.UpdatedAt)
-            .Skip((completedPage - 1) * pageSize)
-            .Take(pageSize + 1)
-            .ToListAsync();
+
+            if (!string.IsNullOrWhiteSpace(completedSearchTerm))
+            {
+                var searchStr = completedSearchTerm.Trim().ToLower();
+                if (int.TryParse(searchStr, out int searchId))
+                {
+                    query = query.Where(b => b.Id == searchId);
+                }
+                else
+                {
+                    var matchingUserIds = await context.Users
+                        .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(searchStr)) 
+                                 || (u.FirstName != null && u.FirstName.ToLower().Contains(searchStr))
+                                 || (u.LastName != null && u.LastName.ToLower().Contains(searchStr)))
+                        .Select(u => u.Id)
+                        .ToListAsync();
+                    query = query.Where(b => matchingUserIds.Contains(b.UserId));
+                }
+            }
             
-        hasMoreCompletedBets = fetchedBets.Count > pageSize;
-        completedBets = fetchedBets.Take(pageSize).ToList();
-        await PopulateUserLookup(completedBets.Select(b => b.UserId));
+            // Use Take(pageSize + 1) to determine if there is a next page, completely bypassing the massive CountAsync() scan!
+            var fetchedBets = await query
+                .OrderByDescending(b => b.UpdatedAt)
+                .Skip((completedPage - 1) * pageSize)
+                .Take(pageSize + 1)
+                .ToListAsync();
+                
+            hasMoreCompletedBets = fetchedBets.Count > pageSize;
+            completedBets = fetchedBets.Take(pageSize).ToList();
+            await PopulateUserLookup(completedBets.Select(b => b.UserId));
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to load completed bets due to database error.";
+            Console.WriteLine($"[Admin.razor] LoadCompletedBets Error: {ex.Message}");
+        }
     }
 
     private async Task NextPage() { completedPage++; await LoadCompletedBets(); }
@@ -3187,6 +3220,11 @@ else
             successMessage = $"Bet #{bet.Id} processed. Queue empty.";
         }
         StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to process bet due to a database error. Please try again.";
+            Console.WriteLine($"[Admin.razor] ProcessBet Error: {ex.Message}");
         }
         finally
         {
