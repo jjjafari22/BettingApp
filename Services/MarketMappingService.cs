@@ -54,7 +54,8 @@ namespace BettingApp.Services
             { "Player To Receive A Card", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
             { "Player Cards", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
             { "Will/Will not get Booked", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
-            { "Player Assists", "Player Assists (incl. overtime)|Player Assists" }
+            { "Player Assists", "Over Under Player Assists (incl. overtime)|Player Assists (incl. overtime)|Player Assists" },
+            { "Player Tackles", "Over Under Player Tackles (incl. overtime)|Player Tackles (incl. overtime)|Player Tackles" }
         };
 
         public List<string> NormalizeMarketName(string rawMarketName, string? matchName = null, string? selectionName = null)
@@ -229,7 +230,11 @@ namespace BettingApp.Services
             }
             if (clean.Contains("Assists", StringComparison.OrdinalIgnoreCase) || clean.Contains("Assist", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Player Assists (incl. overtime)", "Player Assists", "To Provide An Assist", "Anytime Assist", "Assists", "Assist" };
+                return new List<string> { "Over Under Player Assists (incl. overtime)", "Player Assists (incl. overtime)", "Player Assists", "To Provide An Assist", "Anytime Assist", "Assists", "Assist" };
+            }
+            if (clean.Contains("Tackles", StringComparison.OrdinalIgnoreCase) || clean.Contains("Tackle", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Over Under Player Tackles (incl. overtime)", "Player Tackles (incl. overtime)", "Player Tackles", "Tackles", "Tackle" };
             }
             if (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) || (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Card", StringComparison.OrdinalIgnoreCase)))
             {

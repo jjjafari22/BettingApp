@@ -255,6 +255,8 @@ public class OddsApiService
                             }
                         }
                         bool isPlayerGoalsMerge = false;
+                        bool isPlayerAssistsMerge = false;
+                        bool isPlayerTacklesMerge = false;
                         if (baseName.Equals("Player Shots On Goal (incl. overtime)", StringComparison.OrdinalIgnoreCase))
                         {
                             baseName = "Over Under Player Shots On Goal (incl. overtime)";
@@ -266,6 +268,16 @@ public class OddsApiService
                         else if (baseName.Equals("Player Shots (incl. overtime)", StringComparison.OrdinalIgnoreCase))
                         {
                             baseName = "Over Under Player Shots (incl. overtime)";
+                        }
+                        else if (baseName.Equals("Player Assists (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Assists (incl. overtime)";
+                            isPlayerAssistsMerge = true;
+                        }
+                        else if (baseName.Equals("Player Tackles (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Tackles (incl. overtime)";
+                            isPlayerTacklesMerge = true;
                         }
                         else if (baseName.Equals("Player Goals (incl. overtime)", StringComparison.OrdinalIgnoreCase) || 
                                  baseName.Equals("Anytime Goal Scorer", StringComparison.OrdinalIgnoreCase))
@@ -297,7 +309,7 @@ public class OddsApiService
                                     oName = $"Over {overVal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}";
                                 }
 
-                                if (isPlayerGoalsMerge && string.IsNullOrEmpty(handicapSuffix))
+                                if ((isPlayerGoalsMerge || isPlayerAssistsMerge || isPlayerTacklesMerge) && string.IsNullOrEmpty(handicapSuffix))
                                 {
                                     if (oName == "1" || oName.Equals("Yes", StringComparison.OrdinalIgnoreCase))
                                     {
