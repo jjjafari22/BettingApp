@@ -173,27 +173,46 @@ namespace BettingApp.Services
             
         if (!tokens1.Any() || !tokens2.Any()) return false;
         
+        var tokens2List = tokens2.ToList();
         int matchCount = 0;
         foreach (var t1 in tokens1)
         {
-            if (tokens2.Contains(t1))
+            int matchIdx = tokens2List.IndexOf(t1);
+            if (matchIdx >= 0)
             {
                 matchCount++;
+                tokens2List.RemoveAt(matchIdx);
             }
             else if (t1.Length == 1) // Initial
             {
-                if (tokens2.Any(o => o.StartsWith(t1))) matchCount++;
+                int initIdx = tokens2List.FindIndex(o => o.StartsWith(t1));
+                if (initIdx >= 0)
+                {
+                    matchCount++;
+                    tokens2List.RemoveAt(initIdx);
+                }
             }
         }
         if (matchCount == tokens1.Count) return true;
         
+        var tokens1List = tokens1.ToList();
         int reverseMatch = 0;
         foreach(var t2 in tokens2)
         {
-            if (tokens1.Contains(t2)) reverseMatch++;
+            int matchIdx = tokens1List.IndexOf(t2);
+            if (matchIdx >= 0)
+            {
+                reverseMatch++;
+                tokens1List.RemoveAt(matchIdx);
+            }
             else if (t2.Length == 1)
             {
-                if (tokens1.Any(o => o.StartsWith(t2))) reverseMatch++;
+                int initIdx = tokens1List.FindIndex(o => o.StartsWith(t2));
+                if (initIdx >= 0)
+                {
+                    reverseMatch++;
+                    tokens1List.RemoveAt(initIdx);
+                }
             }
         }
         if (reverseMatch == tokens2.Count) return true;
@@ -246,6 +265,7 @@ namespace BettingApp.Services
                     
                     string aiTarget = "";
                     string htftTarget = "";
+                    string opHtftTarget = "";
                     
                     if (normSelRaw.Contains(" / ") || normSelRaw.Contains(" - "))
                     {
@@ -262,6 +282,29 @@ namespace BettingApp.Services
                             }
                         }
                     }
+
+                    string normONameRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(oName).ToLowerInvariant();
+                    if (normONameRaw.Contains(" / ") || normONameRaw.Contains(" - "))
+                    {
+                        var opHtftSplit = normONameRaw.Split(new[] { " / ", " - " }, StringSplitOptions.RemoveEmptyEntries);
+                        if (opHtftSplit.Length == 2)
+                        {
+                            string ht = opHtftSplit[0].Trim();
+                            string ft = opHtftSplit[1].Trim();
+                            
+                            string htCode = (ht == "1" || ht == "2" || ht == "x") ? ht.ToUpper() : (ht.Contains(normT1) ? "1" : (ht.Contains(normT2) ? "2" : (ht.Contains("draw") || ht.Contains("tie") ? "X" : "")));
+                            string ftCode = (ft == "1" || ft == "2" || ft == "x") ? ft.ToUpper() : (ft.Contains(normT1) ? "1" : (ft.Contains(normT2) ? "2" : (ft.Contains("draw") || ft.Contains("tie") ? "X" : "")));
+                            
+                            if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
+                            {
+                                opHtftTarget = $"{htCode}/{ftCode}";
+                            }
+                        }
+                    }
+                    else if (System.Text.RegularExpressions.Regex.IsMatch(oName, @"^(1|X|2)/(1|X|2)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    {
+                        opHtftTarget = oName.ToUpperInvariant();
+                    }
                     
                     if (string.IsNullOrEmpty(htftTarget))
                     {
@@ -273,7 +316,7 @@ namespace BettingApp.Services
                         else if (normSelRaw.Contains("draw") || normSelRaw.Contains("tie")) aiTarget = "X";
                     }
                     
-                    if (!string.IsNullOrEmpty(htftTarget) && string.Equals(oName, htftTarget, StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrEmpty(htftTarget) && (string.Equals(oName, htftTarget, StringComparison.OrdinalIgnoreCase) || string.Equals(opHtftTarget, htftTarget, StringComparison.OrdinalIgnoreCase)))
                     {
                         logicallyMatched = true;
                     }

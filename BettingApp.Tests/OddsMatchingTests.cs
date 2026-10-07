@@ -28,6 +28,11 @@ namespace BettingApp.Tests
         [InlineData("F. Esposito - Over 1.5 Shots", "Over 1.5 (Esposito, Francesco Pio)", true)]
         [InlineData("Max Power - Over 1.5 Shots On Target", "Over 1.5 (Power, Max)", true)]
         [InlineData("Max Power - Over 1.5 Shots On Target (Power Sub)", "Over 1.5 (Power, Max)", true)]
+        [InlineData("Sao Paulo / Sao Paulo", "Cruzeiro / Sao Paulo", false)]
+        [InlineData("Sao Paulo / Sao Paulo", "Sao Paulo / Sao Paulo", true)]
+        [InlineData("Cruzeiro / Sao Paulo", "Sao Paulo / Cruzeiro", true)]
+        [InlineData("John Smith", "John Paul Smith", true)]
+        [InlineData("John Smith", "John", true)]
         public void Test_FuzzyPlayerMatch(string aiSelection, string opOutcome, bool expected)
         {
             bool result = OddsMatchingLogic.IsFuzzyPlayerMatch(aiSelection, opOutcome);
