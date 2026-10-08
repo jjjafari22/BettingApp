@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 
 namespace BettingApp.Data;
@@ -35,5 +36,7 @@ public class ApplicationUser : IdentityUser
     public string? ReferredBy { get; set; }
     public bool IsReferralDiscarded { get; set; }
     public bool IsManuallyVerified { get; set; }
+    
+    [ConcurrencyCheck]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -172,11 +172,7 @@ else
                                 @{
                                     var uModalExists = userLookup.TryGetValue(reviewingBetModel.UserId, out var uModal);
                                     var uModalName = uModalExists && !string.IsNullOrEmpty(uModal.DiscordName) ? uModal.DiscordName : reviewingBetModel.UserName;
-                                    var expectedModalChannel = $"{uModalName?.Trim().ToLower().Replace(" ", "-")}-admins";
-                                    var matchedModalChannel = discordChannels.FirstOrDefault(c => string.Equals(c.Name, expectedModalChannel, StringComparison.OrdinalIgnoreCase));
-                                    var uModalLink = matchedModalChannel.Id != 0 
-                                        ? $"https://discord.com/channels/{DiscordService.GuildId}/{matchedModalChannel.Id}" 
-                                        : $"https://discord.com/channels/{DiscordService.GuildId}";
+                                    var uModalLink = userDiscordLinks.TryGetValue(reviewingBetModel.UserId, out var link1) ? link1 : $"https://discord.com/channels/{DiscordService.GuildId}";
                                 }
                                 <a href="@uModalLink" target="_blank" class="text-decoration-none fw-bold">@uModalName</a>
                                 <span class="badge rounded-pill border @(currentReviewUserLifetimeProfit >= 0 ? "bg-success bg-opacity-10 border-success text-success" : "bg-danger bg-opacity-10 border-danger text-danger")" style="font-size: 0.75rem; font-weight: 600;" title="Lifetime Profit">
@@ -937,11 +933,7 @@ else
                                 @{
                                     var u1Exists = userLookup.TryGetValue(bet.UserId, out var u1);
                                     var u1Name = u1Exists && !string.IsNullOrEmpty(u1.DiscordName) ? u1.DiscordName : bet.UserName;
-                                    var expectedChannel1 = $"{u1Name?.Trim().ToLower().Replace(" ", "-")}-admins";
-                                    var matchedChannel1 = discordChannels.FirstOrDefault(c => string.Equals(c.Name, expectedChannel1, StringComparison.OrdinalIgnoreCase));
-                                    var u1Link = matchedChannel1.Id != 0 
-                                        ? $"https://discord.com/channels/{DiscordService.GuildId}/{matchedChannel1.Id}" 
-                                        : $"https://discord.com/channels/{DiscordService.GuildId}";
+                                    var u1Link = userDiscordLinks.TryGetValue(bet.UserId, out var link2) ? link2 : $"https://discord.com/channels/{DiscordService.GuildId}";
                                 }
                                 <a href="@u1Link" target="_blank" class="text-decoration-none fw-bold">@u1Name</a>
                             </td>
@@ -1204,6 +1196,7 @@ else
     private List<Bet> completedBets = new();
     private List<(ulong Id, string Name, string CategoryName)> discordChannels = new();
     private Dictionary<string, (string DiscordName, string LastName, string DiscordUserId)> userLookup = new();
+    private Dictionary<string, string> userDiscordLinks = new();
     private int pendingPage = 1;
     private int approvedPage = 1;
     private string approvedSortColumn = "UpdatedAt";
@@ -1696,7 +1689,14 @@ else
                 using var context = DbFactory.CreateDbContext();
                 var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.LastName, u.DiscordUserId }).ToListAsync();
                 foreach(var u in users) {
-                    userLookup[u.Id] = (u.DiscordUsername ?? "", u.LastName ?? "", u.DiscordUserId ?? "");
+                    string discordName = u.DiscordUsername ?? "";
+                    userLookup[u.Id] = (discordName, u.LastName ?? "", u.DiscordUserId ?? "");
+                    
+                    var expectedChannel = $"{discordName.Trim().ToLower().Replace(" ", "-")}-admins";
+                    var matchedChannel = discordChannels?.FirstOrDefault(c => string.Equals(c.Name, expectedChannel, StringComparison.OrdinalIgnoreCase));
+                    userDiscordLinks[u.Id] = matchedChannel.HasValue && matchedChannel.Value.Id != 0 
+                        ? $"https://discord.com/channels/{DiscordService.GuildId}/{matchedChannel.Value.Id}" 
+                        : $"https://discord.com/channels/{DiscordService.GuildId}";
                 }
             }
         }
@@ -1786,8 +1786,8 @@ else
                 Nav.NavigateTo("/");
                 return;
             }
-            await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
             discordChannels = await DiscordService.GetGuildTextChannelsAsync();
+            await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
             if (ReviewBetId.HasValue)
             {
                 var targetBet = pendingBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
@@ -2150,8 +2150,6 @@ else
                 
                 debounceTimer.Stop();
                 debounceTimer.Start();
-                
-                InvokeAsync(StateHasChanged);
             });
             await hubConnection.StartAsync();
             await hubConnection.InvokeAsync("JoinAdminGroup");
@@ -3169,8 +3167,16 @@ else
             {
                 await context.SaveChangesAsync();
             }
-            catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+            catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
             {
+                var entry = ex.Entries.FirstOrDefault();
+                if (entry?.Entity is ApplicationUser)
+                {
+                    isSavingBet = false;
+                    await ProcessBet(bet, newStatus);
+                    return;
+                }
+
                 errorMessage = $"Action aborted: Bet #{bet.Id} was modified concurrently.";
                 _ = InvokeAsync(async () => {
                     await LoadPendingBets();
