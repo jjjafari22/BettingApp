@@ -223,10 +223,15 @@ public class OddsApiService
         }
     }
 
-    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null, bool isLiveRequest = false)
+    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null, bool isLiveRequest = false, string? sport = null)
     {
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return (null, "API Key is missing or team name is empty.");
         
+        if (!string.IsNullOrWhiteSpace(sport) && !sport.Contains("Soccer", StringComparison.OrdinalIgnoreCase))
+        {
+            return (null, $"Castle doesn't yet pay for odds for {sport}.");
+        }
+
         await _apiRateLimiter.WaitAsync();
         try
         {

@@ -1414,7 +1414,7 @@ else
             fetchTasks.Add(Task.Run(async () => {
                 await Task.Delay(taskIndex * 50);
                 if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) return ((BettingApp.Models.OddsPapiSearchResult?)null, (string?)null);
-                return await OddsApi.SearchOddsComparisonAsync(teamToSearch, reviewingBetModel?.Id, isLive);
+                return await OddsApi.SearchOddsComparisonAsync(teamToSearch, reviewingBetModel?.Id, isLive, leg.Sport);
             }));
         }
         
@@ -1462,6 +1462,14 @@ else
         
         if (apiResult == null)
         {
+            if (error != null && error.StartsWith("Castle doesn't yet pay for odds for"))
+            {
+                resultData.WarningMessage = error;
+                resultData.SearchResult = new BettingApp.Models.OddsPapiSearchResult { MatchName = leg.Match ?? leg.Selection ?? "" };
+                resultData.IsLoading = false;
+                return;
+            }
+
             resultData.ErrorMessage = error ?? "No OddsPapi matches found.";
             resultData.IsLoading = false;
             return;
@@ -1734,19 +1742,46 @@ else
 
     private string GetFallbackBookieUrl(string bookieKey, string matchName)
     {
-        if (bookieKey == "coolbet" || bookieKey == "Coolbet")
+        string searchTerm = "";
+        if (!string.IsNullOrEmpty(matchName))
         {
-            if (!string.IsNullOrEmpty(matchName))
+            var tokens = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length > 0)
             {
-                var tokens = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.RemoveEmptyEntries);
-                if (tokens.Length > 0)
-                {
-                    return $"https://www.coolbet.com/en/sports/search?q={Uri.EscapeDataString(tokens[0].Trim())}";
-                }
+                searchTerm = Uri.EscapeDataString(tokens[0].Trim());
             }
-            return "https://www.coolbet.com/en/sports";
+            else
+            {
+                searchTerm = Uri.EscapeDataString(matchName.Trim());
+            }
         }
-        return "";
+
+        switch (bookieKey.ToLower())
+        {
+            case "coolbet":
+                return "https://www.coolbet.com/se/sports/recommendations";
+
+            case "unibet.se":
+            case "unibet":
+                return "https://www.unibet.se/betting/sports/home";
+
+            case "pinnacle+30":
+            case "pinnacle":
+                // Pinnacle's search isn't standard in URL, link to sports home
+                return "https://www.pinnacle.com/en/";
+
+            case "betsson":
+                if (!string.IsNullOrEmpty(searchTerm))
+                    return $"https://www.betsson.com/sv/odds/search?q={searchTerm}";
+                return "https://www.betsson.com/sv/odds";
+
+            case "bet365":
+                // Bet365 uses complex hash routing for search, link to sports home
+                return "https://www.bet365.com";
+
+            default:
+                return "";
+        }
     }
 
     private string FormatBookieUrl(string url, string bookieKey = "")
