@@ -54,7 +54,6 @@ namespace BettingApp.Services
                 for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
                     await _globalThrottle.WaitAsync();
-                    HttpResponseMessage response;
                     try 
                     {
                         var elapsed = DateTime.UtcNow - _lastRequestStart;
@@ -64,12 +63,14 @@ namespace BettingApp.Services
                         }
                         
                         _lastRequestStart = DateTime.UtcNow;
-                        response = await fetchFactory();
                     }
                     finally
                     {
                         _globalThrottle.Release();
                     }
+
+                    HttpResponseMessage response;
+                    response = await fetchFactory();
 
                     using (response)
                     {

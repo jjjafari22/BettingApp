@@ -36,3 +36,17 @@ public class OddsPapiSearchResult
     // Bookmaker -> URL to the match
     public Dictionary<string, string> BookmakerUrls { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
+
+public class OddsPapiFixtureDto
+{
+    public string FixtureId { get; set; } = "";
+    public string Participant1Name { get; set; } = "";
+    public string Participant2Name { get; set; } = "";
+    public string NormP1 { get; set; } = "";
+    public string NormP2 { get; set; } = "";
+    public string TournamentName { get; set; } = "";
+    public bool HasModifier { get; set; }
+    public DateTime? StartTime { get; set; }
+    public int StatusId { get; set; }
+    public string? FlashscoreId { get; set; }
+}

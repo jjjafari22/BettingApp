@@ -1389,9 +1389,25 @@ else
         StateHasChanged();
         await Task.Delay(16);
 
+        var fetchTasks = new List<Task<(BettingApp.Models.OddsPapiSearchResult? result, string? error)>>();
         for (int i = 0; i < AiVisionResult.Legs.Count; i++)
         {
             var leg = AiVisionResult.Legs[i];
+            string teamToSearch = leg.Match ?? leg.Selection ?? "";
+            bool isLive = AiVisionResult?.IsLive ?? false;
+            
+            // Kick off all background processing concurrently so it stays fast
+            fetchTasks.Add(Task.Run(async () => {
+                if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) return ((BettingApp.Models.OddsPapiSearchResult?)null, (string?)null);
+                return await OddsApi.SearchOddsComparisonAsync(teamToSearch, reviewingBetModel?.Id, isLive);
+            }));
+        }
+        
+        // Await them sequentially to ensure the UI updates in strict order (1, 2, 3...)
+        for (int i = 0; i < fetchTasks.Count; i++)
+        {
+            var leg = AiVisionResult.Legs[i];
+            var (apiResult, error) = await fetchTasks[i];
             
             if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) 
             {
@@ -1399,7 +1415,7 @@ else
                 break;
             }
 
-            await ProcessLegOddsAsync(leg, i);
+            ProcessLegOddsSync(leg, i, apiResult, error);
 
             CheckedLegsCount++;
             StateHasChanged();
@@ -1425,14 +1441,9 @@ else
         }
     }
 
-    private async Task ProcessLegOddsAsync(BettingApp.Services.AiVisionLeg leg, int index)
+    private void ProcessLegOddsSync(BettingApp.Services.AiVisionLeg leg, int index, BettingApp.Models.OddsPapiSearchResult? apiResult, string? error)
     {
         var resultData = LegOddsCache[index];
-        
-        string teamToSearch = leg.Match ?? leg.Selection ?? "";
-
-        bool isLive = AiVisionResult?.IsLive ?? false;
-        var (apiResult, error) = await Task.Run(async () => await OddsApi.SearchOddsComparisonAsync(teamToSearch, reviewingBetModel?.Id, isLive));
         
         if (apiResult == null)
         {

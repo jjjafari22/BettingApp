@@ -61,9 +61,41 @@ public class OddsApiService
                 
                 if (fJson == null) return (null, "Fixtures API failed or returned 429");
                 
-                using var doc = JsonDocument.Parse(fJson ?? "[]");
-                
-                if (doc.RootElement.ValueKind != JsonValueKind.Array) return (null, "Fixtures API returned invalid JSON format.");
+                if (!_cache.TryGetValue(cacheKey + "_Parsed", out List<BettingApp.Models.OddsPapiFixtureDto> parsedFixtures) || parsedFixtures == null)
+                {
+                    using var doc = JsonDocument.Parse(fJson ?? "[]");
+                    if (doc.RootElement.ValueKind != JsonValueKind.Array) return (null, "Fixtures API returned invalid JSON format.");
+
+                    parsedFixtures = new List<BettingApp.Models.OddsPapiFixtureDto>();
+                    foreach (var f in doc.RootElement.EnumerateArray())
+                    {
+                        var dto = new BettingApp.Models.OddsPapiFixtureDto
+                        {
+                            FixtureId = f.TryGetProperty("fixtureId", out var fid) ? fid.ToString() : "",
+                            Participant1Name = f.TryGetProperty("participant1Name", out var p1n) ? (p1n.GetString() ?? "") : "",
+                            Participant2Name = f.TryGetProperty("participant2Name", out var p2n) ? (p2n.GetString() ?? "") : "",
+                            TournamentName = f.TryGetProperty("tournamentName", out var tn) ? (tn.GetString() ?? "") : "",
+                            StatusId = f.TryGetProperty("statusId", out var sid) && sid.ValueKind == JsonValueKind.Number ? sid.GetInt32() : -1
+                        };
+                        
+                        dto.NormP1 = NormalizeTeamName(dto.Participant1Name);
+                        dto.NormP2 = NormalizeTeamName(dto.Participant2Name);
+                        dto.HasModifier = HasSpecialModifier(dto.Participant1Name) || HasSpecialModifier(dto.Participant2Name) || HasSpecialModifier(dto.TournamentName) || dto.Participant1Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || dto.Participant2Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase);
+
+                        if (f.TryGetProperty("startTime", out var st) && DateTime.TryParse(st.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var dt))
+                        {
+                            dto.StartTime = dt;
+                        }
+                        
+                        if (f.TryGetProperty("externalProviders", out var ep) && ep.TryGetProperty("flashscoreId", out var fsid) && fsid.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            dto.FlashscoreId = fsid.GetString();
+                        }
+                        
+                        parsedFixtures.Add(dto);
+                    }
+                    _cache.Set(cacheKey + "_Parsed", parsedFixtures, TimeSpan.FromHours(6));
+                }
 
             string[] split = teamName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
             string homeTeam = split[0].Trim();
@@ -88,26 +120,19 @@ public class OddsApiService
             var normHomeTokens = homeTokens.Select(t => NormalizeTeamName(t)).ToList();
             var normAwayTokens = awayTokens.Select(t => NormalizeTeamName(t)).ToList();
 
-            var bestMatches = new List<(JsonElement fixture, int score)>();
+            var bestMatches = new List<(BettingApp.Models.OddsPapiFixtureDto fixture, int score)>();
 
-            foreach (var f in doc.RootElement.EnumerateArray())
+            foreach (var f in parsedFixtures)
             {
-                string p1 = f.TryGetProperty("participant1Name", out var p1n) ? (p1n.GetString() ?? "") : "";
-                string p2 = f.TryGetProperty("participant2Name", out var p2n) ? (p2n.GetString() ?? "") : "";
-                
-                string tName = f.TryGetProperty("tournamentName", out var tn) ? (tn.GetString() ?? "") : "";
-                
                 // Skip Youth/Women's/SRL matches if they weren't explicitly requested
                 bool qHasMod = HasSpecialModifier(homeTeam) || HasSpecialModifier(awayTeam);
-                bool fHasMod = HasSpecialModifier(p1) || HasSpecialModifier(p2) || HasSpecialModifier(tName) || p1.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || p2.Contains("Esoccer", StringComparison.OrdinalIgnoreCase);
-                
-                if (!qHasMod && fHasMod)
+                if (!qHasMod && f.HasModifier)
                 {
                     continue;
                 }
                 
-                string normP1 = NormalizeTeamName(p1);
-                string normP2 = NormalizeTeamName(p2);
+                string normP1 = f.NormP1;
+                string normP2 = f.NormP2;
                 
                 bool homeMatch = normHomeTokens.Any(t => IsNameMatch(normP1, t, true) || IsNameMatch(normP2, t, true));
                 bool awayMatch = string.IsNullOrEmpty(normAwayTeam) || normAwayTokens.Any(t => IsNameMatch(normP1, t, true) || IsNameMatch(normP2, t, true));
@@ -170,43 +195,30 @@ public class OddsApiService
             
             var bestFixture = bestMatches.OrderByDescending(m => m.score).First().fixture;
             
-            fixtureId = bestFixture.GetProperty("fixtureId").ToString();
-            string finalP1 = bestFixture.TryGetProperty("participant1Name", out var fp1) ? (fp1.GetString() ?? "") : "";
-            string finalP2 = bestFixture.TryGetProperty("participant2Name", out var fp2) ? (fp2.GetString() ?? "") : "";
+            fixtureId = bestFixture.FixtureId;
+            string finalP1 = bestFixture.Participant1Name;
+            string finalP2 = bestFixture.Participant2Name;
             matchName = $"{finalP1} vs {finalP2}";
 
             _logger.LogInformation($" {betLabel} OddsPapi: Found Match ID {fixtureId} for {matchName}");
             
-            if (bestFixture.TryGetProperty("startTime", out var st))
+            if (bestFixture.StartTime.HasValue)
             {
-                if (DateTime.TryParse(st.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var dt))
-                {
-                    startTime = dt;
-                }
+                startTime = bestFixture.StartTime.Value;
             }
             
-            
-            if (bestFixture.TryGetProperty("statusId", out var sid) && sid.ValueKind == JsonValueKind.Number)
+            int statusId = bestFixture.StatusId;
+            if (statusId > 0 && statusId != 3)
             {
-                int statusId = sid.GetInt32();
-                if (statusId > 0 && statusId != 3)
-                {
-                    isLive = true;
-                }
-                else if (statusId == 0 && startTime <= DateTime.UtcNow)
-                {
-                    // OddsPapi may be slow to update statusId to 1; if it's past start time and still 0 (pre-game), treat as live
-                    isLive = true;
-                }
+                isLive = true;
+            }
+            else if (statusId == 0 && startTime <= DateTime.UtcNow)
+            {
+                // OddsPapi may be slow to update statusId to 1; if it's past start time and still 0 (pre-game), treat as live
+                isLive = true;
             }
 
-            if (bestFixture.TryGetProperty("externalProviders", out var ep))
-            {
-                if (ep.TryGetProperty("flashscoreId", out var fsid) && fsid.ValueKind == System.Text.Json.JsonValueKind.String)
-                {
-                    flashscoreId = fsid.GetString();
-                }
-            }
+            flashscoreId = bestFixture.FlashscoreId;
             
             _cache.Set($"OddspapiMatch3_{teamName}", (fixtureId, matchName, startTime, isLive, flashscoreId), TimeSpan.FromHours(2));
             }
