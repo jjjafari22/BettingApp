@@ -216,115 +216,133 @@ public class OddsApiService
             }
             
             // 1. Get markets metadata to map IDs to Names
-            var marketsUrl = $"https://api.oddspapi.io/v4/markets?apiKey={_apiKey}&language=en";
-            
-            string? mJson = await HttpCacheHelper.GetOrCreateAsync(_cache, "OddspapiMarketsJson", TimeSpan.FromHours(24), () => _httpClient.GetAsync(marketsUrl), _logger);
-            
-            if (mJson == null) return (null, "Markets API failed or returned 429");
-            
-            var rawMarketIdToBaseName = new Dictionary<string, string>();
-            var baseMarketDict = new Dictionary<string, BettingApp.Models.OddsPapiMarket>();
-            if (!string.IsNullOrEmpty(mJson) && mJson != "[]")
+            if (!_cache.TryGetValue("OddspapiMarketsParsed", out (Dictionary<string, string> rawMarketIdToBaseName, Dictionary<string, BettingApp.Models.OddsPapiMarket> cachedBaseMarketDict) cachedMarkets))
             {
-                using var mDoc = JsonDocument.Parse(mJson);
-                if (mDoc.RootElement.ValueKind == JsonValueKind.Array)
+                var marketsUrl = $"https://api.oddspapi.io/v4/markets?apiKey={_apiKey}&language=en";
+                string? mJson = await HttpCacheHelper.GetOrCreateAsync(_cache, "OddspapiMarketsJson", TimeSpan.FromHours(24), () => _httpClient.GetAsync(marketsUrl), _logger);
+                
+                if (mJson == null) return (null, "Markets API failed or returned 429");
+                
+                var newRawMarketIdToBaseName = new Dictionary<string, string>();
+                var newBaseMarketDict = new Dictionary<string, BettingApp.Models.OddsPapiMarket>();
+                
+                if (!string.IsNullOrEmpty(mJson) && mJson != "[]")
                 {
-                    foreach (var m in mDoc.RootElement.EnumerateArray())
+                    using var mDoc = JsonDocument.Parse(mJson);
+                    if (mDoc.RootElement.ValueKind == JsonValueKind.Array)
                     {
-                        var mId = m.GetProperty("marketId").ToString();
-                        var baseName = m.TryGetProperty("marketName", out var mn) ? mn.GetString() ?? "Unknown" : "Unknown";
-                        
-                        string handicapSuffix = "";
-                        if (m.TryGetProperty("handicap", out var hc))
+                        foreach (var m in mDoc.RootElement.EnumerateArray())
                         {
-                            if (hc.ValueKind == JsonValueKind.Number && hc.GetDouble() != 0) handicapSuffix = $" ({hc.GetDouble()})";
-                            else if (hc.ValueKind == JsonValueKind.String && hc.GetString() != "0") handicapSuffix = $" ({hc.GetString()})";
-                        }
-                        
-                        if (baseName.Contains("European Handicap", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = baseName.Replace("European Handicap", "3-Way Handicap", StringComparison.OrdinalIgnoreCase);
+                            var mId = m.GetProperty("marketId").ToString();
+                            var baseName = m.TryGetProperty("marketName", out var mn) ? mn.GetString() ?? "Unknown" : "Unknown";
                             
-                            if (handicapSuffix.StartsWith(" (-") && handicapSuffix.EndsWith(")"))
+                            string handicapSuffix = "";
+                            if (m.TryGetProperty("handicap", out var hc))
                             {
-                                handicapSuffix = $" (0-{handicapSuffix.Substring(3, handicapSuffix.Length - 4)})";
+                                if (hc.ValueKind == JsonValueKind.Number && hc.GetDouble() != 0) handicapSuffix = $" ({hc.GetDouble()})";
+                                else if (hc.ValueKind == JsonValueKind.String && hc.GetString() != "0") handicapSuffix = $" ({hc.GetString()})";
                             }
-                            else if (handicapSuffix.StartsWith(" (") && handicapSuffix.EndsWith(")") && !handicapSuffix.Contains("-"))
+                            
+                            if (baseName.Contains("European Handicap", StringComparison.OrdinalIgnoreCase))
                             {
-                                handicapSuffix = $" ({handicapSuffix.Substring(2, handicapSuffix.Length - 3)}-0)";
-                            }
-                        }
-                        bool isPlayerGoalsMerge = false;
-                        bool isPlayerAssistsMerge = false;
-                        bool isPlayerTacklesMerge = false;
-                        if (baseName.Equals("Player Shots On Goal (incl. overtime)", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = "Over Under Player Shots On Goal (incl. overtime)";
-                        }
-                        else if (baseName.Equals("Player Fouls Committed (incl. overtime)", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = "Over Under Player Fouls Committed (incl. overtime)";
-                        }
-                        else if (baseName.Equals("Player Shots (incl. overtime)", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = "Over Under Player Shots (incl. overtime)";
-                        }
-                        else if (baseName.Equals("Player Assists (incl. overtime)", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = "Over Under Player Assists (incl. overtime)";
-                            isPlayerAssistsMerge = true;
-                        }
-                        else if (baseName.Equals("Player Tackles (incl. overtime)", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = "Over Under Player Tackles (incl. overtime)";
-                            isPlayerTacklesMerge = true;
-                        }
-                        else if (baseName.Equals("Player Goals (incl. overtime)", StringComparison.OrdinalIgnoreCase) || 
-                                 baseName.Equals("Anytime Goal Scorer", StringComparison.OrdinalIgnoreCase))
-                        {
-                            baseName = "Over Under Player Goals (incl. overtime)";
-                            isPlayerGoalsMerge = true;
-                        }
-
-                        rawMarketIdToBaseName[mId] = baseName;
-                        
-                        if (!baseMarketDict.ContainsKey(baseName))
-                        {
-                            baseMarketDict[baseName] = new BettingApp.Models.OddsPapiMarket { MarketId = baseName, MarketName = baseName };
-                        }
-                    
-                        var baseMarketObj = baseMarketDict[baseName];
-                        
-                        if (m.TryGetProperty("outcomes", out var outcomes))
-                        {
-                            foreach (var o in outcomes.EnumerateArray())
-                            {
-                                var oId = o.GetProperty("outcomeId").ToString();
-                                var oName = o.TryGetProperty("outcomeName", out var on) ? on.GetString() ?? "" : "";
+                                baseName = baseName.Replace("European Handicap", "3-Way Handicap", StringComparison.OrdinalIgnoreCase);
                                 
-                                var match = System.Text.RegularExpressions.Regex.Match(oName, @"^(\d+)\+$");
-                                if (match.Success && int.TryParse(match.Groups[1].Value, out int num))
+                                if (handicapSuffix.StartsWith(" (-") && handicapSuffix.EndsWith(")"))
                                 {
-                                    double overVal = num - 0.5;
-                                    oName = $"Over {overVal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}";
+                                    handicapSuffix = $" (0-{handicapSuffix.Substring(3, handicapSuffix.Length - 4)})";
                                 }
-
-                                if ((isPlayerGoalsMerge || isPlayerAssistsMerge || isPlayerTacklesMerge) && string.IsNullOrEmpty(handicapSuffix))
+                                else if (handicapSuffix.StartsWith(" (") && handicapSuffix.EndsWith(")") && !handicapSuffix.Contains("-"))
                                 {
-                                    if (oName == "1" || oName.Equals("Yes", StringComparison.OrdinalIgnoreCase))
+                                    handicapSuffix = $" ({handicapSuffix.Substring(2, handicapSuffix.Length - 3)}-0)";
+                                }
+                            }
+                            bool isPlayerGoalsMerge = false;
+                            bool isPlayerAssistsMerge = false;
+                            bool isPlayerTacklesMerge = false;
+                            if (baseName.Equals("Player Shots On Goal (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                            {
+                                baseName = "Over Under Player Shots On Goal (incl. overtime)";
+                            }
+                            else if (baseName.Equals("Player Fouls Committed (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                            {
+                                baseName = "Over Under Player Fouls Committed (incl. overtime)";
+                            }
+                            else if (baseName.Equals("Player Shots (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                            {
+                                baseName = "Over Under Player Shots (incl. overtime)";
+                            }
+                            else if (baseName.Equals("Player Assists (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                            {
+                                baseName = "Over Under Player Assists (incl. overtime)";
+                                isPlayerAssistsMerge = true;
+                            }
+                            else if (baseName.Equals("Player Tackles (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                            {
+                                baseName = "Over Under Player Tackles (incl. overtime)";
+                                isPlayerTacklesMerge = true;
+                            }
+                            else if (baseName.Equals("Player Goals (incl. overtime)", StringComparison.OrdinalIgnoreCase) || 
+                                     baseName.Equals("Anytime Goal Scorer", StringComparison.OrdinalIgnoreCase))
+                            {
+                                baseName = "Over Under Player Goals (incl. overtime)";
+                                isPlayerGoalsMerge = true;
+                            }
+
+                            newRawMarketIdToBaseName[mId] = baseName;
+                            
+                            if (!newBaseMarketDict.ContainsKey(baseName))
+                            {
+                                newBaseMarketDict[baseName] = new BettingApp.Models.OddsPapiMarket { MarketId = baseName, MarketName = baseName };
+                            }
+                        
+                            var baseMarketObj = newBaseMarketDict[baseName];
+                            
+                            if (m.TryGetProperty("outcomes", out var outcomes))
+                            {
+                                foreach (var o in outcomes.EnumerateArray())
+                                {
+                                    var oId = o.GetProperty("outcomeId").ToString();
+                                    var oName = o.TryGetProperty("outcomeName", out var on) ? on.GetString() ?? "" : "";
+                                    
+                                    var match = System.Text.RegularExpressions.Regex.Match(oName, @"^(\d+)\+$");
+                                    if (match.Success && int.TryParse(match.Groups[1].Value, out int num))
                                     {
-                                        oName = "Over";
-                                        handicapSuffix = " 0.5";
+                                        double overVal = num - 0.5;
+                                        oName = $"Over {overVal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}";
                                     }
-                                }
 
-                                string combined = oName + handicapSuffix;
-                                combined = System.Text.RegularExpressions.Regex.Replace(combined, @"^(Over|Under)\s*\(([^)]+)\)$", "$1 $2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                                baseMarketObj.OutcomeNames[oId] = combined;
+                                    if ((isPlayerGoalsMerge || isPlayerAssistsMerge || isPlayerTacklesMerge) && string.IsNullOrEmpty(handicapSuffix))
+                                    {
+                                        if (oName == "1" || oName.Equals("Yes", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            oName = "Over";
+                                            handicapSuffix = " 0.5";
+                                        }
+                                    }
+
+                                    string combined = oName + handicapSuffix;
+                                    combined = System.Text.RegularExpressions.Regex.Replace(combined, @"^(Over|Under)\s*\(([^)]+)\)$", "$1 $2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                    baseMarketObj.OutcomeNames[oId] = combined;
+                                }
                             }
                         }
+                    }
                 }
-                }
+                
+                cachedMarkets = (newRawMarketIdToBaseName, newBaseMarketDict);
+                _cache.Set("OddspapiMarketsParsed", cachedMarkets, TimeSpan.FromHours(24));
+            }
+
+            var rawMarketIdToBaseName = cachedMarkets.rawMarketIdToBaseName;
+            var baseMarketDict = new Dictionary<string, BettingApp.Models.OddsPapiMarket>();
+            foreach (var kvp in cachedMarkets.cachedBaseMarketDict)
+            {
+                baseMarketDict[kvp.Key] = new BettingApp.Models.OddsPapiMarket 
+                { 
+                    MarketId = kvp.Value.MarketId, 
+                    MarketName = kvp.Value.MarketName, 
+                    OutcomeNames = new Dictionary<string, string>(kvp.Value.OutcomeNames, StringComparer.OrdinalIgnoreCase) 
+                };
             }
 
             // 3. Fetch Odds for Unibet SE, Betsson, Bet365, Pinnacle, Coolbet
