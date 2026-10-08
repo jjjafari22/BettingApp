@@ -1396,8 +1396,12 @@ else
             string teamToSearch = leg.Match ?? leg.Selection ?? "";
             bool isLive = AiVisionResult?.IsLive ?? false;
             
-            // Kick off all background processing concurrently so it stays fast
+            // Kick off background processing concurrently but stagger them by 50ms
+            // This mathematically guarantees that Leg 1 reaches the HTTP Throttle Lock first,
+            // Leg 2 reaches it second, etc. Eliminating the "Throttle Lottery" where Leg 4 locks out Leg 1.
+            int taskIndex = i;
             fetchTasks.Add(Task.Run(async () => {
+                await Task.Delay(taskIndex * 50);
                 if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) return ((BettingApp.Models.OddsPapiSearchResult?)null, (string?)null);
                 return await OddsApi.SearchOddsComparisonAsync(teamToSearch, reviewingBetModel?.Id, isLive);
             }));
