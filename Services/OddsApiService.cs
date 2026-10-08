@@ -24,6 +24,40 @@ public class OddsApiService
 
 
 
+        private async Task<(string? Json, string CacheKey)> GetFixturesJsonAsync()
+    {
+        string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
+        string toDate = DateTime.UtcNow.AddDays(4).ToString("yyyy-MM-dd");
+        string cacheKey = $"OddspapiFixtures_{fromDate}";
+        var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId=10&from={fromDate}&to={toDate}";
+        
+        string? json = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKey, TimeSpan.FromHours(6), () => _httpClient.GetAsync(fixturesUrl), _logger);
+        return (json, cacheKey);
+    }
+
+    private async Task<string?> GetMarketsJsonAsync()
+    {
+        var marketsUrl = $"https://api.oddspapi.io/v4/markets?apiKey={_apiKey}&language=en";
+        return await HttpCacheHelper.GetOrCreateAsync(_cache, "OddspapiMarketsJson", TimeSpan.FromHours(24), () => _httpClient.GetAsync(marketsUrl), _logger);
+    }
+
+    public async Task WarmupCacheAsync()
+    {
+        _logger.LogInformation("OddsPapi: Background worker warming up cache for Fixtures (6h) and Markets (24h)...");
+        try
+        {
+            // The background worker just calls the centralized HTTP logic to ensure the raw JSON is hot in memory.
+            await GetFixturesJsonAsync();
+            await GetMarketsJsonAsync();
+            
+            _logger.LogInformation("OddsPapi: Cache warmup completed successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "OddsPapi: Failed during background cache warmup.");
+        }
+    }
+
     public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null, bool isLiveRequest = false)
     {
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return (null, "API Key is missing or team name is empty.");
@@ -52,12 +86,7 @@ public class OddsApiService
             }
             else
             {
-                string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
-                string toDate = DateTime.UtcNow.AddDays(4).ToString("yyyy-MM-dd");
-                var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId=10&from={fromDate}&to={toDate}";
-                
-                string cacheKey = $"OddspapiFixtures_{fromDate}";
-                string? fJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKey, TimeSpan.FromHours(6), () => _httpClient.GetAsync(fixturesUrl), _logger);
+                var (fJson, cacheKey) = await GetFixturesJsonAsync();
                 
                 if (fJson == null) return (null, "Fixtures API failed or returned 429");
                 
@@ -230,8 +259,7 @@ public class OddsApiService
             // 1. Get markets metadata to map IDs to Names
             if (!_cache.TryGetValue("OddspapiMarketsParsed", out (Dictionary<string, string> rawMarketIdToBaseName, Dictionary<string, BettingApp.Models.OddsPapiMarket> cachedBaseMarketDict) cachedMarkets))
             {
-                var marketsUrl = $"https://api.oddspapi.io/v4/markets?apiKey={_apiKey}&language=en";
-                string? mJson = await HttpCacheHelper.GetOrCreateAsync(_cache, "OddspapiMarketsJson", TimeSpan.FromHours(24), () => _httpClient.GetAsync(marketsUrl), _logger);
+                string? mJson = await GetMarketsJsonAsync();
                 
                 if (mJson == null) return (null, "Markets API failed or returned 429");
                 

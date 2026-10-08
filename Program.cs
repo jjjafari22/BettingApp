@@ -63,6 +63,7 @@ builder.Services.AddSingleton<TeamAliasMappingService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();
 builder.Services.AddHostedService<PendingBetsNotificationService>();
 builder.Services.AddHostedService<BetMonitoringService>();
+builder.Services.AddHostedService<OddsCacheWarmupService>();
 
 // Register Discord Service
 builder.Services.AddSingleton<DiscordNotificationService>();
