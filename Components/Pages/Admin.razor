@@ -326,6 +326,7 @@ else
                                         </div>
                                         @if (showAiExtractionDetails) {
                                             <div class="mb-2 p-2 bg-light bg-opacity-75 rounded border" style="font-size: 0.85em;">
+                                                <strong>Bookmaker:</strong> @AiVisionResult!.Bookmaker <br/>
                                                 <strong>Is Bet Builder:</strong> @AiVisionResult!.IsBetBuilder <br/>
                                                 <strong>Is Live Placed:</strong> @AiVisionResult!.IsLive <br/>
                                                 <strong>Stake:</strong> @AiVisionResult!.Stake <br/>
@@ -390,7 +391,21 @@ else
                                                 
                                                 <div class="card mb-2 @(hasActive ? "border-primary shadow" : "shadow-sm border-0")">
                                                     <div class="card-header bg-white p-2 d-flex justify-content-between align-items-center border-bottom">
-                                                        <div class="fw-bold lh-sm text-dark text-truncate me-2" style="font-size: 0.85em;">@groupKey</div>
+                                                        <div class="fw-bold lh-sm text-dark text-truncate me-2" style="font-size: 0.85em;">
+                                                            @groupKey
+                                                            @if (!string.IsNullOrEmpty(firstItem.Leg.Sport)) {
+                                                                var sportLower = firstItem.Leg.Sport.ToLower();
+                                                                var emoji = sportLower.Contains("soccer") || sportLower.Contains("football") ? "⚽" :
+                                                                            sportLower.Contains("hockey") ? "🏒" :
+                                                                            sportLower.Contains("tennis") ? "🎾" :
+                                                                            sportLower.Contains("basketball") ? "🏀" :
+                                                                            sportLower.Contains("baseball") ? "⚾" :
+                                                                            sportLower.Contains("esport") || sportLower.Contains("cs") ? "🎮" :
+                                                                            sportLower.Contains("mma") || sportLower.Contains("ufc") || sportLower.Contains("boxing") ? "🥊" :
+                                                                            sportLower.Contains("volleyball") ? "🏐" : "🏆";
+                                                                <span class="ms-1" title="@firstItem.Leg.Sport">@emoji</span>
+                                                            }
+                                                        </div>
                                                         @{
                                                             DateTime? displayStartTime = firstItem.Leg.StartTime;
                                                             if (displayStartTime == null && ParsedAiOutcome?.Legs != null)
@@ -2204,7 +2219,7 @@ else
                         return;
                     }
 
-                    var (result, error) = await AiVision.ExtractBetSlipDataAsync(currentBet.ScreenshotUrl);
+                    var (result, error) = await AiVision.ExtractBetSlipDataAsync(currentBet.ScreenshotUrl, currentBet.Id);
                     if (error != null)
                     {
                         await InvokeAsync(async () =>
@@ -2421,7 +2436,7 @@ else
 
         try
         {
-            var (result, error) = await AiVision.ExtractBetSlipDataAsync(capturingScreenshot);
+            var (result, error) = await AiVision.ExtractBetSlipDataAsync(capturingScreenshot, capturingBetId);
             
             bool isModalOpenForThisBet = reviewingBetModel != null && reviewingBetModel.Id == capturingBetId;
             var listModel = pendingBets.FirstOrDefault(b => b.Id == capturingBetId) ?? approvedBets.FirstOrDefault(b => b.Id == capturingBetId) ?? completedBets.FirstOrDefault(b => b.Id == capturingBetId);

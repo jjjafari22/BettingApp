@@ -36,6 +36,9 @@ namespace BettingApp.Services
         [JsonPropertyName("match")]
         public string Match { get; set; } = "";
         
+        [JsonPropertyName("sport")]
+        public string Sport { get; set; } = "";
+        
         [JsonPropertyName("market")]
         public string Market { get; set; } = "";
         
@@ -178,6 +181,7 @@ namespace BettingApp.Services
                              "4) stake (the amount bet, e.g. '100', '1000'). CRITICAL: Often the user will manually draw or write their stake over the image with a digital pen. You MUST look for manual handwritten digits over the image indicating the stake and prioritize that over printed text! " +
                              "5) legs: an array of objects representing each individual bet, containing: " +
                              "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST translate the team names into their standard, globally recognized English names (e.g. you MUST output 'FC Copenhagen' instead of 'FC København', and 'Bayern Munich' instead of 'Bayern München'). This is required for our Odds API to find the match. " +
+                             "   - sport (e.g. 'Soccer', 'Ice Hockey', 'Tennis', 'Basketball'. Deduce this from the team names, market types, or tournament. Use your world knowledge!). " +
                              "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! CRITICAL: If the market name includes a team name (e.g., 'FC Midtjylland Total Goals'), you MUST include the team name exactly as written. Do NOT summarize it! CRITICAL: NEVER drop decimals from numbers in the market or selection. CRITICAL: Output ONLY the final translated market name. NEVER output your reasoning or 'Let's check' in this field! " +
                              "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! CRITICAL: Output ONLY the final selection string. NEVER output your reasoning or thoughts in this field! " +
                              "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or visual icons near the bet (e.g., 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost'). IMPORTANT FOR POWER SUB: Some bookmakers do not write the text, but instead use a visual icon next to the player (such as two arrows pointing in opposite directions, a 'swap' symbol, or a substitution icon). If you see a visual icon that clearly represents a player substitution, you MUST add 'Power Sub' to this array. Be careful not to confuse generic UI arrows (like dropdown arrows) with a substitution icon! " +
@@ -230,12 +234,13 @@ namespace BettingApp.Services
                                         {
                                             legThoughtProcess = new { type = "STRING", description = "Your detailed, step-by-step reasoning for extracting and translating this specific leg." },
                                             match = new { type = "STRING", nullable = true },
+                                            sport = new { type = "STRING", nullable = true, description = "The sport of the match, e.g., 'Soccer', 'Ice Hockey', 'Tennis'." },
                                             market = new { type = "STRING", nullable = true },
                                             selection = new { type = "STRING", nullable = true },
                                             badges = new { type = "ARRAY", items = new { type = "STRING" } },
                                             odds = new { type = "STRING", nullable = true }
                                         },
-                                        required = new[] { "legThoughtProcess", "match", "market", "selection", "badges", "odds" }
+                                        required = new[] { "legThoughtProcess", "match", "sport", "market", "selection", "badges", "odds" }
                                     }
                                 }
                             },
@@ -253,7 +258,7 @@ namespace BettingApp.Services
                 var apiUrl = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
-                _logger.LogInformation($" {betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
+                _logger.LogInformation($"{betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
 
                 var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token);
                 string responseString = await response.Content.ReadAsStringAsync();
@@ -321,7 +326,7 @@ namespace BettingApp.Services
                                 if (!string.IsNullOrEmpty(resolvedMatch))
                                 {
                                     leg.Match = resolvedMatch;
-                                    _logger.LogInformation($" {betLabel}FotMob Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
+                                    _logger.LogInformation($"{betLabel}FotMob Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
                                 }
                             }
                         }
@@ -529,7 +534,7 @@ namespace BettingApp.Services
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
                 betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
-                _logger.LogInformation($" {betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
+                _logger.LogInformation($"{betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
                 
                 var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token);
                 if (!response.IsSuccessStatusCode)
@@ -689,11 +694,11 @@ namespace BettingApp.Services
                         
                         if (status == "MATCH IN PROGRESS" && hasStartTime)
                         {
-                            _logger.LogInformation($" {localBetLabel} AI: Found start time -> {resultObj!.MatchStartTimeIso}");
+                            _logger.LogInformation($"{localBetLabel} AI: Found start time -> {resultObj!.MatchStartTimeIso}");
                         }
                         else
                         {
-                            _logger.LogInformation($" {localBetLabel} AI: Checked outcome -> Status: {status}");
+                            _logger.LogInformation($"{localBetLabel} AI: Checked outcome -> Status: {status}");
                         }
                     }
                     catch { } // ignore parsing errors
@@ -740,7 +745,7 @@ namespace BettingApp.Services
 
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 string betLabel = "[Match Start Time] ";
-                _logger.LogInformation($" {betLabel}calling Gemini (Model: {resolvedModel})...");
+                _logger.LogInformation($"{betLabel}calling Gemini (Model: {resolvedModel})...");
                 
                 var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token);
                 
@@ -794,7 +799,7 @@ namespace BettingApp.Services
                     string thinkMsg = thinking > 0 ? $" (Thinking: {thinking})" : (hasThought ? " (Thinking: active)" : "");
                     string warning = thinking >= 900 ? " ⚠️ WARNING: Approaching thinking limit!" : "";
 
-                    _logger.LogInformation($" {betLabel}📊 AI Usage -> Total: {total} | Input: {prompt} | Output: {output}{thinkMsg}{warning}");
+                    _logger.LogInformation($"{betLabel}📊 AI Usage -> Total: {total} | Input: {prompt} | Output: {output}{thinkMsg}{warning}");
                 }
             }
             catch { }
