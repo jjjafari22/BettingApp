@@ -1013,7 +1013,7 @@ else
                                    @if (ConfirmingOutcomeBetIds.Contains(bet.Id)) {
                                        <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>
                                    } else {
-                                       @GetAiOutcomeBadge(bet.AiOutcomeResult)
+                                       @GetAiOutcomeBadge(bet)
                                    }
                                </td>
                                <td class="text-center">
@@ -1129,7 +1129,7 @@ else
                                 @if (ConfirmingOutcomeBetIds.Contains(bet.Id)) {
                                     <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>
                                 } else {
-                                    @GetAiOutcomeBadge(bet.AiOutcomeResult)
+                                    @GetAiOutcomeBadge(bet)
                                 }
                             </td>
                     
@@ -1197,6 +1197,8 @@ else
     private List<(ulong Id, string Name, string CategoryName)> discordChannels = new();
     private Dictionary<string, (string DiscordName, string LastName, string DiscordUserId)> userLookup = new();
     private Dictionary<string, string> userDiscordLinks = new();
+    private Dictionary<int, (string Json, BettingApp.Services.AiVisionExtractionResult? Result)> _visionCache = new();
+    private Dictionary<int, (string Json, BettingApp.Services.AiOutcomeResultData? Result)> _outcomeCache = new();
     private int pendingPage = 1;
     private int approvedPage = 1;
     private string approvedSortColumn = "UpdatedAt";
@@ -3335,9 +3337,16 @@ else
         if (string.IsNullOrEmpty(bet.AiVisionResultJson)) 
             return new MarkupString("<span class='text-muted small'>Pending...</span>");
             
+        BettingApp.Services.AiVisionExtractionResult? res = null;
+        if (_visionCache.TryGetValue(bet.Id, out var cached) && cached.Json == bet.AiVisionResultJson) {
+            res = cached.Result;
+        } else {
+            try { res = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(bet.AiVisionResultJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }); } catch {}
+            _visionCache[bet.Id] = (bet.AiVisionResultJson, res);
+        }
+            
         try 
         {
-            var res = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(bet.AiVisionResultJson);
             if (res?.Legs != null && res.Legs.Count > 0) 
             {
                 int total = res.Legs.Count;
@@ -3366,8 +3375,9 @@ else
         }
     }
 
-    private RenderFragment GetAiOutcomeBadge(string? outcomeResult) => builder =>
+    private RenderFragment GetAiOutcomeBadge(Bet bet) => builder =>
     {
+        var outcomeResult = bet.AiOutcomeResult;
         if (string.IsNullOrEmpty(outcomeResult)) return;
 
         if (outcomeResult == "Admin Override")
@@ -3381,9 +3391,14 @@ else
 
         try
         {
-            var parsed = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
-                outcomeResult, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-            );
+            BettingApp.Services.AiOutcomeResultData? parsed = null;
+            if (_outcomeCache.TryGetValue(bet.Id, out var cached) && cached.Json == outcomeResult) {
+                parsed = cached.Result;
+            } else {
+                try { parsed = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(outcomeResult, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }); } catch {}
+                _outcomeCache[bet.Id] = (outcomeResult, parsed);
+            }
+
 
             if (parsed != null && !string.IsNullOrEmpty(parsed.OverallStatus))
             {
@@ -3422,7 +3437,13 @@ else
         {
             try 
             {
-                var extraction = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(bet.AiVisionResultJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                BettingApp.Services.AiVisionExtractionResult? extraction = null;
+                if (_visionCache.TryGetValue(bet.Id, out var cached) && cached.Json == bet.AiVisionResultJson) {
+                    extraction = cached.Result;
+                } else {
+                    try { extraction = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(bet.AiVisionResultJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }); } catch {}
+                    _visionCache[bet.Id] = (bet.AiVisionResultJson, extraction);
+                }
                 if (extraction != null && extraction.IsLive)
                 {
                     <span class="badge bg-danger shadow-sm @cssClass" title="This bet was placed while the match was live/in-play.">
@@ -3446,10 +3467,17 @@ else
             if (!string.IsNullOrEmpty(bet.AiOutcomeResult))
             {
                 try {
-                    var doc = System.Text.Json.JsonDocument.Parse(bet.AiOutcomeResult);
-                    if (doc.RootElement.TryGetProperty("overallStatus", out var statusProp))
+                    BettingApp.Services.AiOutcomeResultData? parsed = null;
+                    if (_outcomeCache.TryGetValue(bet.Id, out var cached) && cached.Json == bet.AiOutcomeResult) {
+                        parsed = cached.Result;
+                    } else {
+                        try { parsed = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(bet.AiOutcomeResult, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }); } catch {}
+                        _outcomeCache[bet.Id] = (bet.AiOutcomeResult, parsed);
+                    }
+                    
+                    if (parsed != null && !string.IsNullOrEmpty(parsed.OverallStatus))
                     {
-                        var status = statusProp.GetString()?.Trim().ToUpperInvariant() ?? "";
+                        var status = parsed.OverallStatus.Trim().ToUpperInvariant();
                         isFinished = status == "WON" || status == "LOST" || status == "VOID" || status == "UNKNOWN" ||
                             status == "MATCH FINISHED - WON" || status == "MATCH WON" || 
                             status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || 
