@@ -269,6 +269,7 @@ else
                     <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("Balance")'>Balance <i class="@GetSortIconClass("Balance")"></i></th>
                     <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("FreeBetBalance")'>Free Bet <i class="@GetSortIconClass("FreeBetBalance")"></i></th>
                     <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("AvailableCredit")'>Avail. Credit <i class="@GetSortIconClass("AvailableCredit")"></i></th>
+                    <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("BetsCount")'>#&nbsp;Bets <i class="@GetSortIconClass("BetsCount")"></i></th>
                     <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("Handle")'>Handle <i class="@GetSortIconClass("Handle")"></i></th>
                     <th class="text-nowrap" style="cursor: pointer; user-select:none;" @onclick='() => Sort("LifetimeProfit")'>@(filterStartDate.HasValue || filterEndDate.HasValue ? "Profit (Period)" : "Lifetime Profit") <i class="@GetSortIconClass("LifetimeProfit")"></i></th>
                     <th style="cursor: pointer; user-select:none;" @onclick='() => Sort("FirstName")'>Full Name <i class="@GetSortIconClass("FirstName")"></i></th>
@@ -304,6 +305,7 @@ else
                             <small class="text-muted" style="font-size: 0.7rem;">Total: @user.TotalFreeBetsGiven.ToString("N0") kr</small>
                         </td>
                         <td class="text-nowrap">@user.AvailableCredit.ToString("N0") kr</td>
+                        <td class="text-center fw-bold">@user.BetsCount.ToString("N0")</td>
                         <td class="fw-bold text-nowrap">@user.Handle.ToString("N0") kr</td>
                         <td class="@(user.LifetimeProfit >= 0 ? "text-success" : "text-danger") fw-bold text-nowrap">@user.LifetimeProfit.ToString("N0") kr</td>
                         
@@ -366,7 +368,7 @@ else
                 }
                   @if (!FilteredAndSortedUsers.Any())
                 {
-                     <tr><td colspan="13" class="text-center text-muted">No active users found.</td></tr>
+                     <tr><td colspan="14" class="text-center text-muted">No active users found.</td></tr>
                 }
             </tbody>
         </table>
@@ -722,7 +724,7 @@ else
             var lastTransDate = tStats?.LastTransDate;
 
             var lifetimeProfit = (!filterStartDate.HasValue && !filterEndDate.HasValue) ? u.LifetimeProfit : Math.Floor(winnings) - settledStakes;
-            var periodActivityCount = bStats?.PeriodBetsCount ?? 0;
+            var betsCount = bStats?.PeriodBetsCount ?? 0;
 
             DateTime dateJoined = u.CreatedAt;
             if (dateJoined == DateTime.MinValue)
@@ -766,7 +768,7 @@ else
                 ReferredBy = u.ReferredBy,           
                 PhoneNumber = u.PhoneNumber,
                 IsManuallyVerified = u.IsManuallyVerified,
-                PeriodActivityCount = periodActivityCount
+                BetsCount = betsCount
             };
             if (u.EmailConfirmed)
             {
@@ -1291,7 +1293,7 @@ else
             sortColumn = column;
             sortAscending = column switch 
             {
-                "LastActive" or "DateJoined" or "Balance" or "FreeBetBalance" or "Handle" or "LifetimeProfit" or "AvailableCredit" => false,
+                "LastActive" or "DateJoined" or "Balance" or "FreeBetBalance" or "Handle" or "LifetimeProfit" or "AvailableCredit" or "BetsCount" => false,
                 "IsManuallyVerified" => false,
                 "IsAdmin" => false,
                 "IsTestUser" => false,
@@ -1340,7 +1342,7 @@ else
 
             if (filterStartDate.HasValue || filterEndDate.HasValue)
             {
-                query = query.Where(u => u.PeriodActivityCount > 0);
+                query = query.Where(u => u.BetsCount > 0);
             }
             
             return query;
@@ -1365,6 +1367,7 @@ else
                 "PhoneNumber" => sortAscending ? query.OrderBy(u => u.PhoneNumber) : query.OrderByDescending(u => u.PhoneNumber),
                 "Balance" => sortAscending ? query.OrderBy(u => u.Balance) : query.OrderByDescending(u => u.Balance),
                 "FreeBetBalance" => sortAscending ? query.OrderBy(u => u.FreeBetBalance) : query.OrderByDescending(u => u.FreeBetBalance),
+                "BetsCount" => sortAscending ? query.OrderBy(u => u.BetsCount) : query.OrderByDescending(u => u.BetsCount),
                 "Handle" => sortAscending ? query.OrderBy(u => u.Handle) : query.OrderByDescending(u => u.Handle),
                 "LifetimeProfit" => sortAscending ? query.OrderBy(u => u.LifetimeProfit) : query.OrderByDescending(u => u.LifetimeProfit),
                 "AvailableCredit" => sortAscending ? query.OrderBy(u => u.AvailableCredit) : query.OrderByDescending(u => u.AvailableCredit),
@@ -1415,6 +1418,6 @@ else
         public string? ReferredBy { get; set; }
         public string? PhoneNumber { get; set; }
         public bool IsManuallyVerified { get; set; }
-        public int PeriodActivityCount { get; set; }
+        public int BetsCount { get; set; }
     }
 }
