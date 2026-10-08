@@ -1374,14 +1374,15 @@ else
 
     private async Task CheckAllOddsAsync()
     {
-        if (AiVisionResult?.Legs == null || reviewingBetModel == null) return;
+        var legs = AiVisionResult?.Legs;
+        if (legs == null || reviewingBetModel == null) return;
         
         int runningBetId = reviewingBetModel.Id;
         IsCheckingAllOdds = true;
         CheckedLegsCount = 0;
         LegOddsCache.Clear();
         
-        for (int i = 0; i < AiVisionResult.Legs.Count; i++)
+        for (int i = 0; i < legs.Count; i++)
         {
             LegOddsCache[i] = new LegOddsResult { IsLoading = true };
         }
@@ -1390,9 +1391,9 @@ else
         await Task.Delay(16);
 
         var fetchTasks = new List<Task<(BettingApp.Models.OddsPapiSearchResult? result, string? error)>>();
-        for (int i = 0; i < AiVisionResult.Legs.Count; i++)
+        for (int i = 0; i < legs.Count; i++)
         {
-            var leg = AiVisionResult.Legs[i];
+            var leg = legs[i];
             string teamToSearch = leg.Match ?? leg.Selection ?? "";
             bool isLive = AiVisionResult?.IsLive ?? false;
             
@@ -1410,7 +1411,7 @@ else
         // Await them sequentially to ensure the UI updates in strict order (1, 2, 3...)
         for (int i = 0; i < fetchTasks.Count; i++)
         {
-            var leg = AiVisionResult.Legs[i];
+            var leg = legs[i];
             var (apiResult, error) = await fetchTasks[i];
             
             if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) 

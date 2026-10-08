@@ -48,7 +48,7 @@ public class OddsApiService
                 
         if (fJson == null) return null;
                 
-        if (!_cache.TryGetValue(cacheKey + "_Parsed", out List<BettingApp.Models.OddsPapiFixtureDto> parsedFixtures) || parsedFixtures == null)
+        if (!_cache.TryGetValue(cacheKey + "_Parsed", out List<BettingApp.Models.OddsPapiFixtureDto>? parsedFixtures) || parsedFixtures == null)
                 {
             using var doc = JsonDocument.Parse(fJson ?? "[]");
             if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
