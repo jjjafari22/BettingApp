@@ -191,6 +191,11 @@ namespace BettingApp.Services
                                         dbLeg.Outcome = string.IsNullOrEmpty(parsedLeg.Outcome) ? "Pending" : parsedLeg.Outcome;
                                         dbLeg.Stats = parsedLeg.Stats ?? "";
                                         dbLeg.VerificationSource = string.IsNullOrEmpty(parsedLeg.VerificationSource) ? "Unknown" : parsedLeg.VerificationSource;
+                                        
+                                        if (!string.IsNullOrEmpty(parsedLeg.MatchStartTimeIso) && DateTime.TryParse(parsedLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
+                                        {
+                                            dbLeg.StartTime = st;
+                                        }
                                     }
                                 }
                             }

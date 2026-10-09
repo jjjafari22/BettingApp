@@ -1932,13 +1932,26 @@ else
             try
             {
                 using var context = DbFactory.CreateDbContext();
-                var dbBet = await context.Bets.FindAsync(bId);
+                var dbBet = await context.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == bId);
                 if (dbBet != null)
                 {
                     if (currentAiVisionResultJson != null)
                     {
                         if (matchStartTime.HasValue) dbBet.MatchStartTime = matchStartTime;
                         dbBet.AiVisionResultJson = currentAiVisionResultJson;
+                        
+                        // IMPORTANT: Sync the StartTime to the physical BetLegs so BetProcessingService sees it
+                        if (AiVisionResult?.Legs != null && dbBet.Legs != null && AiVisionResult.Legs.Count == dbBet.Legs.Count)
+                        {
+                            var orderedDbLegs = dbBet.Legs.OrderBy(l => l.Id).ToList();
+                            for (int i = 0; i < AiVisionResult.Legs.Count; i++)
+                            {
+                                if (AiVisionResult.Legs[i].StartTime > DateTime.MinValue)
+                                {
+                                    orderedDbLegs[i].StartTime = AiVisionResult.Legs[i].StartTime;
+                                }
+                            }
+                        }
                     }
                     await context.SaveChangesAsync();
                 }
@@ -2432,6 +2445,11 @@ else
                                             dbLeg.Outcome = string.IsNullOrEmpty(parsedLeg.Outcome) ? "Pending" : parsedLeg.Outcome;
                                             dbLeg.Stats = parsedLeg.Stats ?? "";
                                             dbLeg.VerificationSource = string.IsNullOrEmpty(parsedLeg.VerificationSource) ? "Unknown" : parsedLeg.VerificationSource;
+                                            
+                                            if (!string.IsNullOrEmpty(parsedLeg.MatchStartTimeIso) && DateTime.TryParse(parsedLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime legStartTime))
+                                            {
+                                                dbLeg.StartTime = legStartTime;
+                                            }
                                         }
                                     }
                                 }
