@@ -6,6 +6,7 @@ namespace BettingApp.Data;
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser>(options)
 {
     public DbSet<Bet> Bets { get; set; }
+    public DbSet<BetLeg> BetLegs { get; set; }
     public DbSet<Transaction> Transactions { get; set; }
     public DbSet<SystemSetting> Settings { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
@@ -25,6 +26,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<Bet>()
             .Property(b => b.Odds)
             .HasPrecision(18, 2); // Stores up to 18 digits, 2 of them after decimal (e.g., 1.50)
+
+        builder.Entity<Bet>()
+            .HasMany(b => b.Legs)
+            .WithOne(l => l.Bet)
+            .HasForeignKey(l => l.BetId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.Entity<SystemSetting>()
             .Property(s => s.MinBetAmount)

@@ -55,9 +55,37 @@ namespace BettingApp.Data
         public DateTime? MatchStartTime { get; set; }
         public DateTime? NextCheckTime { get; set; }
         
+        // --- NEW METADATA COLUMNS ---
+        public bool IsLive { get; set; }
+        public bool IsAutoSettled { get; set; }
+        public bool IsBetBuilder { get; set; }
+        public string Bookmaker { get; set; } = string.Empty;
+        
+        public List<BetLeg> Legs { get; set; } = new();
+        // ----------------------------
+        
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         [ConcurrencyCheck]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    public class BetLeg
+    {
+        public int Id { get; set; }
+        public int BetId { get; set; }
+        public Bet? Bet { get; set; }
+        
+        public string Match { get; set; } = string.Empty;
+        public string Sport { get; set; } = string.Empty;
+        public string Market { get; set; } = string.Empty;
+        public string Selection { get; set; } = string.Empty;
+        public string Odds { get; set; } = string.Empty;
+        
+        public DateTime? StartTime { get; set; }
+        
+        public string Outcome { get; set; } = "Pending";
+        public string VerificationSource { get; set; } = "Unknown";
+        public string Stats { get; set; } = string.Empty;
     }
 
     public class Transaction

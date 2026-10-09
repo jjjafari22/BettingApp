@@ -69,6 +69,9 @@ namespace BettingApp.Services
         
         [JsonPropertyName("matchStartTimeIso")]
         public string? MatchStartTimeIso { get; set; }
+
+        [JsonPropertyName("verificationSource")]
+        public string VerificationSource { get; set; } = "Unknown";
     }
 
     public class AiOutcomeResultData
@@ -443,6 +446,7 @@ namespace BettingApp.Services
 - If the match has NOT STARTED or is CURRENTLY IN PROGRESS (e.g. `general.started` is false, or `header.status.finished` is false), grade all legs as 'Pending'. DO NOT grade live matches as 'Unknown' or 'Void' just because final stats are missing.
 - `matchStartTimeIso`: DO NOT PUT THIS AT THE ROOT! You MUST put this inside EACH object in the `legs` array! For EVERY leg (whether finished, live, or pending), return the absolute UTC start time of that specific match (e.g. '2026-07-25T19:00:00Z'). Parse it directly from FotMob JSON if available; if not available, search Google for the match start time.
 - `stats`: Start with EXACTLY ONE of: 'Verified via FotMob: ', 'FotMob lacked stat; Verified via Google Search: ', or 'Verified via Google Search: '. Include EXACTLY ONE source URL if you used Google. BET BUILDERS: Evaluate each leg COMPLETELY INDEPENDENTLY! You MUST write a unique, specific 'stats' reasoning for EACH leg. Do NOT copy and paste the same stats across multiple legs. For example, if Leg 1 is Goalscorer and Leg 2 is Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.
+- `verificationSource`: You MUST provide EXACTLY ONE of the following strict categories: 'FotMob_Verified', 'FotMob_MissingStat', 'FotMob_NotFound', 'Google_Verified', or 'Unknown'.
 - `outcome`: Strictly use EXACTLY ONE of: 'Won', 'Lost', 'Void', 'Pending', or 'Unknown'. NO EMOJIS! NO EXTRA TEXT!";
 
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -493,6 +497,7 @@ namespace BettingApp.Services
                                     ""match"": { ""type"": ""STRING"", ""nullable"": true },
                                     ""stats"": { ""type"": ""STRING"", ""nullable"": true },
                                     ""outcome"": { ""type"": ""STRING"", ""nullable"": true },
+                                    ""verificationSource"": { ""type"": ""STRING"", ""nullable"": true },
                                     ""matchStartTimeIso"": { ""type"": ""STRING"", ""nullable"": true }
                                 }
                             }

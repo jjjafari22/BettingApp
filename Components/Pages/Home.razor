@@ -729,7 +729,7 @@ else
                             try {
                                 System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Processing bet ID {id}\n");
                                 using var bgContext = dbFactory.CreateDbContext();
-                                var dbBet = await bgContext.Bets.FindAsync(id);
+                                var dbBet = await bgContext.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == id);
                                 if (dbBet != null && !string.IsNullOrEmpty(dbBet.ScreenshotUrl))
                                 {
                                     System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Calling AI Vision for URL {dbBet.ScreenshotUrl}\n");
@@ -747,6 +747,31 @@ else
                                         System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI SUCCESS. Serializing result...\n");
                                         dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(result);
                                         dbBet.AiVisionError = null;
+                                        
+                                        dbBet.IsLive = result.IsLive;
+                                        dbBet.IsBetBuilder = result.IsBetBuilder;
+                                        dbBet.Bookmaker = result.Bookmaker ?? "";
+                                        
+                                        if (result.Legs != null)
+                                        {
+                                            dbBet.Legs ??= new List<BettingApp.Data.BetLeg>();
+                                            dbBet.Legs.Clear();
+                                            foreach (var l in result.Legs)
+                                            {
+                                                dbBet.Legs.Add(new BettingApp.Data.BetLeg
+                                                {
+                                                    Match = l.Match ?? "",
+                                                    Sport = l.Sport ?? "",
+                                                    Market = l.Market ?? "",
+                                                    Selection = l.Selection ?? "",
+                                                    Odds = l.Odds ?? "",
+                                                    StartTime = l.StartTime,
+                                                    Outcome = "Pending",
+                                                    VerificationSource = "Unknown",
+                                                    Stats = ""
+                                                });
+                                            }
+                                        }
                                         
                                         // Auto-populate Stake and Odds right away so they appear in the Admin table!
                                         if (!string.IsNullOrEmpty(result.TotalOdds))

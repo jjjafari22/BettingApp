@@ -73,7 +73,7 @@ namespace BettingApp.Services
             {
                 // Refresh bet from DB using a newly scoped context (since DbContext is not thread-safe)
                 using var taskContext = dbFactory.CreateDbContext();
-                var dbBet = await taskContext.Bets.FindAsync(new object[] { bet.Id }, ct);
+                var dbBet = await taskContext.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == bet.Id, ct);
                 if (dbBet == null || (dbBet.Status != "Approved" && dbBet.Status != "Won" && dbBet.Status != "Lost" && dbBet.Status != "Void")) return;
                 
                 if (dbBet.AiOutcomeResult == "Admin Override")
@@ -104,6 +104,27 @@ namespace BettingApp.Services
                     {
                         dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(extractionResult);
                         dbBet.AiVisionError = null;
+                        dbBet.IsLive = extractionResult.IsLive;
+                        dbBet.IsBetBuilder = extractionResult.IsBetBuilder;
+                        dbBet.Bookmaker = extractionResult.Bookmaker ?? "";
+                        
+                        if (extractionResult.Legs != null)
+                        {
+                            dbBet.Legs.Clear();
+                            foreach (var l in extractionResult.Legs)
+                            {
+                                dbBet.Legs.Add(new BetLeg
+                                {
+                                    Match = l.Match ?? "",
+                                    Sport = l.Sport ?? "",
+                                    Market = l.Market ?? "",
+                                    Selection = l.Selection ?? "",
+                                    Odds = l.Odds ?? "",
+                                    StartTime = l.StartTime
+                                });
+                            }
+                        }
+
                         await taskContext.SaveChangesAsync(ct);
                     }
                 }
@@ -156,9 +177,82 @@ namespace BettingApp.Services
                                 dbBet.MatchStartTime = parsedStart;
                             }
 
+                            // --- UPDATE DB BET LEGS ---
+                            if (parsedData.Legs != null && dbBet.Legs != null && dbBet.Legs.Count > 0)
+                            {
+                                var dbLegsList = dbBet.Legs.OrderBy(l => l.Id).ToList();
+                                for (int i = 0; i < dbLegsList.Count; i++)
+                                {
+                                    var dbLeg = dbLegsList[i];
+                                    var parsedLeg = parsedData.Legs.Count > i ? parsedData.Legs[i] : parsedData.Legs.FirstOrDefault(l => string.Equals(l.Match, dbLeg.Match, StringComparison.OrdinalIgnoreCase));
+                                    
+                                    if (parsedLeg != null)
+                                    {
+                                        dbLeg.Outcome = string.IsNullOrEmpty(parsedLeg.Outcome) ? "Pending" : parsedLeg.Outcome;
+                                        dbLeg.Stats = parsedLeg.Stats ?? "";
+                                        dbLeg.VerificationSource = string.IsNullOrEmpty(parsedLeg.VerificationSource) ? "Unknown" : parsedLeg.VerificationSource;
+                                    }
+                                }
+                            }
+                            // --------------------------
+
                             if (isFinished)
                             {
                                 dbBet.NextCheckTime = null;
+
+                                // --- GATEKEEPER AUTO-SETTLEMENT LOGIC ---
+                                if (dbBet.Status == "Approved" && parsedData.Legs != null && parsedData.Legs.Count > 0)
+                                {
+                                    bool hasAnyVoid = parsedData.Legs.Any(l => string.Equals(l.Outcome, "Void", StringComparison.OrdinalIgnoreCase));
+                                    
+                                    string? targetStatus = null;
+
+                                    if (status.Contains("WON") && !hasAnyVoid)
+                                    {
+                                        if (parsedData.Legs.All(l => l.VerificationSource == "FotMob_Verified"))
+                                            targetStatus = "Won";
+                                    }
+                                    else if (status.Contains("LOST") && !hasAnyVoid)
+                                    {
+                                        if (parsedData.Legs.Any(l => string.Equals(l.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) && l.VerificationSource == "FotMob_Verified"))
+                                            targetStatus = "Lost";
+                                    }
+                                    
+                                    if (targetStatus != null)
+                                    {
+                                        var dbUser = await taskContext.Users.FindAsync(new object[] { dbBet.UserId }, ct);
+                                        if (dbUser != null)
+                                        {
+                                            decimal netStake = (decimal)(dbBet.AmountNOK ?? 0) - dbBet.FreeBetAmount;
+                                            
+                                            if (targetStatus == "Won")
+                                            {
+                                                dbUser.Balance += dbBet.PotentialPayout;
+                                                dbUser.LifetimeProfit += (dbBet.PotentialPayout - netStake);
+                                            }
+                                            else if (targetStatus == "Lost")
+                                            {
+                                                dbUser.LifetimeProfit -= netStake;
+                                            }
+
+                                            dbBet.Status = targetStatus;
+                                            dbBet.IsAutoSettled = true;
+                                            dbBet.UpdatedAt = DateTime.UtcNow;
+                                            
+                                            taskContext.AuditLogs.Add(new AuditLog
+                                            {
+                                                Timestamp = DateTime.UtcNow,
+                                                AdminUserName = "SYSTEM_AUTO",
+                                                Action = "Auto-Settled Bet",
+                                                TargetUserName = dbUser.UserName ?? "",
+                                                Details = $"Bet ID: {dbBet.Id} was auto-settled to {targetStatus} based on FotMob verification."
+                                            });
+
+                                            _logger.LogInformation($"Auto-settled Bet {dbBet.Id} to {targetStatus}");
+                                        }
+                                    }
+                                }
+                                // ----------------------------------------
                             }
                             else if (status == "MATCH NOT STARTED" && dbBet.MatchStartTime.HasValue)
                             {

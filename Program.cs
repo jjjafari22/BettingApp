@@ -203,6 +203,108 @@ using (var scope = app.Services.CreateScope())
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
         context.Database.Migrate(); 
+        
+        // --- One-Time Data Migration for BetLegs ---
+        try
+        {
+            // If we have Bets with AiVisionResultJson but NO BetLegs, we need to migrate them
+            bool needsMigration = !context.BetLegs.Any() && context.Bets.Any(b => b.AiVisionResultJson != null);
+            if (needsMigration)
+            {
+                var logger = services.GetRequiredService<ILogger<Program>>();
+                logger.LogInformation("Starting one-time data migration for BetLegs...");
+                
+                var betsToMigrate = context.Bets.Where(b => b.AiVisionResultJson != null).ToList();
+                int count = 0;
+                foreach(var bet in betsToMigrate)
+                {
+                    try 
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(bet.AiVisionResultJson);
+                        var root = doc.RootElement;
+                        
+                        bool isLive = root.TryGetProperty("isLive", out var l) && l.GetBoolean();
+                        bool isBb = root.TryGetProperty("isBetBuilder", out var bb) && bb.GetBoolean();
+                        string bookmaker = root.TryGetProperty("bookmaker", out var bk) ? bk.GetString() : "";
+
+                        bet.IsLive = isLive;
+                        bet.IsBetBuilder = isBb;
+                        bet.Bookmaker = bookmaker ?? "";
+
+                        if (root.TryGetProperty("legs", out var legs) && legs.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var leg in legs.EnumerateArray())
+                            {
+                                string match = leg.TryGetProperty("match", out var m) ? m.GetString() : "";
+                                string sport = leg.TryGetProperty("sport", out var sp) ? sp.GetString() : "";
+                                string market = leg.TryGetProperty("market", out var mk) ? mk.GetString() : "";
+                                string selection = leg.TryGetProperty("selection", out var sl) ? sl.GetString() : "";
+                                string odds = leg.TryGetProperty("odds", out var o) ? (o.ValueKind == System.Text.Json.JsonValueKind.String ? o.GetString() : o.GetRawText()) : "";
+                                
+                                DateTime? startTime = null;
+                                if (leg.TryGetProperty("startTime", out var st) && st.ValueKind == System.Text.Json.JsonValueKind.String)
+                                {
+                                    if (st.TryGetDateTime(out var parsedTime)) startTime = parsedTime;
+                                }
+
+                                string mappedOutcome = "Pending";
+                                string mappedSource = "Unknown";
+                                string mappedStats = "";
+                                
+                                if (!string.IsNullOrEmpty(bet.AiOutcomeResult))
+                                {
+                                    try 
+                                    {
+                                        using var outcomeDoc = System.Text.Json.JsonDocument.Parse(bet.AiOutcomeResult);
+                                        if (outcomeDoc.RootElement.TryGetProperty("legs", out var outLegs) && outLegs.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                        {
+                                            foreach (var oLeg in outLegs.EnumerateArray())
+                                            {
+                                                if (oLeg.TryGetProperty("match", out var oMatch) && string.Equals(oMatch.GetString(), match, StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    if (oLeg.TryGetProperty("outcome", out var oc)) mappedOutcome = oc.GetString() ?? "Pending";
+                                                    if (oLeg.TryGetProperty("verificationSource", out var vs)) mappedSource = vs.GetString() ?? "Unknown";
+                                                    if (oLeg.TryGetProperty("stats", out var ost)) mappedStats = ost.GetString() ?? "";
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } catch { }
+                                }
+
+                                context.BetLegs.Add(new BettingApp.Data.BetLeg
+                                {
+                                    BetId = bet.Id,
+                                    Match = match ?? "",
+                                    Sport = sport ?? "",
+                                    Market = market ?? "",
+                                    Selection = selection ?? "",
+                                    Odds = odds ?? "",
+                                    StartTime = startTime,
+                                    Outcome = string.IsNullOrEmpty(mappedOutcome) ? "Pending" : mappedOutcome,
+                                    VerificationSource = string.IsNullOrEmpty(mappedSource) ? "Unknown" : mappedSource,
+                                    Stats = mappedStats ?? ""
+                                });
+                            }
+                        }
+                        count++;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, $"Failed to migrate Bet {bet.Id}");
+                    }
+                }
+                
+                context.SaveChanges();
+                logger.LogInformation($"Successfully migrated data for {count} historical bets.");
+            }
+        }
+        catch (Exception ex)
+        {
+            var logger = services.GetRequiredService<ILogger<Program>>();
+            logger.LogError(ex, "An error occurred during one-time BetLeg data migration.");
+        }
+        // ---------------------------------------------
     }
     catch (Exception ex)
     {
