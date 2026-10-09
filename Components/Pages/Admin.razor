@@ -2468,7 +2468,9 @@ else
                             if (targetAutoSettleStatus != null)
                             {
                                 string autoSettleDetails = $"Bet ID: {dbBet.Id} was auto-settled to {targetAutoSettleStatus} based on manual check via Admin.";
-                                await ProcessBet(currentBet, targetAutoSettleStatus, isAutoSettled: true, customAuditDetails: autoSettleDetails);
+                                await InvokeAsync(async () => {
+                                    await ProcessBet(currentBet, targetAutoSettleStatus, isAutoSettled: true, customAuditDetails: autoSettleDetails, showOverlay: false);
+                                });
                             }
                         }
                     });
@@ -3089,14 +3091,17 @@ else
         else if (e.Key == "ArrowLeft") await NavigateReview(-1);
     }
 
-    private async Task ProcessBet(Bet bet, string newStatus, bool isAutoSettled = false, string? customAuditDetails = null)
+    private async Task ProcessBet(Bet bet, string newStatus, bool isAutoSettled = false, string? customAuditDetails = null, bool showOverlay = true)
     {
-        if (isSavingBet) return;
+        if (showOverlay && isSavingBet) return;
         try
         {
-            isSavingBet = true;
-            StateHasChanged();
-            await Task.Delay(1); // Give Blazor Server time to push UI state to client
+            if (showOverlay)
+            {
+                isSavingBet = true;
+                StateHasChanged();
+                await Task.Delay(1); // Give Blazor Server time to push UI state to client
+            }
 
             errorMessage = null;
             successMessage = null; 
@@ -3181,8 +3186,8 @@ else
             if (result.ErrorMessage.Contains("concurrently"))
             {
                 // Simple retry for concurrency (matches previous behavior for ApplicationUser)
-                isSavingBet = false;
-                await ProcessBet(bet, newStatus, isAutoSettled, customAuditDetails);
+                if (showOverlay) isSavingBet = false;
+                await ProcessBet(bet, newStatus, isAutoSettled, customAuditDetails, showOverlay);
                 return;
             }
 
@@ -3252,8 +3257,11 @@ else
         }
         finally
         {
-            isSavingBet = false;
-            StateHasChanged();
+            if (showOverlay)
+            {
+                isSavingBet = false;
+                StateHasChanged();
+            }
         }
     }
 
