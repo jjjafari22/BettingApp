@@ -218,6 +218,8 @@ using (var scope = app.Services.CreateScope())
                 int count = 0;
                 foreach(var bet in betsToMigrate)
                 {
+                    if (string.IsNullOrWhiteSpace(bet.AiVisionResultJson)) continue;
+
                     try 
                     {
                         using var doc = System.Text.Json.JsonDocument.Parse(bet.AiVisionResultJson);
@@ -225,21 +227,21 @@ using (var scope = app.Services.CreateScope())
                         
                         bool isLive = root.TryGetProperty("isLive", out var l) && l.GetBoolean();
                         bool isBb = root.TryGetProperty("isBetBuilder", out var bb) && bb.GetBoolean();
-                        string bookmaker = root.TryGetProperty("bookmaker", out var bk) ? bk.GetString() : "";
+                        string bookmaker = root.TryGetProperty("bookmaker", out var bk) ? (bk.GetString() ?? "") : "";
 
                         bet.IsLive = isLive;
                         bet.IsBetBuilder = isBb;
-                        bet.Bookmaker = bookmaker ?? "";
+                        bet.Bookmaker = bookmaker;
 
                         if (root.TryGetProperty("legs", out var legs) && legs.ValueKind == System.Text.Json.JsonValueKind.Array)
                         {
                             foreach (var leg in legs.EnumerateArray())
                             {
-                                string match = leg.TryGetProperty("match", out var m) ? m.GetString() : "";
-                                string sport = leg.TryGetProperty("sport", out var sp) ? sp.GetString() : "";
-                                string market = leg.TryGetProperty("market", out var mk) ? mk.GetString() : "";
-                                string selection = leg.TryGetProperty("selection", out var sl) ? sl.GetString() : "";
-                                string odds = leg.TryGetProperty("odds", out var o) ? (o.ValueKind == System.Text.Json.JsonValueKind.String ? o.GetString() : o.GetRawText()) : "";
+                                string match = leg.TryGetProperty("match", out var m) ? (m.GetString() ?? "") : "";
+                                string sport = leg.TryGetProperty("sport", out var sp) ? (sp.GetString() ?? "") : "";
+                                string market = leg.TryGetProperty("market", out var mk) ? (mk.GetString() ?? "") : "";
+                                string selection = leg.TryGetProperty("selection", out var sl) ? (sl.GetString() ?? "") : "";
+                                string odds = leg.TryGetProperty("odds", out var o) ? (o.ValueKind == System.Text.Json.JsonValueKind.String ? (o.GetString() ?? "") : o.GetRawText()) : "";
                                 
                                 DateTime? startTime = null;
                                 if (leg.TryGetProperty("startTime", out var st) && st.ValueKind == System.Text.Json.JsonValueKind.String)
