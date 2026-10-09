@@ -255,14 +255,9 @@ namespace BettingApp.Services
                                 }
                                 // ----------------------------------------
                             }
-                            else if (status == "MATCH NOT STARTED" && dbBet.MatchStartTime.HasValue)
-                            {
-                                var twoHoursAfter = dbBet.MatchStartTime.Value.AddHours(2);
-                                dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
-                            }
                             else
                             {
-                                dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                                dbBet.NextCheckTime = BettingApp.Services.BetSchedulingLogic.CalculateNextCheckTime(dbBet);
                             }
                         }
                     }

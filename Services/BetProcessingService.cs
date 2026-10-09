@@ -155,29 +155,9 @@ namespace BettingApp.Services
                 }
             }
 
-            if (newStatus == "Approved" && !string.IsNullOrEmpty(dbBet.AiVisionResultJson))
+            if (newStatus == "Approved")
             {
-                bool IsMissingAnyStartTime = false;
-                if (dbBet.Legs != null && dbBet.Legs.Count > 0)
-                {
-                    IsMissingAnyStartTime = dbBet.Legs.Any(l => !l.StartTime.HasValue);
-                }
-                else
-                {
-                    IsMissingAnyStartTime = !dbBet.MatchStartTime.HasValue;
-                }
-
-                if (IsMissingAnyStartTime)
-                {
-                    // If ANY legs are missing a start time (or all of them), wake up the AI immediately to find them!
-                    dbBet.NextCheckTime = DateTime.UtcNow;
-                }
-                else if (dbBet.MatchStartTime.HasValue)
-                {
-                    // All legs are fully scheduled! The earliest MatchStartTime is safe to use.
-                    var twoHoursAfter = dbBet.MatchStartTime.Value.AddHours(2);
-                    dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
-                }
+                dbBet.NextCheckTime = BettingApp.Services.BetSchedulingLogic.CalculateNextCheckTime(dbBet);
             }
             else if (newStatus != "Approved" && newStatus != "Pending")
             {

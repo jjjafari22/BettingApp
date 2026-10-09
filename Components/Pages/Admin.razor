@@ -2376,22 +2376,7 @@ else
                                     dbBet.MatchStartTime = st;
                                 }
 
-                                if (status == "MATCH NOT STARTED" && dbBet.MatchStartTime.HasValue)
-                                {
-                                    var twoHoursAfter = dbBet.MatchStartTime.Value.AddHours(2);
-                                    dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
-                                }
-                                else if (!isFinished)
-                                {
-                                    dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
-                                }
-                                else
-                                {
-                                    dbBet.NextCheckTime = null; // Finished, no need to check
-                                }
-                                
                                 currentBet.MatchStartTime = dbBet.MatchStartTime;
-                                currentBet.NextCheckTime = dbBet.NextCheckTime;
                                 
                                 // Securely store start times found by Google into the actual extraction legs
                                 bool aiVisionUpdated = false;
@@ -2474,6 +2459,10 @@ else
                                 // ----------------------------------------
                             }
 
+                            // --- UPDATE NEXT CHECK TIME ---
+                            dbBet.NextCheckTime = BettingApp.Services.BetSchedulingLogic.CalculateNextCheckTime(dbBet);
+                            currentBet.NextCheckTime = dbBet.NextCheckTime;
+                            
                             await context.SaveChangesAsync();
                             
                             if (targetAutoSettleStatus != null)
