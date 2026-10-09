@@ -220,36 +220,32 @@ namespace BettingApp.Services
                                     
                                     if (targetStatus != null)
                                     {
-                                        var dbUser = await taskContext.Users.FindAsync(new object[] { dbBet.UserId }, ct);
-                                        if (dbUser != null)
+                                        // Save the extracted legs and outcome string first
+                                        await taskContext.SaveChangesAsync(ct);
+
+                                        var betProcessor = scope.ServiceProvider.GetRequiredService<BettingApp.Services.BetProcessingService>();
+                                        var processResult = await betProcessor.ProcessBetAsync(
+                                            betId: dbBet.Id,
+                                            newStatus: targetStatus,
+                                            adminName: "SYSTEM_AUTO",
+                                            expectedOriginalStatus: "Approved",
+                                            newAmount: (decimal)(dbBet.AmountNOK ?? 0),
+                                            newOdds: dbBet.Odds,
+                                            customAuditDetails: $"Bet ID: {dbBet.Id} was auto-settled to {targetStatus} based on FotMob verification.",
+                                            isAutoSettled: true
+                                        );
+
+                                        if (processResult.Success)
                                         {
-                                            decimal netStake = (decimal)(dbBet.AmountNOK ?? 0) - dbBet.FreeBetAmount;
-                                            
-                                            if (targetStatus == "Won")
-                                            {
-                                                dbUser.Balance += dbBet.PotentialPayout;
-                                                dbUser.LifetimeProfit += (dbBet.PotentialPayout - netStake);
-                                            }
-                                            else if (targetStatus == "Lost")
-                                            {
-                                                dbUser.LifetimeProfit -= netStake;
-                                            }
-
-                                            dbBet.Status = targetStatus;
-                                            dbBet.IsAutoSettled = true;
-                                            dbBet.UpdatedAt = DateTime.UtcNow;
-                                            
-                                            taskContext.AuditLogs.Add(new AuditLog
-                                            {
-                                                Timestamp = DateTime.UtcNow,
-                                                AdminUserName = "SYSTEM_AUTO",
-                                                Action = "Auto-Settled Bet",
-                                                TargetUserName = dbUser.UserName ?? "",
-                                                Details = $"Bet ID: {dbBet.Id} was auto-settled to {targetStatus} based on FotMob verification."
-                                            });
-
                                             _logger.LogInformation($"Auto-settled Bet {dbBet.Id} to {targetStatus}");
                                         }
+                                        else
+                                        {
+                                            _logger.LogWarning($"Failed to auto-settle Bet {dbBet.Id}: {processResult.ErrorMessage}");
+                                        }
+
+                                        anyUpdates = true;
+                                        return; // We already saved and processed, skip the final SaveChangesAsync below
                                     }
                                 }
                                 // ----------------------------------------

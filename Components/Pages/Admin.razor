@@ -21,6 +21,7 @@
 @inject MarketMappingService MarketMapper
 @inject IServiceProvider ServiceProvider
 @inject ILogger<Admin> Logger
+@inject BettingApp.Services.BetProcessingService BetProcessor
 @attribute [Authorize]
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 @implements IAsyncDisposable
@@ -2451,21 +2452,6 @@ else
                                         if (parsedData.Legs.Any(l => string.Equals(l.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) && l.VerificationSource == "FotMob_Verified"))
                                             targetAutoSettleStatus = "Lost";
                                     }
-                                    
-                                    if (targetAutoSettleStatus != null)
-                                    {
-                                        dbBet.IsAutoSettled = true;
-                                        currentBet.IsAutoSettled = true;
-                                        
-                                        context.AuditLogs.Add(new AuditLog
-                                        {
-                                            Timestamp = DateTime.UtcNow,
-                                            AdminUserName = "SYSTEM_AUTO_MANUAL",
-                                            Action = "Auto-Settled Bet (Manual Check)",
-                                            TargetUserName = dbBet.UserId ?? "",
-                                            Details = $"Bet ID: {dbBet.Id} was auto-settled to {targetAutoSettleStatus} based on manual check via Admin."
-                                        });
-                                    }
                                 }
                                 // ----------------------------------------
                             }
@@ -2474,7 +2460,8 @@ else
                             
                             if (targetAutoSettleStatus != null)
                             {
-                                await ProcessBet(currentBet, targetAutoSettleStatus);
+                                string autoSettleDetails = $"Bet ID: {dbBet.Id} was auto-settled to {targetAutoSettleStatus} based on manual check via Admin.";
+                                await ProcessBet(currentBet, targetAutoSettleStatus, isAutoSettled: true, customAuditDetails: autoSettleDetails);
                             }
                         }
                     });
@@ -3095,7 +3082,7 @@ else
         else if (e.Key == "ArrowLeft") await NavigateReview(-1);
     }
 
-    private async Task ProcessBet(Bet bet, string newStatus)
+    private async Task ProcessBet(Bet bet, string newStatus, bool isAutoSettled = false, string? customAuditDetails = null)
     {
         if (isSavingBet) return;
         try
@@ -3171,195 +3158,37 @@ else
             }
         }
         
-        using var context = DbFactory.CreateDbContext();
-        var dbBet = await context.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == bet.Id);
-        var dbUser = await context.Users.FindAsync(bet.UserId);
-        if (dbBet != null && dbUser != null)
+        var result = await BetProcessor.ProcessBetAsync(
+            betId: bet.Id,
+            newStatus: newStatus,
+            adminName: currentAdminName ?? "Unknown",
+            expectedOriginalStatus: originalStatus,
+            newAmount: (decimal)(bet.AmountNOK ?? 0),
+            newOdds: bet.Odds,
+            customAuditDetails: customAuditDetails,
+            isAutoSettled: isAutoSettled
+        );
+
+        if (!result.Success)
         {
-            if (dbBet.Status != originalStatus)
+            if (result.ErrorMessage.Contains("concurrently"))
             {
-                 var lastAudit = await context.AuditLogs
-                    .Where(a => a.Details.Contains($"Bet ID: {bet.Id}"))
-                    .OrderByDescending(a => a.Timestamp)
-                    .FirstOrDefaultAsync();
-                 
-                 string otherAdminName = lastAudit != null ? lastAudit.AdminUserName : "another admin";
-                 errorMessage = $"Action aborted: Bet #{bet.Id} was already updated to '{dbBet.Status}' by Admin {otherAdminName}.";
-                 _ = InvokeAsync(async () => {
-                     await LoadPendingBets();
-                     await LoadApprovedBets();
-                     await LoadCompletedBets();
-                     StateHasChanged();
-                 });
-                 reviewingBetModel = null;
-                 StateHasChanged();
-                 return;
-            }
-
-            decimal dbAmount = (decimal)(dbBet.AmountNOK ?? 0);
-
-            // REVERSE OLD IMPACT
-            // Statuses that have deducted balance: Approved, Won, Lost
-            if (originalStatus == "Approved" || originalStatus == "Lost")
-            {
-                dbUser.Balance += (dbAmount - dbBet.FreeBetAmount);
-                dbUser.FreeBetBalance += dbBet.FreeBetAmount;
-                if (originalStatus == "Lost")
-                {
-                    dbUser.LifetimeProfit += (dbAmount - dbBet.FreeBetAmount);
-                }
-            }
-            else if (originalStatus == "Won")
-            {
-                dbUser.Balance += (dbAmount - dbBet.FreeBetAmount);
-                dbUser.FreeBetBalance += dbBet.FreeBetAmount;
-                dbUser.Balance -= dbBet.PotentialPayout;
-                
-                // Refund the old net profit
-                dbUser.LifetimeProfit -= (dbBet.PotentialPayout - (dbAmount - dbBet.FreeBetAmount));
-            }
-            // originalStatus == Void/Rejected/Cancelled/Pending already has balance returned
-
-            // APPLY NEW VALUES
-            dbBet.Status = newStatus;
-            dbBet.AmountNOK = bet.AmountNOK;
-            dbBet.Odds = bet.Odds;
-
-            decimal newAmount = (decimal)(dbBet.AmountNOK ?? 0);
-
-            if (originalStatus == "Pending")
-            {
-                // Automatic consumption if user has free bet balance
-                dbBet.FreeBetAmount = Math.Min(newAmount, dbUser.FreeBetBalance);
-            }
-            else 
-            {
-                 // Safety: Capping free bet amount if admin reduced the total stake
-                 dbBet.FreeBetAmount = Math.Min(dbBet.FreeBetAmount, newAmount);
-            }
-
-            // APPLY NEW STATUS IMPACT
-            // Statuses that should deduct balance: Approved, Won, Lost
-            if (newStatus == "Approved" || newStatus == "Lost")
-            {
-                dbUser.Balance -= (newAmount - dbBet.FreeBetAmount);
-                dbUser.FreeBetBalance -= dbBet.FreeBetAmount;
-                if (newStatus == "Lost")
-                {
-                    dbUser.LifetimeProfit -= (newAmount - dbBet.FreeBetAmount);
-                }
-            }
-            else if (newStatus == "Won")
-            {
-                dbUser.Balance -= (newAmount - dbBet.FreeBetAmount);
-                dbUser.FreeBetBalance -= dbBet.FreeBetAmount;
-                dbUser.Balance += dbBet.PotentialPayout;
-                
-                // Add the new net profit
-                dbUser.LifetimeProfit += (dbBet.PotentialPayout - (newAmount - dbBet.FreeBetAmount));
-            }
-            // newStatus == Void/Rejected/Cancelled doesn't deduct stakes
-
-
-            dbBet.UpdatedAt = DateTime.UtcNow;
-            context.AuditLogs.Add(new AuditLog
-            {
-                AdminUserName = currentAdminName ?? "Unknown",
-                Action = isUndo ? "Bet Undone (Reverted to Approved)" : $"Bet {newStatus}",
-                TargetUserName = bet.UserName,
-                Details = $"Bet ID: {bet.Id}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Payout: {dbBet.PotentialPayout:N0}"
-            });
-
-            if (isUndo)
-            {
-                dbBet.AiOutcomeResult = null;
-                dbBet.IsAutoSettled = false;
-                
-                if (dbBet.Legs != null)
-                {
-                    foreach (var leg in dbBet.Legs)
-                    {
-                        leg.Outcome = "Pending";
-                        leg.VerificationSource = "Unknown";
-                        leg.Stats = "";
-                    }
-                }
-            }
-
-            if (newStatus == "Approved" && !string.IsNullOrEmpty(dbBet.AiVisionResultJson))
-            {
-                if (IsMissingAnyStartTime(dbBet))
-                {
-                    // If ANY legs are missing a start time (or all of them), wake up the AI immediately to find them!
-                    dbBet.NextCheckTime = DateTime.UtcNow;
-                }
-                else
-                {
-                    // All legs are fully scheduled! The earliest MatchStartTime is safe to use.
-                    var twoHoursAfter = dbBet.MatchStartTime!.Value.AddHours(2);
-                    dbBet.NextCheckTime = twoHoursAfter <= DateTime.UtcNow ? DateTime.UtcNow : twoHoursAfter;
-                }
-            }
-            else if (newStatus != "Approved" && newStatus != "Pending")
-            {
-                if (newStatus == "Won" || newStatus == "Lost" || newStatus == "Void")
-                {
-                    bool isAiFinished = false;
-                    if (!string.IsNullOrEmpty(dbBet.AiOutcomeResult))
-                    {
-                        try {
-                            var doc = System.Text.Json.JsonDocument.Parse(dbBet.AiOutcomeResult);
-                            if (doc.RootElement.TryGetProperty("overallStatus", out var prop))
-                            {
-                                var s = prop.GetString()?.ToUpperInvariant() ?? "";
-                                if (s == "WON" || s == "LOST" || s == "VOID" || s == "UNKNOWN")
-                                {
-                                    isAiFinished = true;
-                                }
-                            }
-                        } catch { }
-                    }
-                    
-                    if (isAiFinished || dbBet.AiOutcomeResult == "Admin Override")
-                    {
-                        dbBet.NextCheckTime = null;
-                        bet.NextCheckTime = null;
-                    }
-
-                    if (!isAiFinished && dbBet.AiOutcomeResult != "Admin Override")
-                    {
-                        // Schedule AI Check for 60 minutes later
-                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
-                        bet.NextCheckTime = dbBet.NextCheckTime;
-                    }
-                }
-            }
-
-            try
-            {
-                await context.SaveChangesAsync();
-            }
-            catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
-            {
-                var entry = ex.Entries.FirstOrDefault();
-                if (entry?.Entity is ApplicationUser)
-                {
-                    isSavingBet = false;
-                    await ProcessBet(bet, newStatus);
-                    return;
-                }
-
-                errorMessage = $"Action aborted: Bet #{bet.Id} was modified concurrently.";
-                _ = InvokeAsync(async () => {
-                    await LoadPendingBets();
-                    await LoadApprovedBets();
-                    await LoadCompletedBets();
-                    StateHasChanged();
-                });
-                reviewingBetModel = null;
-                StateHasChanged();
+                // Simple retry for concurrency (matches previous behavior for ApplicationUser)
+                isSavingBet = false;
+                await ProcessBet(bet, newStatus, isAutoSettled, customAuditDetails);
                 return;
             }
+
+            errorMessage = result.ErrorMessage;
+            _ = InvokeAsync(async () => {
+                await LoadPendingBets();
+                await LoadApprovedBets();
+                await LoadCompletedBets();
+                StateHasChanged();
+            });
+            reviewingBetModel = null;
+            StateHasChanged();
+            return;
         }
 
         // Do not block the UI waiting for 3 heavy table scans! 
@@ -3370,12 +3199,6 @@ else
             await LoadCompletedBets();
             StateHasChanged();
         });
-        if (dbUser != null && !string.IsNullOrEmpty(dbUser.DiscordUserId))
-        {
-            _ = DiscordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet!, isUndo ? "Undone" : newStatus, isUpdate: isUndo);
-        }
-
-        await HubContext.Clients.Group(bet.UserId).SendAsync("ReceiveUpdate", $"Your bet status is now: {newStatus}");
         await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
         successMessage = $"Bet #{bet.Id} updated.";
         

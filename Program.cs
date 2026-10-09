@@ -43,6 +43,7 @@ builder.Services.AddSignalR(hubOptions =>
 // -----------------------------------------------------
 
 builder.Services.AddScoped<SettlementService>();
+builder.Services.AddScoped<BetProcessingService>();
 builder.Services.AddScoped<DialogService>();
 Func<HttpMessageHandler> compressedHandler = () => new HttpClientHandler
 {
