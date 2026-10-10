@@ -245,7 +245,9 @@ else
         if (!string.IsNullOrWhiteSpace(idFilter))
         {
             var term = idFilter.Trim().ToLower();
-            query = query.Where(l => l.Details.ToLower().Contains($"id: {term},") || l.Details.ToLower().EndsWith($"id: {term}"));
+            query = query.Where(l => l.Details.ToLower().Contains($"id: {term},") 
+                                  || l.Details.ToLower().Contains($"id: {term} ") 
+                                  || l.Details.ToLower().EndsWith($"id: {term}"));
         }
 
         if (!string.IsNullOrWhiteSpace(adminFilter))

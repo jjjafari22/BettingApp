@@ -211,22 +211,9 @@ namespace BettingApp.Services
                                 dbBet.NextCheckTime = null;
 
                                 // --- GATEKEEPER AUTO-SETTLEMENT LOGIC ---
-                                if (dbBet.Status == "Approved" && parsedData.Legs != null && parsedData.Legs.Count > 0)
+                                if (dbBet.Status == "Approved")
                                 {
-                                    bool hasAnyVoid = parsedData.Legs.Any(l => string.Equals(l.Outcome, "Void", StringComparison.OrdinalIgnoreCase));
-                                    
-                                    string? targetStatus = null;
-
-                                    if (status.Contains("WON") && !hasAnyVoid)
-                                    {
-                                        if (parsedData.Legs.All(l => l.VerificationSource == "FotMob_Verified"))
-                                            targetStatus = "Won";
-                                    }
-                                    else if (status.Contains("LOST") && !hasAnyVoid)
-                                    {
-                                        if (parsedData.Legs.Any(l => string.Equals(l.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) && l.VerificationSource == "FotMob_Verified"))
-                                            targetStatus = "Lost";
-                                    }
+                                    string? targetStatus = BetSchedulingLogic.DetermineAutoSettleStatus(parsedData.OverallStatus, parsedData.Legs);
                                     
                                     if (targetStatus != null)
                                     {
@@ -241,7 +228,6 @@ namespace BettingApp.Services
                                             expectedOriginalStatus: "Approved",
                                             newAmount: (decimal)(dbBet.AmountNOK ?? 0),
                                             newOdds: dbBet.Odds,
-                                            customAuditDetails: $"Bet ID: {dbBet.Id} was auto-settled to {targetStatus} based on FotMob verification.",
                                             isAutoSettled: true
                                         );
 

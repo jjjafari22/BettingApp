@@ -129,6 +129,12 @@ namespace BettingApp.Services
 
             dbBet.UpdatedAt = DateTime.UtcNow;
 
+            if (isAutoSettled)
+            {
+                adminName = "SYSTEM_AUTO";
+                customAuditDetails = $"Bet ID: {betId} was auto-settled to {newStatus} based on FotMob verification.";
+            }
+
             string details = customAuditDetails ?? $"Bet ID: {betId}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Payout: {dbBet.PotentialPayout:N0}";
             
             context.AuditLogs.Add(new AuditLog

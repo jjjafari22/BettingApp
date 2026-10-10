@@ -74,5 +74,28 @@ namespace BettingApp.Services
                 return DateTime.UtcNow.AddMinutes(15);
             }
         }
+
+        public static string? DetermineAutoSettleStatus(string? overallStatus, System.Collections.Generic.List<BettingApp.Services.AiOutcomeLegResult>? legs)
+        {
+            if (legs == null || legs.Count == 0) return null;
+
+            bool hasAnyVoid = legs.Any(l => string.Equals(l.Outcome, "Void", StringComparison.OrdinalIgnoreCase));
+            if (hasAnyVoid) return null;
+
+            string status = overallStatus?.ToUpper() ?? "";
+
+            if (status.Contains("WON"))
+            {
+                if (legs.All(l => l.VerificationSource == "FotMob_Verified"))
+                    return "Won";
+            }
+            else if (status.Contains("LOST"))
+            {
+                if (legs.Any(l => string.Equals(l.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) && l.VerificationSource == "FotMob_Verified"))
+                    return "Lost";
+            }
+
+            return null;
+        }
     }
 }
