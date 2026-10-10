@@ -118,6 +118,24 @@ namespace BettingApp.Data
         public string Outcome { get; set; } = "Pending";
         public string VerificationSource { get; set; } = "Unknown";
         public string Stats { get; set; } = string.Empty;
+        
+        public List<BetLegBookmakerOdds> BookmakerOdds { get; set; } = new();
+    }
+
+    public class BetLegBookmakerOdds
+    {
+        public int Id { get; set; }
+        public int BetLegId { get; set; }
+        public BetLeg? BetLeg { get; set; }
+        
+        public string BookmakerName { get; set; } = string.Empty;
+        public decimal OddsValue { get; set; }
+        
+        // The max bet limit (volume / liquidity) provided by bookmakers like Pinnacle
+        public decimal? Limit { get; set; }
+        
+        // The exact time the odds were retrieved from the API
+        public DateTime? LookedUpAt { get; set; }
     }
 
     public class Transaction

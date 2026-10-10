@@ -8,6 +8,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Bet> Bets { get; set; }
     public DbSet<BetAiEvaluation> BetAiEvaluations { get; set; }
     public DbSet<BetLeg> BetLegs { get; set; }
+    public DbSet<BetLegBookmakerOdds> BetLegBookmakerOdds { get; set; }
     public DbSet<Transaction> Transactions { get; set; }
     public DbSet<SystemSetting> Settings { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
@@ -39,6 +40,20 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .WithOne(a => a.Bet)
             .HasForeignKey<BetAiEvaluation>(a => a.BetId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<BetLeg>()
+            .HasMany(l => l.BookmakerOdds)
+            .WithOne(o => o.BetLeg)
+            .HasForeignKey(o => o.BetLegId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<BetLegBookmakerOdds>()
+            .Property(o => o.OddsValue)
+            .HasPrecision(18, 3);
+            
+        builder.Entity<BetLegBookmakerOdds>()
+            .Property(o => o.Limit)
+            .HasPrecision(18, 2);
 
         builder.Entity<SystemSetting>()
             .Property(s => s.MinBetAmount)

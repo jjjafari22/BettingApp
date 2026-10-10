@@ -354,6 +354,21 @@ else
                                                     </div>
                                                 }
                                             }
+                                            else
+                                            {
+                                                if (LegOddsCache.Count == 0)
+                                                {
+                                                    <button class="btn btn-outline-primary btn-sm mb-2 w-100 fw-bold shadow-sm" @onclick="LoadSavedOddsIntoCache">
+                                                        <i class="bi bi-eye me-1"></i> Show Bookmaker Odds
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="btn btn-outline-secondary btn-sm mb-2 w-100 fw-bold shadow-sm" @onclick="HideSavedOddsFromCache">
+                                                        <i class="bi bi-eye-slash me-1"></i> Hide Bookmaker Odds
+                                                    </button>
+                                                }
+                                            }
                                             
                                                 // Group ONLY adjacent legs with the same Match name
                                                 var groupedLegs = new List<List<(BettingApp.Services.AiVisionLeg Leg, int Index)>>();
@@ -510,6 +525,8 @@ else
                                                                                 <div class="text-truncate">
                                                                                     @if (!string.IsNullOrEmpty(legResult.HighlightedOutcome)) {
                                                                                         <span><i class="bi bi-check2-circle text-success me-1"></i>Matched: <strong>@legResult.HighlightedOutcome</strong></span>
+                                                                                    } else if (legResult.LookedUpAt.HasValue) {
+                                                                                        <span><i class="bi bi-clock-history text-secondary me-1"></i>Looked up at: <strong>@ToUserLocal(legResult.LookedUpAt.Value).ToString("dd/MM HH:mm")</strong></span>
                                                                                     } else {
                                                                                         <span><i class="bi bi-dash-circle text-secondary me-1"></i>No match</span>
                                                                                     }
@@ -1019,7 +1036,6 @@ else
                     {
                         <tr>
                              <td>
-                           
                                  <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
                                      <i class="bi bi-play-circle"></i> Process
                                 </button>
@@ -1248,7 +1264,7 @@ else
         if (reviewingBetModel != null)
         {
             using var context = DbFactory.CreateDbContext();
-            var dbBet = await context.Bets.Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == reviewingBetModel.Id);
+            var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == reviewingBetModel.Id);
             if (dbBet != null)
             {
                 if (dbBet.AiOutcomeResult == "Admin Override")
@@ -1376,10 +1392,57 @@ else
         public BettingApp.Models.OddsPapiSearchResult? SearchResult { get; set; }
         public string? SelectedMarketId { get; set; }
         public string? HighlightedOutcome { get; set; }
+        public DateTime? LookedUpAt { get; set; }
         public Dictionary<string, BettingApp.Models.OddsData> MatchedBookieOdds { get; set; } = new();
     }
 
+    private async Task HideSavedOddsFromCache()
+    {
+        LegOddsCache.Clear();
+        try { await reviewModalRef.FocusAsync(); } catch { }
+    }
+
+    private async Task LoadSavedOddsIntoCache()
+    {
+        if (reviewingBetModel == null) return;
+        LegOddsCache.Clear();
+        for (int i = 0; i < reviewingBetModel.Legs.Count; i++)
+        {
+            var leg = reviewingBetModel.Legs[i];
+            var matched = new Dictionary<string, BettingApp.Models.OddsData>();
+            
+            if (leg.BookmakerOdds.Any())
+            {
+                foreach (var bo in leg.BookmakerOdds)
+                {
+                    matched[bo.BookmakerName] = new BettingApp.Models.OddsData 
+                    { 
+                        Price = (double)bo.OddsValue,
+                        Limit = (double?)bo.Limit
+                    };
+                }
+            }
+            
+            LegOddsCache[i] = new LegOddsResult 
+            { 
+                IsLoading = false,
+                MatchedBookieOdds = matched,
+                WarningMessage = leg.BookmakerOdds.Any() ? "Showing historical odds snapshot from time of approval." : "No historical odds saved for this leg.",
+                LookedUpAt = leg.BookmakerOdds.FirstOrDefault()?.LookedUpAt
+            };
+        }
+        
+        try { await reviewModalRef.FocusAsync(); } catch { }
+    }
+
     private Dictionary<int, LegOddsResult> LegOddsCache = new();
+    
+    private HashSet<int> ExpandedBetIds = new();
+    private void ToggleBetRow(int betId)
+    {
+        if (ExpandedBetIds.Contains(betId)) ExpandedBetIds.Remove(betId);
+        else ExpandedBetIds.Add(betId);
+    }
     private bool IsCheckingAllOdds = false;
     private int CheckedLegsCount = 0;
 
@@ -1597,6 +1660,7 @@ else
             resultData.WarningMessage = $"The betslip is for '{preSelectCategory}', but OddsPapi doesn't offer it for this match.";
         }
 
+        resultData.LookedUpAt = DateTime.UtcNow;
         resultData.IsLoading = false;
     }
     private System.Timers.Timer? uiRefreshTimer;
@@ -1849,7 +1913,7 @@ else
                 if (targetBet != null) StartReview(targetBet);
                 else 
                 {
-                    var exists = await context.Bets.Include(b => b.AiEvaluation).AnyAsync(b => b.Id == ReviewBetId.Value);
+                    var exists = await context.Bets.AnyAsync(b => b.Id == ReviewBetId.Value);
                     if (exists) errorMessage = $"Bet #{ReviewBetId.Value} is already reviewed.";
                     else errorMessage = $"Bet #{ReviewBetId.Value} not found.";
                 }
@@ -1872,7 +1936,7 @@ else
         {
             using var context = DbFactory.CreateDbContext();
             var twoMinsAgo = DateTime.UtcNow.AddMinutes(-2);
-            var allPendingBets = await context.Bets.Include(b => b.AiEvaluation).Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
+            var allPendingBets = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
             totalPendingBets = allPendingBets.Count;
             
             pendingBets = allPendingBets
@@ -1932,7 +1996,7 @@ else
             try
             {
                 using var context = DbFactory.CreateDbContext();
-                var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == bId);
+                var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == bId);
                 if (dbBet != null)
                 {
                     if (currentAiVisionResultJson != null)
@@ -1965,7 +2029,7 @@ else
         try
         {
             using var context = DbFactory.CreateDbContext();
-            var query = context.Bets.Include(b => b.AiEvaluation).Where(b => b.Status == "Approved");
+            var query = context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).Where(b => b.Status == "Approved");
 
             if (!string.IsNullOrWhiteSpace(approvedSearchTerm))
             {
@@ -2058,7 +2122,7 @@ else
         {
             using var context = DbFactory.CreateDbContext();
             
-            var query = context.Bets.Include(b => b.AiEvaluation).AsQueryable();
+            var query = context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).AsQueryable();
 
             if (showOnlyMismatch)
             {
@@ -2301,7 +2365,7 @@ else
                     }
                     
                     using var context = DbFactory.CreateDbContext();
-                    var dbBet = await context.Bets.Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
+                    var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
                     if (dbBet != null)
                     {
                         dbBet.AiVisionResultJson = json;
@@ -2343,7 +2407,7 @@ else
                         }
 
                         using var context = DbFactory.CreateDbContext();
-                        var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
+                        var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
                         if (dbBet != null)
                         {
                             dbBet.AiOutcomeResult = outcome;
@@ -2542,7 +2606,7 @@ else
                 try 
                 {
                     using var context = DbFactory.CreateDbContext();
-                    var dbBet = await context.Bets.Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == capturingBetId);
+                    var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == capturingBetId);
                     if (dbBet != null)
                     {
                         dbBet.AiVisionError = error;
@@ -2600,7 +2664,7 @@ else
                 try 
                 {
                     using var context = DbFactory.CreateDbContext();
-                    var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == capturingBetId);
+                    var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == capturingBetId);
                     if (dbBet != null)
                     {
                         dbBet.AiVisionResultJson = json;
@@ -3169,6 +3233,43 @@ else
                 }
             }
         }
+
+        if (newStatus == "Approved" && LegOddsCache.Count > 0)
+        {
+            try
+            {
+                using var oddsContext = DbFactory.CreateDbContext();
+                var dbBetToUpdate = await oddsContext.Bets.Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == bet.Id);
+                if (dbBetToUpdate != null)
+                {
+                    for (int i = 0; i < dbBetToUpdate.Legs.Count; i++)
+                    {
+                        if (LegOddsCache.TryGetValue(i, out var legResult) && legResult.MatchedBookieOdds.Count > 0)
+                        {
+                            dbBetToUpdate.Legs[i].BookmakerOdds.Clear();
+                            foreach (var kvp in legResult.MatchedBookieOdds)
+                            {
+                                if (kvp.Value.Price > 0)
+                                {
+                                    dbBetToUpdate.Legs[i].BookmakerOdds.Add(new BetLegBookmakerOdds 
+                                    {
+                                        BookmakerName = kvp.Key,
+                                        OddsValue = (decimal)kvp.Value.Price,
+                                        Limit = (decimal?)kvp.Value.Limit,
+                                        LookedUpAt = legResult.LookedUpAt
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    await oddsContext.SaveChangesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Admin.razor] Failed to save Bookmaker Odds: {ex.Message}");
+            }
+        }
         
         var result = await BetProcessor.ProcessBetAsync(
             betId: bet.Id,
@@ -3269,14 +3370,14 @@ else
     private async Task ExportPendingBetsCsv()
     {
         using var context = DbFactory.CreateDbContext();
-        var bets = await context.Bets.Include(b => b.AiEvaluation).Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        var bets = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).ToListAsync();
         await GenerateAndDownloadCsv(bets, "PendingBets.csv", "Pending");
     }
 
     private async Task ExportActiveBetsCsv()
     {
         using var context = DbFactory.CreateDbContext();
-        var bets = await context.Bets.Include(b => b.AiEvaluation).Where(b => b.Status == "Approved").OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        var bets = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).Where(b => b.Status == "Approved").OrderByDescending(b => b.UpdatedAt).ToListAsync();
         await GenerateAndDownloadCsv(bets, "ActiveBets.csv", "Active");
     }
 
@@ -3284,7 +3385,7 @@ else
     {
         using var context = DbFactory.CreateDbContext();
         var completedStatuses = new[] { "Won", "Lost", "Void", "Rejected", "Cancelled" };
-        var bets = await context.Bets.Include(b => b.AiEvaluation).Where(b => completedStatuses.Contains(b.Status)).OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        var bets = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).Where(b => completedStatuses.Contains(b.Status)).OrderByDescending(b => b.UpdatedAt).ToListAsync();
         await GenerateAndDownloadCsv(bets, "CompletedBets.csv", "Completed");
     }
 
