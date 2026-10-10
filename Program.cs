@@ -64,6 +64,7 @@ builder.Services.AddSingleton<TeamAliasMappingService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();
 builder.Services.AddHostedService<PendingBetsNotificationService>();
 builder.Services.AddHostedService<BetMonitoringService>();
+builder.Services.AddHostedService<PendingSettlementReminderService>();
 
 if (!builder.Environment.IsDevelopment())
 {

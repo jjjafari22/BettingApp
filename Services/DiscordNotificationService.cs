@@ -311,6 +311,37 @@ public class DiscordNotificationService : IHostedService
         }
     }
 
+    public async Task NotifyAdminPendingSettlementsAsync(int count)
+    {
+        var webhookUrl = _config["Discord:WebhookUrl"];
+        if (string.IsNullOrEmpty(webhookUrl)) return;
+
+        string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143";
+        string adminUrl = $"{baseUrl}/admin";
+
+        string description = $"🚨 **Pending Settlements Alert** 🚨\n\n" +
+                             $"There are **{count}** bets that have finished their AI check and need manual settlement!\n\n" +
+                             $"[Go to Admin Dashboard]({adminUrl})\n" +
+                             $"------------------------------\n";
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var embed = new
+            {
+                description = description,
+                color = 16753920 // Orange
+            };
+
+            var payload = new { embeds = new[] { embed } };
+            await client.PostAsJsonAsync(webhookUrl, payload);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send pending settlements Discord Webhook.");
+        }
+    }
+
     public async Task NotifyAdminWithdrawalAsync(Transaction transaction)
     {
         var webhookUrl = _config["Discord:WebhookUrl"];
