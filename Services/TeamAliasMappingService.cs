@@ -52,6 +52,7 @@ namespace BettingApp.Services
             { "stade rennais", "rennes" },
             { "al draih", "al diriyah" },
             { "al-draih", "al diriyah" },
+            { "draih", "diriyah" },
             { "al fateh", "al fateh fc" },
             { "al-fateh", "al fateh fc" },
             { "al nassr", "al nassr fc" },
@@ -120,7 +121,7 @@ namespace BettingApp.Services
 
             private static readonly HashSet<string> _stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
             { 
-                "fc", "fk", "united", "city", "cf", "cd", "bk", "sc", "ec", "if" 
+                "fc", "fk", "united", "city", "cf", "cd", "bk", "sc", "ec", "if", "club"
             };
 
             private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _normalizationCache = new();
@@ -159,6 +160,10 @@ namespace BettingApp.Services
                     );
                                   
                     var finalRes = string.Join(" ", words).Trim();
+                    if (string.IsNullOrEmpty(finalRes))
+                    {
+                        finalRes = result.Trim();
+                    }
                     _normalizationCache[cacheKey] = finalRes;
                     return finalRes;
                 }
