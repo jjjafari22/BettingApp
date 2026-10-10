@@ -6,6 +6,7 @@ namespace BettingApp.Data;
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser>(options)
 {
     public DbSet<Bet> Bets { get; set; }
+    public DbSet<BetAiEvaluation> BetAiEvaluations { get; set; }
     public DbSet<BetLeg> BetLegs { get; set; }
     public DbSet<Transaction> Transactions { get; set; }
     public DbSet<SystemSetting> Settings { get; set; }
@@ -31,6 +32,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasMany(b => b.Legs)
             .WithOne(l => l.Bet)
             .HasForeignKey(l => l.BetId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<Bet>()
+            .HasOne(b => b.AiEvaluation)
+            .WithOne(a => a.Bet)
+            .HasForeignKey<BetAiEvaluation>(a => a.BetId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Entity<SystemSetting>()

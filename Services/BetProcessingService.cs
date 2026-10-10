@@ -40,7 +40,7 @@ namespace BettingApp.Services
         {
             using var context = _dbFactory.CreateDbContext();
             
-            var dbBet = await context.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == betId);
+            var dbBet = await context.Bets.Include(b => b.Legs).Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == betId);
             if (dbBet == null) return (false, "Bet not found.");
             
             var dbUser = await context.Users.FindAsync(dbBet.UserId);
@@ -141,7 +141,10 @@ namespace BettingApp.Services
 
             if (isUndo)
             {
-                dbBet.AiOutcomeResult = null;
+                if (dbBet.AiEvaluation != null)
+                {
+                    dbBet.AiEvaluation.AiOutcomeResult = null;
+                }
                 dbBet.IsAutoSettled = false;
                 
                 if (dbBet.Legs != null)
@@ -164,10 +167,10 @@ namespace BettingApp.Services
                 if (newStatus == "Won" || newStatus == "Lost" || newStatus == "Void")
                 {
                     bool isAiFinished = false;
-                    if (!string.IsNullOrEmpty(dbBet.AiOutcomeResult))
+                    if (dbBet.AiEvaluation != null && !string.IsNullOrEmpty(dbBet.AiEvaluation.AiOutcomeResult))
                     {
                         try {
-                            var doc = System.Text.Json.JsonDocument.Parse(dbBet.AiOutcomeResult);
+                            var doc = System.Text.Json.JsonDocument.Parse(dbBet.AiEvaluation.AiOutcomeResult);
                             if (doc.RootElement.TryGetProperty("overallStatus", out var prop))
                             {
                                 var s = prop.GetString()?.ToUpperInvariant() ?? "";
@@ -179,7 +182,7 @@ namespace BettingApp.Services
                         } catch { }
                     }
                     
-                    if (isAiFinished || dbBet.AiOutcomeResult == "Admin Override")
+                    if (isAiFinished || (dbBet.AiEvaluation != null && dbBet.AiEvaluation.AiOutcomeResult == "Admin Override"))
                     {
                         dbBet.NextCheckTime = null;
                     }

@@ -1248,7 +1248,7 @@ else
         if (reviewingBetModel != null)
         {
             using var context = DbFactory.CreateDbContext();
-            var dbBet = await context.Bets.FindAsync(reviewingBetModel.Id);
+            var dbBet = await context.Bets.Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == reviewingBetModel.Id);
             if (dbBet != null)
             {
                 if (dbBet.AiOutcomeResult == "Admin Override")
@@ -1849,7 +1849,7 @@ else
                 if (targetBet != null) StartReview(targetBet);
                 else 
                 {
-                    var exists = await context.Bets.AnyAsync(b => b.Id == ReviewBetId.Value);
+                    var exists = await context.Bets.Include(b => b.AiEvaluation).AnyAsync(b => b.Id == ReviewBetId.Value);
                     if (exists) errorMessage = $"Bet #{ReviewBetId.Value} is already reviewed.";
                     else errorMessage = $"Bet #{ReviewBetId.Value} not found.";
                 }
@@ -1872,7 +1872,7 @@ else
         {
             using var context = DbFactory.CreateDbContext();
             var twoMinsAgo = DateTime.UtcNow.AddMinutes(-2);
-            var allPendingBets = await context.Bets.Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
+            var allPendingBets = await context.Bets.Include(b => b.AiEvaluation).Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
             totalPendingBets = allPendingBets.Count;
             
             pendingBets = allPendingBets
@@ -1932,7 +1932,7 @@ else
             try
             {
                 using var context = DbFactory.CreateDbContext();
-                var dbBet = await context.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == bId);
+                var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == bId);
                 if (dbBet != null)
                 {
                     if (currentAiVisionResultJson != null)
@@ -1965,7 +1965,7 @@ else
         try
         {
             using var context = DbFactory.CreateDbContext();
-            var query = context.Bets.Where(b => b.Status == "Approved");
+            var query = context.Bets.Include(b => b.AiEvaluation).Where(b => b.Status == "Approved");
 
             if (!string.IsNullOrWhiteSpace(approvedSearchTerm))
             {
@@ -2058,14 +2058,14 @@ else
         {
             using var context = DbFactory.CreateDbContext();
             
-            var query = context.Bets.AsQueryable();
+            var query = context.Bets.Include(b => b.AiEvaluation).AsQueryable();
 
             if (showOnlyMismatch)
             {
                 // Evaluate complex text matching locally to avoid massive 20-second PostgreSQL LIKE query table scans
                 var allCompleted = await context.Bets
-                    .Where(b => b.AiOutcomeResult != null && b.AiOutcomeResult != "" && b.AiOutcomeResult != "Admin Override" && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void"))
-                    .Select(b => new { b.Id, b.Status, b.AiOutcomeResult })
+                    .Where(b => b.AiEvaluation != null && b.AiEvaluation.AiOutcomeResult != null && b.AiEvaluation.AiOutcomeResult != "" && b.AiEvaluation.AiOutcomeResult != "Admin Override" && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void"))
+                    .Select(b => new { b.Id, b.Status, AiOutcomeResult = b.AiEvaluation != null ? b.AiEvaluation.AiOutcomeResult : null })
                     .ToListAsync();
 
                 var mismatchedIds = allCompleted.Where(b => 
@@ -2093,7 +2093,7 @@ else
             }
             else if (showOnlyAdminOverride)
             {
-                query = query.Where(b => b.AiOutcomeResult == "Admin Override");
+                query = query.Where(b => b.AiEvaluation != null && b.AiEvaluation.AiOutcomeResult == "Admin Override");
             }
             else
             {
@@ -2301,7 +2301,7 @@ else
                     }
                     
                     using var context = DbFactory.CreateDbContext();
-                    var dbBet = await context.Bets.FindAsync(currentBet.Id);
+                    var dbBet = await context.Bets.Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
                     if (dbBet != null)
                     {
                         dbBet.AiVisionResultJson = json;
@@ -2343,7 +2343,7 @@ else
                         }
 
                         using var context = DbFactory.CreateDbContext();
-                        var dbBet = await context.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
+                        var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
                         if (dbBet != null)
                         {
                             dbBet.AiOutcomeResult = outcome;
@@ -2542,7 +2542,7 @@ else
                 try 
                 {
                     using var context = DbFactory.CreateDbContext();
-                    var dbBet = await context.Bets.FindAsync(capturingBetId);
+                    var dbBet = await context.Bets.Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == capturingBetId);
                     if (dbBet != null)
                     {
                         dbBet.AiVisionError = error;
@@ -2600,7 +2600,7 @@ else
                 try 
                 {
                     using var context = DbFactory.CreateDbContext();
-                    var dbBet = await context.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == capturingBetId);
+                    var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == capturingBetId);
                     if (dbBet != null)
                     {
                         dbBet.AiVisionResultJson = json;
@@ -3269,14 +3269,14 @@ else
     private async Task ExportPendingBetsCsv()
     {
         using var context = DbFactory.CreateDbContext();
-        var bets = await context.Bets.Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        var bets = await context.Bets.Include(b => b.AiEvaluation).Where(b => b.Status == "Pending").OrderByDescending(b => b.UpdatedAt).ToListAsync();
         await GenerateAndDownloadCsv(bets, "PendingBets.csv", "Pending");
     }
 
     private async Task ExportActiveBetsCsv()
     {
         using var context = DbFactory.CreateDbContext();
-        var bets = await context.Bets.Where(b => b.Status == "Approved").OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        var bets = await context.Bets.Include(b => b.AiEvaluation).Where(b => b.Status == "Approved").OrderByDescending(b => b.UpdatedAt).ToListAsync();
         await GenerateAndDownloadCsv(bets, "ActiveBets.csv", "Active");
     }
 
@@ -3284,7 +3284,7 @@ else
     {
         using var context = DbFactory.CreateDbContext();
         var completedStatuses = new[] { "Won", "Lost", "Void", "Rejected", "Cancelled" };
-        var bets = await context.Bets.Where(b => completedStatuses.Contains(b.Status)).OrderByDescending(b => b.UpdatedAt).ToListAsync();
+        var bets = await context.Bets.Include(b => b.AiEvaluation).Where(b => completedStatuses.Contains(b.Status)).OrderByDescending(b => b.UpdatedAt).ToListAsync();
         await GenerateAndDownloadCsv(bets, "CompletedBets.csv", "Completed");
     }
 

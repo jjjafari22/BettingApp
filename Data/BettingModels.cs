@@ -43,9 +43,28 @@ namespace BettingApp.Data
         
         public string? ScreenshotUrl { get; set; }
         
-        public string? AiVisionResultJson { get; set; }
-        public string? AiVisionError { get; set; }
-        public string? AiOutcomeResult { get; set; }
+        public BetAiEvaluation? AiEvaluation { get; set; }
+        
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public string? AiVisionResultJson 
+        { 
+            get => AiEvaluation?.AiVisionResultJson; 
+            set { if (AiEvaluation == null) AiEvaluation = new BetAiEvaluation { BetId = Id }; AiEvaluation.AiVisionResultJson = value; } 
+        }
+
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public string? AiVisionError 
+        { 
+            get => AiEvaluation?.AiVisionError; 
+            set { if (AiEvaluation == null) AiEvaluation = new BetAiEvaluation { BetId = Id }; AiEvaluation.AiVisionError = value; } 
+        }
+
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public string? AiOutcomeResult 
+        { 
+            get => AiEvaluation?.AiOutcomeResult; 
+            set { if (AiEvaluation == null) AiEvaluation = new BetAiEvaluation { BetId = Id }; AiEvaluation.AiOutcomeResult = value; } 
+        }
         
         // Single Source of Truth
         // Lifecycle: Pending -> Approved -> (Won / Lost / Void)
@@ -67,6 +86,19 @@ namespace BettingApp.Data
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         [ConcurrencyCheck]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    public class BetAiEvaluation
+    {
+        public int Id { get; set; }
+        public int BetId { get; set; }
+        public Bet? Bet { get; set; }
+        
+        public string? AiVisionResultJson { get; set; }
+        public string? AiVisionError { get; set; }
+        public string? AiOutcomeResult { get; set; }
+        
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     public class BetLeg

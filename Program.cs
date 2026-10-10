@@ -208,22 +208,22 @@ using (var scope = app.Services.CreateScope())
         // --- One-Time Data Migration for BetLegs ---
         try
         {
-            // If we have Bets with AiVisionResultJson but NO BetLegs, we need to migrate them
-            bool needsMigration = !context.BetLegs.Any() && context.Bets.Any(b => b.AiVisionResultJson != null);
+            // If we have Bets with AiEvaluation.AiVisionResultJson but NO BetLegs, we need to migrate them
+            bool needsMigration = !context.BetLegs.Any() && context.Bets.Include(b => b.AiEvaluation).Any(b => b.AiEvaluation != null && b.AiEvaluation.AiVisionResultJson != null);
             if (needsMigration)
             {
                 var logger = services.GetRequiredService<ILogger<Program>>();
                 logger.LogInformation("Starting one-time data migration for BetLegs...");
                 
-                var betsToMigrate = context.Bets.Where(b => b.AiVisionResultJson != null).ToList();
+                var betsToMigrate = context.Bets.Include(b => b.AiEvaluation).Where(b => b.AiEvaluation != null && b.AiEvaluation.AiVisionResultJson != null).ToList();
                 int count = 0;
                 foreach(var bet in betsToMigrate)
                 {
-                    if (string.IsNullOrWhiteSpace(bet.AiVisionResultJson)) continue;
+                    if (string.IsNullOrWhiteSpace(bet.AiEvaluation!.AiVisionResultJson)) continue;
 
                     try 
                     {
-                        using var doc = System.Text.Json.JsonDocument.Parse(bet.AiVisionResultJson);
+                        using var doc = System.Text.Json.JsonDocument.Parse(bet.AiEvaluation.AiVisionResultJson);
                         var root = doc.RootElement;
                         
                         bool isLive = root.TryGetProperty("isLive", out var l) && l.GetBoolean();
@@ -254,11 +254,11 @@ using (var scope = app.Services.CreateScope())
                                 string mappedSource = "Unknown";
                                 string mappedStats = "";
                                 
-                                if (!string.IsNullOrEmpty(bet.AiOutcomeResult))
+                                if (!string.IsNullOrEmpty(bet.AiEvaluation.AiOutcomeResult))
                                 {
                                     try 
                                     {
-                                        using var outcomeDoc = System.Text.Json.JsonDocument.Parse(bet.AiOutcomeResult);
+                                        using var outcomeDoc = System.Text.Json.JsonDocument.Parse(bet.AiEvaluation.AiOutcomeResult);
                                         if (outcomeDoc.RootElement.TryGetProperty("legs", out var outLegs) && outLegs.ValueKind == System.Text.Json.JsonValueKind.Array)
                                         {
                                             foreach (var oLeg in outLegs.EnumerateArray())

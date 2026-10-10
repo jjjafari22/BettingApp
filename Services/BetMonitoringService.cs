@@ -73,10 +73,15 @@ namespace BettingApp.Services
             {
                 // Refresh bet from DB using a newly scoped context (since DbContext is not thread-safe)
                 using var taskContext = dbFactory.CreateDbContext();
-                var dbBet = await taskContext.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == bet.Id, ct);
+                var dbBet = await taskContext.Bets.Include(b => b.Legs).Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == bet.Id, ct);
                 if (dbBet == null || (dbBet.Status != "Approved" && dbBet.Status != "Won" && dbBet.Status != "Lost" && dbBet.Status != "Void")) return;
                 
-                if (dbBet.AiOutcomeResult == "Admin Override")
+                if (dbBet.AiEvaluation == null)
+                {
+                    dbBet.AiEvaluation = new BetAiEvaluation { BetId = dbBet.Id };
+                }
+                
+                if (dbBet.AiEvaluation.AiOutcomeResult == "Admin Override")
                 {
                     if (dbBet.NextCheckTime != null)
                     {
@@ -86,14 +91,14 @@ namespace BettingApp.Services
                     return;
                 }
 
-                if (string.IsNullOrEmpty(dbBet.AiVisionResultJson))
+                if (string.IsNullOrEmpty(dbBet.AiEvaluation.AiVisionResultJson))
                 {
                     if (string.IsNullOrEmpty(dbBet.ScreenshotUrl)) return;
                     
                     var (extractionResult, error) = await _aiVisionService.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl, dbBet.Id);
                     if (error != null)
                     {
-                        dbBet.AiVisionError = error;
+                        dbBet.AiEvaluation.AiVisionError = error;
                         // Use the standard check outcome scheduling interval if extraction fails
                         dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
                         await taskContext.SaveChangesAsync(ct);
@@ -102,8 +107,8 @@ namespace BettingApp.Services
                     
                     if (extractionResult != null)
                     {
-                        dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(extractionResult);
-                        dbBet.AiVisionError = null;
+                        dbBet.AiEvaluation.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(extractionResult);
+                        dbBet.AiEvaluation.AiVisionError = null;
                         dbBet.IsLive = extractionResult.IsLive;
                         dbBet.IsBetBuilder = extractionResult.IsBetBuilder;
                         dbBet.Bookmaker = extractionResult.Bookmaker ?? "";
@@ -129,11 +134,11 @@ namespace BettingApp.Services
                     }
                 }
 
-                if (string.IsNullOrEmpty(dbBet.AiVisionResultJson)) return;
+                if (string.IsNullOrEmpty(dbBet.AiEvaluation.AiVisionResultJson)) return;
 
-                string? result = await _aiVisionService.ConfirmOutcomeAsync(dbBet.AiVisionResultJson, dbBet.CreatedAt, dbBet.MatchStartTime, dbBet.Id);
+                string? result = await _aiVisionService.ConfirmOutcomeAsync(dbBet.AiEvaluation.AiVisionResultJson, dbBet.CreatedAt, dbBet.MatchStartTime, dbBet.Id);
                 
-                dbBet.AiOutcomeResult = result;
+                dbBet.AiEvaluation.AiOutcomeResult = result;
                 
                 try 
                 {
