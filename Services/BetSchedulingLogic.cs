@@ -53,24 +53,23 @@ namespace BettingApp.Services
                 }
             }
 
-            // 5. Determine if the match has started yet
-            bool isMatchNotStarted = earliestStart.Value > DateTime.UtcNow;
+            // 5. Determine the expected finish time
+            var nextLeg = pendingLegs.OrderBy(l => l.StartTime ?? DateTime.MaxValue).FirstOrDefault();
+            string sport = nextLeg?.Sport ?? "Soccer";
+            
+            int delayHours = sport.Contains("Hockey", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
+            var expectedFinishTime = earliestStart.Value.AddHours(delayHours);
 
-            if (isMatchNotStarted)
+            if (expectedFinishTime > DateTime.UtcNow)
             {
-                // Find the sport of the next relevant leg
-                var nextLeg = pendingLegs.OrderBy(l => l.StartTime ?? DateTime.MaxValue).FirstOrDefault();
-                string sport = nextLeg?.Sport ?? "Soccer";
-                
-                int delayHours = sport.Contains("Hockey", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
-                
-                var delayTime = earliestStart.Value.AddHours(delayHours);
-                return delayTime <= DateTime.UtcNow ? DateTime.UtcNow : delayTime;
+                // The match is either not started yet or is currently in progress.
+                // Wait until the match is expected to be finished.
+                return expectedFinishTime;
             }
             else
             {
-                // MATCH IS IN PROGRESS (Earliest start time is in the past)
-                // Results are not in yet, so we check every 15 minutes.
+                // The expected finish time is in the past, but results are not in yet.
+                // Check every 15 minutes.
                 return DateTime.UtcNow.AddMinutes(15);
             }
         }
