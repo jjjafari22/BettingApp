@@ -15,6 +15,8 @@ public class DiscordNotificationService : IHostedService
     private readonly DiscordSocketClient _client;
     private readonly IConfiguration _config;
     public string GuildId => _config["Discord:GuildId"] ?? "";
+    private string? BetsWebhookUrl => _config["Discord:WebhookUrl"];
+    private string? AlertsWebhookUrl => _config["Discord:AlertsWebhookUrl"] ?? _config["Discord:WebhookUrl"];
     private readonly ILogger<DiscordNotificationService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -61,10 +63,10 @@ public class DiscordNotificationService : IHostedService
         await _client.StopAsync();
     }
 
-    // --- GENERIC NOTIFICATION (Unchanged) ---
+    // --- GENERIC NOTIFICATION (Used for New User Registrations -> #admin-alerts) ---
     public async Task SendNotificationAsync(string title, string message)
     {
-        var webhookUrl = _config["Discord:WebhookUrl"];
+        var webhookUrl = AlertsWebhookUrl;
         if (string.IsNullOrEmpty(webhookUrl)) return;
 
         string content = $"**{title}**\n" +
@@ -246,10 +248,10 @@ public class DiscordNotificationService : IHostedService
         await SendDmAsync(discordUserId, message);
     }
 
-    // --- ADMIN WEBHOOK LOGIC (Unchanged) ---
+    // --- ADMIN WEBHOOK LOGIC (New Picks -> #admin-bets) ---
     public async Task NotifyAdminNewPickAsync(Bet bet)
     {
-        var webhookUrl = _config["Discord:WebhookUrl"];
+        var webhookUrl = BetsWebhookUrl;
         if (string.IsNullOrEmpty(webhookUrl)) return;
 
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
@@ -313,7 +315,7 @@ public class DiscordNotificationService : IHostedService
 
     public async Task NotifyAdminPendingSettlementsAsync(int count)
     {
-        var webhookUrl = _config["Discord:WebhookUrl"];
+        var webhookUrl = AlertsWebhookUrl;
         if (string.IsNullOrEmpty(webhookUrl)) return;
 
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143";
@@ -344,7 +346,7 @@ public class DiscordNotificationService : IHostedService
 
     public async Task NotifyAdminWithdrawalAsync(Transaction transaction)
     {
-        var webhookUrl = _config["Discord:WebhookUrl"];
+        var webhookUrl = AlertsWebhookUrl;
         if (string.IsNullOrEmpty(webhookUrl)) return;
 
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143";
@@ -405,55 +407,9 @@ public class DiscordNotificationService : IHostedService
         }
     }
 
-    // --- NEW METHOD: Pending Bets Reminder (Uses IHttpClientFactory like the rest of the class) ---
-    public async Task SendPendingBetsReminderAsync(int count, TimeSpan oldestWaitTime)
-    {
-        var webhookUrl = _config["Discord:WebhookUrl"];
-        if (string.IsNullOrEmpty(webhookUrl)) return;
-
-        // Format: "1h 45m" or just "45m"
-        string timeString = oldestWaitTime.TotalHours >= 1 
-            ? $"{(int)oldestWaitTime.TotalHours}h {oldestWaitTime.Minutes}m" 
-            : $"{oldestWaitTime.Minutes}m";
-
-        string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
-        string adminUrl = $"{baseUrl}/admin";
-
-        try 
-        {
-            var client = _httpClientFactory.CreateClient();
-
-            var embed = new
-            {
-                title = "⏳ Pending Bets Review Needed",
-                description = $"There are currently **{count}** bets waiting for approval.\n[Go to Admin Dashboard]({adminUrl})",
-                color = 16753920, // Orange
-                fields = new[]
-                {
-                    new { name = "Queue Size", value = $"{count} Bets", inline = true },
-                    new { name = "Wait Time", value = $"{timeString} (Oldest)", inline = true }
-                },
-                footer = new { text = "BettingApp Admin Bot" },
-                timestamp = DateTime.UtcNow.ToString("o")
-            };
-
-            var payload = new
-            {
-                username = "BettingApp AdminBot",
-                embeds = new[] { embed }
-            };
-
-            await client.PostAsJsonAsync(webhookUrl, payload);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Failed to send Discord admin reminder: {ex.Message}");
-        }
-    }
-
     public async Task SendWakeUpAlarmAsync(BettingApp.Data.Bet bet)
     {
-        var webhookUrl = _config["Discord:WebhookUrl"];
+        var webhookUrl = AlertsWebhookUrl;
         if (string.IsNullOrEmpty(webhookUrl)) return;
 
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
