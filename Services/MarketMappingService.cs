@@ -242,6 +242,13 @@ namespace BettingApp.Services
             }
             // -----------------------------------------------------------------------------------------
 
+            if (clean.StartsWith("Early Win", StringComparison.OrdinalIgnoreCase) || 
+                clean.StartsWith("Early Payout", StringComparison.OrdinalIgnoreCase) ||
+                clean.StartsWith("2Up", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "2Up - Full Time Result" };
+            }
+
             if (clean.StartsWith("1st Half Goals", StringComparison.OrdinalIgnoreCase) || 
                 clean.StartsWith("First Half Goals", StringComparison.OrdinalIgnoreCase) ||
                 clean.StartsWith("Half Time Goals", StringComparison.OrdinalIgnoreCase))
