@@ -95,5 +95,69 @@ namespace BettingApp.Tests
             Assert.NotNull(bestMarket);
             Assert.Equal("10743", bestMarket.MarketId);
         }
+
+        [Fact]
+        public void Test_ToScoreOrAssist_DoesNotMatchPlayerGoalsOrAssists()
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "100", MarketName = "Over Under Player Goals (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "101", MarketName = "Over Under Player Assists (incl. overtime)" }
+            };
+
+            var bestMarket = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "To Score or Assist",
+                "Liverpool vs Manchester City",
+                "Erling Haaland - Yes (Power Sub)",
+                _marketMapper);
+
+            Assert.Null(bestMarket);
+        }
+
+        [Theory]
+        [InlineData("To Score or Assist")]
+        [InlineData("Score or Assist")]
+        [InlineData("Goal or Assist")]
+        [InlineData("To Score or Provide an Assist")]
+        [InlineData("Score or Provide an Assist")]
+        [InlineData("Anytime Goal or Assist")]
+        [InlineData("Player Goal or Assist")]
+        [InlineData("To Score / Assist")]
+        public void Test_NormalizeMarketName_GoalOrAssistVariants_DoNotIncludeGoalsOrAssists(string marketName)
+        {
+            var targets = _marketMapper.NormalizeMarketName(marketName, "Liverpool vs Manchester City", "Erling Haaland - Yes");
+            Assert.DoesNotContain("Over Under Player Goals (incl. overtime)", targets);
+            Assert.DoesNotContain("Over Under Player Assists (incl. overtime)", targets);
+            Assert.Contains(targets, t => t.Contains("Goal or Assist", StringComparison.OrdinalIgnoreCase) || t.Contains("Goals or Assists", StringComparison.OrdinalIgnoreCase) || t.Contains("Score or Assist", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void Test_PureGoalAndPureAssist_StillMatchCorrectly()
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "100", MarketName = "Over Under Player Goals (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "101", MarketName = "Over Under Player Assists (incl. overtime)" }
+            };
+
+            var goalMarket = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "Anytime Goalscorer",
+                "Liverpool vs Manchester City",
+                "Erling Haaland",
+                _marketMapper);
+            Assert.NotNull(goalMarket);
+            Assert.Equal("100", goalMarket.MarketId);
+
+            var assistMarket = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "Player Assists",
+                "Liverpool vs Manchester City",
+                "Kevin De Bruyne",
+                _marketMapper);
+            Assert.NotNull(assistMarket);
+            Assert.Equal("101", assistMarket.MarketId);
+        }
     }
 }
