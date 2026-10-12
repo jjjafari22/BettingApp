@@ -2909,22 +2909,6 @@ else
         await Task.CompletedTask;
     }
 
-    private async Task<(bool allowed, string error)> CheckUserBalance(string userId, decimal newBetAmount)
-    {
-        using var context = DbFactory.CreateDbContext();
-        var targetUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
-        
-        var currentBal = targetUser?.Balance ?? 0;
-        var freeBetBal = targetUser?.FreeBetBalance ?? 0;
-        var creditLimit = targetUser?.CreditLimit ?? 0;
-        
-        var availableCredit = currentBal + freeBetBal + creditLimit - newBetAmount;
-        if (availableCredit < 0)
-        {
-            return (false, $"Insufficient funds. Available: {(currentBal + freeBetBal + creditLimit):N0} kr. Required: {newBetAmount:N0} kr.");
-        }
-        return (true, string.Empty);
-    }
 
     private void StartReview(Bet bet)
     {
@@ -3210,19 +3194,6 @@ else
              if (!confirmed) return;
         }
 
-        if (newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost")
-        {
-            if (originalStatus == "Pending")
-            {
-                var (allowed, error) = await CheckUserBalance(bet.UserId, (decimal)(bet.AmountNOK ?? 0));
-                if (!allowed)
-                {
-                    errorMessage = error;
-                    StateHasChanged();
-                    return;
-                }
-            }
-        }
 
         if (newStatus == "Approved" && LegOddsCache.Count > 0)
         {

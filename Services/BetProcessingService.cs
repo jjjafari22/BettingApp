@@ -58,6 +58,19 @@ namespace BettingApp.Services
             string originalStatus = dbBet.Status;
             bool isUndo = originalStatus != "Pending" && newStatus == "Approved";
 
+            if (originalStatus == "Pending" && (newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost"))
+            {
+                var currentBal = dbUser.Balance;
+                var freeBetBal = dbUser.FreeBetBalance;
+                var creditLimit = (decimal)dbUser.CreditLimit;
+                
+                var availableCredit = currentBal + freeBetBal + creditLimit - newAmount;
+                if (availableCredit < 0)
+                {
+                    return (false, $"Insufficient funds. Available: {(currentBal + freeBetBal + creditLimit):N0} kr. Required: {newAmount:N0} kr.");
+                }
+            }
+
             decimal dbAmount = (decimal)(dbBet.AmountNOK ?? 0);
 
             // REVERSE OLD IMPACT
