@@ -57,6 +57,7 @@ builder.Services.AddHttpClient<AiVisionService>(client =>
     client.Timeout = TimeSpan.FromSeconds(300); // 5 minutes for LLM processing
 }).ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<FotMobScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
+builder.Services.AddHttpClient<PlayerMatchResolverService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 
 builder.Services.AddSingleton<UiNotificationService>();
 builder.Services.AddSingleton<MarketMappingService>();

@@ -96,6 +96,7 @@ namespace BettingApp.Services
         private readonly HttpClient _httpClient;
         private readonly string? _apiKey;
         private readonly FotMobScraperService _fotMob;
+        private readonly PlayerMatchResolverService _matchResolver;
         private readonly IConfiguration _config;
         private static Google.Apis.Auth.OAuth2.GoogleCredential? _cachedCredential;
         private static readonly object _credentialLock = new object();
@@ -144,12 +145,13 @@ namespace BettingApp.Services
         }
         private readonly ILogger<AiVisionService> _logger;
 
-        public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob, ILogger<AiVisionService> logger)
+        public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob, PlayerMatchResolverService matchResolver, ILogger<AiVisionService> logger)
         {
             _httpClient = httpClient;
             _config = config;
             _apiKey = config["GeminiApiKey"];
             _fotMob = fotMob;
+            _matchResolver = matchResolver;
             _logger = logger;
         }
 
@@ -199,7 +201,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 4. stake: Amount bet (e.g. '100', '1000'). If the user manually drew or wrote digits over the image with a digital pen, prioritize handwritten digits over printed text!
 5. legs: An array of objects for each individual bet:
    - legThoughtProcess: Step 1: Transcribe the exact raw text seen on the slip for this leg. Step 2: Translate strictly according to rules without assuming.
-   - match: Team names translated into standard, globally recognized English names (e.g. 'FC Copenhagen' instead of 'FC København', 'Bayern Munich' instead of 'Bayern München').
+   - match: Team names translated into standard, globally recognized English names (e.g. 'FC Copenhagen' instead of 'FC København', 'Bayern Munich' instead of 'Bayern München'). STRICT DIRECTIVE: If the match or team header is NOT visible or cropped on the screenshot, output null. NEVER guess, assume, or hallucinate the match from player names or past memory!
    - sport: 'Soccer', 'Ice Hockey', 'Tennis', 'Basketball', etc. Deduce from team names, market types, or tournament.
    - market: The translated English market name.
    - selection: The bet chosen including player condition (e.g. 'Marcus Rashford - Will Score', 'Erling Haaland - Over 0.5'). Transcribe player names letter-by-letter without autocorrecting.
@@ -252,7 +254,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                                         properties = new
                                         {
                                             legThoughtProcess = new { type = "STRING", description = "Step 1: Transcribe the exact raw text seen on the slip for this leg. Step 2: Translate strictly without assuming." },
-                                            match = new { type = "STRING", nullable = true },
+                                            match = new { type = "STRING", nullable = true, description = "The match name (e.g. 'Team A vs Team B'). Output null if the match title/header is not visibly printed on the screenshot. Never guess or hallucinate." },
                                             sport = new { type = "STRING", nullable = true, description = "The sport of the match, e.g., 'Soccer', 'Ice Hockey', 'Tennis'." },
                                             market = new { type = "STRING", nullable = true },
                                             selection = new { type = "STRING", nullable = true },
@@ -335,18 +337,40 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 
                     if (result != null && result.Legs != null)
                     {
+                        string? sharedResolvedMatch = null;
+
                         foreach (var leg in result.Legs)
                         {
                             if (leg != null && string.IsNullOrWhiteSpace(leg.Match) && !string.IsNullOrWhiteSpace(leg.Selection))
                             {
-                                // We pass DateTime.UtcNow since ExtractBetSlipDataAsync doesn't have the explicit betPlacedAt from DB yet, 
-                                // but the bet slip is freshly uploaded so UtcNow is perfectly fine!
-                                string? resolvedMatch = await _fotMob.ResolvePlayerMatchAsync(leg.Selection, DateTime.UtcNow, betId);
+                                // If this slip has a shared match already resolved from another leg, reuse it!
+                                if (!string.IsNullOrEmpty(sharedResolvedMatch))
+                                {
+                                    leg.Match = sharedResolvedMatch;
+                                    _logger.LogInformation($"{betLabel}Reused resolved match '{sharedResolvedMatch}' for leg '{leg.Selection}'");
+                                    continue;
+                                }
+
+                                string? resolvedMatch = await _matchResolver.ResolvePlayerMatchAsync(leg.Selection, DateTime.UtcNow, betId);
                                 if (!string.IsNullOrEmpty(resolvedMatch))
                                 {
                                     leg.Match = resolvedMatch;
-                                    _logger.LogInformation($"{betLabel}FotMob Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
+                                    sharedResolvedMatch = resolvedMatch;
+                                    _logger.LogInformation($"{betLabel}Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
                                 }
+                            }
+                            else if (leg != null && !string.IsNullOrWhiteSpace(leg.Match) && string.IsNullOrEmpty(sharedResolvedMatch))
+                            {
+                                sharedResolvedMatch = leg.Match;
+                            }
+                        }
+
+                        // Back-propagate sharedResolvedMatch to any earlier legs that were missing a match
+                        if (!string.IsNullOrEmpty(sharedResolvedMatch))
+                        {
+                            foreach (var leg in result.Legs.Where(l => l != null && string.IsNullOrWhiteSpace(l.Match)))
+                            {
+                                leg.Match = sharedResolvedMatch;
                             }
                         }
 
