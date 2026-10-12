@@ -441,7 +441,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
             {
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
 
-                                var prompt = $@"You are a sports betting expert analyzing a bet slip uploaded at {betPlacedAt:yyyy-MM-dd HH:mm}.
+                                var prompt = $@"You are a sports betting expert analyzing a bet slip uploaded on {betPlacedAt:yyyy-MM-dd HH:mm} UTC (Year: {betPlacedAt.Year}).
 {extractedBetDataJson}
 
 # CORE DIRECTIVES
@@ -453,21 +453,26 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 - If JSON is provided, the match is correct even if the start time is slightly before the upload date. Do not reject it.
 - Your `fullAnalysis` must start with API Status (e.g. 'API Status: Scores found (1-0)').
 - Use FULL-TIME (FT) stats unless the market explicitly says '1st Half' or 'Half Time'.
-- MATCH FINISHED LOGIC: A match is definitively finished ONLY if `header.status.reason.short` is 'FT', 'AET', or 'PEN', or if the match clearly reached full time and is not ongoing. FotMob's `general.finished` and `header.status.finished` flags are sometimes incorrectly true while the match is still live! You MUST ignore `finished: true` if `header.status.ongoing` is true, if `liveTime` is present, or if `reason.short` indicates a live minute (e.g. '83\\''). Do not grade bets as finished prematurely!
+- MATCH FINISHED LOGIC: A match is definitively finished ONLY if `header.status.reason.short` is 'FT', 'AET', or 'PEN', or if the match clearly reached full time and is not ongoing. FotMob's `general.finished` and `header.status.finished` flags are sometimes incorrectly true while the match is still live! You MUST ignore `finished: true` if `header.status.ongoing` is true, if `liveTime` is present, or if `reason.short` indicates a live minute (e.g. '83\''). Do not grade bets as finished prematurely!
 - EXTRA TIME: Events in Extra Time (e.g. 111th minute) DO NOT COUNT unless the market says 'To Qualify', 'To Lift Trophy', or 'Including Extra Time'. Regular time is 90 mins + injury time. For example, if a player receives a yellow card in Extra Time, a standard 'Player Booked' bet is LOST.
 
-# 2. GOOGLE SEARCH STRATEGY & SITES
-- SITES: To ensure conclusive results, use the 'OR' operator to check multiple reputable domains simultaneously! Do NOT search FlashScore, LiveScore, or SofaScore.
-   - NFL/NBA/NHL/MLB: Append '(site:espn.com OR site:cbssports.com OR site:foxsports.com OR site:sports.yahoo.com)'
-   - Soccer/Football: Append '(site:espn.com/soccer OR site:skysports.com/football OR site:bbc.com/sport/football OR site:foxsports.com/soccer)'
-   - CS/Esports: Append 'site:hltv.org/matches'
-- PLAYER PROPS: Text snippets rarely have full box scores. You MUST force Google to find the exact player by wrapping their name in quotes (e.g., 'Eagles vs Cowboys ""Jalen Hurts"" passing yards').
+# 2. GOOGLE SEARCH STRATEGY (2-STEP VERIFICATION)
+When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leagues):
+- STEP 1 (CHECK MATCH STATUS & START TIME FIRST):
+  Before searching for player stats, first verify whether the match scheduled for {betPlacedAt:yyyy-MM-dd} (Year: {betPlacedAt.Year}) has actually FINISHED!
+  Always include the year '{betPlacedAt.Year}' in your search query (e.g. 'Buffalo Sabres vs Florida Panthers score {betPlacedAt.Year}' or '{betPlacedAt:yyyy-MM-dd}').
+  * If the match is UPCOMING or CURRENTLY IN PROGRESS (Live / 1st/2nd/3rd period / 1st/2nd half), STOP! Do NOT search for player box scores. Grade all legs as 'Pending' and return the match start time in `matchStartTimeIso`.
+- STEP 2 (PLAYER PROPS ONLY FOR COMPLETED MATCHES):
+  Only if Step 1 confirmed the match on {betPlacedAt:yyyy-MM-dd} is 100% FINAL / COMPLETED, search for player box scores for that specific {betPlacedAt.Year} match.
+  Append reputable domains:
+  - NFL/NBA/NHL/MLB: '(site:espn.com OR site:cbssports.com OR site:foxsports.com OR site:sports.yahoo.com OR site:nhl.com)'
+  - Soccer: '(site:espn.com/soccer OR site:skysports.com/football OR site:bbc.com/sport/football OR site:foxsports.com/soccer)'
+  - CS/Esports: 'site:hltv.org/matches'
+  Quote player names (e.g. 'Sabres vs Panthers ""Sam Bennett"" points {betPlacedAt.Year}'). Do NOT search FlashScore, LiveScore, or SofaScore.
 
-# 3. GOOGLE SEARCH ANTI-HALLUCINATION
+# 3. STRICT ANTI-HALLUCINATION & YEAR MATCHING
+- EXACT YEAR AND DATE: The bet was placed for the match on {betPlacedAt:yyyy-MM-dd} (Year: {betPlacedAt.Year}). You MUST strictly verify the match took place in {betPlacedAt.Year}! NEVER use historical box scores or recaps from past years (e.g. 2023, 2024, 2025). If Google returns an article from a past year because today's match is live or has no recap yet, REJECT IT. If the match is in progress, mark 'Pending'. If no verified data for {betPlacedAt.Year} exists, mark 'Unknown'.
 - NEVER use prediction articles, previews, or odds sites (lines.com, actionnetwork).
-- You MUST explicitly read the ACTUAL FINAL SCORE and/or EXACT PLAYER STAT from the snippet. If the search reveals the match has NOT STARTED or is CURRENTLY IN PROGRESS, output 'Pending'. If the match is FINISHED but stats are vague or missing, output 'Unknown'. DO NOT invent '4-0' or guess player stats based on team scores.
-- EXACT DATE: You must verify the match date is within 5 days of {betPlacedAt:yyyy-MM-dd}. Reject old/historical matches and mark 'Unknown'. Do NOT grade based on unverified dates.
-- EXACT TIME: If the leg has a 'startTime', find the exact UTC match. If no 'startTime', find the FIRST match chronologically on/after the upload time.
 - TEAMS: Verify the exact Home vs Away order.
 
 # 4. PLAYER PROPS & VOIDS
@@ -484,8 +489,8 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 
 # 6. FORMATTING & SCHEDULING
 - If the match has NOT STARTED or is CURRENTLY IN PROGRESS (e.g. `general.started` is false, or `header.status.finished` is false), grade all legs as 'Pending'. DO NOT grade live matches as 'Unknown' or 'Void' just because final stats are missing.
-- `matchStartTimeIso`: DO NOT PUT THIS AT THE ROOT! You MUST put this inside EACH object in the `legs` array! For EVERY leg (whether finished, live, or pending), return the absolute UTC start time of that specific match (e.g. '2026-07-25T19:00:00Z'). Parse it directly from FotMob JSON if available; if not available, search Google for the match start time.
-- `stats`: Start with EXACTLY ONE of: 'Verified via FotMob: ', 'FotMob lacked stat; Verified via Google Search: ', or 'Verified via Google Search: '. Include EXACTLY ONE source URL if you used Google. BET BUILDERS: Evaluate each leg COMPLETELY INDEPENDENTLY! You MUST write a unique, specific 'stats' reasoning for EACH leg. Do NOT copy and paste the same stats across multiple legs. For example, if Leg 1 is Goalscorer and Leg 2 is Match Result, Leg 2's stats MUST discuss the match score, NOT the goalscorer.
+- `matchStartTimeIso`: DO NOT PUT THIS AT THE ROOT! You MUST put this inside EACH object in the `legs` array! For EVERY leg (whether finished, live, or pending), return the absolute UTC start time of that specific match (e.g. '{betPlacedAt.Year}-10-12T17:00:00Z'). Parse it directly from FotMob JSON if available; if not available, search Google for the match start time.
+- `stats`: Start with EXACTLY ONE of: 'Verified via FotMob: ', 'FotMob lacked stat; Verified via Google Search: ', or 'Verified via Google Search: '. Include EXACTLY ONE source URL if you used Google. BET BUILDERS: Evaluate each leg COMPLETELY INDEPENDENTLY! You MUST write a unique, specific 'stats' reasoning for EACH leg. Do NOT copy and paste the same stats across multiple legs.
 - `verificationSource`: You MUST provide EXACTLY ONE of the following strict categories: 'FotMob_Verified', 'FotMob_MissingStat', 'FotMob_NotFound', 'Google_Verified', or 'Unknown'.
 - `outcome`: Strictly use EXACTLY ONE of: 'Won', 'Lost', 'Void', 'Pending', or 'Unknown'. NO EMOJIS! NO EXTRA TEXT!";
 
