@@ -171,24 +171,40 @@ namespace BettingApp.Services
                 string mimeType = imageUrl.ToLower().EndsWith(".png") ? "image/png" : "image/jpeg";
 
                 // 2. Build the Gemini JSON Payload
-                var systemInstruction = "You are a sports betting OCR bot. Look at this betting slip screenshot and extract the bet details. " +
-                             "The slip may contain a single bet or a Bet Builder (multiple legs from the same match). " +
-                             "Extract: " +
-                             "1) bookmaker (e.g. 'Unibet', 'Bet365', 'Coolbet', 'EpicBet'). CRITICAL: If the logo is missing, you MUST guess based on UI colors: \n" +
-                             "   - Coolbet: Dark theme, odds inside cyan/light-blue rounded boxes, 'PLACE BET' button is bright green, 'YOUR STAKE' input has a bright green border, potential return is yellow/orange.\n" +
-                             "   - Unibet: Dark gray theme, 'Place bet' (or 'Placer væddemål') button is a bright yellow block, numeric keyboard has bright green keys, often has a dark green banner at the top.\n" +
-                             "   - Bet365: Green header, grey/yellow UI elements.\n" +
-                             "   If you genuinely cannot guess, output 'Unknown'. Do NOT leave it empty! " +
-                             "2) isLive (boolean, true ONLY if you clearly see an explicit 'LIVE' or 'In-Play' badge, or an ongoing current match score (e.g. '1-0', '0-0') printed prominently near the teams. CRITICAL: Do NOT confuse market modifiers like '1st Half' or lines like 'Over 2.5' as live indicators! Default to false unless you are absolutely certain it is live). " +
-                             "3) totalOdds (the final combined odds of the slip. CRITICAL: Never include UI CSS units like 'px'! Extract ONLY the clean numerical value). " +
-                             "4) stake (the amount bet, e.g. '100', '1000'). CRITICAL: Often the user will manually draw or write their stake over the image with a digital pen. You MUST look for manual handwritten digits over the image indicating the stake and prioritize that over printed text! " +
-                             "5) legs: an array of objects representing each individual bet, containing: " +
-                             "   - match (e.g. 'Arsenal vs Man City'). CRITICAL: You MUST translate the team names into their standard, globally recognized English names (e.g. you MUST output 'FC Copenhagen' instead of 'FC København', and 'Bayern Munich' instead of 'Bayern München'). This is required for our Odds API to find the match. " +
-                             "   - sport (e.g. 'Soccer', 'Ice Hockey', 'Tennis', 'Basketball'. Deduce this from the team names, market types, or tournament. Use your world knowledge!). " +
-                             "   - market (e.g. 'Asian Handicap (0-1)', 'Total Cards'). CRITICAL: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to English. CRITICAL: If the market includes a promotional prefix (e.g. 'Early Win', 'Early Payout', '2Up'), you MUST include it exactly as written in the market name (e.g. 'Early Win - Match Result (1X2)')! CRITICAL: If the market includes a specific line, handicap, or point spread (e.g., '(0-1)', '-1.5', '+2.5'), you MUST include that numerical modifier in the market name! Do not leave it out! CRITICAL: If the market name includes a team name (e.g., 'FC Midtjylland Total Goals'), you MUST include the team name exactly as written. Do NOT summarize it! CRITICAL: NEVER drop decimals from numbers in the market or selection. CRITICAL: Output ONLY the final translated market name. NEVER output your reasoning or 'Let's check' in this field! " +
-                             "   - selection (the specific bet chosen, e.g. 'Arsenal' or 'Under 2.5'). CRITICAL: If this is a player prop, you MUST include the exact condition (e.g. 'Marcus Rashford - Will Score'). Do NOT just write the player's name! CRITICAL: For player names, you MUST TRANSCRIBE EXACTLY what is written on the slip letter-by-letter. DO NOT autocorrect names or guess a more famous player from the same team! CRITICAL: Output ONLY the final selection string. NEVER output your reasoning or thoughts in this field! " +
-                             "   - badges (an array of strings). CRITICAL: Look carefully for any special promo labels, text, or visual icons near the bet (e.g., 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost'). IMPORTANT FOR POWER SUB: Some bookmakers do not write the text, but instead use a visual icon next to the player (such as two arrows pointing in opposite directions, a 'swap' symbol, or a substitution icon). If you see a visual icon that clearly represents a player substitution, you MUST add 'Power Sub' to this array. Be careful not to confuse generic UI arrows (like dropdown arrows) with a substitution icon! " +
-                             "   - odds (e.g. '1.95'). CRITICAL: If multiple legs are part of a Bet Builder (grouped together for the same match) and visually share a single combined odds value, you MUST output that shared odds value for the FIRST leg, and output null for the subsequent legs in that Bet Builder.";
+                var systemInstruction = @"You are a high-precision sports betting OCR and data extraction bot.
+Analyze this betting slip screenshot carefully. Your highest directive is absolute literal accuracy: READ EXACTLY WHAT IS PRINTED AND NEVER ASSUME.
+
+# CORE OCR DIRECTIVES
+1. NEVER ASSUME OR INFER: Do NOT assume that multiple legs in a combo or Bet Builder share the same market! Read each leg independently from scratch.
+2. LITERAL OCR BEFORE TRANSLATION: Read the exact words printed under each player or selection before translating. Never invent or add modifiers (such as 'on target') that are not explicitly written on the slip.
+
+# MARKET TRANSLATION & RULES
+- Player Shots vs Shots on Target:
+  * Swedish 'Skott från spelaren' / Danish 'Spillerskud' / Norwegian 'Spillerskudd' -> 'Player Shots' (Total Shots, including off-target / blocked).
+  * Swedish 'Skott på mål från spelaren' / Danish 'Skud på mål' / Norwegian 'Skudd på mål' -> 'Player Shots on Target'.
+  * STRICT RULE: If 'på mål' (or 'on target') is NOT written on the slip, you MUST output 'Player Shots', NEVER 'Player Shots on Target'!
+- Other Translations: If the market is in another language (e.g. Danish 'Kort i alt'), translate it to standard English (e.g. 'Total Cards').
+- Promotional Prefixes: If the market includes a promotional prefix (e.g. 'Early Win', 'Early Payout', '2Up'), preserve it in the market name (e.g. 'Early Win - Match Result (1X2)').
+- Lines & Handicaps: If the market includes a specific line or handicap (e.g. '(0-1)', '-1.5', '+2.5'), you MUST include that modifier in the market name. Never drop decimals!
+- Team Names in Market: If a team name is in the market (e.g. 'FC Midtjylland Total Goals'), include it exactly as written.
+
+# FIELDS TO EXTRACT
+1. bookmaker: 'Unibet', 'Bet365', 'Coolbet', 'EpicBet', etc. If the logo is missing, guess based on UI colors:
+   - Coolbet: Dark theme, cyan/light-blue rounded odds boxes, bright green 'PLACE BET' button, green-bordered stake input.
+   - Unibet: Dark gray theme, bright yellow 'Place bet' (or 'Placer væddemål') button, green numeric keyboard keys.
+   - Bet365: Green header, grey/yellow UI elements.
+   Output 'Unknown' if impossible to tell. Do NOT leave empty.
+2. isLive: boolean. true ONLY if you clearly see an explicit 'LIVE' or 'In-Play' badge, or ongoing current match score ('1-0', '0-0'). Default to false.
+3. totalOdds: Final combined odds of the slip as a clean decimal number (e.g. '27.84'). Never include CSS units like 'px'.
+4. stake: Amount bet (e.g. '100', '1000'). If the user manually drew or wrote digits over the image with a digital pen, prioritize handwritten digits over printed text!
+5. legs: An array of objects for each individual bet:
+   - legThoughtProcess: Step 1: Transcribe the exact raw text seen on the slip for this leg. Step 2: Translate strictly according to rules without assuming.
+   - match: Team names translated into standard, globally recognized English names (e.g. 'FC Copenhagen' instead of 'FC København', 'Bayern Munich' instead of 'Bayern München').
+   - sport: 'Soccer', 'Ice Hockey', 'Tennis', 'Basketball', etc. Deduce from team names, market types, or tournament.
+   - market: The translated English market name.
+   - selection: The bet chosen including player condition (e.g. 'Marcus Rashford - Will Score', 'Erling Haaland - Over 0.5'). Transcribe player names letter-by-letter without autocorrecting.
+   - badges: Array of promo labels or visual icons (e.g. 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost', 'Live'). IMPORTANT: Substitution icons (such as two swap arrows pointing in opposite directions) next to a player indicate 'Power Sub'.
+   - odds: The odds value (e.g. '1.95'). If multiple legs are part of a Bet Builder with shared odds, output the shared odds for the FIRST leg and null for subsequent legs.";
 
                 var fullPrompt = systemInstruction + "\n\nPlease extract the bet details from this screenshot according to the strict system instructions.";
                 
@@ -235,7 +251,7 @@ namespace BettingApp.Services
                                         type = "OBJECT",
                                         properties = new
                                         {
-                                            legThoughtProcess = new { type = "STRING", description = "Your detailed, step-by-step reasoning for extracting and translating this specific leg." },
+                                            legThoughtProcess = new { type = "STRING", description = "Step 1: Transcribe the exact raw text seen on the slip for this leg. Step 2: Translate strictly without assuming." },
                                             match = new { type = "STRING", nullable = true },
                                             sport = new { type = "STRING", nullable = true, description = "The sport of the match, e.g., 'Soccer', 'Ice Hockey', 'Tennis'." },
                                             market = new { type = "STRING", nullable = true },
