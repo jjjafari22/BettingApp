@@ -2,15 +2,13 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
 @using BettingApp.Data
-@using Microsoft.AspNetCore.SignalR
-@using BettingApp.Hubs
+@using BettingApp.Services
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavManager
-@inject IHubContext<BetHub> HubContext
+@inject UiNotificationService UiNotifier
 @inject IJSRuntime JSRuntime
-@using BettingApp.Services
 @inject DiscordNotificationService DiscordService
 @inject BettingApp.Services.DialogService DialogService
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
@@ -302,25 +300,34 @@ else
     {
         if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
 
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        if (authState.User.Identity?.IsAuthenticated == true)
+        try
         {
-            using var context = DbFactory.CreateDbContext();
-            var currentUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == authState.User.Identity.Name);
-            if (currentUser != null && currentUser.IsAdmin)
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            if (authState.User.Identity?.IsAuthenticated == true)
             {
-                isAdmin = true;
-                await LoadData();
+                using var context = DbFactory.CreateDbContext();
+                var currentUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == authState.User.Identity.Name);
+                if (currentUser != null && currentUser.IsAdmin)
+                {
+                    isAdmin = true;
+                    await LoadData();
+                }
+            }
+            
+            if (!isAdmin)
+            {
+                NavManager.NavigateTo("/");
+                return;
             }
         }
-        
-        if (!isAdmin)
+        catch (Exception ex)
         {
-            NavManager.NavigateTo("/");
-            return;
+            Console.WriteLine($"Error initializing AdminReferrals: {ex.Message}");
         }
-
-        isInitializing = false;
+        finally
+        {
+            isInitializing = false;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -593,7 +600,8 @@ else
         });
         
         await context.SaveChangesAsync();
-        await HubContext.Clients.Group(referrer.Id).SendAsync("ReceiveUpdate", $"You received a referral bonus of {payout:N0} FB!");
+        UiNotifier.NotifyUser(referrer.Id, $"You received a referral bonus of {payout:N0} FB!");
+        UiNotifier.NotifyAdmin($"Referral bonus of {payout:N0} FB paid to {referrer.UserName}");
         _ = DiscordService.NotifyUserFreeBetAsync(referrer.DiscordUserId, (int)payout, $"Referral Bonus ({msg}) for inviting {dbRef.ReferredUserName}");
         
         var displayUserName = !string.IsNullOrEmpty(referrer.DiscordUsername) ? referrer.DiscordUsername : referrer.UserName;

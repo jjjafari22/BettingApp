@@ -46,24 +46,31 @@
     
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var userPrincipal = authState.User;
-
-        if (userPrincipal.Identity is not null && userPrincipal.Identity.IsAuthenticated)
+        try
         {
-            // Create a new scope to get a fresh UserManager/DbContext
-            // This prevents conflict with the page's DbContext usage
-            using (var scope = ScopeFactory.CreateScope())
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var userPrincipal = authState.User;
+
+            if (userPrincipal.Identity is not null && userPrincipal.Identity.IsAuthenticated)
             {
-                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-                var user = await userManager.GetUserAsync(userPrincipal);
-                
-                // CHANGED: Now checks if 'DiscordUsername' is missing (instead of Client ID)
-                if (user is not null && string.IsNullOrEmpty(user.DiscordUsername))
+                // Create a new scope to get a fresh UserManager/DbContext
+                // This prevents conflict with the page's DbContext usage
+                using (var scope = ScopeFactory.CreateScope())
                 {
-                    showDiscordWarning = true;
+                    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+                    var user = await userManager.GetUserAsync(userPrincipal);
+                    
+                    // CHANGED: Now checks if 'DiscordUsername' is missing (instead of Client ID)
+                    if (user is not null && string.IsNullOrEmpty(user.DiscordUsername))
+                    {
+                        showDiscordWarning = true;
+                    }
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking user in MainLayout: {ex.Message}");
         }
     }
 }

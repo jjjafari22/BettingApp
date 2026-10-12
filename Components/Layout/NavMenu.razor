@@ -1,12 +1,13 @@
-@implements IAsyncDisposable
+@implements IDisposable
 @using BettingApp.Data
+@using BettingApp.Services
 @using Microsoft.EntityFrameworkCore
-@using Microsoft.AspNetCore.SignalR.Client
 @using Microsoft.AspNetCore.Components.Web
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject ILogger<NavMenu> Logger
+@inject UiNotificationService UiNotifier
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <div class="top-row navbar navbar-dark d-flex align-items-center" style="padding-left: 1rem;">
@@ -197,7 +198,6 @@
 @code {
     private string? currentUrl;
     private bool isAdmin;
-    private HubConnection? hubConnection;
     private int adminHomeTasks = 0;
     private int transactionTasks = 0;
     private int userTasks = 0;
@@ -208,38 +208,34 @@
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
  NavigationManager.LocationChanged += OnLocationChanged;
 
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
- if (user.Identity?.IsAuthenticated == true)
+        try
         {
-            using var context = DbFactory.CreateDbContext();
- var dbUser = await context.Users
-                .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
- isAdmin = dbUser?.IsAdmin ?? false;
-
-            if (isAdmin)
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            if (user.Identity?.IsAuthenticated == true)
             {
-                await LoadAdminTasks(context);
- try 
-                {
-                    hubConnection = new HubConnectionBuilder()
-                        .WithUrl(NavigationManager.ToAbsoluteUri("/bethub"))
-                        .Build();
- hubConnection.On<string>("ReceiveAdminNotification", async (message) => await RefreshTasks());
-                    hubConnection.On("ReceiveUserRegistration", async () => await RefreshTasks());
-                    hubConnection.On<string>("ReceiveUpdate", async (message) => await RefreshTasks());
+                using var context = DbFactory.CreateDbContext();
+                var dbUser = await context.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+                isAdmin = dbUser?.IsAdmin ?? false;
 
-                    await hubConnection.StartAsync();
- await hubConnection.InvokeAsync("JoinAdminGroup");
-                }
-                catch (TaskCanceledException) { }
-                catch (Exception ex)
+                if (isAdmin)
                 {
-                    Logger.LogError($"NavMenu SignalR Error: {ex.Message}");
- }
+                    await LoadAdminTasks(context);
+                    UiNotifier.OnAdminNotification += HandleAdminNotification;
+                }
             }
         }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "NavMenu initialization error.");
+        }
+    }
+
+    private void HandleAdminNotification(string? message)
+    {
+        _ = InvokeAsync(RefreshTasks);
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
@@ -305,16 +301,9 @@
         referralTasks += possibleReferrals;
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
- if (hubConnection is not null)
-        {
-            try 
-            {
-                await hubConnection.DisposeAsync();
- }
-            catch { /* Ignore disposal errors */ }
-        }
+        UiNotifier.OnAdminNotification -= HandleAdminNotification;
     }
 }

@@ -1,20 +1,18 @@
 @page "/admin/transactions"
 <PageTitle>Transactions - Castle of Happiness</PageTitle>
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.SignalR
-@using Microsoft.AspNetCore.SignalR.Client
-@using BettingApp.Hubs
 @using BettingApp.Data
 @using BettingApp.Services
 @using Microsoft.EntityFrameworkCore
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
-@inject IHubContext<BetHub> HubContext
+@inject UiNotificationService UiNotifier
 @inject IJSRuntime JSRuntime
 @inject DiscordNotificationService DiscordService
 @inject BettingApp.Services.DialogService DialogService
 @attribute [Authorize]
+@implements IDisposable
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <h3>Manage Transactions</h3>
@@ -1120,7 +1118,7 @@ else
     private bool isSavingTransaction = false;
     private bool isProcessingAction = false;
     private string? currentAdminName;
-    private HubConnection? hubConnection;
+    private System.Timers.Timer? _debounceTimer;
     
     private int currentPage = 1;
     private const int PageSize = 25;
@@ -1155,27 +1153,65 @@ else
     {
         if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
 
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        currentAdminName = user.Identity?.Name;
-
-        using var context = DbFactory.CreateDbContext();
-        var userName = user.Identity?.Name;
-        ApplicationUser? dbUser = null;
-        if (!string.IsNullOrEmpty(userName))
+        try
         {
-            dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == userName);
-        }
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            currentAdminName = user.Identity?.Name;
 
-        if (dbUser == null || !dbUser.IsAdmin)
+            using var context = DbFactory.CreateDbContext();
+            var userName = user.Identity?.Name;
+            ApplicationUser? dbUser = null;
+            if (!string.IsNullOrEmpty(userName))
+            {
+                dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == userName);
+            }
+
+            if (dbUser == null || !dbUser.IsAdmin)
+            {
+                Nav.NavigateTo("/");
+                return;
+            }
+
+            await LoadTransactions(context);
+            await GoToCurrent();
+            UiNotifier.OnAdminNotification += HandleAdminNotification;
+        }
+        catch (Exception ex)
         {
-            Nav.NavigateTo("/");
-            return;
+            Console.WriteLine($"Error initializing AdminTransactions: {ex.Message}");
         }
+        finally
+        {
+            isInitializing = false;
+        }
+    }
 
-        await LoadTransactions(context);
-        await GoToCurrent();
-        isInitializing = false;
+    private void HandleAdminNotification(string? message)
+    {
+        if (_debounceTimer == null)
+        {
+            _debounceTimer = new System.Timers.Timer(1000);
+            _debounceTimer.AutoReset = false;
+            _debounceTimer.Elapsed += async (s, e) => 
+            {
+                await InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        using var context = DbFactory.CreateDbContext();
+                        await LoadTransactions(context);
+                        StateHasChanged();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error reloading transactions: {ex.Message}");
+                    }
+                });
+            };
+        }
+        _debounceTimer.Stop();
+        _debounceTimer.Start();
     }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -1187,8 +1223,6 @@ else
             } catch { }
             
             _ = GoToCurrent();
-            
-            try { await SetupSignalR(); } catch { }
         }
     }
 
@@ -1380,37 +1414,6 @@ else
         await LoadTransactions(context);
     }
 
-    private async Task SetupSignalR()
-    {
-        hubConnection = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/bethub")).Build();
-        
-        System.Timers.Timer? debounceTimer = null;
-        
-        Action triggerRefresh = () => 
-        {
-            if (debounceTimer == null)
-            {
-                debounceTimer = new System.Timers.Timer(1000);
-                debounceTimer.AutoReset = false;
-                debounceTimer.Elapsed += async (s, e) => 
-                {
-                    await InvokeAsync(async () =>
-                    {
-                        using var context = DbFactory.CreateDbContext();
-                        await LoadTransactions(context);
-                        StateHasChanged();
-                    });
-                };
-            }
-            debounceTimer.Stop();
-            debounceTimer.Start();
-        };
-
-        hubConnection.On<string>("ReceiveUpdate", (message) => triggerRefresh());
-        hubConnection.On<string>("ReceiveAdminNotification", (message) => triggerRefresh());
-        await hubConnection.StartAsync();
-        await hubConnection.InvokeAsync("JoinAdminGroup");
-    }
 
     private async Task LoadTransactions(ApplicationDbContext context)
     {
@@ -1730,7 +1733,8 @@ else
                 dbTrans.UpdatedAt = DateTime.UtcNow;
                 context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Confirmed Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {t.AmountNOK}, Platform: {t.Platform}" });
                 await context.SaveChangesAsync();
-                await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal confirmed");
+                UiNotifier.NotifyUser(t.UserId, "Withdrawal confirmed");
+                UiNotifier.NotifyAdmin("Withdrawal confirmed");
                 
                 if (user != null && !string.IsNullOrEmpty(user.DiscordUserId))
                 {
@@ -1852,7 +1856,8 @@ else
             });
             
             await context.SaveChangesAsync();
-            await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal amount updated");
+            UiNotifier.NotifyUser(t.UserId, "Withdrawal amount updated");
+            UiNotifier.NotifyAdmin("Withdrawal amount updated");
             
             _ = ShowSuccess($"Withdrawal amount updated to {editingTransactionAmount} kr.");
             editingTransactionId = null;
@@ -1882,7 +1887,8 @@ else
             context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Rejected Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {remainingToRefund} (Original: {t.AmountNOK}), ID: {t.Id}" });
             await context.SaveChangesAsync();
             
-            await HubContext.Clients.Group(t.UserId).SendAsync("ReceiveUpdate", "Withdrawal rejected");
+            UiNotifier.NotifyUser(t.UserId, "Withdrawal rejected");
+            UiNotifier.NotifyAdmin("Withdrawal rejected");
             if (!string.IsNullOrEmpty(user.DiscordUserId))
             {
                 await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, t, "Rejected");
@@ -2091,8 +2097,9 @@ else
                 if (user != null && !string.IsNullOrEmpty(user.DiscordUserId))
                 {
                     await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, tx, "Completed");
-                    await HubContext.Clients.Group(user.Id).SendAsync("ReceiveUpdate", "Withdrawal processed");
                 }
+                UiNotifier.NotifyUser(tx.UserId, "Withdrawal processed");
+                UiNotifier.NotifyAdmin("Withdrawal processed");
             }
             else if (tx.Type == "Deposit")
             {
@@ -2100,8 +2107,9 @@ else
                 if (user != null && !string.IsNullOrEmpty(user.DiscordUserId))
                 {
                     await DiscordService.NotifyUserDepositAsync(user.DiscordUserId, tx.AmountNOK);
-                    await HubContext.Clients.Group(user.Id).SendAsync("ReceiveUpdate", "Deposit processed");
                 }
+                UiNotifier.NotifyUser(tx.UserId, "Deposit processed");
+                UiNotifier.NotifyAdmin("Deposit processed");
             }
         }
         
@@ -2137,9 +2145,9 @@ else
         isPaymentDetailsAutoFilled = false;
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        if (hubConnection is not null) { await hubConnection.DisposeAsync();
-        }
+        UiNotifier.OnAdminNotification -= HandleAdminNotification;
+        _debounceTimer?.Dispose();
     }
 }

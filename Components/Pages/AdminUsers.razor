@@ -3,9 +3,6 @@
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.SignalR
-@using Microsoft.AspNetCore.SignalR.Client
-@using BettingApp.Hubs
 @using BettingApp.Services
 @using Microsoft.AspNetCore.Identity
 @attribute [Authorize]
@@ -13,11 +10,11 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
 @inject IJSRuntime JSRuntime
-@inject IHubContext<BetHub> HubContext
+@inject UiNotificationService UiNotifier
 @inject DiscordNotificationService DiscordService
 @inject IEmailSender<ApplicationUser> EmailSenderInterface
 @inject BettingApp.Services.DialogService DialogService
-@implements IAsyncDisposable
+@implements IDisposable
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <style>
@@ -502,7 +499,7 @@ else
     private bool hasAccess = false;
     private bool isLoading = true;
     private string? successMessage;
-    private HubConnection? hubConnection;
+    private System.Timers.Timer? userDebounceTimer;
     private string sortColumn = "LastActive";
     private bool sortAscending = false; 
     private string? currentAdminName;
@@ -574,53 +571,53 @@ else
     {
         if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
 
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        currentAdminName = user.Identity?.Name;
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            currentAdminName = user.Identity?.Name;
 
-        using var context = DbFactory.CreateDbContext();
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            var currentUser = await context.Users.AsNoTracking()
-                .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
-            hasAccess = currentUser?.IsAdmin ?? false;
-        }
-
-        if (!hasAccess) 
-        {
-            Nav.NavigateTo("/");
-            return;
-        }
-        
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(Nav.ToAbsoluteUri("/bethub"))
-            .Build();
-            
-        System.Timers.Timer? debounceTimer = null;
-        
-        Action triggerRefresh = () => 
-        {
-            if (debounceTimer == null)
+            using var context = DbFactory.CreateDbContext();
+            if (user.Identity?.IsAuthenticated == true)
             {
-                debounceTimer = new System.Timers.Timer(1000);
-                debounceTimer.AutoReset = false;
-                debounceTimer.Elapsed += async (s, e) => 
-                {
-                    await InvokeAsync(async () => await RefreshData());
-                };
+                var currentUser = await context.Users.AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+                hasAccess = currentUser?.IsAdmin ?? false;
             }
-            debounceTimer.Stop();
-            debounceTimer.Start();
-        };
 
-        hubConnection.On("ReceiveUserRegistration", () => triggerRefresh());
-        hubConnection.On<string>("ReceiveAdminNotification", (msg) => triggerRefresh());
-        
-        await hubConnection.StartAsync();
-        await hubConnection.SendAsync("JoinAdminGroup");
+            if (!hasAccess) 
+            {
+                Nav.NavigateTo("/");
+                return;
+            }
 
-        await LoadData(context);
-        isLoading = false;
+            UiNotifier.OnAdminNotification += HandleAdminNotification;
+
+            await LoadData(context);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AdminUsers] Initialization error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void HandleAdminNotification(string? msg)
+    {
+        if (userDebounceTimer == null)
+        {
+            userDebounceTimer = new System.Timers.Timer(1000);
+            userDebounceTimer.AutoReset = false;
+            userDebounceTimer.Elapsed += async (s, e) => 
+            {
+                await InvokeAsync(async () => await RefreshData());
+            };
+        }
+        userDebounceTimer.Stop();
+        userDebounceTimer.Start();
     }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -871,7 +868,7 @@ else
                 }
             }
 
-            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+            UiNotifier.NotifyAdmin("Update");
             await RefreshData();
             
             successMessage = $"User {user.UserName} has been approved.";
@@ -901,7 +898,7 @@ else
             });
             await context.SaveChangesAsync();
             
-            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+            UiNotifier.NotifyAdmin("Update");
             await RefreshData();
             
             successMessage = $"User {name} has been rejected and deleted.";
@@ -1308,9 +1305,10 @@ else
         return sortAscending ? "bi bi-arrow-up-short text-warning" : "bi bi-arrow-down-short text-warning";
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        if (hubConnection is not null) { await hubConnection.DisposeAsync(); }
+        userDebounceTimer?.Dispose();
+        UiNotifier.OnAdminNotification -= HandleAdminNotification;
     }
 
     private int usersPage = 1;

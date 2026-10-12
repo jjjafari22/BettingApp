@@ -8,8 +8,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using BettingApp.Data;
 using System.Text.Json;
-using BettingApp.Hubs;
-using Microsoft.AspNetCore.SignalR;
 
 namespace BettingApp.Services
 {
@@ -266,8 +264,8 @@ namespace BettingApp.Services
             if (anyUpdates)
             {
                 // Notify UI about the update once for all bets
-                var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<BetHub>>();
-                await hubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+                var uiNotifier = scope.ServiceProvider.GetService<UiNotificationService>();
+                uiNotifier?.NotifyAdmin("Update");
             }
         }
     }

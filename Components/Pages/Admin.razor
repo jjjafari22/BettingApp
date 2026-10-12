@@ -1,17 +1,14 @@
 @page "/admin"
 <PageTitle>Admin Dashboard - Castle of Happiness</PageTitle>
 @using Microsoft.AspNetCore.Authorization  
-@using Microsoft.AspNetCore.SignalR
-@using BettingApp.Hubs
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
-@using Microsoft.AspNetCore.SignalR.Client
 @using Microsoft.AspNetCore.Components.Authorization
 @using BettingApp.Services
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
 @inject IDbContextFactory<ApplicationDbContext> DbFactory 
-@inject IHubContext<BetHub> HubContext
+@inject UiNotificationService UiNotifier
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
 @inject BettingApp.Services.DialogService DialogService
@@ -1379,7 +1376,7 @@ else
             if (changed) await InvokeAsync(StateHasChanged);
         });
     }
-    private HubConnection? hubConnection;
+    private System.Timers.Timer? adminDebounceTimer;
     private string? currentAdminName;
     private Bet? reviewingBetModel;
     private bool showAiExtractionDetails = false;
@@ -2256,36 +2253,39 @@ else
             catch (TaskCanceledException) { /* Ignore when user navigates away */ }
             catch (Exception ex) { Logger.LogError($"Timezone error: {ex.Message}"); }
 
-            hubConnection = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/bethub")).Build();
-            
-            System.Timers.Timer? debounceTimer = null;
-            
-            hubConnection.On<string>("ReceiveAdminNotification", (message) =>
-            {
-                if (!string.IsNullOrEmpty(message) && message != "Update") successMessage = message;
-                
-                if (debounceTimer == null)
-                {
-                    debounceTimer = new System.Timers.Timer(1000);
-                    debounceTimer.AutoReset = false;
-                    debounceTimer.Elapsed += async (s, e) => 
-                    {
-                        await InvokeAsync(async () =>
-                        {
-                            await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
-                            StateHasChanged();
-                        });
-                    };
-                }
-                
-                debounceTimer.Stop();
-                debounceTimer.Start();
-            });
-            await hubConnection.StartAsync();
-            await hubConnection.InvokeAsync("JoinAdminGroup");
+            UiNotifier.OnAdminNotification += HandleAdminNotification;
         }
         if (shouldFocusReviewModal) { shouldFocusReviewModal = false;
             try { await reviewModalRef.FocusAsync(); } catch { } }
+    }
+
+    private void HandleAdminNotification(string? message)
+    {
+        if (!string.IsNullOrEmpty(message) && message != "Update") successMessage = message;
+        
+        if (adminDebounceTimer == null)
+        {
+            adminDebounceTimer = new System.Timers.Timer(1000);
+            adminDebounceTimer.AutoReset = false;
+            adminDebounceTimer.Elapsed += async (s, e) => 
+            {
+                await InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
+                        StateHasChanged();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Failed to refresh bets on admin notification.");
+                    }
+                });
+            };
+        }
+        
+        adminDebounceTimer.Stop();
+        adminDebounceTimer.Start();
     }
 
     private bool ShowOddsLookup = false;
@@ -2904,7 +2904,9 @@ else
     public async ValueTask DisposeAsync()
     {
         uiRefreshTimer?.Dispose();
-        if (hubConnection is not null) { await hubConnection.DisposeAsync(); }
+        adminDebounceTimer?.Dispose();
+        UiNotifier.OnAdminNotification -= HandleAdminNotification;
+        await Task.CompletedTask;
     }
 
     private async Task<(bool allowed, string error)> CheckUserBalance(string userId, decimal newBetAmount)
@@ -3300,7 +3302,7 @@ else
             await LoadCompletedBets();
             StateHasChanged();
         });
-        await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+        UiNotifier.NotifyAdmin("Update");
         successMessage = $"Bet #{bet.Id} updated.";
         
         // Remove the processed bet from the current UI list immediately if its status changed,

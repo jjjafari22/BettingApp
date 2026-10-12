@@ -1,9 +1,6 @@
 @page "/"
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
-@using Microsoft.AspNetCore.SignalR
-@using BettingApp.Hubs
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.SignalR.Client
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore 
 @using Azure.Storage.Blobs
@@ -13,12 +10,13 @@
 @inject AuthenticationStateProvider AuthState
 @inject NavigationManager Nav
 @inject BlobServiceClient BlobService
-@inject IHubContext<BetHub> HubContext
+@inject UiNotificationService UiNotifier
 @inject IConfiguration Config
 @inject DiscordNotificationService DiscordService
 @inject IJSRuntime JSRuntime
 @inject Microsoft.Extensions.DependencyInjection.IServiceScopeFactory ScopeFactory
 @inject ILogger<Home> Logger
+@implements IDisposable
 
 <PageTitle>Castle of Happiness</PageTitle>
 
@@ -404,7 +402,6 @@ else
     private decimal AvailableCredit = 1000;
     private IReadOnlyList<IBrowserFile> uploadedFiles = new List<IBrowserFile>();
     
-    private HubConnection? hubConnection;
     private string userId = string.Empty;
     private string userName = string.Empty;
     private string inputFileKey = Guid.NewGuid().ToString();
@@ -494,12 +491,32 @@ else
                 }
                 newBet.UserId = userId;
                 newBet.UserName = userName;
+                UiNotifier.OnUserNotification += HandleUserNotification;
             }
         }
         catch (Exception ex) when (ex is not NavigationException)
         {
             ErrorMessage = $"Startup Error: {ex.Message}";
             Logger.LogError(ex, "An error occurred");
+        }
+    }
+
+    private void HandleUserNotification(string targetUserId, string? message)
+    {
+        if (targetUserId == userId)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                try
+                {
+                    await LoadData();
+                    StateHasChanged();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error refreshing home user data");
+                }
+            });
         }
     }
 
@@ -513,7 +530,6 @@ else
                 if (!string.IsNullOrEmpty(userId))
                 {
                     await LoadData();
-                    await SetupSignalR();
                 }
             }
             catch (Exception ex)
@@ -580,19 +596,6 @@ else
         }
     }
 
-    private async Task SetupSignalR()
-    {
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(Nav.ToAbsoluteUri("/bethub"))
-            .Build();
-        hubConnection.On<string>("ReceiveUpdate", async (message) =>
-        {
-            await LoadData();
-            await InvokeAsync(StateHasChanged);
-        });
-        await hubConnection.StartAsync();
-        await hubConnection.InvokeAsync("JoinUserGroup", userId);
-    }
 
     private void HandleFileSelected(InputFileChangeEventArgs e)
     {
@@ -717,7 +720,7 @@ else
                     var aiVision = scope.ServiceProvider.GetRequiredService<BettingApp.Services.AiVisionService>();
                     var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BettingApp.Data.ApplicationDbContext>>();
                     var discord = scope.ServiceProvider.GetRequiredService<BettingApp.Services.DiscordNotificationService>();
-                    var hub = scope.ServiceProvider.GetRequiredService<IHubContext<BettingApp.Hubs.BetHub>>();
+                    var uiNotifier = scope.ServiceProvider.GetRequiredService<BettingApp.Services.UiNotificationService>();
                     
                     // Concurrency set to 3: Fast enough for live bets, but prevents 5-burst 429 errors
                     var semaphore = new SemaphoreSlim(3);
@@ -810,8 +813,7 @@ else
                                         var submitterUser = await bgContext.Users.AsNoTracking().Where(u => u.Id == dbBet.UserId).Select(u => new { u.DiscordUsername }).FirstOrDefaultAsync();
                                         var displayUserName = !string.IsNullOrEmpty(submitterUser?.DiscordUsername) ? submitterUser.DiscordUsername : dbBet.UserName;
 
-                                        await hub.Clients.All.SendAsync("ReceiveBetUpdate", dbBet.Id);
-                                        await hub.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"New pick submitted by {displayUserName}");
+                                        uiNotifier.NotifyAdmin($"New pick submitted by {displayUserName}");
                                         await discord.NotifyAdminNewPickAsync(dbBet);
                                     }
                                     else
@@ -886,7 +888,7 @@ else
                 var submitterUser = await context.Users.AsNoTracking().Where(u => u.Id == dbBet.UserId).Select(u => new { u.DiscordUsername }).FirstOrDefaultAsync();
                 var displayUserName = !string.IsNullOrEmpty(submitterUser?.DiscordUsername) ? submitterUser.DiscordUsername : dbBet.UserName;
 
-                await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", $"Pick cancelled by {displayUserName}");
+                UiNotifier.NotifyAdmin($"Pick cancelled by {displayUserName}");
 
                 SuccessMessage = "Pick cancelled successfully.";
                 if (viewBetModel?.Id == bet.Id) CloseViewModal();
@@ -962,11 +964,9 @@ else
         _ => "text-danger"
     };
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        if (hubConnection is not null)
-        {
-            await hubConnection.DisposeAsync();
-        }
+        UiNotifier.OnUserNotification -= HandleUserNotification;
+        _messageCts?.Dispose();
     }
 }

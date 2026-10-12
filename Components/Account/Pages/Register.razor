@@ -6,8 +6,6 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
 @using BettingApp.Data
-@using Microsoft.AspNetCore.SignalR 
-@using BettingApp.Hubs
 @using BettingApp.Services
 
 @inject UserManager<ApplicationUser> UserManager
@@ -17,7 +15,7 @@
 @inject ILogger<Register> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
-@inject IHubContext<BetHub> HubContext
+@inject UiNotificationService UiNotifier
 @inject DiscordNotificationService DiscordService
 
 <PageTitle>Register - Castle of Happiness</PageTitle>
@@ -137,8 +135,8 @@
             {
                 Logger.LogInformation("User created a new account with password.");
                 // --- NOTIFICATIONS ---
-                // 1. Notify Admin Page (SignalR)
-                await HubContext.Clients.Group("Admins").SendAsync("ReceiveUserRegistration");
+                // 1. Notify Admin Page
+                UiNotifier.NotifyAdmin("NewUser");
                 // 2. Notify Discord
                 try
                 {

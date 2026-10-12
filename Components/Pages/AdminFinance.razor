@@ -1,14 +1,16 @@
 @page "/admin/finance"
 <PageTitle>Finance Dashboard - Castle of Happiness</PageTitle>
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.SignalR.Client
+@using BettingApp.Services
 @using Microsoft.EntityFrameworkCore
 @using BettingApp.Data
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
+@inject UiNotificationService UiNotifier
 @inject IJSRuntime JSRuntime
 @attribute [Authorize]
+@implements IDisposable
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -164,7 +166,6 @@
     private enum ViewMode { Daily, Weekly, Monthly, Yearly, Custom }
 
     private bool isAuthorized = false;
-    private HubConnection? hubConnection;
     
     // State
     private bool showNorwayTimezone = false;
@@ -201,17 +202,42 @@
     {
         if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
 
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var userName = authState.User.Identity?.Name;
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var userName = authState.User.Identity?.Name;
 
-        if (string.IsNullOrEmpty(userName)) { Nav.NavigateTo("/"); return; }
+            if (string.IsNullOrEmpty(userName)) { Nav.NavigateTo("/"); return; }
 
-        using var context = DbFactory.CreateDbContext();
-        var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == userName);
-        if (dbUser == null || !dbUser.IsAdmin) { Nav.NavigateTo("/"); return; }
+            using var context = DbFactory.CreateDbContext();
+            var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == userName);
+            if (dbUser == null || !dbUser.IsAdmin) { Nav.NavigateTo("/"); return; }
 
-        isAuthorized = true;
-        GoToCurrent();
+            isAuthorized = true;
+            GoToCurrent();
+            UiNotifier.OnAdminNotification += HandleAdminNotification;
+            UiNotifier.OnUserNotification += HandleUserNotification;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing AdminFinance: {ex.Message}");
+        }
+    }
+
+    private void HandleAdminNotification(string? msg) => _ = TriggerLiveRefresh();
+    private void HandleUserNotification(string userId, string? msg) => _ = TriggerLiveRefresh();
+
+    private async Task TriggerLiveRefresh()
+    {
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            await RefreshLiveLiability(context);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refreshing live liability: {ex.Message}");
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -223,25 +249,6 @@
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
                 hasFetchedOffset = true;
                 GoToCurrent(); // Refresh bounds correctly now that we have the offset
-            }
-            catch { }
-        }
-
-        if (firstRender && isAuthorized)
-        {
-            // Setup SignalR for live liability updates
-            try 
-            {
-                using var context = DbFactory.CreateDbContext();
-                hubConnection = new HubConnectionBuilder()
-                    .WithUrl(Nav.ToAbsoluteUri("/bethub"))
-                    .Build();
-
-                hubConnection.On<string>("ReceiveAdminNotification", async (msg) => await RefreshLiveLiability(context));
-                hubConnection.On<string>("ReceiveUpdate", async (msg) => await RefreshLiveLiability(context));
-
-                await hubConnection.StartAsync();
-                await hubConnection.InvokeAsync("JoinAdminGroup");
             }
             catch { }
         }
@@ -463,11 +470,9 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        if (hubConnection is not null)
-        {
-            await hubConnection.DisposeAsync();
-        }
+        UiNotifier.OnAdminNotification -= HandleAdminNotification;
+        UiNotifier.OnUserNotification -= HandleUserNotification;
     }
 }

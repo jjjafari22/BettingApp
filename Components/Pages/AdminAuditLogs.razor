@@ -3,13 +3,14 @@
 @using BettingApp.Data
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.SignalR.Client
+@using BettingApp.Services
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
 @inject IJSRuntime JS
-@implements IAsyncDisposable
+@inject UiNotificationService UiNotifier
+@implements IDisposable
 @rendermode @(new InteractiveServerRenderMode(prerender: true))
 
 <h3>Audit Logs (@totalLogs)</h3>
@@ -133,8 +134,6 @@ else
     private int totalPages => totalLogs == 0 ? 1 : (int)Math.Ceiling((double)totalLogs / pageSize);
     private bool hasNextPage => currentPage < totalPages;
     private int TimezoneOffset { get; set; }
-    
-    private HubConnection? hubConnection;
 
     private async Task PopulateUserLookup(IEnumerable<string> targetUserNames)
     {
@@ -156,35 +155,48 @@ else
     {
         if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
 
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
 
-        using var context = DbFactory.CreateDbContext();
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
-            isAdmin = dbUser?.IsAdmin ?? false;
-        }
+            using var context = DbFactory.CreateDbContext();
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+                isAdmin = dbUser?.IsAdmin ?? false;
+            }
 
-        if (!isAdmin)
-        {
-            Nav.NavigateTo("/");
-            return;
-        }
-        {
+            if (!isAdmin)
+            {
+                Nav.NavigateTo("/");
+                return;
+            }
+
             await LoadLogs();
-            hubConnection = new HubConnectionBuilder()
-                .WithUrl(Nav.ToAbsoluteUri("/bethub"))
-                .Build();
-            hubConnection.On<string>("ReceiveAdminNotification", async (msg) => 
-            { 
-                await LoadLogs();
-                await InvokeAsync(StateHasChanged);
-            });
-            await hubConnection.StartAsync();
-            await hubConnection.InvokeAsync("JoinAdminGroup");
+            UiNotifier.OnAdminNotification += HandleAdminNotification;
         }
-        isInitializing = false;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AdminAuditLogs] Error initializing: {ex.Message}");
+        }
+        finally
+        {
+            isInitializing = false;
+        }
+    }
+
+    private void HandleAdminNotification(string? msg)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await LoadLogs();
+                StateHasChanged();
+            }
+            catch { }
+        });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -297,11 +309,8 @@ else
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        if (hubConnection is not null)
-        {
-            await hubConnection.DisposeAsync();
-        }
+        UiNotifier.OnAdminNotification -= HandleAdminNotification;
     }
 }

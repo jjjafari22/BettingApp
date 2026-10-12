@@ -3,8 +3,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using BettingApp.Data;
-using Microsoft.AspNetCore.SignalR;
-using BettingApp.Hubs;
 using Microsoft.Extensions.Logging;
 
 namespace BettingApp.Services
@@ -12,18 +10,18 @@ namespace BettingApp.Services
     public class BetProcessingService
     {
         private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
-        private readonly IHubContext<BetHub> _hubContext;
+        private readonly UiNotificationService _uiNotificationService;
         private readonly DiscordNotificationService _discordService;
         private readonly ILogger<BetProcessingService> _logger;
 
         public BetProcessingService(
             IDbContextFactory<ApplicationDbContext> dbFactory,
-            IHubContext<BetHub> hubContext,
+            UiNotificationService uiNotificationService,
             DiscordNotificationService discordService,
             ILogger<BetProcessingService> logger)
         {
             _dbFactory = dbFactory;
-            _hubContext = hubContext;
+            _uiNotificationService = uiNotificationService;
             _discordService = discordService;
             _logger = logger;
         }
@@ -222,8 +220,8 @@ namespace BettingApp.Services
                     _ = _discordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet, isUndo ? "Undone" : newStatus, isUpdate: isUndo);
                 }
 
-                await _hubContext.Clients.Group(dbBet.UserId).SendAsync("ReceiveUpdate", $"Your bet status is now: {newStatus}");
-                await _hubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "Update");
+                _uiNotificationService.NotifyUser(dbBet.UserId, $"Your bet status is now: {newStatus}");
+                _uiNotificationService.NotifyAdmin("Update");
             }
             catch (Exception ex)
             {

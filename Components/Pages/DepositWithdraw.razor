@@ -4,18 +4,15 @@
 @using BettingApp.Services
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.SignalR.Client
-@using Microsoft.AspNetCore.SignalR
-@using BettingApp.Hubs
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthState
 @inject NavigationManager Nav
 @inject IJSRuntime JSRuntime
-@inject IHubContext<BetHub> HubContext
+@inject UiNotificationService UiNotifier
 @inject DiscordNotificationService DiscordService
 @inject ILogger<DepositWithdraw> Logger
 @attribute [Authorize]
-@implements IAsyncDisposable
+@implements IDisposable
 
 <PageTitle>Deposit / Withdrawal - Castle of Happiness</PageTitle>
 
@@ -313,7 +310,6 @@
     private int totalTransactions = 0;
     private const int PageSize = 25;
 
-    private HubConnection? hubConnection;
     private int TimezoneOffset { get; set; }
 
     private DateTime ToUserLocal(DateTime utcDate)
@@ -329,12 +325,41 @@
     {
         if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
 
-        var auth = await AuthState.GetAuthenticationStateAsync();
-        userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value ?? "";
-        
-        if (string.IsNullOrEmpty(userId))
+        try
         {
-            Nav.NavigateTo("/Account/Login");
+            var auth = await AuthState.GetAuthenticationStateAsync();
+            userId = auth.User.FindFirst(u => u.Type.Contains("nameidentifier"))?.Value ?? "";
+            
+            if (string.IsNullOrEmpty(userId))
+            {
+                Nav.NavigateTo("/Account/Login");
+                return;
+            }
+
+            UiNotifier.OnUserNotification += HandleUserNotification;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing DepositWithdraw");
+        }
+    }
+
+    private void HandleUserNotification(string targetUserId, string? message)
+    {
+        if (targetUserId == userId)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                try
+                {
+                    await LoadData();
+                    StateHasChanged();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error refreshing cashier data");
+                }
+            });
         }
     }
 
@@ -347,26 +372,11 @@
                 if (!string.IsNullOrEmpty(userId))
                 {
                     await LoadData();
-                    await SetupSignalR();
                 }
             }
             catch (Exception ex) { Logger.LogError(ex, "An error occurred"); }
             finally { IsLoading = false; StateHasChanged(); }
         }
-    }
-
-    private async Task SetupSignalR()
-    {
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(Nav.ToAbsoluteUri("/bethub"))
-            .Build();
-        hubConnection.On<string>("ReceiveUpdate", async (message) =>
-        {
-            await LoadData();
-            await InvokeAsync(StateHasChanged);
-        });
-        await hubConnection.StartAsync();
-        await hubConnection.InvokeAsync("JoinUserGroup", userId);
     }
 
     private async Task LoadData()
@@ -509,7 +519,7 @@
             await context.SaveChangesAsync();
 
             await DiscordService.NotifyAdminWithdrawalAsync(transaction);
-            await HubContext.Clients.Group("Admins").SendAsync("ReceiveAdminNotification", "New withdrawal request");
+            UiNotifier.NotifyAdmin("New withdrawal request");
             
             SuccessMessage = "Withdrawal request submitted successfully. Waiting for admin approval.";
             withdrawalAmount = null;
@@ -541,8 +551,8 @@
         _ => "bg-secondary"
     };
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        if (hubConnection is not null) await hubConnection.DisposeAsync();
+        UiNotifier.OnUserNotification -= HandleUserNotification;
     }
 }

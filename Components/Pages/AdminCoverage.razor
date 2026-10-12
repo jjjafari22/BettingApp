@@ -274,33 +274,41 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        if (user.Identity?.IsAuthenticated == true)
+        try
         {
-            currentUserName = user.Identity.Name ?? "Unknown";
-            using var context = DbFactory.CreateDbContext();
-            var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == currentUserName);
-            isAdmin = dbUser?.IsAdmin ?? false;
-            
-            if (isAdmin)
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            if (user.Identity?.IsAuthenticated == true)
             {
-                allAdmins = await context.Users
-                    .AsNoTracking()
-                    .Where(u => u.IsAdmin)
-                    .OrderBy(u => u.FirstName)
-                    .ToListAsync();
+                currentUserName = user.Identity.Name ?? "Unknown";
+                using var context = DbFactory.CreateDbContext();
+                var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == currentUserName);
+                isAdmin = dbUser?.IsAdmin ?? false;
+                
+                if (isAdmin)
+                {
+                    allAdmins = await context.Users
+                        .AsNoTracking()
+                        .Where(u => u.IsAdmin)
+                        .OrderBy(u => u.FirstName)
+                        .ToListAsync();
+                }
             }
-        }
 
-        if (!isAdmin)
+            if (!isAdmin)
+            {
+                NavManager.NavigateTo("/");
+                return;
+            }
+
+            CalculateWeek();
+            await LoadShifts();
+        }
+        catch (Exception ex)
         {
-            NavManager.NavigateTo("/");
-            return;
+            Console.WriteLine($"Error initializing AdminCoverage: {ex.Message}");
+            isLoading = false;
         }
-
-        CalculateWeek();
-        await LoadShifts();
     }
 
     private int TimezoneOffset { get; set; }

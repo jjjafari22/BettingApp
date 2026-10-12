@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using BettingApp.Components;
 using BettingApp.Components.Account;
 using BettingApp.Data;
-using BettingApp.Hubs;
 using BettingApp.Services;
 using Microsoft.AspNetCore.DataProtection;
 using System.IO;
@@ -59,6 +58,7 @@ builder.Services.AddHttpClient<AiVisionService>(client =>
 }).ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<FotMobScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 
+builder.Services.AddSingleton<UiNotificationService>();
 builder.Services.AddSingleton<MarketMappingService>();
 builder.Services.AddSingleton<TeamAliasMappingService>();
 builder.Services.AddHostedService<SettlementBackgroundService>();
@@ -198,7 +198,6 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.MapHub<BetHub>("/bethub");
 app.MapAdditionalIdentityEndpoints();
 app.MapHealthChecks("/health");
 
