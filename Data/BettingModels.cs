@@ -49,21 +49,27 @@ namespace BettingApp.Data
         public string? AiVisionResultJson 
         { 
             get => AiEvaluation?.AiVisionResultJson; 
-            set { if (AiEvaluation == null) AiEvaluation = new BetAiEvaluation { BetId = Id }; AiEvaluation.AiVisionResultJson = value; } 
+            set { EnsureAiEvaluation().AiVisionResultJson = value; } 
         }
 
         [System.ComponentModel.DataAnnotations.Schema.NotMapped]
         public string? AiVisionError 
         { 
             get => AiEvaluation?.AiVisionError; 
-            set { if (AiEvaluation == null) AiEvaluation = new BetAiEvaluation { BetId = Id }; AiEvaluation.AiVisionError = value; } 
+            set { EnsureAiEvaluation().AiVisionError = value; } 
         }
 
         [System.ComponentModel.DataAnnotations.Schema.NotMapped]
         public string? AiOutcomeResult 
         { 
             get => AiEvaluation?.AiOutcomeResult; 
-            set { if (AiEvaluation == null) AiEvaluation = new BetAiEvaluation { BetId = Id }; AiEvaluation.AiOutcomeResult = value; } 
+            set { EnsureAiEvaluation().AiOutcomeResult = value; } 
+        }
+
+        public BetAiEvaluation EnsureAiEvaluation()
+        {
+            AiEvaluation ??= new BetAiEvaluation { BetId = Id };
+            return AiEvaluation;
         }
         
         // Single Source of Truth

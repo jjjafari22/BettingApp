@@ -76,7 +76,8 @@ namespace BettingApp.Services
                 
                 if (dbBet.AiEvaluation == null)
                 {
-                    dbBet.AiEvaluation = new BetAiEvaluation { BetId = dbBet.Id };
+                    var existingEval = await taskContext.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id, ct);
+                    dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
                 }
                 
                 if (dbBet.AiEvaluation.AiOutcomeResult == "Admin Override")
@@ -96,6 +97,16 @@ namespace BettingApp.Services
                     var (extractionResult, error) = await _aiVisionService.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl, dbBet.Id);
                     if (error != null)
                     {
+                        if (dbBet.AiEvaluation.Id == 0)
+                        {
+                            var existingEval = await taskContext.BetAiEvaluations.AsNoTracking().FirstOrDefaultAsync(a => a.BetId == dbBet.Id, ct);
+                            if (existingEval != null)
+                            {
+                                dbBet.AiEvaluation.Id = existingEval.Id;
+                                taskContext.Entry(dbBet.AiEvaluation).State = EntityState.Modified;
+                            }
+                        }
+
                         dbBet.AiEvaluation.AiVisionError = error;
                         // Use the standard check outcome scheduling interval if extraction fails
                         dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
@@ -128,6 +139,16 @@ namespace BettingApp.Services
                             }
                         }
 
+                        if (dbBet.AiEvaluation.Id == 0)
+                        {
+                            var existingEval = await taskContext.BetAiEvaluations.AsNoTracking().FirstOrDefaultAsync(a => a.BetId == dbBet.Id, ct);
+                            if (existingEval != null)
+                            {
+                                dbBet.AiEvaluation.Id = existingEval.Id;
+                                taskContext.Entry(dbBet.AiEvaluation).State = EntityState.Modified;
+                            }
+                        }
+
                         await taskContext.SaveChangesAsync(ct);
                     }
                 }
@@ -136,6 +157,17 @@ namespace BettingApp.Services
 
                 string? result = await _aiVisionService.ConfirmOutcomeAsync(dbBet.AiEvaluation.AiVisionResultJson, dbBet.CreatedAt, dbBet.MatchStartTime, dbBet.Id);
                 
+                // If AiEvaluation was newly instantiated in memory, verify if another process created it in DB during the AI call
+                if (dbBet.AiEvaluation.Id == 0)
+                {
+                    var existingEval = await taskContext.BetAiEvaluations.AsNoTracking().FirstOrDefaultAsync(a => a.BetId == dbBet.Id, ct);
+                    if (existingEval != null)
+                    {
+                        dbBet.AiEvaluation.Id = existingEval.Id;
+                        taskContext.Entry(dbBet.AiEvaluation).State = EntityState.Modified;
+                    }
+                }
+
                 dbBet.AiEvaluation.AiOutcomeResult = result;
                 
                 try 

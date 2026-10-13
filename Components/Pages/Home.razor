@@ -732,9 +732,15 @@ else
                             try {
                                 System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Processing bet ID {id}\n");
                                 using var bgContext = dbFactory.CreateDbContext();
-                                var dbBet = await bgContext.Bets.Include(b => b.Legs).FirstOrDefaultAsync(b => b.Id == id);
+                                var dbBet = await bgContext.Bets.Include(b => b.Legs).Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == id);
                                 if (dbBet != null && !string.IsNullOrEmpty(dbBet.ScreenshotUrl))
                                 {
+                                    if (dbBet.AiEvaluation == null)
+                                    {
+                                        var existingEval = await bgContext.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id);
+                                        dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
+                                    }
+
                                     System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Calling AI Vision for URL {dbBet.ScreenshotUrl}\n");
                                     var (result, error) = await aiVision.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl, id);
                                     
@@ -807,6 +813,17 @@ else
                                     if (currentStatus != "Cancelled")
                                     {
                                         dbBet.Status = "Pending";
+
+                                        if (dbBet.AiEvaluation != null && dbBet.AiEvaluation.Id == 0)
+                                        {
+                                            var existingEval = await bgContext.BetAiEvaluations.AsNoTracking().FirstOrDefaultAsync(a => a.BetId == id);
+                                            if (existingEval != null)
+                                            {
+                                                dbBet.AiEvaluation.Id = existingEval.Id;
+                                                bgContext.Entry(dbBet.AiEvaluation).State = EntityState.Modified;
+                                            }
+                                        }
+
                                         await bgContext.SaveChangesAsync();
                                         System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Saved to DB (Pending) and broadcasted SignalR.\n");
                                         

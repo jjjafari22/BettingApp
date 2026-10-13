@@ -1264,6 +1264,12 @@ else
             var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == reviewingBetModel.Id);
             if (dbBet != null)
             {
+                if (dbBet.AiEvaluation == null)
+                {
+                    var existingEval = await context.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id);
+                    dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
+                }
+
                 if (dbBet.AiOutcomeResult == "Admin Override")
                 {
                     dbBet.AiOutcomeResult = ""; // Clear override
@@ -1999,6 +2005,11 @@ else
                     if (currentAiVisionResultJson != null)
                     {
                         if (matchStartTime.HasValue) dbBet.MatchStartTime = matchStartTime;
+                        if (dbBet.AiEvaluation == null)
+                        {
+                            var existingEval = await context.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id);
+                            dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
+                        }
                         dbBet.AiVisionResultJson = currentAiVisionResultJson;
                         
                         // IMPORTANT: Sync the StartTime to the physical BetLegs so BetProcessingService sees it
@@ -2345,9 +2356,14 @@ else
                             currentBet.AiVisionError = error;
                             if (currentOriginal != null) currentOriginal.AiVisionError = error;
                             using var errContext = DbFactory.CreateDbContext();
-                            var errBet = await errContext.Bets.FindAsync(currentBet.Id);
+                            var errBet = await errContext.Bets.Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
                             if (errBet != null)
                             {
+                                if (errBet.AiEvaluation == null)
+                                {
+                                    var existingEval = await errContext.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == errBet.Id);
+                                    errBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = errBet.Id };
+                                }
                                 errBet.AiVisionError = error;
                                 await errContext.SaveChangesAsync();
                             }
@@ -2368,6 +2384,11 @@ else
                     var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
                     if (dbBet != null)
                     {
+                        if (dbBet.AiEvaluation == null)
+                        {
+                            var existingEval = await context.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id);
+                            dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
+                        }
                         dbBet.AiVisionResultJson = json;
                         dbBet.AiVisionError = null;
                         await context.SaveChangesAsync();
@@ -2410,6 +2431,11 @@ else
                         var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
                         if (dbBet != null)
                         {
+                            if (dbBet.AiEvaluation == null)
+                            {
+                                var existingEval = await context.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id);
+                                dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
+                            }
                             dbBet.AiOutcomeResult = outcome;
                             string? targetAutoSettleStatus = null;
 
@@ -2541,9 +2567,14 @@ else
                         if (currentOriginal != null) currentOriginal.AiVisionError = errText;
                         
                         using var errContext = DbFactory.CreateDbContext();
-                        var errBet = await errContext.Bets.FindAsync(currentBet.Id);
+                        var errBet = await errContext.Bets.Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == currentBet.Id);
                         if (errBet != null)
                         {
+                            if (errBet.AiEvaluation == null)
+                            {
+                                var existingEval = await errContext.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == errBet.Id);
+                                errBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = errBet.Id };
+                            }
                             errBet.AiVisionError = errText;
                             await errContext.SaveChangesAsync();
                         }
@@ -2597,6 +2628,11 @@ else
                     var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == capturingBetId);
                     if (dbBet != null)
                     {
+                        if (dbBet.AiEvaluation == null)
+                        {
+                            var existingEval = await context.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id);
+                            dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
+                        }
                         dbBet.AiVisionError = error;
                         await context.SaveChangesAsync();
                     }
@@ -2655,6 +2691,11 @@ else
                     var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == capturingBetId);
                     if (dbBet != null)
                     {
+                        if (dbBet.AiEvaluation == null)
+                        {
+                            var existingEval = await context.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id);
+                            dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
+                        }
                         dbBet.AiVisionResultJson = json;
                         dbBet.AiVisionError = null;
                         
@@ -2944,8 +2985,15 @@ else
             AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, 
             FreeBetAmount = bet.FreeBetAmount,
             ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt,
-            AiVisionResultJson = bet.AiVisionResultJson, AiOutcomeResult = bet.AiOutcomeResult,
-            AiVisionError = bet.AiVisionError,
+            AiEvaluation = bet.AiEvaluation != null ? new BetAiEvaluation
+            {
+                Id = bet.AiEvaluation.Id,
+                BetId = bet.AiEvaluation.BetId,
+                AiVisionResultJson = bet.AiEvaluation.AiVisionResultJson,
+                AiVisionError = bet.AiEvaluation.AiVisionError,
+                AiOutcomeResult = bet.AiEvaluation.AiOutcomeResult,
+                CreatedAt = bet.AiEvaluation.CreatedAt
+            } : null,
             IsLive = bet.IsLive,
             IsAutoSettled = bet.IsAutoSettled,
             IsBetBuilder = bet.IsBetBuilder,
@@ -3187,7 +3235,7 @@ else
             }
         }
 
-        if (new[] { "Won", "Lost", "Void", "Completed", "Cancelled" }.Contains(originalStatus))
+        if (!isAutoSettled && new[] { "Won", "Lost", "Void", "Completed", "Cancelled" }.Contains(originalStatus))
         {
              bool confirmed = await DialogService.ConfirmAsync( 
                 $"Update Bet #{bet.Id}?\n\n{originalStatus} -> {newStatus}\nAmount: {bet.AmountNOK} kr\nOdds: {bet.Odds}");
@@ -3260,7 +3308,10 @@ else
                 await LoadCompletedBets();
                 StateHasChanged();
             });
-            reviewingBetModel = null;
+            if (!isAutoSettled)
+            {
+                reviewingBetModel = null;
+            }
             StateHasChanged();
             return;
         }
@@ -3274,6 +3325,25 @@ else
             StateHasChanged();
         });
         UiNotifier.NotifyAdmin("Update");
+        
+        if (isAutoSettled)
+        {
+            // For auto-settle, do NOT advance the queue or swap the open modal to the next bet!
+            // Update the current reviewing model in place so the admin stays on the modal and sees the outcome.
+            if (reviewingBetModel?.Id == bet.Id)
+            {
+                reviewingBetModel.Status = newStatus;
+                reviewingBetModel.IsAutoSettled = true;
+            }
+            if (originalBetModel?.Id == bet.Id)
+            {
+                originalBetModel.Status = newStatus;
+                originalBetModel.IsAutoSettled = true;
+            }
+            StateHasChanged();
+            return;
+        }
+
         successMessage = $"Bet #{bet.Id} updated.";
         
         // Remove the processed bet from the current UI list immediately if its status changed,

@@ -106,4 +106,67 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<Transaction>().HasIndex(t => t.Type);
         builder.Entity<AuditLog>().HasIndex(a => a.Timestamp);
     }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsDuplicateAiEvaluationException(ex))
+        {
+            var addedAiEvals = ChangeTracker.Entries<BetAiEvaluation>()
+                .Where(e => e.State == EntityState.Added)
+                .ToList();
+
+            if (addedAiEvals.Count == 0) throw;
+
+            foreach (var entry in addedAiEvals)
+            {
+                var betId = entry.Entity.BetId;
+                var visionJson = entry.Entity.AiVisionResultJson;
+                var visionErr = entry.Entity.AiVisionError;
+                var outcome = entry.Entity.AiOutcomeResult;
+
+                entry.State = EntityState.Detached;
+
+                var existing = await BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == betId, cancellationToken);
+                if (existing != null)
+                {
+                    if (visionJson != null) existing.AiVisionResultJson = visionJson;
+                    if (visionErr != null) existing.AiVisionError = visionErr;
+                    if (outcome != null) existing.AiOutcomeResult = outcome;
+
+                    var parentBet = ChangeTracker.Entries<Bet>().FirstOrDefault(b => b.Entity.Id == betId);
+                    if (parentBet != null)
+                    {
+                        parentBet.Entity.AiEvaluation = existing;
+                    }
+                }
+            }
+
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        => SaveChangesAsync(acceptAllChangesOnSuccess: true, cancellationToken);
+
+    private static bool IsDuplicateAiEvaluationException(DbUpdateException ex)
+    {
+        Exception? current = ex;
+        while (current != null)
+        {
+            if (current is Microsoft.Data.SqlClient.SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+            {
+                return true;
+            }
+            if (current.Message.Contains("IX_BetAiEvaluations_BetId", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            current = current.InnerException;
+        }
+        return false;
+    }
 }
