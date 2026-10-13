@@ -145,6 +145,13 @@ namespace BettingApp.Services
             return cleaned.Replace(" ", "");
         }
 
+        private static bool IsPureLineOutcome(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            string lettersOnly = new string(s.Where(char.IsLetter).ToArray()).ToLowerInvariant();
+            return lettersOnly == "over" || lettersOnly == "under";
+        }
+
         public static bool IsTeamMatch(string? teamA, string? teamB)
         {
             if (string.IsNullOrWhiteSpace(teamA) || string.IsNullOrWhiteSpace(teamB)) return false;
@@ -155,6 +162,8 @@ namespace BettingApp.Services
 
             if (string.IsNullOrEmpty(normA) || string.IsNullOrEmpty(normB)) return false;
             if (normA == normB) return true;
+
+            if (IsPureLineOutcome(normA) || IsPureLineOutcome(normB)) return false;
 
             string compactA = normA.Replace(" ", "");
             string compactB = normB.Replace(" ", "");

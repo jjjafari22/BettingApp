@@ -218,5 +218,103 @@ namespace BettingApp.Tests
             Assert.NotNull(bestMarket);
             Assert.Equal("201", bestMarket.MarketId);
         }
+
+        [Fact]
+        public void Test_Bet940_TotalGoalkeeperSaves_DoesNotMatchPlayerProps()
+        {
+            var opMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "100", MarketName = "Over Under Full Time" },
+                new OddsPapiMarket { MarketId = "101", MarketName = "Over Under Team 1" },
+                new OddsPapiMarket { MarketId = "102", MarketName = "Over Under Team 2" },
+                new OddsPapiMarket { MarketId = "103", MarketName = "Over Under Player Goalkeeper Saves (incl. overtime)" }
+            };
+
+            // Leg 1: Total Goalkeeper Saves - Roma
+            var m1 = OddsMatchingLogic.FindBestMarket(opMarkets, "Total Goalkeeper Saves - Roma", "Roma vs Real Madrid", "Over 5.5", _marketMapper);
+            Assert.Null(m1);
+
+            // Leg 5: Total Goalkeeper Saves
+            var m5 = OddsMatchingLogic.FindBestMarket(opMarkets, "Total Goalkeeper Saves", "Roma vs Real Madrid", "Over 7.5", _marketMapper);
+            Assert.Null(m5);
+
+            // Leg 6: Total Goalkeeper Saves - Real Madrid
+            var m6 = OddsMatchingLogic.FindBestMarket(opMarkets, "Total Goalkeeper Saves - Real Madrid", "Roma vs Real Madrid", "Over 2.5", _marketMapper);
+            Assert.Null(m6);
+        }
+
+        [Fact]
+        public void Test_Bet940_TotalFouls_DoesNotMatchPlayerProps()
+        {
+            var opMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "100", MarketName = "Over Under Full Time" },
+                new OddsPapiMarket { MarketId = "101", MarketName = "Over Under Team 1" },
+                new OddsPapiMarket { MarketId = "102", MarketName = "Over Under Team 2" },
+                new OddsPapiMarket { MarketId = "104", MarketName = "Over Under Player Fouls Committed (incl. overtime)" }
+            };
+
+            // Leg 2: Total Fouls
+            var m2 = OddsMatchingLogic.FindBestMarket(opMarkets, "Total Fouls", "Roma vs Real Madrid", "Over 29.5", _marketMapper);
+            Assert.Null(m2);
+
+            // Leg 3: Total Fouls - Roma
+            var m3 = OddsMatchingLogic.FindBestMarket(opMarkets, "Total Fouls - Roma", "Roma vs Real Madrid", "Over 14.5", _marketMapper);
+            Assert.Null(m3);
+
+            // Leg 4: Total Fouls - Real Madrid
+            var m4 = OddsMatchingLogic.FindBestMarket(opMarkets, "Total Fouls - Real Madrid", "Roma vs Real Madrid", "Over 13.5", _marketMapper);
+            Assert.Null(m4);
+        }
+
+        [Fact]
+        public void Test_PlayerProps_SavesAndFouls_StillMatch()
+        {
+            var opMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "103", MarketName = "Over Under Player Goalkeeper Saves (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "104", MarketName = "Over Under Player Fouls Committed (incl. overtime)" }
+            };
+
+            // Player Saves
+            var mp1 = OddsMatchingLogic.FindBestMarket(opMarkets, "Player Goalkeeper Saves", "Roma vs Real Madrid", "Mile Svilar Over 2.5", _marketMapper);
+            Assert.NotNull(mp1);
+            Assert.Equal("103", mp1.MarketId);
+
+            var mp2 = OddsMatchingLogic.FindBestMarket(opMarkets, "Mile Svilar - Goalkeeper Saves", "Roma vs Real Madrid", "Over 2.5", _marketMapper);
+            Assert.NotNull(mp2);
+            Assert.Equal("103", mp2.MarketId);
+
+            // Player Fouls
+            var mp3 = OddsMatchingLogic.FindBestMarket(opMarkets, "Player Fouls Committed", "Roma vs Real Madrid", "Over 1.5", _marketMapper);
+            Assert.NotNull(mp3);
+            Assert.Equal("104", mp3.MarketId);
+        }
+
+        [Fact]
+        public void Test_IsOutcomeMatch_DoesNotFalselyMatchOverUnderToNamedPlayer()
+        {
+            var leg = new AiVisionLeg
+            {
+                Match = "Roma vs Real Madrid",
+                Market = "Total Goalkeeper Saves - Roma",
+                Selection = "Over 5.5"
+            };
+
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Roma vs Real Madrid"
+            };
+
+            // Svilar has line Over 5.5 in OP outcome, but leg selection is just "Over 5.5" (no player specified)
+            bool isMatch = OddsMatchingLogic.IsOutcomeMatch(
+                "Over 5.5 (Svilar, Mile)",
+                "Over 5.5 (Svilar, Mile)",
+                leg,
+                searchResult,
+                "Over Under Player Goalkeeper Saves (incl. overtime)");
+
+            Assert.False(isMatch);
+        }
     }
 }

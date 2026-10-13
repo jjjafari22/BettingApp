@@ -431,7 +431,8 @@ namespace BettingApp.Services
                 string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.StripToAlphaNumeric(displayONameSafe), @"\.0+(?!\d)", "");
                 string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.StripToAlphaNumeric(rawSel), @"\.0+(?!\d)", "");
                 
-                if (normOName == normSel || (!string.IsNullOrEmpty(normOName) && !string.IsNullOrEmpty(normSel) && BettingApp.Services.TeamAliasMappingService.IsTeamMatch(normOName, normSel)))
+                bool isLineSel = normSel.StartsWith("over") || normSel.StartsWith("under") || normOName.StartsWith("over") || normOName.StartsWith("under");
+                if (normOName == normSel || (!isLineSel && !string.IsNullOrEmpty(normOName) && !string.IsNullOrEmpty(normSel) && BettingApp.Services.TeamAliasMappingService.IsTeamMatch(normOName, normSel)))
                 {
                     isMatch = true;
                 }
@@ -670,9 +671,33 @@ namespace BettingApp.Services
         
         if (bestMatch == null)
         {
+            var statKeywords = new[] { "corner", "booking", "card", "foul", "save", "goalkeeper", "shot", "tackle", "offside" };
+
             foreach (var target in simplifiedTargets)
             {
-                var potentialMatches = markets.Where(m => simplify(m.MarketName).Contains(target) || target.Contains(simplify(m.MarketName))).ToList();
+                var targetStats = statKeywords.Where(kw => target.Contains(kw)).ToList();
+
+                var potentialMatches = markets.Where(m => 
+                {
+                    string simM = simplify(m.MarketName);
+                    if (targetStats.Any())
+                    {
+                        bool hasMatchingStat = targetStats.Any(kw => 
+                            simM.Contains(kw) || 
+                            (kw == "booking" && simM.Contains("card")) || 
+                            (kw == "card" && simM.Contains("booking")) ||
+                            (kw == "goalkeeper" && simM.Contains("save")) ||
+                            (kw == "save" && simM.Contains("goalkeeper")));
+                        if (!hasMatchingStat) return false;
+                    }
+                    else
+                    {
+                        if (statKeywords.Any(kw => simM.Contains(kw))) return false;
+                    }
+
+                    return simM.Contains(target) || target.Contains(simM);
+                }).ToList();
+
                 if (potentialMatches.Count == 1)
                 {
                     bestMatch = potentialMatches.First();

@@ -313,6 +313,10 @@ public partial class Admin
                         }
                     }
                 }
+                else if (string.IsNullOrEmpty(resultData.WarningMessage))
+                {
+                    resultData.WarningMessage = $"OddsPapi doesn't offer selection '{leg.Selection}' for '{bestMatch.MarketName}'.";
+                }
             }
         }
         else
