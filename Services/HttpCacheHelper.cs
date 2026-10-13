@@ -57,9 +57,9 @@ namespace BettingApp.Services
                     try 
                     {
                         var elapsed = DateTime.UtcNow - _lastRequestStart;
-                        if (elapsed.TotalMilliseconds < 1050)
+                        if (elapsed.TotalMilliseconds < 1100)
                         {
-                            await Task.Delay(1050 - (int)elapsed.TotalMilliseconds);
+                            await Task.Delay(1100 - (int)elapsed.TotalMilliseconds);
                         }
                         
                         _lastRequestStart = DateTime.UtcNow;

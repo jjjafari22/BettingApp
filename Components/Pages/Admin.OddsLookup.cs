@@ -103,6 +103,7 @@ public partial class Admin
 
     private async Task CheckAllOddsAsync()
     {
+        if (IsCheckingAllOdds) return;
         var legs = AiVisionResult?.Legs;
         if (legs == null || reviewingBetModel == null) return;
         
@@ -177,7 +178,11 @@ public partial class Admin
 
     private void ProcessLegOddsSync(BettingApp.Services.AiVisionLeg leg, int index, BettingApp.Models.OddsPapiSearchResult? apiResult, string? error)
     {
-        var resultData = LegOddsCache[index];
+        if (!LegOddsCache.TryGetValue(index, out var resultData))
+        {
+            resultData = new LegOddsResult();
+            LegOddsCache[index] = resultData;
+        }
         
         if (apiResult == null)
         {

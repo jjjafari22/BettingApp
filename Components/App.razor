@@ -157,6 +157,27 @@
             }
         });
 
+        // Guard Blazor InputFile against null element references on dynamic DOM unmounting
+        function patchBlazorInputFile() {
+            if (window.Blazor && window.Blazor._internal && window.Blazor._internal.InputFile && !window.Blazor._internal.InputFile._nullGuarded) {
+                const origInit = window.Blazor._internal.InputFile.init;
+                window.Blazor._internal.InputFile.init = function(element) {
+                    if (!element) return;
+                    return origInit.apply(this, arguments);
+                };
+                window.Blazor._internal.InputFile._nullGuarded = true;
+            }
+        }
+        patchBlazorInputFile();
+        const inputFileGuardInterval = setInterval(() => {
+            if (window.Blazor?._internal?.InputFile?._nullGuarded) {
+                clearInterval(inputFileGuardInterval);
+            } else {
+                patchBlazorInputFile();
+            }
+        }, 50);
+        setTimeout(() => clearInterval(inputFileGuardInterval), 10000);
+
         // 2. Safely monitor for the reconnect modal without queueing infinite loops
         let reconnectTimer = null;
         let countdownInterval = null;
