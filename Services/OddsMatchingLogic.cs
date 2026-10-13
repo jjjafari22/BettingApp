@@ -250,10 +250,12 @@ namespace BettingApp.Services
                     bool isSwapped = false;
                     // Determine if the bookmaker's Team 1 is actually Odds Papi's Team 2
                     if ((opT2.Contains(aiT1) && aiT1.Length > 3) || (aiT1.Contains(opT2) && opT2.Length > 3) || 
-                        (opT1.Contains(aiT2) && aiT2.Length > 3) || (aiT2.Contains(opT1) && opT1.Length > 3))
+                        (opT1.Contains(aiT2) && aiT2.Length > 3) || (aiT2.Contains(opT1) && opT1.Length > 3) ||
+                        BettingApp.Services.TeamAliasMappingService.IsTeamMatch(aiT1, opT2) ||
+                        BettingApp.Services.TeamAliasMappingService.IsTeamMatch(aiT2, opT1))
                     {
                         // Ensure it's not just a generic match like "fc"
-                        if (!opT1.Contains(aiT1) && !aiT1.Contains(opT1))
+                        if (!opT1.Contains(aiT1) && !aiT1.Contains(opT1) && !BettingApp.Services.TeamAliasMappingService.IsTeamMatch(aiT1, opT1))
                         {
                             isSwapped = true;
                         }
@@ -262,6 +264,8 @@ namespace BettingApp.Services
                     // normT1 represents the team that corresponds to Odds Papi's outcome "1".
                     string normT1 = isSwapped ? aiT2 : aiT1;
                     string normT2 = isSwapped ? aiT1 : aiT2;
+                    string targetOp1 = isSwapped ? opT2 : opT1;
+                    string targetOp2 = isSwapped ? opT1 : opT2;
                     
                     string aiTarget = "";
                     string htftTarget = "";
@@ -274,8 +278,10 @@ namespace BettingApp.Services
                         {
                             string ht = htftSplit[0].Trim();
                             string ft = htftSplit[1].Trim();
-                            string htCode = ht.Contains(normT1) ? "1" : (ht.Contains(normT2) ? "2" : (ht.Contains("draw") || ht.Contains("tie") ? "X" : ""));
-                            string ftCode = ft.Contains(normT1) ? "1" : (ft.Contains(normT2) ? "2" : (ft.Contains("draw") || ft.Contains("tie") ? "X" : ""));
+                            int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, normT1, normT2, targetOp1, targetOp2);
+                            int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, normT1, normT2, targetOp1, targetOp2);
+                            string htCode = htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (ht.Contains("draw") || ht.Contains("tie") ? "X" : ""));
+                            string ftCode = ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (ft.Contains("draw") || ft.Contains("tie") ? "X" : ""));
                             if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
                             {
                                 htftTarget = $"{htCode}/{ftCode}";
@@ -291,9 +297,11 @@ namespace BettingApp.Services
                         {
                             string ht = opHtftSplit[0].Trim();
                             string ft = opHtftSplit[1].Trim();
+                            int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, normT1, normT2, targetOp1, targetOp2);
+                            int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, normT1, normT2, targetOp1, targetOp2);
                             
-                            string htCode = (ht == "1" || ht == "2" || ht == "x") ? ht.ToUpper() : (ht.Contains(normT1) ? "1" : (ht.Contains(normT2) ? "2" : (ht.Contains("draw") || ht.Contains("tie") ? "X" : "")));
-                            string ftCode = (ft == "1" || ft == "2" || ft == "x") ? ft.ToUpper() : (ft.Contains(normT1) ? "1" : (ft.Contains(normT2) ? "2" : (ft.Contains("draw") || ft.Contains("tie") ? "X" : "")));
+                            string htCode = (ht == "1" || ht == "2" || ht == "x") ? ht.ToUpper() : (htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (ht.Contains("draw") || ht.Contains("tie") ? "X" : "")));
+                            string ftCode = (ft == "1" || ft == "2" || ft == "x") ? ft.ToUpper() : (ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (ft.Contains("draw") || ft.Contains("tie") ? "X" : "")));
                             
                             if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
                             {
@@ -308,12 +316,20 @@ namespace BettingApp.Services
                     
                     if (string.IsNullOrEmpty(htftTarget))
                     {
-                        if (normSelRaw.Contains(normT1) && normSelRaw.Contains(normT2)) aiTarget = "12";
-                        else if (normSelRaw.Contains(normT1) && (normSelRaw.Contains("draw") || normSelRaw.Contains("tie"))) aiTarget = "1X";
-                        else if (normSelRaw.Contains(normT2) && (normSelRaw.Contains("draw") || normSelRaw.Contains("tie"))) aiTarget = "X2";
-                        else if (normSelRaw.Contains(normT1)) aiTarget = "1";
-                        else if (normSelRaw.Contains(normT2)) aiTarget = "2";
-                        else if (normSelRaw.Contains("draw") || normSelRaw.Contains("tie")) aiTarget = "X";
+                        int teamResolved = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ActiveLookupLeg.Selection, normT1, normT2, targetOp1, targetOp2);
+                        bool mentionsT1 = teamResolved == 1 || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(ActiveLookupLeg.Selection, normT1) || (!string.IsNullOrEmpty(targetOp1) && BettingApp.Services.TeamAliasMappingService.IsTeamMatch(ActiveLookupLeg.Selection, targetOp1));
+                        bool mentionsT2 = teamResolved == 2 || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(ActiveLookupLeg.Selection, normT2) || (!string.IsNullOrEmpty(targetOp2) && BettingApp.Services.TeamAliasMappingService.IsTeamMatch(ActiveLookupLeg.Selection, targetOp2));
+                        bool hasDraw = normSelRaw.Contains("draw") || normSelRaw.Contains("tie") || normSelRaw.Contains("oavgjort") || normSelRaw.Contains("uavgjort") || normSelRaw.Contains("kryss");
+
+                        if (mentionsT1 && mentionsT2) aiTarget = "12";
+                        else if (teamResolved == 1 && hasDraw) aiTarget = "1X";
+                        else if (teamResolved == 2 && hasDraw) aiTarget = "X2";
+                        else if (teamResolved == 1) aiTarget = "1";
+                        else if (teamResolved == 2) aiTarget = "2";
+                        else if (hasDraw) aiTarget = "X";
+                        else if (normSelRaw.Contains("1x")) aiTarget = "1X";
+                        else if (normSelRaw.Contains("x2") || normSelRaw.Contains("2x")) aiTarget = "X2";
+                        else if (normSelRaw.Contains("12")) aiTarget = "12";
                     }
                     
                     if (!string.IsNullOrEmpty(htftTarget) && (string.Equals(oName, htftTarget, StringComparison.OrdinalIgnoreCase) || string.Equals(opHtftTarget, htftTarget, StringComparison.OrdinalIgnoreCase)))
@@ -412,10 +428,10 @@ namespace BettingApp.Services
 
                 string displayONameSafe = System.Text.RegularExpressions.Regex.Replace(displayOName ?? "", @"\b(power sub|super sub)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-                string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayONameSafe).ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
-                string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.ApplyTeamAliases(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(rawSel).ToLowerInvariant()).Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
+                string normOName = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.StripToAlphaNumeric(displayONameSafe), @"\.0+(?!\d)", "");
+                string normSel = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.StripToAlphaNumeric(rawSel), @"\.0+(?!\d)", "");
                 
-                if (normOName == normSel)
+                if (normOName == normSel || (!string.IsNullOrEmpty(normOName) && !string.IsNullOrEmpty(normSel) && BettingApp.Services.TeamAliasMappingService.IsTeamMatch(normOName, normSel)))
                 {
                     isMatch = true;
                 }
@@ -452,7 +468,7 @@ namespace BettingApp.Services
                         string teamSel = normSel.Substring(0, matchSel.Index);
                         
                         if (!string.IsNullOrEmpty(teamOName) && !string.IsNullOrEmpty(teamSel) && 
-                            (teamOName.Contains(teamSel) || teamSel.Contains(teamOName)))
+                            (teamOName.Contains(teamSel) || teamSel.Contains(teamOName) || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(teamOName, teamSel)))
                         {
                             isMatch = true;
                         }
@@ -471,7 +487,7 @@ namespace BettingApp.Services
                             string baseOName = normOName.Substring(0, numOName.Index);
                             string baseSel = normSel.Substring(0, numSel.Index);
                             if (!string.IsNullOrEmpty(baseOName) && !string.IsNullOrEmpty(baseSel) && 
-                                (baseOName.Contains(baseSel) || baseSel.Contains(baseOName)))
+                                (baseOName.Contains(baseSel) || baseSel.Contains(baseOName) || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(baseOName, baseSel)))
                             {
                                 isMatch = true;
                             }
@@ -687,13 +703,10 @@ namespace BettingApp.Services
                 var hcSplit = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
                 if (hcSplit.Length >= 2)
                 {
-                    string normSelRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(selectionName).ToLowerInvariant();
-                    string normT1 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[0].Split('(')[0].Trim()).ToLowerInvariant();
-                    string normT2 = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(hcSplit[1].Split('(')[0].Trim()).ToLowerInvariant();
-                    
+                    int matchedTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(selectionName, hcSplit[0], hcSplit[1]);
                     string expectedTeamMarket = "";
-                    if (normSelRaw.Contains(normT1)) expectedTeamMarket = simplify("Over Under Team 1");
-                    else if (normSelRaw.Contains(normT2)) expectedTeamMarket = simplify("Over Under Team 2");
+                    if (matchedTeam == 1) expectedTeamMarket = simplify("Over Under Team 1");
+                    else if (matchedTeam == 2) expectedTeamMarket = simplify("Over Under Team 2");
                     
                     if (!string.IsNullOrEmpty(expectedTeamMarket))
                     {

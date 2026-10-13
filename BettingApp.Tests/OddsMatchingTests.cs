@@ -159,5 +159,64 @@ namespace BettingApp.Tests
             Assert.NotNull(assistMarket);
             Assert.Equal("101", assistMarket.MarketId);
         }
+
+        [Fact]
+        public void Test_Psg_Vs_ParisSaintGermain_Resolution()
+        {
+            var opResult = new OddsPapiSearchResult { MatchName = "Manchester City vs Paris Saint-Germain" };
+
+            // PROD scenario: AI extracted "Manchester City vs Paris Saint-Germain", selection "PSG"
+            var prodLeg = new AiVisionLeg { Match = "Manchester City vs Paris Saint-Germain", Selection = "PSG", Market = "Full Time Result" };
+            string displayOName = OddsMatchingLogic.GetTranslatedOutcomeName("2", opResult.MatchName);
+            bool prodMatch = OddsMatchingLogic.IsOutcomeMatch("2", displayOName, prodLeg, opResult, "Full Time Result");
+            Assert.True(prodMatch, "PSG selection must match Outcome 2 (Paris Saint-Germain) when Match contains Paris Saint-Germain");
+
+            // DEV scenario: AI extracted "Manchester City vs PSG", selection "PSG"
+            var devLeg = new AiVisionLeg { Match = "Manchester City vs PSG", Selection = "PSG", Market = "Full Time Result" };
+            bool devMatch = OddsMatchingLogic.IsOutcomeMatch("2", displayOName, devLeg, opResult, "Full Time Result");
+            Assert.True(devMatch, "PSG selection must match Outcome 2 when Match contains PSG");
+
+            // Double Chance: "PSG or Draw" -> X2
+            var x2Leg = new AiVisionLeg { Match = "Manchester City vs Paris Saint-Germain", Selection = "PSG or Draw", Market = "Double Chance" };
+            string x2Translated = OddsMatchingLogic.GetTranslatedOutcomeName("X2", opResult.MatchName);
+            bool x2Match = OddsMatchingLogic.IsOutcomeMatch("X2", x2Translated, x2Leg, opResult, "Double Chance");
+            Assert.True(x2Match, "PSG or Draw must match Outcome X2 (Paris Saint-Germain or Draw)");
+
+            // Asian Handicap: "PSG (+1.5)" -> 2 (+1.5)
+            var hcLeg = new AiVisionLeg { Match = "Manchester City vs Paris Saint-Germain", Selection = "PSG (+1.5)", Market = "Asian Handicap" };
+            string hcTranslated = OddsMatchingLogic.GetTranslatedOutcomeName("2 (+1.5)", opResult.MatchName);
+            bool hcMatch = OddsMatchingLogic.IsOutcomeMatch("2 (+1.5)", hcTranslated, hcLeg, opResult, "Asian Handicap");
+            Assert.True(hcMatch, "PSG (+1.5) must match Outcome 2 (+1.5)");
+        }
+
+        [Fact]
+        public void Test_Spurs_Vs_TottenhamHotspur_Resolution()
+        {
+            var opResult = new OddsPapiSearchResult { MatchName = "Tottenham Hotspur vs Arsenal" };
+            var leg = new AiVisionLeg { Match = "Tottenham Hotspur vs Arsenal", Selection = "Spurs", Market = "Full Time Result" };
+            string displayOName = OddsMatchingLogic.GetTranslatedOutcomeName("1", opResult.MatchName);
+            bool isMatch = OddsMatchingLogic.IsOutcomeMatch("1", displayOName, leg, opResult, "Full Time Result");
+            Assert.True(isMatch, "Spurs selection must match Outcome 1 (Tottenham Hotspur)");
+        }
+
+        [Fact]
+        public void Test_TeamTotalGoals_FindBestMarket_Psg()
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "200", MarketName = "Over Under Team 1" },
+                new OddsPapiMarket { MarketId = "201", MarketName = "Over Under Team 2" }
+            };
+
+            var bestMarket = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "Team Total Goals",
+                "Manchester City vs Paris Saint-Germain",
+                "PSG Over 1.5 Goals",
+                _marketMapper);
+
+            Assert.NotNull(bestMarket);
+            Assert.Equal("201", bestMarket.MarketId);
+        }
     }
 }

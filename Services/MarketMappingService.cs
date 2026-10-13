@@ -324,6 +324,7 @@ namespace BettingApp.Services
         {
             if (string.IsNullOrWhiteSpace(teamName) || string.IsNullOrWhiteSpace(marketName)) return false;
             if (marketName.Contains(teamName, StringComparison.OrdinalIgnoreCase)) return true;
+            if (BettingApp.Services.TeamAliasMappingService.IsTeamMatch(teamName, marketName)) return true;
             
             var words = teamName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var significantWords = System.Linq.Enumerable.Where(words, w => 

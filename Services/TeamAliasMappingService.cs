@@ -46,6 +46,9 @@ namespace BettingApp.Services
             { "paphos", "pafos" },
             { "grasshoppers", "grasshopper" },
             { "psg", "paris saint germain" },
+            { "paris sg", "paris saint germain" },
+            { "paris s-g", "paris saint germain" },
+            { "paris saint-germain", "paris saint germain" },
             { "aalesunds", "aalesund" },
             { "nacional de montevideo", "nacional" },
             { "albion fc", "albion" },
@@ -95,6 +98,8 @@ namespace BettingApp.Services
             { "atletico mineiro", "atletico mg" },
             { "manchester utd", "manchester united" },
             { "man city", "manchester city" },
+            { "manchester c", "manchester city" },
+            { "manchester u", "manchester united" },
             { "spurs", "tottenham hotspur" },
             { "wolves", "wolverhampton wanderers" },
             { "qpr", "queens park rangers" },
@@ -119,6 +124,105 @@ namespace BettingApp.Services
             }
             
             return result;
+        }
+
+        public static string NormalizeForComparison(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "";
+            string cleaned = RemoveDiacritics(name).ToLowerInvariant();
+            // Replace hyphens, dashes, slashes, underscores, colons with spaces
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"[\-_/\\:]+", " ");
+            cleaned = ApplyTeamAliases(cleaned);
+            // Remove punctuation, collapse spaces
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"[^\w\s]", "");
+            return System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s+", " ").Trim();
+        }
+
+        public static string StripToAlphaNumeric(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "";
+            string cleaned = NormalizeForComparison(name);
+            return cleaned.Replace(" ", "");
+        }
+
+        public static bool IsTeamMatch(string? teamA, string? teamB)
+        {
+            if (string.IsNullOrWhiteSpace(teamA) || string.IsNullOrWhiteSpace(teamB)) return false;
+            if (string.Equals(teamA, teamB, StringComparison.OrdinalIgnoreCase)) return true;
+
+            string normA = NormalizeForComparison(teamA);
+            string normB = NormalizeForComparison(teamB);
+
+            if (string.IsNullOrEmpty(normA) || string.IsNullOrEmpty(normB)) return false;
+            if (normA == normB) return true;
+
+            string compactA = normA.Replace(" ", "");
+            string compactB = normB.Replace(" ", "");
+            if (compactA == compactB) return true;
+
+            // Substring / word containment (require at least 3 chars)
+            if (compactA.Length >= 3 && compactB.Length >= 3)
+            {
+                if (normA.Contains(normB) || normB.Contains(normA)) return true;
+                if (compactA.Contains(compactB) || compactB.Contains(compactA)) return true;
+            }
+
+            // Token overlap: Check significant tokens (length >= 3, excluding generic words)
+            var genericWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "fc", "fk", "cf", "cd", "sc", "if", "bk", "club" };
+            var tokensA = normA.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length >= 3 && !genericWords.Contains(t)).ToList();
+            var tokensB = normB.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length >= 3 && !genericWords.Contains(t)).ToList();
+
+            if (tokensA.Any() && tokensB.Any())
+            {
+                var shorter = tokensA.Count <= tokensB.Count ? tokensA : tokensB;
+                var longer = tokensA.Count <= tokensB.Count ? tokensB : tokensA;
+                if (shorter.All(s => longer.Contains(s))) return true;
+            }
+
+            return false;
+        }
+
+        public static int ResolveTeamSelection(string? selectionText, string? team1Name, string? team2Name, string? opTeam1 = null, string? opTeam2 = null)
+        {
+            if (string.IsNullOrWhiteSpace(selectionText)) return 0;
+
+            string sel = selectionText.Trim();
+            string normSel = NormalizeForComparison(sel);
+
+            // Direct outcome codes
+            if (sel == "1" || normSel == "1" || normSel.Equals("home", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (sel == "2" || normSel == "2" || normSel.Equals("away", StringComparison.OrdinalIgnoreCase)) return 2;
+            if (sel.Equals("x", StringComparison.OrdinalIgnoreCase) || normSel.Equals("draw", StringComparison.OrdinalIgnoreCase) || normSel.Equals("tie", StringComparison.OrdinalIgnoreCase)) return 0;
+
+            // Strip line numbers, handicaps, prop conditions to isolate team candidate
+            // e.g. "PSG (+1.5)" -> "PSG", "PSG Over 1.5 Goals" -> "PSG", "Manchester City -1" -> "Manchester City"
+            string candidate = System.Text.RegularExpressions.Regex.Replace(sel, @"\([+-]?\d+(?:\.\d+)?\)", " ").Trim();
+            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"[+-]?\d+(?:\.\d+)?", " ").Trim();
+            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\b(over|under|goals?|corners?|cards?|bookings?|points?|to win|starts?)\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\s+", " ").Trim();
+            if (string.IsNullOrWhiteSpace(candidate)) candidate = sel;
+
+            bool match1 = (!string.IsNullOrEmpty(team1Name) && IsTeamMatch(candidate, team1Name)) ||
+                          (!string.IsNullOrEmpty(opTeam1) && IsTeamMatch(candidate, opTeam1));
+
+            bool match2 = (!string.IsNullOrEmpty(team2Name) && IsTeamMatch(candidate, team2Name)) ||
+                          (!string.IsNullOrEmpty(opTeam2) && IsTeamMatch(candidate, opTeam2));
+
+            if (match1 && !match2) return 1;
+            if (match2 && !match1) return 2;
+
+            if (match1 && match2)
+            {
+                string normCand = NormalizeForComparison(candidate);
+                string n1 = NormalizeForComparison(team1Name ?? opTeam1);
+                string n2 = NormalizeForComparison(team2Name ?? opTeam2);
+                if (normCand == n1) return 1;
+                if (normCand == n2) return 2;
+                if (n1.Contains(normCand) && !n2.Contains(normCand)) return 1;
+                if (n2.Contains(normCand) && !n1.Contains(normCand)) return 2;
+            }
+
+            return 0;
         }
 
             private static readonly HashSet<string> _stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
