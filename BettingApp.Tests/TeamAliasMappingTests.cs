@@ -21,6 +21,10 @@ namespace BettingApp.Tests
         [InlineData("Manchester Utd", "manchester")]
         [InlineData("Man City", "manchester")]
         [InlineData("Spurs", "tottenham hotspur")]
+        [InlineData("Internazionale", "internazionale")]
+        [InlineData("Inter Milan", "internazionale")]
+        [InlineData("Inter Milano", "internazionale")]
+        [InlineData("Internazionale Milano", "internazionale")]
         [InlineData("FC United", "fc united")] // Should fallback to full string since both are stopwords
         public void Test_NormalizeTeamName(string input, string expected)
         {

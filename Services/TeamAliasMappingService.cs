@@ -75,6 +75,8 @@ namespace BettingApp.Services
             { "ca vinotinto", "vinotinto del ecuador" },
             { "athletic bilbao", "athletic club" },
             { "inter milan", "internazionale" },
+            { "inter milano", "internazionale" },
+            { "internazionale milano", "internazionale" },
             { "sporting lisbon", "sporting cp" },
             { "boca juniors", "boca" },
             { "fc copenhagen", "fc kobenhavn" },
