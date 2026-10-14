@@ -402,6 +402,7 @@ else
             string referredName1 = $"{referred.FirstName} {referred.LastName}".Trim();
             if (string.IsNullOrEmpty(referredName1)) referredName1 = referred.UserName ?? "a friend";
             _ = DiscordService.NotifyUserReferralAddedAsync(referrer.DiscordUserId, referredName1);
+            UiNotifier.NotifyAdmin($"Referral created for {referred.UserName}");
             successMessage = $"Referral created successfully for {FormatAdminDisplay(referredUser, referred.UserName ?? "")}.";
             await LoadData();
         }
@@ -415,6 +416,7 @@ else
         {
             dbUser.IsReferralDiscarded = true;
             await context.SaveChangesAsync();
+            UiNotifier.NotifyAdmin($"Referral discarded for {user.UserName}");
             await LoadData();
             successMessage = $"Discarded possible referral for {FormatAdminDisplay(user, user.Email ?? "")}.";
         }
@@ -548,6 +550,7 @@ else
             string referredName2 = $"{referred.FirstName} {referred.LastName}".Trim();
             if (string.IsNullOrEmpty(referredName2)) referredName2 = referred.UserName ?? "a friend";
             _ = DiscordService.NotifyUserReferralAddedAsync(referrer.DiscordUserId, referredName2);
+            UiNotifier.NotifyAdmin($"Referral created for {referred.UserName}");
             successMessage = "Referral created successfully.";
             newReferrerId = null;
             newReferredId = null;
@@ -625,6 +628,7 @@ else
             context.AuditLogs.Add(new AuditLog { AdminUserName = adminName, Action = "Deleted Referral", TargetUserName = r.ReferrerUserName, Details = $"Deleted referral for: {r.ReferredUserName}" });
             
             await context.SaveChangesAsync();
+            UiNotifier.NotifyAdmin("Referral deleted");
             await LoadData();
             successMessage = "Referral deleted successfully.";
         }

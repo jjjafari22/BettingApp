@@ -3,6 +3,7 @@
 @using BettingApp.Services
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Web
+@using System.Threading
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
@@ -203,10 +204,15 @@
     private int userTasks = 0;
     private int referralTasks = 0;
 
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private System.Timers.Timer? _debounceTimer;
+    private bool _isDisposed = false;
+    private bool _hasPendingRefresh = false;
+
     protected override async Task OnInitializedAsync()
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
- NavigationManager.LocationChanged += OnLocationChanged;
+        NavigationManager.LocationChanged += OnLocationChanged;
 
         try
         {
@@ -222,8 +228,8 @@
 
                 if (isAdmin)
                 {
-                    await LoadAdminTasks(context);
                     UiNotifier.OnAdminNotification += HandleAdminNotification;
+                    await RefreshTasksAsync();
                 }
             }
         }
@@ -235,75 +241,166 @@
 
     private void HandleAdminNotification(string? message)
     {
-        _ = InvokeAsync(RefreshTasks);
+        if (_isDisposed) return;
+        TriggerDebouncedRefresh();
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
- if (isAdmin)
+        if (!_isDisposed)
         {
-            _ = InvokeAsync(RefreshTasks);
- }
-        else 
+            try { _ = InvokeAsync(StateHasChanged); } catch { }
+        }
+        if (isAdmin)
         {
-            StateHasChanged();
- }
+            TriggerDebouncedRefresh();
+        }
     }
 
-    private async Task RefreshTasks()
+    private void TriggerDebouncedRefresh()
     {
-        try 
+        if (_isDisposed || !isAdmin) return;
+
+        if (_debounceTimer == null)
         {
-            using var context = DbFactory.CreateDbContext();
- await LoadAdminTasks(context);
-            await InvokeAsync(StateHasChanged);
+            _debounceTimer = new System.Timers.Timer(300); // 300ms debounce
+            _debounceTimer.AutoReset = false;
+            _debounceTimer.Elapsed += async (s, e) =>
+            {
+                await RefreshTasksAsync();
+            };
+        }
+
+        _debounceTimer.Stop();
+        _debounceTimer.Start();
+    }
+
+    private async Task RefreshTasksAsync()
+    {
+        if (_isDisposed || !isAdmin) return;
+
+        // If another refresh is already in progress, flag it so a follow-up check runs after it finishes
+        if (!await _refreshLock.WaitAsync(0))
+        {
+            _hasPendingRefresh = true;
+            return;
+        }
+
+        try
+        {
+            do
+            {
+                _hasPendingRefresh = false;
+                using var context = DbFactory.CreateDbContext();
+                await LoadAdminTasks(context);
+            } while (_hasPendingRefresh && !_isDisposed);
         }
         catch (Exception ex)
         {
-            Logger.LogError($"Error refreshing admin tasks: {ex.Message}");
- }
+            Logger.LogError(ex, "Error refreshing admin tasks.");
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
     }
 
     private async Task LoadAdminTasks(ApplicationDbContext context)
     {
-        var pendingBets = await context.Bets.CountAsync(b => b.Status == "Pending");
-        var activeBets = await context.Bets.CountAsync(b => b.Status == "Approved");
-        adminHomeTasks = pendingBets + activeBets;
-        transactionTasks = await context.Transactions.CountAsync(t => t.Type == "Withdrawal" && t.Status == "Pending");
-        userTasks = await context.Users.CountAsync(u => !u.EmailConfirmed);
+        var twoMinsAgo = DateTime.UtcNow.AddMinutes(-2);
 
-        var activeRefs = await context.Referrals.Where(r => !(r.Tier1Paid && r.Tier2Paid && r.Tier3Paid)).ToListAsync();
-        if(activeRefs.Any()) {
-            var userIds = activeRefs.Select(r => r.ReferredUserId).ToList();
-            var turnovers = await context.Bets.Where(b => userIds.Contains(b.UserId) && (b.Status == "Won" || b.Status == "Lost") && b.Odds >= 1.50m)
+        // 1. Admin Home: pending bets + stuck processing bets + active approved bets
+        var pendingBets = await context.Bets
+            .AsNoTracking()
+            .CountAsync(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo));
+        var activeBets = await context.Bets
+            .AsNoTracking()
+            .CountAsync(b => b.Status == "Approved");
+        int newAdminHomeTasks = pendingBets + activeBets;
+
+        // 2. Transactions: pending withdrawals
+        int newTransactionTasks = await context.Transactions
+            .AsNoTracking()
+            .CountAsync(t => t.Type == "Withdrawal" && t.Status == "Pending");
+
+        // 3. All Users: unconfirmed registrations awaiting approval
+        int newUserTasks = await context.Users
+            .AsNoTracking()
+            .CountAsync(u => !u.EmailConfirmed);
+
+        // 4. Referrals: active eligible tiers + possible referrals
+        int activeReferralTasks = 0;
+        var activeRefs = await context.Referrals
+            .AsNoTracking()
+            .Where(r => !(r.Tier1Paid && r.Tier2Paid && r.Tier3Paid))
+            .ToListAsync();
+
+        if (activeRefs.Any())
+        {
+            var userIds = activeRefs.Select(r => r.ReferredUserId).Distinct().ToList();
+            var turnovers = await context.Bets
+                .AsNoTracking()
+                .Where(b => userIds.Contains(b.UserId) && (b.Status == "Won" || b.Status == "Lost") && b.Odds >= 1.50m)
                 .GroupBy(b => b.UserId)
                 .Select(g => new { UserId = g.Key, Turnover = g.Sum(b => b.AmountNOK ?? 0) })
                 .ToDictionaryAsync(x => x.UserId, x => x.Turnover);
 
-            referralTasks = activeRefs.Count(r => {
+            activeReferralTasks = activeRefs.Count(r => {
                 var t = turnovers.GetValueOrDefault(r.ReferredUserId, 0);
                 return (t >= 5000 && !r.Tier1Paid) || (t >= 15000 && !r.Tier2Paid) || (t >= 30000 && !r.Tier3Paid);
             });
-        } else {
-            referralTasks = 0;
         }
 
-        // Possible Referrals (Approved users with ReferredBy text who aren't mapped or discarded)
-        var referredUserIds = await context.Referrals.Select(r => r.ReferredUserId).ToListAsync();
+        var referredUserIds = await context.Referrals
+            .AsNoTracking()
+            .Select(r => r.ReferredUserId)
+            .ToListAsync();
+
         var possibleReferrals = await context.Users
+            .AsNoTracking()
             .Where(u => u.EmailConfirmed 
                      && !string.IsNullOrEmpty(u.ReferredBy) 
-                     && !u.IsReferralDiscarded)
-            .Where(u => !referredUserIds.Contains(u.Id))
+                     && !u.IsReferralDiscarded
+                     && !referredUserIds.Contains(u.Id))
             .CountAsync();
 
-        referralTasks += possibleReferrals;
+        int newReferralTasks = activeReferralTasks + possibleReferrals;
+
+        // Atomic assignment to instance variables only after all async work completes
+        bool hasChanged = adminHomeTasks != newAdminHomeTasks ||
+                          transactionTasks != newTransactionTasks ||
+                          userTasks != newUserTasks ||
+                          referralTasks != newReferralTasks;
+
+        if (hasChanged && !_isDisposed)
+        {
+            adminHomeTasks = newAdminHomeTasks;
+            transactionTasks = newTransactionTasks;
+            userTasks = newUserTasks;
+            referralTasks = newReferralTasks;
+            try
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (Exception) when (_isDisposed)
+            {
+                // Component disposed during invocation, ignore safely
+            }
+        }
     }
 
     public void Dispose()
     {
+        _isDisposed = true;
         NavigationManager.LocationChanged -= OnLocationChanged;
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
+        if (_debounceTimer != null)
+        {
+            _debounceTimer.Stop();
+            _debounceTimer.Dispose();
+            _debounceTimer = null;
+        }
+        _refreshLock.Dispose();
     }
 }
