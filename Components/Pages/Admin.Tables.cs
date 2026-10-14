@@ -454,8 +454,11 @@ public partial class Admin
         if (outcomeResult == "Admin Override")
         {
             builder.OpenElement(0, "span");
-            builder.AddAttribute(1, "class", "badge bg-primary text-light shadow-sm");
-            builder.AddContent(2, "🛡️ Admin Override");
+            builder.AddAttribute(1, "class", "badge bg-primary text-white shadow-sm d-inline-flex align-items-center");
+            builder.OpenElement(2, "i");
+            builder.AddAttribute(3, "class", "bi bi-shield-check me-1");
+            builder.CloseElement();
+            builder.AddContent(4, "Admin Override");
             builder.CloseElement();
             return;
         }
@@ -470,30 +473,41 @@ public partial class Admin
                 _outcomeCache[bet.Id] = (outcomeResult, parsed);
             }
 
-
             if (parsed != null && !string.IsNullOrEmpty(parsed.OverallStatus))
             {
                 var lowerStatus = parsed.OverallStatus.ToLower();
                 
                 if (lowerStatus.Contains("won")) {
                     builder.OpenElement(0, "span");
-                    builder.AddAttribute(1, "class", "badge bg-success text-light shadow-sm");
-                    builder.AddContent(2, "✅ Won");
+                    builder.AddAttribute(1, "class", "badge bg-success text-white shadow-sm d-inline-flex align-items-center");
+                    builder.OpenElement(2, "i");
+                    builder.AddAttribute(3, "class", "bi bi-check-lg me-1");
+                    builder.CloseElement();
+                    builder.AddContent(4, "Won");
                     builder.CloseElement();
                 } else if (lowerStatus.Contains("lost")) {
                     builder.OpenElement(0, "span");
-                    builder.AddAttribute(1, "class", "badge bg-danger text-light shadow-sm");
-                    builder.AddContent(2, "❌ Lost");
+                    builder.AddAttribute(1, "class", "badge bg-danger text-white shadow-sm d-inline-flex align-items-center");
+                    builder.OpenElement(2, "i");
+                    builder.AddAttribute(3, "class", "bi bi-x-lg me-1");
+                    builder.CloseElement();
+                    builder.AddContent(4, "Lost");
                     builder.CloseElement();
                 } else if (lowerStatus.Contains("void")) {
                     builder.OpenElement(0, "span");
-                    builder.AddAttribute(1, "class", "badge bg-secondary text-light shadow-sm");
-                    builder.AddContent(2, "➖ Void");
+                    builder.AddAttribute(1, "class", "badge bg-secondary text-white shadow-sm d-inline-flex align-items-center");
+                    builder.OpenElement(2, "i");
+                    builder.AddAttribute(3, "class", "bi bi-dash-lg me-1");
+                    builder.CloseElement();
+                    builder.AddContent(4, "Void");
                     builder.CloseElement();
                 } else if (lowerStatus.Contains("unknown")) {
                     builder.OpenElement(0, "span");
-                    builder.AddAttribute(1, "class", "badge bg-warning text-dark shadow-sm");
-                    builder.AddContent(2, "❓ Unknown");
+                    builder.AddAttribute(1, "class", "badge bg-warning text-dark shadow-sm d-inline-flex align-items-center");
+                    builder.OpenElement(2, "i");
+                    builder.AddAttribute(3, "class", "bi bi-question-lg me-1");
+                    builder.CloseElement();
+                    builder.AddContent(4, "Unknown");
                     builder.CloseElement();
                 }
                 return;
