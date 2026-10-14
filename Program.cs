@@ -56,7 +56,9 @@ builder.Services.AddHttpClient<AiVisionService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(360); // 6 minutes for LLM processing
 }).ConfigurePrimaryHttpMessageHandler(compressedHandler);
+builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<FotMobScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
+builder.Services.AddHttpClient<EspnApiService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<PlayerMatchResolverService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 
 builder.Services.AddSingleton<UiNotificationService>();

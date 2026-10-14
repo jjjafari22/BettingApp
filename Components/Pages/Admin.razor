@@ -401,9 +401,10 @@ else
                                                                                 matchingOutcome.Outcome.ToLower().Contains("lost") ? "text-danger" : "text-warning";
                                                                     var emoji = matchingOutcome.Outcome.ToLower().Contains("won") ? "✅" : 
                                                                                 matchingOutcome.Outcome.ToLower().Contains("lost") ? "❌" : "➖";
+
                                                                     <div class="mt-1 p-1 bg-light rounded border border-secondary border-opacity-25 lh-sm" style="font-size: 0.75em;">
                                                                         <strong>Outcome:</strong> <span class="@color fw-bold">@emoji @matchingOutcome.Outcome</span><br/>
-                                                                        <strong>Stats:</strong> @matchingOutcome.Stats
+                                                                        <strong>Stats:</strong> @HighlightVerification(matchingOutcome.Stats)
                                                                     </div>
                                                                 }
 

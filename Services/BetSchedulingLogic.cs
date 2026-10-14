@@ -57,7 +57,12 @@ namespace BettingApp.Services
             var nextLeg = pendingLegs.OrderBy(l => l.StartTime ?? DateTime.MaxValue).FirstOrDefault();
             string sport = nextLeg?.Sport ?? "Soccer";
             
-            int delayHours = sport.Contains("Hockey", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
+            int delayHours = 2;
+            if (sport.Contains("Hockey", StringComparison.OrdinalIgnoreCase)) delayHours = 3;
+            else if (sport.Contains("American Football", StringComparison.OrdinalIgnoreCase) || sport.Contains("Football", StringComparison.OrdinalIgnoreCase)) delayHours = 4;
+            else if (sport.Contains("Baseball", StringComparison.OrdinalIgnoreCase)) delayHours = 3;
+            else if (sport.Contains("Basketball", StringComparison.OrdinalIgnoreCase)) delayHours = 3;
+
             var expectedFinishTime = earliestStart.Value.AddHours(delayHours);
 
             if (expectedFinishTime > DateTime.UtcNow)
@@ -83,14 +88,16 @@ namespace BettingApp.Services
 
             string status = overallStatus?.ToUpper() ?? "";
 
+            static bool IsVerified(string? source) => source == "FotMob_Verified" || source == "ESPN_Verified";
+
             if (status.Contains("WON"))
             {
-                if (legs.All(l => l.VerificationSource == "FotMob_Verified"))
+                if (legs.All(l => IsVerified(l.VerificationSource)))
                     return "Won";
             }
             else if (status.Contains("LOST"))
             {
-                if (legs.Any(l => string.Equals(l.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) && l.VerificationSource == "FotMob_Verified"))
+                if (legs.Any(l => string.Equals(l.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) && IsVerified(l.VerificationSource)))
                     return "Lost";
             }
 

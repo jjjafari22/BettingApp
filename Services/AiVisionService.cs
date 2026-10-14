@@ -97,6 +97,7 @@ namespace BettingApp.Services
         private readonly HttpClient _httpClient;
         private readonly string? _apiKey;
         private readonly FotMobScraperService _fotMob;
+        private readonly EspnApiService _espn;
         private readonly PlayerMatchResolverService _matchResolver;
         private readonly IConfiguration _config;
         private static Google.Apis.Auth.OAuth2.GoogleCredential? _cachedCredential;
@@ -146,15 +147,17 @@ namespace BettingApp.Services
         }
         private readonly ILogger<AiVisionService> _logger;
 
-        public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob, PlayerMatchResolverService matchResolver, ILogger<AiVisionService> logger)
+        public AiVisionService(HttpClient httpClient, IConfiguration config, FotMobScraperService fotMob, EspnApiService espn, PlayerMatchResolverService matchResolver, ILogger<AiVisionService> logger)
         {
             _httpClient = httpClient;
             _config = config;
             _apiKey = config["GeminiApiKey"];
             _fotMob = fotMob;
+            _espn = espn;
             _matchResolver = matchResolver;
             _logger = logger;
         }
+
 
         public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl, int? betId = null)
         {
@@ -203,7 +206,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 5. legs: An array of objects for each individual bet:
    - legThoughtProcess: Step 1: Transcribe the exact raw text seen on the slip for this leg. Step 2: Translate strictly according to rules without assuming.
    - match: Team names translated into standard, globally recognized English names (e.g. 'FC Copenhagen' instead of 'FC København', 'Bayern Munich' instead of 'Bayern München'). STRICT DIRECTIVE: If the match or team header is NOT visible or cropped on the screenshot, output null. NEVER guess, assume, or hallucinate the match from player names or past memory!
-   - sport: 'Soccer', 'Ice Hockey', 'Tennis', 'Basketball', etc. Deduce from team names, market types, or tournament.
+   - sport: 'Soccer', 'Ice Hockey', 'American Football', 'Basketball', 'Baseball', 'Tennis', etc. Deduce from team names, market types, or tournament. STRICT RULE: For NFL or gridiron football, ALWAYS output 'American Football' (NEVER 'Football', to prevent confusion with soccer). For association football, ALWAYS output 'Soccer'.
    - market: The translated English market name.
    - selection: The bet chosen including player condition (e.g. 'Marcus Rashford - Will Score', 'Erling Haaland - Over 0.5'). Transcribe player names letter-by-letter without autocorrecting.
    - badges: Array of promo labels or visual icons (e.g. 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost', 'Live'). IMPORTANT: Substitution icons (such as two swap arrows pointing in opposite directions) next to a player indicate 'Power Sub'.
@@ -256,7 +259,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                                         {
                                             legThoughtProcess = new { type = "STRING", description = "Step 1: Transcribe the exact raw text seen on the slip for this leg. Step 2: Translate strictly without assuming." },
                                             match = new { type = "STRING", nullable = true, description = "The match name (e.g. 'Team A vs Team B'). Output null if the match title/header is not visibly printed on the screenshot. Never guess or hallucinate." },
-                                            sport = new { type = "STRING", nullable = true, description = "The sport of the match, e.g., 'Soccer', 'Ice Hockey', 'Tennis'." },
+                                            sport = new { type = "STRING", nullable = true, description = "The sport of the match, e.g., 'Soccer', 'Ice Hockey', 'American Football', 'Basketball', 'Baseball', 'Tennis'." },
                                             market = new { type = "STRING", nullable = true },
                                             selection = new { type = "STRING", nullable = true },
                                             badges = new { type = "ARRAY", items = new { type = "STRING" } },
@@ -457,14 +460,14 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 - DO NOT hallucinate, guess, or invent stats. If data is missing or ambiguous, output 'Unknown'.
 
 # 1. API VERIFICATION (JSON)
-- If JSON is provided, the match is correct even if the start time is slightly before the upload date. Do not reject it.
+- If JSON (FotMob or ESPN) is provided, the match is correct even if the start time is slightly before the upload date. Do not reject it.
 - Your `fullAnalysis` must start with API Status (e.g. 'API Status: Scores found (1-0)').
 - Use FULL-TIME (FT) stats unless the market explicitly says '1st Half' or 'Half Time'.
-- MATCH FINISHED LOGIC: A match is definitively finished ONLY if `header.status.reason.short` is 'FT', 'AET', or 'PEN', or if the match clearly reached full time and is not ongoing. FotMob's `general.finished` and `header.status.finished` flags are sometimes incorrectly true while the match is still live! You MUST ignore `finished: true` if `header.status.ongoing` is true, if `liveTime` is present, or if `reason.short` indicates a live minute (e.g. '83\''). Do not grade bets as finished prematurely!
+- MATCH FINISHED LOGIC: For FotMob, a match is definitively finished ONLY if `header.status.reason.short` is 'FT', 'AET', or 'PEN'. For ESPN, a match is finished ONLY if `status` is 'Final' or `isFinished: true`. If JSON indicates 'Scheduled', 'In Progress', or `isFinished: false`, grade all legs as 'Pending'!
 - EXTRA TIME: Events in Extra Time (e.g. 111th minute) DO NOT COUNT unless the market says 'To Qualify', 'To Lift Trophy', or 'Including Extra Time'. Regular time is 90 mins + injury time. For example, if a player receives a yellow card in Extra Time, a standard 'Player Booked' bet is LOST.
 
 # 2. GOOGLE SEARCH STRATEGY (2-STEP VERIFICATION)
-When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leagues):
+When evaluating matches without API JSON (e.g. European hockey, lower leagues, Tennis, MMA):
 - STEP 1 (CHECK MATCH STATUS & START TIME FIRST):
   Before searching for player stats, first verify whether the match scheduled for {betPlacedAt:yyyy-MM-dd} (Year: {betPlacedAt.Year}) has actually FINISHED!
   Always include the year '{betPlacedAt.Year}' in your search query (e.g. 'Buffalo Sabres vs Florida Panthers score {betPlacedAt.Year}' or '{betPlacedAt:yyyy-MM-dd}').
@@ -495,10 +498,10 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
 - '1' AND '2' TOTALS: If a market says 'Total Goals 1' with selection 'Over 1.0', the '1' might be a truncation of the Asian Line (1.0), not Team 1. If no specific team is named, treat it as TOTAL match goals.
 
 # 6. FORMATTING & SCHEDULING
-- If the match has NOT STARTED or is CURRENTLY IN PROGRESS (e.g. `general.started` is false, or `header.status.finished` is false), grade all legs as 'Pending'. DO NOT grade live matches as 'Unknown' or 'Void' just because final stats are missing.
-- `matchStartTimeIso`: DO NOT PUT THIS AT THE ROOT! You MUST put this inside EACH object in the `legs` array! For EVERY leg (whether finished, live, or pending), return the absolute UTC start time of that specific match (e.g. '{betPlacedAt.Year}-10-12T17:00:00Z'). Parse it directly from FotMob JSON if available; if not available, search Google for the match start time.
-- `stats`: Start with EXACTLY ONE of: 'Verified via FotMob: ', 'FotMob lacked stat; Verified via Google Search: ', or 'Verified via Google Search: '. Include EXACTLY ONE source URL if you used Google. BET BUILDERS: Evaluate each leg COMPLETELY INDEPENDENTLY! You MUST write a unique, specific 'stats' reasoning for EACH leg. Do NOT copy and paste the same stats across multiple legs.
-- `verificationSource`: You MUST provide EXACTLY ONE of the following strict categories: 'FotMob_Verified', 'FotMob_MissingStat', 'FotMob_NotFound', 'Google_Verified', or 'Unknown'.
+- If the match has NOT STARTED or is CURRENTLY IN PROGRESS (e.g. `isFinished: false`, or `status` is 'Scheduled' / 'In Progress'), grade all legs as 'Pending'. DO NOT grade live matches as 'Unknown' or 'Void' just because final stats are missing.
+- `matchStartTimeIso`: DO NOT PUT THIS AT THE ROOT! You MUST put this inside EACH object in the `legs` array! For EVERY leg (whether finished, live, or pending), return the absolute UTC start time of that specific match (e.g. '{betPlacedAt.Year}-10-12T17:00:00Z'). Parse it directly from FotMob/ESPN JSON if available; if not available, search Google for the match start time.
+- `stats`: Start with EXACTLY ONE of: 'Verified via FotMob: ', 'Verified via ESPN: ', 'FotMob lacked stat; Verified via Google Search: ', 'ESPN lacked stat; Verified via Google Search: ', or 'Verified via Google Search: '. Include EXACTLY ONE source URL if you used Google. BET BUILDERS: Evaluate each leg COMPLETELY INDEPENDENTLY! You MUST write a unique, specific 'stats' reasoning for EACH leg. Do NOT copy and paste the same stats across multiple legs.
+- `verificationSource`: You MUST provide EXACTLY ONE of the following strict categories: 'FotMob_Verified', 'ESPN_Verified', 'FotMob_MissingStat', 'ESPN_MissingStat', 'Google_Verified', or 'Unknown'.
 - `outcome`: Strictly use EXACTLY ONE of: 'Won', 'Lost', 'Void', 'Pending', or 'Unknown'. NO EMOJIS! NO EXTRA TEXT!";
 
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -506,8 +509,10 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                 
                 var partsList = new List<Dictionary<string, object>>
                 {
-                    new Dictionary<string, object> { { "text", "Please determine the outcome of this bet according to the strict system instructions and the attached FotMob JSON data." } }
+                    new Dictionary<string, object> { { "text", "Please determine the outcome of this bet according to the strict system instructions and the attached sports JSON data." } }
                 };
+
+                bool anyLegNeedsGoogleSearch = false;
 
                 if (extractionResult?.Legs != null)
                 {
@@ -515,18 +520,36 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                     foreach (var group in groupedLegs)
                     {
                         string matchName = group.Key ?? "";
-                        
-                        var rawJson = await _fotMob.GetMatchStatsJsonAsync(matchName, betPlacedAt, betId);
+                        string legSport = group.FirstOrDefault()?.Sport ?? "Soccer";
+
+                        string? rawJson = null;
+                        string providerLabel = "";
+
+                        // 1. Soccer -> FotMob
+                        if (legSport.Equals("Soccer", StringComparison.OrdinalIgnoreCase))
+                        {
+                            rawJson = await _fotMob.GetMatchStatsJsonAsync(matchName, betPlacedAt, betId);
+                            providerLabel = "FotMob";
+                        }
+                        else
+                        {
+                            // 2. US Sports (American Football, Ice Hockey, Basketball, Baseball) -> ESPN
+                            rawJson = await _espn.GetMatchStatsJsonAsync(matchName, legSport, betPlacedAt, matchStartTime, betId);
+                            providerLabel = "ESPN";
+                        }
+
                         if (!string.IsNullOrEmpty(rawJson))
                         {
                             partsList.Add(new Dictionary<string, object>
                             {
-                                { "text", $"=== FOTMOB RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n=========================" }
+                                { "text", $"=== {providerLabel.ToUpperInvariant()} RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n=========================" }
                             });
                         }
                         else
                         {
-                            // Explicit empty else block to prevent the delay from binding to it
+                            _logger.LogInformation($"{betLabel}⚠️ [Outcome Check] {providerLabel} data not found for '{matchName}' -> Falling back to Google Search.");
+                            // Neither provider found data for this match -> Leg requires Google Search fallback
+                            anyLegNeedsGoogleSearch = true;
                         }
                         
                         // Add a small delay to avoid rate limits on slips with multiple matches
@@ -566,25 +589,33 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                             ["role"] = "user",
                             ["parts"] = partsList
                         }
-                    },
-                    ["tools"] = new[]
+                    }
+                };
+
+                // Only attach Google Search Grounding if at least one leg could not be found via FotMob or ESPN!
+                // This guarantees $0 search fee on all Soccer and ESPN-supported matches!
+                if (anyLegNeedsGoogleSearch)
+                {
+                    payload["tools"] = new[]
                     {
                         new Dictionary<string, object>
                         {
                             ["googleSearch"] = new Dictionary<string, object>()
                         }
-                    },
-                    ["generationConfig"] = new Dictionary<string, object>
+                    };
+                }
+
+                payload["generationConfig"] = new Dictionary<string, object>
+                {
+                    ["maxOutputTokens"] = 8192,
+                    ["responseMimeType"] = "application/json",
+                    ["responseSchema"] = JsonSerializer.Deserialize<object>(schemaJson, options)!,
+                    ["thinkingConfig"] = new Dictionary<string, object>
                     {
-                        ["maxOutputTokens"] = 8192,
-                        ["responseMimeType"] = "application/json",
-                        ["responseSchema"] = JsonSerializer.Deserialize<object>(schemaJson, options)!,
-                        ["thinkingConfig"] = new Dictionary<string, object>
-                        {
-                            ["thinkingLevel"] = "high"
-                        }
+                        ["thinkingLevel"] = "high"
                     }
                 };
+
 
                 var jsonPayload = JsonSerializer.Serialize(payload);
                 
@@ -594,7 +625,14 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
                 betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
-                _logger.LogInformation($"{betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
+                if (anyLegNeedsGoogleSearch)
+                {
+                    _logger.LogInformation($"{betLabel}🔍 [Outcome Check] Calling Gemini with Google Search Grounding ENABLED (Model: {resolvedModel})...");
+                }
+                else
+                {
+                    _logger.LogInformation($"{betLabel}🛡️ [Outcome Check] Calling Gemini with Google Search Grounding DISABLED - $0 Search Cost (Model: {resolvedModel})...");
+                }
                 
                 var (response, elapsedMs) = await SendWithRetryAsync(url, jsonPayload, betLabel, token, timeoutSeconds: 300);
                 if (!response.IsSuccessStatusCode)

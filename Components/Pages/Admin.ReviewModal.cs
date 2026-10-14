@@ -603,4 +603,22 @@ public partial class Admin
         }
     }
 
+    private static readonly System.Text.RegularExpressions.Regex VerificationHighlightRegex = new(
+        @"(Verified (?:via|by) (?:ESPN|FotMob):?)",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled
+    );
+
+    private MarkupString HighlightVerification(string? stats)
+    {
+        if (string.IsNullOrEmpty(stats)) return (MarkupString)"";
+
+        string encoded = System.Net.WebUtility.HtmlEncode(stats);
+
+        string highlighted = VerificationHighlightRegex.Replace(encoded, m =>
+            $"<span style=\"border: 1px solid #000; padding: 0 3px; border-radius: 3px;\">{m.Value}</span>"
+        );
+
+        return (MarkupString)highlighted;
+    }
+
 }
