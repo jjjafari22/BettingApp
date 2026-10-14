@@ -410,7 +410,7 @@ public class OddsApiService
             var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365,pinnacle%2B30,coolbet";
             
             string cacheKeyOdds = $"OddspapiOdds_{fixtureId}";
-            TimeSpan cacheDuration = isLiveRequest ? TimeSpan.Zero : TimeSpan.FromSeconds(75);
+            TimeSpan cacheDuration = isLiveRequest ? TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(75);
             string? oJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKeyOdds, cacheDuration, () => _httpClient.GetAsync(oddsUrl), _logger);
             
             if (oJson == null) return (null, "Odds API failed or returned 429");
@@ -581,7 +581,7 @@ public class OddsApiService
             }
             result.Markets.Sort((a, b) => a.MarketName.CompareTo(b.MarketName));
             
-            _cache.Set($"OddspapiParsedResult_{fixtureId}", result, TimeSpan.FromSeconds(15));
+            _cache.Set($"OddspapiParsedResult_{fixtureId}", result, cacheDuration);
 
             return (result, null);
         }

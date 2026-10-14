@@ -282,12 +282,12 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
                 _logger.LogInformation($"{betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
 
-                var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token, timeoutSeconds: 90);
+                var (response, elapsedMs) = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token, timeoutSeconds: 90);
                 string responseString = await response.Content.ReadAsStringAsync();
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    LogAiUsage(responseString, betLabel);
+                    LogAiUsage(responseString, betLabel, elapsedMs, response.StatusCode.ToString());
                 }
 
                 if (!response.IsSuccessStatusCode)
@@ -596,7 +596,7 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                 betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
                 _logger.LogInformation($"{betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
                 
-                var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token, timeoutSeconds: 300);
+                var (response, elapsedMs) = await SendWithRetryAsync(url, jsonPayload, betLabel, token, timeoutSeconds: 300);
                 if (!response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync();
@@ -605,7 +605,7 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
 
                 var json = await response.Content.ReadAsStringAsync();
                 
-                LogAiUsage(json, betLabel);
+                LogAiUsage(json, betLabel, elapsedMs, response.StatusCode.ToString());
 
                 using var doc = JsonDocument.Parse(json);
                 var text = ExtractGeminiText(doc);
@@ -779,76 +779,7 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
             }
         }
 
-        public async Task<DateTime?> ExtractMatchStartTimeAsync(string extractedBetDataJson, DateTime betPlacedAt)
-        {
-            var token = await GetVertexAccessTokenAsync();
-            if (string.IsNullOrEmpty(token)) return null;
-
-            try
-            {
-                var prompt = $"You are a sports scheduler. Here is the JSON data of a bet slip placed on {betPlacedAt:yyyy-MM-dd HH:mm}.\n" +
-                             $"{extractedBetDataJson}\n\n" +
-                             $"Your task is to identify the EARLIEST (FIRST) START TIME among all the matches listed in this bet slip.\n" +
-                             $"Use Google Search to find the scheduled kick-off time for the matches. Make sure to look for matches occurring ON OR AFTER {betPlacedAt:yyyy-MM-dd}.\n" +
-                             $"First, list out each match and the start time you found. Then, return a JSON object wrapped in a ```json code block containing a single field 'earliestMatchStartTimeUtc' with the ISO 8601 UTC timestamp of the earliest start time among all matches (e.g., '2026-07-23T18:00:00Z'). If you cannot find the time, return null for the field.";
-
-                var payload = new
-                {
-                    contents = new[] { new { role = "user", parts = new[] { new { text = prompt } } } },
-                    tools = new[] { new { googleSearch = new object() } },
-                    generationConfig = new 
-                    {
-                        maxOutputTokens = 2048,
-                        thinkingConfig = new { thinkingLevel = "high" }
-                    }
-                };
-
-                var jsonPayload = JsonSerializer.Serialize(payload);
-                
-                // Hardcoded to the latest available Vertex AI enterprise model
-                var resolvedModel = "gemini-3.8-flash";
-
-                var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
-                string betLabel = "[Match Start Time] ";
-                _logger.LogInformation($"{betLabel}calling Gemini (Model: {resolvedModel})...");
-                
-                var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token, timeoutSeconds: 180);
-                
-                if (!response.IsSuccessStatusCode) return null;
-
-                var json = await response.Content.ReadAsStringAsync();
-                
-                LogAiUsage(json, betLabel);
-
-                using var doc = JsonDocument.Parse(json);
-                var text = ExtractGeminiText(doc);
-
-                if (!string.IsNullOrEmpty(text))
-                {
-                    var jsonMatch = System.Text.RegularExpressions.Regex.Match(text, @"```json\s*(\{.*?\})\s*```", System.Text.RegularExpressions.RegexOptions.Singleline);
-                    if (jsonMatch.Success)
-                    {
-                        text = jsonMatch.Groups[1].Value;
-                    }
-
-                    var resultDoc = JsonDocument.Parse(text.Trim());
-                    if (resultDoc.RootElement.TryGetProperty("earliestMatchStartTimeUtc", out var timeElement) && timeElement.ValueKind != JsonValueKind.Null)
-                    {
-                        if (DateTime.TryParse(timeElement.GetString(), null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsedTime))
-                        {
-                            return parsedTime.ToUniversalTime();
-                        }
-                    }
-                }
-                return null;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private void LogAiUsage(string jsonResponse, string betLabel)
+        private void LogAiUsage(string jsonResponse, string betLabel, long elapsedMs = 0, string? status = null)
         {
             try 
             {
@@ -862,8 +793,9 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                     
                     bool hasThought = jsonResponse.Contains("\"thoughtSignature\"");
                     string thinkMsg = thinking > 0 ? $" (Thinking: {thinking})" : (hasThought ? " (Thinking: active)" : "");
+                    string timingMsg = elapsedMs > 0 ? $" ({elapsedMs}ms, {status ?? "OK"})" : "";
 
-                    _logger.LogInformation($"{betLabel}📊 AI Usage -> Total: {total} | Input: {prompt} | Output: {output}{thinkMsg}");
+                    _logger.LogInformation($"{betLabel}📊 AI Usage{timingMsg} -> Total: {total} | Input: {prompt} | Output: {output}{thinkMsg}");
                 }
             }
             catch { }
@@ -912,7 +844,7 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
             return null;
         }
 
-        private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "", string token = "", int timeoutSeconds = 180)
+        private async Task<(HttpResponseMessage Response, long ElapsedMs)> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "", string token = "", int timeoutSeconds = 180)
         {
             int maxRetries = 3;
             for (int i = 0; i < maxRetries; i++)
@@ -942,8 +874,11 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                         }
                     }
                     
-                    _logger.LogInformation($"{logLabel}Gemini API responded in {attemptSw.ElapsedMilliseconds}ms (Status: {response.StatusCode})");
-                    return response;
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        _logger.LogWarning($"{logLabel}Gemini API responded with status {response.StatusCode} in {attemptSw.ElapsedMilliseconds}ms");
+                    }
+                    return (response, attemptSw.ElapsedMilliseconds);
                 }
                 catch (OperationCanceledException)
                 {

@@ -49,7 +49,7 @@ namespace BettingApp.Services
                 earliestStart = dbBet.MatchStartTime;
                 if (!earliestStart.HasValue)
                 {
-                    return DateTime.UtcNow.AddMinutes(60);
+                    return DateTime.UtcNow;
                 }
             }
 

@@ -17,6 +17,16 @@ namespace BettingApp.Services
         private readonly ILogger<BetMonitoringService> _logger;
         private readonly AiVisionService _aiVisionService;
 
+        private static readonly SemaphoreSlim _wakeSignal = new(0);
+
+        public static void WakeUp()
+        {
+            if (_wakeSignal.CurrentCount == 0)
+            {
+                try { _wakeSignal.Release(); } catch { }
+            }
+        }
+
         public BetMonitoringService(
             IServiceProvider serviceProvider, 
             ILogger<BetMonitoringService> logger,
@@ -42,8 +52,12 @@ namespace BettingApp.Services
                     _logger.LogError(ex, "Error in BetMonitoringService loop");
                 }
 
-                // Wait 1 minute before the next check
-                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                // Wait up to 1 minute, or wake up immediately if signaled by bet approval or admin action
+                try
+                {
+                    await _wakeSignal.WaitAsync(TimeSpan.FromMinutes(1), stoppingToken);
+                }
+                catch (OperationCanceledException) { }
             }
         }
 
@@ -305,6 +319,7 @@ namespace BettingApp.Services
             finally
             {
                 AiVisionService.ProcessingOutcomeBetIds.TryRemove(dbBet.Id, out _);
+                uiNotifier?.NotifyAdmin("Update");
             }
             });
             

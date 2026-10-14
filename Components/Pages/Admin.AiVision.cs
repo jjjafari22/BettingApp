@@ -460,7 +460,6 @@ public partial class Admin
             }
         });
     }
-
     private async Task AnalyzeImageAsync()
     {
         if (reviewingBetModel == null || string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) return;

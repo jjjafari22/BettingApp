@@ -524,6 +524,14 @@ public partial class Admin
         });
         UiNotifier.NotifyAdmin("Update");
         
+        if (newStatus == "Approved")
+        {
+            if (!bet.MatchStartTime.HasValue || (bet.Legs != null && bet.Legs.Any(l => !l.StartTime.HasValue)) || bet.MatchStartTime.Value <= DateTime.UtcNow)
+            {
+                BettingApp.Services.BetMonitoringService.WakeUp();
+            }
+        }
+        
         if (isAutoSettled)
         {
             // For auto-settle, do NOT advance the queue or swap the open modal to the next bet!

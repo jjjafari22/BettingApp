@@ -378,12 +378,12 @@ else
                                                                 </div>
                                                                 
                                                                 @if (matchingOutcome != null && !string.IsNullOrEmpty(matchingOutcome.Outcome)) {
-                                                                    var isLegWon = matchingOutcome.Outcome.ToLower().Contains("won");
-                                                                    var isLegLost = matchingOutcome.Outcome.ToLower().Contains("lost");
-                                                                    var color = isLegWon ? "text-success" : isLegLost ? "text-danger" : "text-warning";
-                                                                    var icon = isLegWon ? "bi-check-lg" : isLegLost ? "bi-x-lg" : "bi-dash-lg";
+                                                                    var color = matchingOutcome.Outcome.ToLower().Contains("won") ? "text-success" : 
+                                                                                matchingOutcome.Outcome.ToLower().Contains("lost") ? "text-danger" : "text-warning";
+                                                                    var emoji = matchingOutcome.Outcome.ToLower().Contains("won") ? "✅" : 
+                                                                                matchingOutcome.Outcome.ToLower().Contains("lost") ? "❌" : "➖";
                                                                     <div class="mt-1 p-1 bg-light rounded border border-secondary border-opacity-25 lh-sm" style="font-size: 0.75em;">
-                                                                        <strong>Outcome:</strong> <span class="@color fw-bold"><i class="bi @icon me-1"></i>@matchingOutcome.Outcome</span><br/>
+                                                                        <strong>Outcome:</strong> <span class="@color fw-bold">@emoji @matchingOutcome.Outcome</span><br/>
                                                                         <strong>Stats:</strong> @matchingOutcome.Stats
                                                                     </div>
                                                                 }
@@ -1190,11 +1190,7 @@ else
         else
         {
             var now = DateTime.UtcNow;
-            if (bet.NextCheckTime.HasValue && bet.NextCheckTime.Value <= now)
-            {
-                <span class="badge bg-warning text-dark shadow-sm"><i class="bi bi-clock-history me-1"></i> Due Check</span>
-            }
-            else if (bet.MatchStartTime.HasValue && bet.MatchStartTime.Value > now)
+            if (bet.MatchStartTime.HasValue && bet.MatchStartTime.Value > now)
             {
                 <div class="d-flex flex-column align-items-start gap-1" title="Match hasn't started yet">
                     <span class="badge bg-warning text-dark shadow-sm">
