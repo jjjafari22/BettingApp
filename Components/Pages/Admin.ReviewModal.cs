@@ -242,7 +242,12 @@ public partial class Admin
             } catch (Exception ex) { AiVisionError = "Failed to parse AI Vision data: " + ex.Message; }
         }
 
-        if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) && !reviewingBetModel.AiOutcomeResult.StartsWith("Error") && !reviewingBetModel.AiOutcomeResult.StartsWith("Exception"))
+        if (_outcomeCache.TryGetValue(bet.Id, out var cachedOutcome) && !string.IsNullOrEmpty(cachedOutcome.Json))
+        {
+            reviewingBetModel.AiOutcomeResult = cachedOutcome.Json;
+            ParsedAiOutcome = cachedOutcome.Result;
+        }
+        else if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) && !reviewingBetModel.AiOutcomeResult.StartsWith("Error") && !reviewingBetModel.AiOutcomeResult.StartsWith("Exception"))
         {
             try {
                 ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(

@@ -31,6 +31,16 @@ public partial class Admin
     private BettingApp.Services.AiVisionLeg? ActiveLookupLeg = null;
     private string? AiVisionError = null;
 
+    private bool IsCheckingOutcome(int betId)
+    {
+        return ConfirmingOutcomeBetIds.Contains(betId) || BettingApp.Services.AiVisionService.ProcessingOutcomeBetIds.ContainsKey(betId);
+    }
+
+    private bool IsAnalyzingAutoRead(int betId)
+    {
+        return AnalyzingImageBetIds.Contains(betId) || BettingApp.Services.AiVisionService.ProcessingAutoReadBetIds.ContainsKey(betId);
+    }
+
     private void SaveAiVisionResultToDatabase()
     {
         if (reviewingBetModel == null) return;
@@ -99,9 +109,15 @@ public partial class Admin
         var currentBet = reviewingBetModel;
         var currentOriginal = originalBetModel;
 
+        if (!BettingApp.Services.AiVisionService.ProcessingOutcomeBetIds.TryAdd(capturingBetId, true))
+        {
+            return;
+        }
+
         ConfirmingOutcomeBetIds.Add(capturingBetId);
         if (reviewingBetModel.Id == capturingBetId) errorMessage = null;
         StateHasChanged();
+        UiNotifier.NotifyAdmin("Update");
         try { _ = reviewModalRef.FocusAsync(); } catch { }
 
         _ = Task.Run(async () =>
@@ -433,12 +449,14 @@ public partial class Admin
             }
             finally
             {
+                BettingApp.Services.AiVisionService.ProcessingOutcomeBetIds.TryRemove(capturingBetId, out _);
                 await InvokeAsync(() =>
                 {
                     ConfirmingOutcomeBetIds.Remove(capturingBetId);
                     shouldFocusReviewModal = true;
                     StateHasChanged();
                 });
+                UiNotifier.NotifyAdmin("Update");
             }
         });
     }

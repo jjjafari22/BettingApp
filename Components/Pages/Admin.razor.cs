@@ -231,6 +231,45 @@ public partial class Admin
                     try
                     {
                         await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
+                        
+                        if (reviewingBetModel != null)
+                        {
+                            var matchingBet = pendingBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
+                                           ?? approvedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
+                                           ?? completedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id);
+                            if (matchingBet != null)
+                            {
+                                if (matchingBet.AiOutcomeResult != reviewingBetModel.AiOutcomeResult ||
+                                    matchingBet.Status != reviewingBetModel.Status ||
+                                    matchingBet.NextCheckTime != reviewingBetModel.NextCheckTime ||
+                                    matchingBet.AiVisionResultJson != reviewingBetModel.AiVisionResultJson)
+                                {
+                                    reviewingBetModel.AiOutcomeResult = matchingBet.AiOutcomeResult;
+                                    reviewingBetModel.Status = matchingBet.Status;
+                                    reviewingBetModel.NextCheckTime = matchingBet.NextCheckTime;
+                                    reviewingBetModel.MatchStartTime = matchingBet.MatchStartTime;
+                                    reviewingBetModel.AiVisionResultJson = matchingBet.AiVisionResultJson;
+                                    reviewingBetModel.AiVisionError = matchingBet.AiVisionError;
+                                    if (matchingBet.Legs != null)
+                                    {
+                                        reviewingBetModel.Legs = matchingBet.Legs.ToList();
+                                    }
+                                    
+                                    if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) && 
+                                        !reviewingBetModel.AiOutcomeResult.StartsWith("Error") && 
+                                        !reviewingBetModel.AiOutcomeResult.StartsWith("Exception"))
+                                    {
+                                        try {
+                                            ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
+                                                reviewingBetModel.AiOutcomeResult, 
+                                                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                                            );
+                                        } catch { }
+                                    }
+                                }
+                            }
+                        }
+
                         StateHasChanged();
                     }
                     catch (Exception ex)

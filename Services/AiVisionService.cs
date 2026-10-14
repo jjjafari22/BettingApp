@@ -92,6 +92,7 @@ namespace BettingApp.Services
     public class AiVisionService
     {
         public static System.Collections.Concurrent.ConcurrentDictionary<int, bool> ProcessingAutoReadBetIds { get; } = new();
+        public static System.Collections.Concurrent.ConcurrentDictionary<int, bool> ProcessingOutcomeBetIds { get; } = new();
         
         private readonly HttpClient _httpClient;
         private readonly string? _apiKey;
@@ -437,6 +438,12 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
             var token = await GetVertexAccessTokenAsync();
             if (string.IsNullOrEmpty(token)) return "Error: Gemini Auth Token missing.";
 
+            bool addedHere = false;
+            if (betId.HasValue)
+            {
+                addedHere = ProcessingOutcomeBetIds.TryAdd(betId.Value, true);
+            }
+
             try
             {
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
@@ -759,6 +766,13 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
             catch (Exception ex)
             {
                 return $"Exception checking outcome: {ex.Message}";
+            }
+            finally
+            {
+                if (addedHere && betId.HasValue)
+                {
+                    ProcessingOutcomeBetIds.TryRemove(betId.Value, out _);
+                }
             }
         }
 

@@ -65,6 +65,7 @@ namespace BettingApp.Services
                 .ToListAsync(stoppingToken);
 
             bool anyUpdates = false;
+            var uiNotifier = scope.ServiceProvider.GetService<UiNotificationService>();
 
             // Execute in parallel (up to 3 concurrent checks to prevent Gemini 429 Rate Limits)
             await Parallel.ForEachAsync(dueBets, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = stoppingToken }, async (bet, ct) =>
@@ -89,6 +90,15 @@ namespace BettingApp.Services
                     }
                     return;
                 }
+
+                if (!AiVisionService.ProcessingOutcomeBetIds.TryAdd(dbBet.Id, true))
+                {
+                    return; // Already being checked by another thread or admin
+                }
+
+                try
+                {
+                    uiNotifier?.NotifyAdmin("Update");
 
                 if (string.IsNullOrEmpty(dbBet.AiEvaluation.AiVisionResultJson))
                 {
@@ -291,12 +301,16 @@ namespace BettingApp.Services
 
                 await taskContext.SaveChangesAsync(ct);
                 anyUpdates = true;
+            }
+            finally
+            {
+                AiVisionService.ProcessingOutcomeBetIds.TryRemove(dbBet.Id, out _);
+            }
             });
             
             if (anyUpdates)
             {
                 // Notify UI about the update once for all bets
-                var uiNotifier = scope.ServiceProvider.GetService<UiNotificationService>();
                 uiNotifier?.NotifyAdmin("Update");
             }
         }
