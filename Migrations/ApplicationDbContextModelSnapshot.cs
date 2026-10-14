@@ -185,6 +185,9 @@ namespace BettingApp.Migrations
                     b.Property<int?>("AmountNOK")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("ArrivedPendingAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Bookmaker")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");

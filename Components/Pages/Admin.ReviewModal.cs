@@ -177,7 +177,7 @@ public partial class Admin
             Id = bet.Id, UserId = bet.UserId, UserName = bet.UserName, 
             AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, 
             FreeBetAmount = bet.FreeBetAmount,
-            ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt,
+            ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt, ArrivedPendingAt = bet.ArrivedPendingAt,
             AiEvaluation = bet.AiEvaluation != null ? new BetAiEvaluation
             {
                 Id = bet.AiEvaluation.Id,

@@ -90,6 +90,7 @@ namespace BettingApp.Data
         // ----------------------------
         
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? ArrivedPendingAt { get; set; }
         [ConcurrencyCheck]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }

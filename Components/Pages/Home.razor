@@ -813,6 +813,7 @@ else
                                     if (currentStatus != "Cancelled")
                                     {
                                         dbBet.Status = "Pending";
+                                        dbBet.ArrivedPendingAt ??= DateTime.UtcNow;
 
                                         if (dbBet.AiEvaluation != null && dbBet.AiEvaluation.Id == 0)
                                         {

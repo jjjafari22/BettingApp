@@ -242,11 +242,13 @@ public partial class Admin
                                 if (matchingBet.AiOutcomeResult != reviewingBetModel.AiOutcomeResult ||
                                     matchingBet.Status != reviewingBetModel.Status ||
                                     matchingBet.NextCheckTime != reviewingBetModel.NextCheckTime ||
+                                    matchingBet.ArrivedPendingAt != reviewingBetModel.ArrivedPendingAt ||
                                     matchingBet.AiVisionResultJson != reviewingBetModel.AiVisionResultJson)
                                 {
                                     reviewingBetModel.AiOutcomeResult = matchingBet.AiOutcomeResult;
                                     reviewingBetModel.Status = matchingBet.Status;
                                     reviewingBetModel.NextCheckTime = matchingBet.NextCheckTime;
+                                    reviewingBetModel.ArrivedPendingAt = matchingBet.ArrivedPendingAt;
                                     reviewingBetModel.MatchStartTime = matchingBet.MatchStartTime;
                                     reviewingBetModel.AiVisionResultJson = matchingBet.AiVisionResultJson;
                                     reviewingBetModel.AiVisionError = matchingBet.AiVisionError;

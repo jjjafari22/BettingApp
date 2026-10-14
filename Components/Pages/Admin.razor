@@ -242,6 +242,25 @@ else
                                                 <strong>Is Live Placed:</strong> @AiVisionResult!.IsLive <br/>
                                                 <strong>Stake:</strong> @AiVisionResult!.Stake <br/>
                                                 <strong>Total Odds:</strong> @AiVisionResult!.TotalOdds
+                                                <hr class="my-1 text-muted" />
+                                                <div><strong>SS Sent:</strong> @ToUserLocal(reviewingBetModel.CreatedAt).ToString("dd/MM/yyyy HH:mm:ss")</div>
+                                                @{
+                                                    var arrivedTime = reviewingBetModel.ArrivedPendingAt ?? reviewingBetModel.AiEvaluation?.CreatedAt;
+                                                }
+                                                <div>
+                                                    <strong>SS Arrived Pending:</strong> 
+                                                    @if (arrivedTime.HasValue) {
+                                                        @ToUserLocal(arrivedTime.Value).ToString("dd/MM/yyyy HH:mm:ss")
+                                                        var delay = (arrivedTime.Value - reviewingBetModel.CreatedAt).TotalSeconds;
+                                                        if (delay >= 0) {
+                                                            <span class="badge @(delay > 15 ? "bg-warning text-dark" : "bg-secondary") ms-1" title="Time taken to process and reach pending queue">@($"+{delay:0.0}s")</span>
+                                                        }
+                                                    } else if (reviewingBetModel.Status == "Processing") {
+                                                        <span class="badge bg-info text-dark ms-1">Processing...</span>
+                                                    } else {
+                                                        <span class="text-muted">-</span>
+                                                    }
+                                                </div>
                                             </div>
                                         }
                                         @if (AiVisionResult!.Legs != null)
