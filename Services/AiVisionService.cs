@@ -268,7 +268,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                             },
                             required = new[] { "thoughtProcess", "bookmaker", "isLive", "totalOdds", "stake", "legs" }
                         },
-                        thinkingConfig = new { thinkingLevel = "high" }
+                        thinkingConfig = new { thinkingLevel = "medium" }
                     }
                 };
 
