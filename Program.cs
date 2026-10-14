@@ -54,7 +54,7 @@ builder.Services.AddHttpClient<KambiScraperService>().ConfigurePrimaryHttpMessag
 builder.Services.AddHttpClient<Bet365ScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<AiVisionService>(client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(300); // 5 minutes for LLM processing
+    client.Timeout = TimeSpan.FromSeconds(360); // 6 minutes for LLM processing
 }).ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<FotMobScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<PlayerMatchResolverService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);

@@ -268,7 +268,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                             },
                             required = new[] { "thoughtProcess", "bookmaker", "isLive", "totalOdds", "stake", "legs" }
                         },
-                        thinkingConfig = new { thinkingBudget = 1024 }
+                        thinkingConfig = new { thinkingLevel = "high" }
                     }
                 };
 
@@ -282,7 +282,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
                 _logger.LogInformation($"{betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
 
-                var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token);
+                var response = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token, timeoutSeconds: 90);
                 string responseString = await response.Content.ReadAsStringAsync();
                 
                 if (response.IsSuccessStatusCode)
@@ -579,7 +579,10 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                         ["maxOutputTokens"] = 8192,
                         ["responseMimeType"] = "application/json",
                         ["responseSchema"] = JsonSerializer.Deserialize<object>(schemaJson, options)!,
-                        ["thinkingConfig"] = new Dictionary<string, object> { ["thinkingBudget"] = 1024 }
+                        ["thinkingConfig"] = new Dictionary<string, object>
+                        {
+                            ["thinkingLevel"] = "high"
+                        }
                     }
                 };
 
@@ -593,7 +596,7 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                 betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
                 _logger.LogInformation($"{betLabel}Check Outcome calling Gemini (Model: {resolvedModel})...");
                 
-                var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token);
+                var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token, timeoutSeconds: 300);
                 if (!response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync();
@@ -795,10 +798,8 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                     tools = new[] { new { googleSearch = new object() } },
                     generationConfig = new 
                     {
-                        thinkingConfig = new 
-                        {
-                            thinkingBudget = 1024
-                        }
+                        maxOutputTokens = 2048,
+                        thinkingConfig = new { thinkingLevel = "high" }
                     }
                 };
 
@@ -811,7 +812,7 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                 string betLabel = "[Match Start Time] ";
                 _logger.LogInformation($"{betLabel}calling Gemini (Model: {resolvedModel})...");
                 
-                var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token);
+                var response = await SendWithRetryAsync(url, jsonPayload, betLabel, token, timeoutSeconds: 180);
                 
                 if (!response.IsSuccessStatusCode) return null;
 
@@ -861,9 +862,8 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                     
                     bool hasThought = jsonResponse.Contains("\"thoughtSignature\"");
                     string thinkMsg = thinking > 0 ? $" (Thinking: {thinking})" : (hasThought ? " (Thinking: active)" : "");
-                    string warning = thinking >= 900 ? " ⚠️ WARNING: Approaching thinking limit!" : "";
 
-                    _logger.LogInformation($"{betLabel}📊 AI Usage -> Total: {total} | Input: {prompt} | Output: {output}{thinkMsg}{warning}");
+                    _logger.LogInformation($"{betLabel}📊 AI Usage -> Total: {total} | Input: {prompt} | Output: {output}{thinkMsg}");
                 }
             }
             catch { }
@@ -912,13 +912,15 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
             return null;
         }
 
-        private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "", string token = "")
+        private async Task<HttpResponseMessage> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "", string token = "", int timeoutSeconds = 180)
         {
             int maxRetries = 3;
             for (int i = 0; i < maxRetries; i++)
             {
+                var attemptSw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
                     var request = new HttpRequestMessage(HttpMethod.Post, url);
                     request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
                     if (!string.IsNullOrEmpty(token))
@@ -926,30 +928,42 @@ When evaluating matches without API JSON (e.g. Ice Hockey, US sports, lower leag
                         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
                     }
                     
-                    var response = await _httpClient.SendAsync(request);
+                    var response = await _httpClient.SendAsync(request, cts.Token);
+                    attemptSw.Stop();
                     
                     if (response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable || response.StatusCode == (System.Net.HttpStatusCode)429)
                     {
                         if (i < maxRetries - 1)
                         {
-                            int delaySec = 5 * (i + 1);
-                            _logger.LogWarning($"{logLabel}Gemini API returned {response.StatusCode}. Retrying in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
+                            int delaySec = 3 * (i + 1);
+                            _logger.LogWarning($"{logLabel}Gemini API returned {response.StatusCode} in {attemptSw.ElapsedMilliseconds}ms. Retrying in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
                             await Task.Delay(delaySec * 1000);
                             continue;
                         }
                     }
+                    
+                    _logger.LogInformation($"{logLabel}Gemini API responded in {attemptSw.ElapsedMilliseconds}ms (Status: {response.StatusCode})");
                     return response;
                 }
-                catch (TaskCanceledException)
+                catch (OperationCanceledException)
                 {
+                    attemptSw.Stop();
                     if (i < maxRetries - 1)
                     {
-                        int delaySec = 5 * (i + 1);
-                        _logger.LogWarning($"{logLabel}Gemini API TaskCanceled (Timeout). Retrying in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
+                        int delaySec = 2 * (i + 1);
+                        _logger.LogWarning($"{logLabel}Gemini API request timed out after {attemptSw.ElapsedMilliseconds}ms (> {timeoutSeconds}s). Retrying on fresh connection in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
                         await Task.Delay(delaySec * 1000);
                         continue;
                     }
-                    throw;
+                    _logger.LogError($"{logLabel}Gemini API request timed out after {maxRetries} attempts of {timeoutSeconds}s each.");
+                    throw new TimeoutException($"Gemini API timed out after {maxRetries} attempts of {timeoutSeconds}s.");
+                }
+                catch (Exception ex) when (i < maxRetries - 1)
+                {
+                    attemptSw.Stop();
+                    _logger.LogWarning($"{logLabel}Gemini API call failed ({ex.Message}). Retrying in 3s... (Attempt {i+1}/{maxRetries-1})");
+                    await Task.Delay(3000);
+                    continue;
                 }
             }
             throw new Exception("Max retries exceeded.");
