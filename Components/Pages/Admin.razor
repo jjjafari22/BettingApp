@@ -881,7 +881,7 @@ else
      
                     @foreach (var bet in pendingBets)
                     {
-                        <tr>
+                        <tr @key="bet.Id">
                               <td>
         
                                  <button class="btn btn-primary btn-sm action-btn" @onclick="() => StartReview(bet)">
@@ -963,7 +963,7 @@ else
                  <tbody>
                     @foreach (var bet in approvedBets)
                     {
-                        <tr>
+                        <tr @key="bet.Id">
                              <td>
                                  <button class="btn btn-success btn-sm action-btn" @onclick="() => StartReview(bet)">
                                      <i class="bi bi-play-circle"></i> Process
@@ -1079,7 +1079,7 @@ else
                     @foreach (var bet in completedBets)
                     {
                         var rowClass = bet.Status == "Won" ? "table-success" : (bet.Status == "Lost" ? "table-danger" : "table-secondary");
-                        <tr class="@rowClass">
+                        <tr @key="bet.Id" class="@rowClass">
                             <td>
                                   <button class="btn btn-outline-dark btn-sm" @onclick="() => StartReview(bet)">
                       

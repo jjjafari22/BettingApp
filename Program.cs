@@ -154,6 +154,9 @@ customCulture.DateTimeFormat.ShortDatePattern = "dd.MMM";
 customCulture.DateTimeFormat.ShortTimePattern = "HH:mm";
 var supportedCultures = new[] { customCulture };
 
+System.Globalization.CultureInfo.DefaultThreadCurrentCulture = customCulture;
+System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = customCulture;
+
 app.UseRequestLocalization(new RequestLocalizationOptions
 {
     DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture(customCulture),

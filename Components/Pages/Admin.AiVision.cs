@@ -117,7 +117,6 @@ public partial class Admin
         ConfirmingOutcomeBetIds.Add(capturingBetId);
         if (reviewingBetModel.Id == capturingBetId) errorMessage = null;
         StateHasChanged();
-        UiNotifier.NotifyAdmin("Update");
         try { _ = reviewModalRef.FocusAsync(); } catch { }
 
         _ = Task.Run(async () =>
@@ -408,7 +407,6 @@ public partial class Admin
                                 await LoadPendingBets();
                                 await LoadApprovedBets();
                                 await LoadCompletedBets();
-                                UiNotifier.NotifyAdmin("Update");
                                 StateHasChanged();
                             }
                         }
