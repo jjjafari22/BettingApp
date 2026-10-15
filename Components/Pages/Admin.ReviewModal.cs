@@ -206,6 +206,7 @@ public partial class Admin
         AiVisionResult = null;
         AiVisionError = bet.AiVisionError;
         ParsedAiOutcome = null;
+        CancelCheckingAllOdds();
         LegOddsCache.Clear();
         IsCheckingAllOdds = false;
         CheckedLegsCount = 0;
@@ -281,6 +282,8 @@ public partial class Admin
 
     private async Task CancelReview() 
     { 
+        CancelCheckingAllOdds();
+
         if (reviewingBetModel != null && originalBetModel != null)
         {
             if (originalBetModel.Status != "Pending" && (reviewingBetModel.Odds != originalBetModel.Odds || reviewingBetModel.AmountNOK != originalBetModel.AmountNOK))
@@ -358,6 +361,7 @@ public partial class Admin
 
         if (newIndex != currentReviewIndex && newIndex >= 0 && newIndex < currentReviewList.Count)
         {
+            CancelCheckingAllOdds();
             successMessage = null;
             AiVisionResult = null;
             AiVisionError = null;
@@ -371,13 +375,15 @@ public partial class Admin
 
     private async Task OnReviewModalKeyDown(KeyboardEventArgs e) 
     { 
-        if (e.Key == "ArrowRight") await NavigateReview(1);
+        if (e.Key == "Escape") await CancelReview();
+        else if (e.Key == "ArrowRight") await NavigateReview(1);
         else if (e.Key == "ArrowLeft") await NavigateReview(-1);
     }
 
     private async Task ProcessBet(Bet bet, string newStatus, bool isAutoSettled = false, string? customAuditDetails = null, bool showOverlay = true)
     {
         if (showOverlay && isSavingBet) return;
+        CancelCheckingAllOdds();
         try
         {
             if (showOverlay)

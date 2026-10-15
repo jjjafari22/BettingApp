@@ -294,6 +294,7 @@ public partial class Admin
 
     public async ValueTask DisposeAsync()
     {
+        CancelCheckingAllOdds();
         uiRefreshTimer?.Dispose();
         adminDebounceTimer?.Dispose();
         UiNotifier.OnAdminNotification -= HandleAdminNotification;

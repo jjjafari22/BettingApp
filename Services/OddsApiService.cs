@@ -34,26 +34,26 @@ public class OddsApiService
         return -1;
     }
 
-    private async Task<(string? Json, string CacheKey)> GetFixturesJsonAsync(int sportId = 10)
+    private async Task<(string? Json, string CacheKey)> GetFixturesJsonAsync(int sportId = 10, CancellationToken cancellationToken = default)
     {
         string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
         string toDate = DateTime.UtcNow.AddDays(4).ToString("yyyy-MM-dd");
         string cacheKey = $"OddspapiFixtures_{sportId}_{fromDate}";
         var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId={sportId}&from={fromDate}&to={toDate}";
         
-        string? json = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKey, TimeSpan.FromHours(6), () => _httpClient.GetAsync(fixturesUrl), _logger);
+        string? json = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKey, TimeSpan.FromHours(6), () => _httpClient.GetAsync(fixturesUrl, cancellationToken), _logger, cancellationToken);
         return (json, cacheKey);
     }
 
-    private async Task<string?> GetMarketsJsonAsync(int sportId = 10)
+    private async Task<string?> GetMarketsJsonAsync(int sportId = 10, CancellationToken cancellationToken = default)
     {
         var marketsUrl = $"https://api.oddspapi.io/v4/markets?apiKey={_apiKey}&sportId={sportId}&language=en";
-        return await HttpCacheHelper.GetOrCreateAsync(_cache, $"OddspapiMarketsJson_{sportId}", TimeSpan.FromHours(24), () => _httpClient.GetAsync(marketsUrl), _logger);
+        return await HttpCacheHelper.GetOrCreateAsync(_cache, $"OddspapiMarketsJson_{sportId}", TimeSpan.FromHours(24), () => _httpClient.GetAsync(marketsUrl, cancellationToken), _logger, cancellationToken);
     }
 
-    private async Task<List<BettingApp.Models.OddsPapiFixtureDto>?> GetParsedFixturesAsync(int sportId = 10)
+    private async Task<List<BettingApp.Models.OddsPapiFixtureDto>?> GetParsedFixturesAsync(int sportId = 10, CancellationToken cancellationToken = default)
     {
-        var (fJson, cacheKey) = await GetFixturesJsonAsync(sportId);
+        var (fJson, cacheKey) = await GetFixturesJsonAsync(sportId, cancellationToken);
                 
         if (fJson == null) return null;
                 
@@ -96,12 +96,12 @@ public class OddsApiService
         return parsedFixtures;
     }
 
-    private async Task<(Dictionary<string, string> rawMarketIdToBaseName, Dictionary<string, BettingApp.Models.OddsPapiMarket> cachedBaseMarketDict)?> GetParsedMarketsAsync(int sportId = 10)
+    private async Task<(Dictionary<string, string> rawMarketIdToBaseName, Dictionary<string, BettingApp.Models.OddsPapiMarket> cachedBaseMarketDict)?> GetParsedMarketsAsync(int sportId = 10, CancellationToken cancellationToken = default)
     {
         string parsedCacheKey = $"OddspapiMarketsParsed_{sportId}";
         if (!_cache.TryGetValue(parsedCacheKey, out (Dictionary<string, string> rawMarketIdToBaseName, Dictionary<string, BettingApp.Models.OddsPapiMarket> cachedBaseMarketDict) cachedMarkets))
         {
-            string? mJson = await GetMarketsJsonAsync(sportId);
+            string? mJson = await GetMarketsJsonAsync(sportId, cancellationToken);
                 
             if (mJson == null) return null;
                 
@@ -249,7 +249,7 @@ public class OddsApiService
         }
     }
 
-    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null, bool isLiveRequest = false, string? sport = null)
+    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null, bool isLiveRequest = false, string? sport = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return (null, "API Key is missing or team name is empty.");
         
@@ -259,9 +259,10 @@ public class OddsApiService
             return (null, $"Castle doesn't yet pay for odds for {sport}.");
         }
 
-        await _apiRateLimiter.WaitAsync();
+        await _apiRateLimiter.WaitAsync(cancellationToken);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Manual Lookup]";
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             
@@ -285,7 +286,7 @@ public class OddsApiService
             }
             else
             {
-                var parsedFixtures = await GetParsedFixturesAsync(sportId);
+                var parsedFixtures = await GetParsedFixturesAsync(sportId, cancellationToken);
                 if (parsedFixtures == null) return (null, "Fixtures API failed or returned 429");
 
             string[] split = teamName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
@@ -429,7 +430,7 @@ public class OddsApiService
             }
             
             // 1. Get markets metadata to map IDs to Names
-            var parsedMarkets = await GetParsedMarketsAsync(sportId);
+            var parsedMarkets = await GetParsedMarketsAsync(sportId, cancellationToken);
             if (parsedMarkets == null) return (null, "Markets API failed or returned 429");
             var cachedMarkets = parsedMarkets.Value;
 
@@ -450,7 +451,7 @@ public class OddsApiService
             
             string cacheKeyOdds = $"OddspapiOdds_{fixtureId}";
             TimeSpan cacheDuration = isLiveRequest ? TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(75);
-            string? oJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKeyOdds, cacheDuration, () => _httpClient.GetAsync(oddsUrl), _logger);
+            string? oJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKeyOdds, cacheDuration, () => _httpClient.GetAsync(oddsUrl, cancellationToken), _logger, cancellationToken);
             
             if (oJson == null) return (null, "Odds API failed or returned 429");
             using var oddsDoc = JsonDocument.Parse(oJson ?? "{}");
@@ -624,6 +625,10 @@ public class OddsApiService
             _cache.Set($"OddspapiParsedResult_{fixtureId}", result, cacheDuration);
 
             return (result, null);
+        }
+        catch (OperationCanceledException)
+        {
+            return (null, "Odds lookup canceled.");
         }
         catch (Exception ex)
         {

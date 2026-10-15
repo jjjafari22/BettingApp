@@ -26,7 +26,8 @@ namespace BettingApp.Services
             string cacheKey,
             TimeSpan absoluteExpirationRelativeToNow,
             Func<Task<HttpResponseMessage>> fetchFactory,
-            ILogger logger)
+            ILogger logger,
+            CancellationToken cancellationToken = default)
         {
             if (absoluteExpirationRelativeToNow > TimeSpan.Zero && cache.TryGetValue(cacheKey, out string? cachedValue))
             {
@@ -35,7 +36,7 @@ namespace BettingApp.Services
 
             var myLock = _locks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
             
-            await myLock.WaitAsync();
+            await myLock.WaitAsync(cancellationToken);
             try
             {
                 // Double-check cache inside lock
@@ -53,13 +54,14 @@ namespace BettingApp.Services
                 
                 for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
-                    await _globalThrottle.WaitAsync();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await _globalThrottle.WaitAsync(cancellationToken);
                     try 
                     {
                         var elapsed = DateTime.UtcNow - _lastRequestStart;
                         if (elapsed.TotalMilliseconds < 1100)
                         {
-                            await Task.Delay(1100 - (int)elapsed.TotalMilliseconds);
+                            await Task.Delay(1100 - (int)elapsed.TotalMilliseconds, cancellationToken);
                         }
                         
                         _lastRequestStart = DateTime.UtcNow;
@@ -92,7 +94,7 @@ namespace BettingApp.Services
                             }
                             
                             logger.LogWarning($"OddsPapi: 429 Too Many Requests for {cacheKey}. Retrying... (Attempt {attempt} of {maxRetries - 1})");
-                            await Task.Delay(500); // Small wait before re-queueing
+                            await Task.Delay(500, cancellationToken); // Small wait before re-queueing
                         }
                         else
                         {

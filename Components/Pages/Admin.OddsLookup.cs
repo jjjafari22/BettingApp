@@ -101,13 +101,30 @@ public partial class Admin
         else ExpandedBetIds.Add(betId);
     }
 
-    private async Task CheckAllOddsAsync()
+    private CancellationTokenSource? _checkAllOddsCts = null;
+
+    private void CancelCheckingAllOdds()
+    {
+        if (_checkAllOddsCts != null)
+        {
+            try { _checkAllOddsCts.Cancel(); } catch { }
+            try { _checkAllOddsCts.Dispose(); } catch { }
+            _checkAllOddsCts = null;
+        }
+        IsCheckingAllOdds = false;
+    }
+
+    private void CheckAllOddsAsync()
     {
         if (IsCheckingAllOdds) return;
         var legs = AiVisionResult?.Legs;
         if (legs == null || reviewingBetModel == null) return;
         
         int runningBetId = reviewingBetModel.Id;
+        CancelCheckingAllOdds();
+        _checkAllOddsCts = new CancellationTokenSource();
+        var ct = _checkAllOddsCts.Token;
+
         IsCheckingAllOdds = true;
         CheckedLegsCount = 0;
         LegOddsCache.Clear();
@@ -118,71 +135,81 @@ public partial class Admin
         }
         
         StateHasChanged();
-        await Task.Delay(16);
 
-        var fetchTasks = new List<Task<(BettingApp.Models.OddsPapiSearchResult? result, string? error)>>();
-        for (int i = 0; i < legs.Count; i++)
+        // Run the entire fetch and match process in the background!
+        // This ensures the Blazor Server circuit dispatcher is NEVER blocked or held hostage.
+        _ = Task.Run(async () =>
         {
-            var leg = legs[i];
-            string teamToSearch = leg.Match ?? leg.Selection ?? "";
-            bool isLive = AiVisionResult?.IsLive ?? false;
-            
-            // Kick off background processing concurrently but stagger them by 50ms
-            // This mathematically guarantees that Leg 1 reaches the HTTP Throttle Lock first,
-            // Leg 2 reaches it second, etc. Eliminating the "Throttle Lottery" where Leg 4 locks out Leg 1.
-            int taskIndex = i;
-            fetchTasks.Add(Task.Run(async () => {
-                await Task.Delay(taskIndex * 50);
-                if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) return ((BettingApp.Models.OddsPapiSearchResult?)null, (string?)null);
-                return await OddsApi.SearchOddsComparisonAsync(teamToSearch, reviewingBetModel?.Id, isLive, leg.Sport);
-            }));
-        }
-        
-        // Await them sequentially to ensure the UI updates in strict order (1, 2, 3...)
-        for (int i = 0; i < fetchTasks.Count; i++)
-        {
-            var leg = legs[i];
-            var (apiResult, error) = await fetchTasks[i];
-            
-            if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) 
+            try
             {
-                LegOddsCache.Clear();
-                break;
+                for (int i = 0; i < legs.Count; i++)
+                {
+                    if (ct.IsCancellationRequested || reviewingBetModel == null || reviewingBetModel.Id != runningBetId)
+                    {
+                        break;
+                    }
+
+                    var leg = legs[i];
+                    string teamToSearch = leg.Match ?? leg.Selection ?? "";
+                    bool isLive = AiVisionResult?.IsLive ?? false;
+
+                    var (apiResult, error) = await OddsApi.SearchOddsComparisonAsync(teamToSearch, runningBetId, isLive, leg.Sport, ct);
+
+                    if (ct.IsCancellationRequested || reviewingBetModel == null || reviewingBetModel.Id != runningBetId)
+                    {
+                        break;
+                    }
+
+                    // Process heavy market matching and outcome translation off the UI thread
+                    var legResult = ProcessLegOddsBackground(leg, apiResult, error);
+                    int legIndex = i;
+
+                    await InvokeAsync(() =>
+                    {
+                        if (ct.IsCancellationRequested || reviewingBetModel == null || reviewingBetModel.Id != runningBetId)
+                        {
+                            return;
+                        }
+
+                        LegOddsCache[legIndex] = legResult;
+                        CheckedLegsCount++;
+                        StateHasChanged();
+                    });
+                }
+
+                if (!ct.IsCancellationRequested && reviewingBetModel != null && reviewingBetModel.Id == runningBetId)
+                {
+                    await InvokeAsync(() =>
+                    {
+                        IsCheckingAllOdds = false;
+                        SaveAiVisionResultToDatabase();
+                        StateHasChanged();
+                        try { _ = reviewModalRef.FocusAsync(); } catch { }
+                    });
+                }
             }
-
-            ProcessLegOddsSync(leg, i, apiResult, error);
-
-            CheckedLegsCount++;
-            StateHasChanged();
-            
-            // Give UI thread a tiny slice to render the progress smoothly
-            await Task.Delay(1);
-        }
-        
-        if (reviewingBetModel == null || reviewingBetModel.Id != runningBetId) 
-        {
-            LegOddsCache.Clear();
-        }
-
-        if (reviewingBetModel != null && reviewingBetModel.Id == runningBetId)
-        {
-            IsCheckingAllOdds = false;
-
-            // Save the newly found start times back to the DB!
-            SaveAiVisionResultToDatabase();
-
-            StateHasChanged();
-            try { await reviewModalRef.FocusAsync(); } catch { }
-        }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, $"[Bet #{runningBetId}] Error in background CheckAllOdds");
+            }
+            finally
+            {
+                await InvokeAsync(() =>
+                {
+                    if (reviewingBetModel?.Id == runningBetId)
+                    {
+                        IsCheckingAllOdds = false;
+                        StateHasChanged();
+                    }
+                });
+            }
+        }, ct);
     }
 
-    private void ProcessLegOddsSync(BettingApp.Services.AiVisionLeg leg, int index, BettingApp.Models.OddsPapiSearchResult? apiResult, string? error)
+    private LegOddsResult ProcessLegOddsBackground(BettingApp.Services.AiVisionLeg leg, BettingApp.Models.OddsPapiSearchResult? apiResult, string? error)
     {
-        if (!LegOddsCache.TryGetValue(index, out var resultData))
-        {
-            resultData = new LegOddsResult();
-            LegOddsCache[index] = resultData;
-        }
+        var resultData = new LegOddsResult();
         
         if (apiResult == null)
         {
@@ -191,12 +218,12 @@ public partial class Admin
                 resultData.WarningMessage = error;
                 resultData.SearchResult = new BettingApp.Models.OddsPapiSearchResult { MatchName = leg.Match ?? leg.Selection ?? "" };
                 resultData.IsLoading = false;
-                return;
+                return resultData;
             }
 
             resultData.ErrorMessage = error ?? "No OddsPapi matches found.";
             resultData.IsLoading = false;
-            return;
+            return resultData;
         }
 
         resultData.SearchResult = apiResult;
@@ -333,6 +360,7 @@ public partial class Admin
 
         resultData.LookedUpAt = DateTime.UtcNow;
         resultData.IsLoading = false;
+        return resultData;
     }
 
     private string GetFallbackBookieUrl(string bookieKey, string matchName)
