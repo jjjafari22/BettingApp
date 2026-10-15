@@ -698,5 +698,98 @@ namespace BettingApp.Tests
             bool match2X = OddsMatchingLogic.IsOutcomeMatch("2X", display2X, leg, searchResult, "Double Chance Full Time");
             Assert.True(match2X, "Juventus or Draw should match Outcome 2X (Juventus Turin or Draw)");
         }
+
+        [Fact]
+        public void Test_HajdukSplit_Vs_Ajax_CornersHandicap()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "HNK Hajduk Split vs Ajax Amsterdam"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "Hajduk Split vs AFC Ajax",
+                Market = "Corners Handicap (2 Way) 0 - 0.5",
+                Selection = "AFC Ajax +0.5"
+            };
+
+            // In OddsPapi 2-way handicap, 2 (-0.5) is Away Team +0.5
+            string display2Minus05 = OddsMatchingLogic.GetTranslatedOutcomeName("2 (-0.5)", searchResult.MatchName);
+            Assert.Equal("Ajax Amsterdam +0.5", display2Minus05);
+            bool matchCorrect = OddsMatchingLogic.IsOutcomeMatch("2 (-0.5)", display2Minus05, leg, searchResult, "Corners - Handicap");
+            Assert.True(matchCorrect, "AFC Ajax +0.5 must match 2 (-0.5) (Ajax Amsterdam +0.5)");
+
+            // 2 (0.5) is Away Team -0.5 and should NOT match
+            string display2Plus05 = OddsMatchingLogic.GetTranslatedOutcomeName("2 (0.5)", searchResult.MatchName);
+            Assert.Equal("Ajax Amsterdam -0.5", display2Plus05);
+            bool matchWrong = OddsMatchingLogic.IsOutcomeMatch("2 (0.5)", display2Plus05, leg, searchResult, "Corners - Handicap");
+            Assert.False(matchWrong, "AFC Ajax +0.5 must not match 2 (0.5) (Ajax Amsterdam -0.5)");
+
+            // Home outcomes should not match
+            string display1Minus05 = OddsMatchingLogic.GetTranslatedOutcomeName("1 (-0.5)", searchResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("1 (-0.5)", display1Minus05, leg, searchResult, "Corners - Handicap"));
+
+            string display1Plus05 = OddsMatchingLogic.GetTranslatedOutcomeName("1 (0.5)", searchResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("1 (0.5)", display1Plus05, leg, searchResult, "Corners - Handicap"));
+        }
+
+        [Fact]
+        public void Test_Torreense_Vs_Sunderland_CornersHandicap()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "SCU Torreense vs Sunderland AFC"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "SC União Torreense vs Sunderland",
+                Market = "Corners Handicap (2 Way) 4.5 - 0",
+                Selection = "Sunderland -4.5"
+            };
+
+            // In OddsPapi 2-way handicap with baseline 4.5, 2 (4.5) is Away Team -4.5
+            string display2 = OddsMatchingLogic.GetTranslatedOutcomeName("2 (4.5)", searchResult.MatchName);
+            Assert.Equal("Sunderland AFC -4.5", display2);
+            bool match2 = OddsMatchingLogic.IsOutcomeMatch("2 (4.5)", display2, leg, searchResult, "Corners - Handicap");
+            Assert.True(match2, "Sunderland -4.5 must match 2 (4.5) (Sunderland AFC -4.5)");
+
+            // Home 1 (4.5) is SCU Torreense +4.5
+            string display1 = OddsMatchingLogic.GetTranslatedOutcomeName("1 (4.5)", searchResult.MatchName);
+            Assert.Equal("SCU Torreense +4.5", display1);
+            bool match1 = OddsMatchingLogic.IsOutcomeMatch("1 (4.5)", display1, leg, searchResult, "Corners - Handicap");
+            Assert.False(match1, "Sunderland -4.5 must not match 1 (4.5) (SCU Torreense +4.5)");
+        }
+
+        [Fact]
+        public void Test_HandicapSignConflict_OppositeSignsDoNotMatch()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Hajduk Split vs AFC Ajax"
+            };
+
+            var legMinus = new AiVisionLeg
+            {
+                Match = "Hajduk Split vs AFC Ajax",
+                Market = "Corners Handicap",
+                Selection = "Hajduk Split -0.5"
+            };
+
+            string displayPlus = OddsMatchingLogic.GetTranslatedOutcomeName("1 (0.5)", searchResult.MatchName);
+            Assert.Equal("Hajduk Split +0.5", displayPlus);
+            bool matchConflict = OddsMatchingLogic.IsOutcomeMatch("1 (0.5)", displayPlus, legMinus, searchResult, "Corners - Handicap");
+            Assert.False(matchConflict, "Hajduk Split -0.5 must not match Hajduk Split +0.5");
+
+            var legPlus = new AiVisionLeg
+            {
+                Match = "Hajduk Split vs AFC Ajax",
+                Market = "Corners Handicap",
+                Selection = "Hajduk Split +0.5"
+            };
+            bool matchSame = OddsMatchingLogic.IsOutcomeMatch("1 (0.5)", displayPlus, legPlus, searchResult, "Corners - Handicap");
+            Assert.True(matchSame, "Hajduk Split +0.5 must match Hajduk Split +0.5");
+        }
     }
 }

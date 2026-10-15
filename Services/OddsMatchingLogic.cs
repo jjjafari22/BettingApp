@@ -28,7 +28,7 @@ namespace BettingApp.Services
                     double t2Hc = 0;
                     bool validHc = false;
                     
-                    if (hcStr.Contains("-") && hcStr.Length > 2)
+                    if (hcStr.Contains("-") && hcStr.Length > 2 && !hcStr.StartsWith("-"))
                     {
                         var parts = hcStr.Split('-');
                         if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
@@ -50,8 +50,16 @@ namespace BettingApp.Services
                     }
                     if (!validHc && double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
                     {
-                        t1Hc = val;
-                        t2Hc = -val;
+                        if (hcStr.StartsWith("+"))
+                        {
+                            t1Hc = teamSel == "1" ? val : -val;
+                            t2Hc = teamSel == "2" ? val : -val;
+                        }
+                        else
+                        {
+                            t1Hc = val;
+                            t2Hc = -val;
+                        }
                         validHc = true;
                     }
                     
@@ -227,6 +235,19 @@ namespace BettingApp.Services
         bool isMatch = false;
         if (ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
         {
+            var hcSignRegex = new System.Text.RegularExpressions.Regex(@"(?:^|\s|\()([+-]\d+(?:\.\d+)?)\)?");
+            var mOName = hcSignRegex.Match(displayOName ?? "");
+            var mSel = hcSignRegex.Match(ActiveLookupLeg.Selection);
+            if (mOName.Success && mSel.Success &&
+                double.TryParse(mOName.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double valO) &&
+                double.TryParse(mSel.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double valS))
+            {
+                if (Math.Abs(valO - valS) > 0.001)
+                {
+                    return false;
+                }
+            }
+
             bool logicallyMatched = false;
             if (ActiveLookupLeg.Match != null)
             {
@@ -356,7 +377,18 @@ namespace BettingApp.Services
                                 double? opHc = null;
                                 if (!string.IsNullOrEmpty(hcStr))
                                 {
-                                    if (hcStr.Contains("-") && hcStr.Length > 2)
+                                    if (double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                                    {
+                                        if (hcStr.StartsWith("+"))
+                                        {
+                                            opHc = val;
+                                        }
+                                        else
+                                        {
+                                            opHc = opTarget == "2" ? -val : val;
+                                        }
+                                    }
+                                    else if (hcStr.Contains("-") && !hcStr.StartsWith("-"))
                                     {
                                         var parts = hcStr.Split('-');
                                         if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) && double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
@@ -371,10 +403,6 @@ namespace BettingApp.Services
                                         {
                                             opHc = opTarget == "1" ? (p1 - p2) : (opTarget == "2" ? (p2 - p1) : (p1 - p2));
                                         }
-                                    }
-                                    else if (double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
-                                    {
-                                        opHc = val;
                                     }
                                 }
                                 
