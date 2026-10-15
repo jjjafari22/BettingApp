@@ -11,6 +11,20 @@ namespace BettingApp.Services
         private readonly Dictionary<string, string> _marketAliases = new(StringComparer.OrdinalIgnoreCase)
         {
             // Example mappings (AI Output -> Kambi Category)
+            { "Moneyline (incl. overtime and penalties)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Moneyline", "Winner (incl. overtime and penalties)|Full Time Result" },
+            { "Winner (incl. overtime and penalties)", "Winner (incl. overtime and penalties)" },
+            { "Total Goals - Regular Time", "Total|Total Goals|Over Under Full Time" },
+            { "Total Goals (incl. overtime and penalties)", "Total (incl. overtime and penalties)|Total|Total Goals|Over Under Full Time" },
+            { "Anytime Goalscorer - Including Overtime", "Over Under Player Goals (incl. overtime)|Anytime Goal Scorer|Player Goals (incl. overtime)|Player Goals" },
+            { "To Score 2 or More Goals - Including Overtime", "Over Under Player Goals (incl. overtime)|Player Goals (incl. overtime)|Player Goals" },
+            { "To Score 3 or More Goals - Including Overtime", "Over Under Player Goals (incl. overtime)|Player Goals (incl. overtime)|Player Goals" },
+            { "To Score 2 or More Goals", "Over Under Player Goals (incl. overtime)|Player Goals (incl. overtime)|Player Goals" },
+            { "To Score 3 or More Goals", "Over Under Player Goals (incl. overtime)|Player Goals (incl. overtime)|Player Goals" },
+            { "Player Points", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Points (incl. overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Shots on Goal", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target" },
+            { "Player Shots On Goal (incl. overtime)", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)" },
             { "Asian Over/Under", "Over Under Full Time" },
             { "1. Half: Goals Handicap", "Half Time Handicap" },
             { "Yellow Cards: Total", "Total Cards" },
@@ -158,7 +172,11 @@ namespace BettingApp.Services
                         if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase))
                         {
                             if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Over Under" + halfSuffix };
-                            return new List<string> { "Over Under Full Time" };
+                            if (clean.Contains("incl. overtime", StringComparison.OrdinalIgnoreCase) || clean.Contains("including overtime", StringComparison.OrdinalIgnoreCase))
+                            {
+                                return new List<string> { "Total (incl. overtime and penalties)", "Total", "Total Goals", "Over Under Full Time" };
+                            }
+                            return new List<string> { "Total", "Total Goals", "Over Under Full Time" };
                         }
                     }
 
@@ -272,7 +290,11 @@ namespace BettingApp.Services
             // Clean up common AI hallucinations where it appends numbers to Total Goals
             if (clean.StartsWith("Total Goals", StringComparison.OrdinalIgnoreCase))
             {
-                return new List<string> { "Over Under Full Time" };
+                if (clean.Contains("incl. overtime", StringComparison.OrdinalIgnoreCase) || clean.Contains("including overtime", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<string> { "Total (incl. overtime and penalties)", "Total", "Total Goals", "Over Under Full Time" };
+                }
+                return new List<string> { "Total", "Total Goals", "Over Under Full Time" };
             }
             
             if (clean.Contains("Corners", StringComparison.OrdinalIgnoreCase) && clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase))
@@ -523,8 +545,12 @@ namespace BettingApp.Services
                                                  .Replace("Trinidad and Tobago", "", StringComparison.OrdinalIgnoreCase)
                                                  .Replace("Bosnia & Herzegovina", "", StringComparison.OrdinalIgnoreCase)
                                                  .Replace("Bosnia and Herzegovina", "", StringComparison.OrdinalIgnoreCase)
-                                                 .Replace("Antigua & Barbuda", "", StringComparison.OrdinalIgnoreCase)
-                                                 .Replace("Antigua and Barbuda", "", StringComparison.OrdinalIgnoreCase);
+                                                 .Replace("Antigua & Barbuda", "", StringComparison.OrdinalIgnoreCase);
+            cleanWithoutTeams = System.Text.RegularExpressions.Regex.Replace(
+                cleanWithoutTeams,
+                @"\b(?:including\s+|incl\.?\s+)?(?:overtime|ot)\s*(?:and|&|\/)\s*(?:penalties|penalty|shootouts?|so)\b",
+                "",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
             // 2. Contains ampersand '&'
             if (cleanWithoutTeams.Contains('&'))

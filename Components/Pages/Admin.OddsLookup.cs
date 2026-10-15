@@ -442,7 +442,7 @@ public partial class Admin
         BettingApp.Models.OddsPapiSearchResult? result;
         string? error;
         bool isLive = AiVisionResult?.IsLive ?? false;
-        (result, error) = await Task.Run(async () => await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id, isLive));
+        (result, error) = await Task.Run(async () => await OddsApi.SearchOddsComparisonAsync(OddsSearchTeam, reviewingBetModel?.Id, isLive, ActiveLookupLeg?.Sport));
         
         if (result == null)
         {

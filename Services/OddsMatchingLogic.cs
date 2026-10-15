@@ -94,8 +94,10 @@ namespace BettingApp.Services
 
         Func<string, string> injectImplicitOdds = (string norm) => {
             norm = System.Text.RegularExpressions.Regex.Replace(norm, @"(\d+)\+", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
+            norm = System.Text.RegularExpressions.Regex.Replace(norm, @"(?:to score\s+)?(\d+)\s+or\s+more", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
 
-            if (norm.Contains("to provide") || norm.Contains("to score") || norm.Contains("to get") || norm.Contains("anytime") || norm.Contains("carded") || norm.Contains("booked"))
+            if (!norm.Contains("over ") && !norm.Contains("under ") && 
+                (norm.Contains("to provide") || norm.Contains("to score") || norm.Contains("to get") || norm.Contains("anytime") || norm.Contains("carded") || norm.Contains("booked")))
             {
                 if (!norm.Contains("not ")) return norm + " over 0.5";
                 else return norm + " under 0.5";
@@ -280,8 +282,8 @@ namespace BettingApp.Services
                             string ft = htftSplit[1].Trim();
                             int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, normT1, normT2, targetOp1, targetOp2);
                             int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, normT1, normT2, targetOp1, targetOp2);
-                            string htCode = htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (ht.Contains("draw") || ht.Contains("tie") ? "X" : ""));
-                            string ftCode = ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (ft.Contains("draw") || ft.Contains("tie") ? "X" : ""));
+                            string htCode = htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (System.Text.RegularExpressions.Regex.IsMatch(ht, @"\b(?:draw|tie)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "X" : ""));
+                            string ftCode = ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (System.Text.RegularExpressions.Regex.IsMatch(ft, @"\b(?:draw|tie)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "X" : ""));
                             if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
                             {
                                 htftTarget = $"{htCode}/{ftCode}";
@@ -300,8 +302,8 @@ namespace BettingApp.Services
                             int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, normT1, normT2, targetOp1, targetOp2);
                             int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, normT1, normT2, targetOp1, targetOp2);
                             
-                            string htCode = (ht == "1" || ht == "2" || ht == "x") ? ht.ToUpper() : (htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (ht.Contains("draw") || ht.Contains("tie") ? "X" : "")));
-                            string ftCode = (ft == "1" || ft == "2" || ft == "x") ? ft.ToUpper() : (ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (ft.Contains("draw") || ft.Contains("tie") ? "X" : "")));
+                            string htCode = (ht == "1" || ht == "2" || ht == "x") ? ht.ToUpper() : (htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (System.Text.RegularExpressions.Regex.IsMatch(ht, @"\b(?:draw|tie)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "X" : "")));
+                            string ftCode = (ft == "1" || ft == "2" || ft == "x") ? ft.ToUpper() : (ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (System.Text.RegularExpressions.Regex.IsMatch(ft, @"\b(?:draw|tie)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "X" : "")));
                             
                             if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
                             {
@@ -319,7 +321,7 @@ namespace BettingApp.Services
                         int teamResolved = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ActiveLookupLeg.Selection, normT1, normT2, targetOp1, targetOp2);
                         bool mentionsT1 = teamResolved == 1 || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(ActiveLookupLeg.Selection, normT1) || (!string.IsNullOrEmpty(targetOp1) && BettingApp.Services.TeamAliasMappingService.IsTeamMatch(ActiveLookupLeg.Selection, targetOp1));
                         bool mentionsT2 = teamResolved == 2 || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(ActiveLookupLeg.Selection, normT2) || (!string.IsNullOrEmpty(targetOp2) && BettingApp.Services.TeamAliasMappingService.IsTeamMatch(ActiveLookupLeg.Selection, targetOp2));
-                        bool hasDraw = normSelRaw.Contains("draw") || normSelRaw.Contains("tie") || normSelRaw.Contains("oavgjort") || normSelRaw.Contains("uavgjort") || normSelRaw.Contains("kryss");
+                        bool hasDraw = System.Text.RegularExpressions.Regex.IsMatch(normSelRaw, @"\b(?:draw|tie|ties|oavgjort|uavgjort|kryss)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
                         if (mentionsT1 && mentionsT2) aiTarget = "12";
                         else if (teamResolved == 1 && hasDraw) aiTarget = "1X";
@@ -527,7 +529,7 @@ namespace BettingApp.Services
                             }
                         }
                     }
-                    else if (IsFuzzyPlayerMatch(displayOName ?? "", ActiveLookupLeg?.Selection ?? ""))
+                    else if (IsFuzzyPlayerMatch(displayOName ?? "", string.IsNullOrWhiteSpace(ActiveLookupLeg?.Market) ? (ActiveLookupLeg?.Selection ?? "") : $"{ActiveLookupLeg.Market} {ActiveLookupLeg.Selection}"))
                     {
                         isMatch = true;
                     }
@@ -568,10 +570,12 @@ namespace BettingApp.Services
                         
                         if (isValidNameMatch)
                         {
+                            bool hasHigherLineReq = System.Text.RegularExpressions.Regex.IsMatch($"{(ActiveLookupLeg?.Market ?? "")} {(ActiveLookupLeg?.Selection ?? "")}", @"(?:[2-9]|\d{2,})\s*(?:\+|or\s+more)|over\s*(?:[1-9]|\d\.\d)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
                             bool isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
                                                   normSel.Contains(normOutcomePart) || 
                                                   (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under"))) ||
-                                                  (normOutcomePart == "over0.5" && normSel.Contains("yes") && !normSel.Contains("no") && !normSel.Contains("under"));
+                                                  (normOutcomePart == "over0.5" && normSel.Contains("yes") && !normSel.Contains("no") && !normSel.Contains("under") && !hasHigherLineReq);
                             
                             if (!isOutcomeMatch && normOutcomePart.EndsWith("+"))
                             {
@@ -579,6 +583,20 @@ namespace BettingApp.Services
                                 {
                                     string eqOver = $"over{plusVal - 1}.5";
                                     if (normSel.Contains(eqOver) || (plusVal == 1 && (normSel.Contains("assist") || normSel.Contains("score") || normSel.Contains("goal") || normSel.Contains("1or"))))
+                                    {
+                                        isOutcomeMatch = true;
+                                    }
+                                }
+                            }
+                            
+                            if (!isOutcomeMatch)
+                            {
+                                string fullLegText = $"{(ActiveLookupLeg?.Market ?? "")} {(ActiveLookupLeg?.Selection ?? "")}";
+                                var mktNumMatch = System.Text.RegularExpressions.Regex.Match(fullLegText, @"(?:to score\s+)?(\d+)\s+or\s+more", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                if (mktNumMatch.Success && int.TryParse(mktNumMatch.Groups[1].Value, out int targetGoals))
+                                {
+                                    string expectedOver = $"over{targetGoals - 1}.5";
+                                    if (normOutcomePart == expectedOver && !normSel.Contains("no") && !normSel.Contains("under"))
                                     {
                                         isOutcomeMatch = true;
                                     }
@@ -630,8 +648,9 @@ namespace BettingApp.Services
             }
         }
         
-        string fallbackSel = ActiveLookupLeg?.Selection ?? "";
+        string fallbackSel = (string.IsNullOrWhiteSpace(ActiveLookupLeg?.Market) ? "" : ActiveLookupLeg.Market + " ") + (ActiveLookupLeg?.Selection ?? "");
         fallbackSel = System.Text.RegularExpressions.Regex.Replace(fallbackSel, @"(\d+)\+", m => $"over {double.Parse(m.Groups[1].Value) - 0.5}");
+        fallbackSel = System.Text.RegularExpressions.Regex.Replace(fallbackSel, @"(?:to score\s+)?(\d+)\s+or\s+more", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
         
         if (!isMatch && !string.IsNullOrEmpty(displayOName) && ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
         {

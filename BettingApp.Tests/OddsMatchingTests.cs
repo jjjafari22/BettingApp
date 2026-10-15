@@ -506,5 +506,73 @@ namespace BettingApp.Tests
             bool isMatch = OddsMatchingLogic.IsOutcomeMatch("1", displayOName, leg, searchResult, "Corners - 1X2");
             Assert.True(isMatch, "Outcome 1 should match Lyon for Most Corners");
         }
+
+        [Theory]
+        [InlineData("Moneyline (incl. overtime and penalties)", "Toronto Maple Leafs", false)]
+        [InlineData("Moneyline", "Toronto Maple Leafs to win including overtime and penalties", false)]
+        [InlineData("Moneyline", "Sabres to win including overtime and penalties", false)]
+        [InlineData("Moneyline", "Buffalo Sabres (incl. overtime and shootout)", false)]
+        [InlineData("Moneyline", "Toronto Maple Leafs to win incl. OT & SO", false)]
+        [InlineData("Match Result and Total Goals", "Toronto Maple Leafs and Over 5.5", true)]
+        [InlineData("Winner and Total Goals", "Sabres to win including overtime and penalties and Over 5.5", true)]
+        public void Test_Hockey_OvertimeAndCombinationMarkets(string market, string selection, bool expectedIsCombination)
+        {
+            string match = "Toronto Maple Leafs vs Buffalo Sabres";
+            bool isCombo = MarketMappingService.IsCombinationMarket(market, match) || MarketMappingService.IsCombinationMarket(selection, match);
+            Assert.Equal(expectedIsCombination, isCombo);
+        }
+
+        [Fact]
+        public void Test_Hockey_MoneylineOutcomeMatching()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Toronto Maple Leafs vs Buffalo Sabres"
+            };
+
+            // Buffalo Sabres with "Sabres to win including overtime and penalties"
+            var sabresLeg = new AiVisionLeg
+            {
+                Match = "Toronto Maple Leafs vs Buffalo Sabres",
+                Market = "Moneyline",
+                Selection = "Sabres to win including overtime and penalties"
+            };
+            string sabresDisplay = OddsMatchingLogic.GetTranslatedOutcomeName("2", searchResult.MatchName);
+            bool sabresMatch = OddsMatchingLogic.IsOutcomeMatch("2", sabresDisplay, sabresLeg, searchResult, "Winner (incl. overtime and penalties)");
+            Assert.True(sabresMatch, "Sabres selection should match outcome 2");
+
+            // Toronto Maple Leafs with "Toronto Maple Leafs to win incl. OT & SO"
+            var leafsLeg = new AiVisionLeg
+            {
+                Match = "Toronto Maple Leafs vs Buffalo Sabres",
+                Market = "Moneyline",
+                Selection = "Toronto Maple Leafs to win incl. OT & SO"
+            };
+            string leafsDisplay = OddsMatchingLogic.GetTranslatedOutcomeName("1", searchResult.MatchName);
+            bool leafsMatch = OddsMatchingLogic.IsOutcomeMatch("1", leafsDisplay, leafsLeg, searchResult, "Winner (incl. overtime and penalties)");
+            Assert.True(leafsMatch, "Leafs selection should match outcome 1");
+        }
+
+        [Fact]
+        public void Test_Hockey_PlayerProp_MultiGoalDistinction()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Toronto Maple Leafs vs Buffalo Sabres"
+            };
+
+            var leg2OrMore = new AiVisionLeg
+            {
+                Match = "Toronto Maple Leafs vs Buffalo Sabres",
+                Market = "To Score 2 or More Goals - Including Overtime",
+                Selection = "Tage Thompson - Yes"
+            };
+
+            bool matchOver05 = OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Thompson, Tage)", "Over 0.5 (Thompson, Tage)", leg2OrMore, searchResult, "Over Under Player Goals (incl. overtime)");
+            bool matchOver15 = OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Thompson, Tage)", "Over 1.5 (Thompson, Tage)", leg2OrMore, searchResult, "Over Under Player Goals (incl. overtime)");
+
+            Assert.False(matchOver05, "To Score 2 or More Goals must NOT match Over 0.5");
+            Assert.True(matchOver15, "To Score 2 or More Goals MUST match Over 1.5");
+        }
     }
 }
