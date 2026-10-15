@@ -316,5 +316,195 @@ namespace BettingApp.Tests
 
             Assert.False(isMatch);
         }
+
+        [Fact]
+        public void Test_BothTeamsToScoreAndOverGoals_DoesNotMatchBttsOrOverUnder()
+        {
+            // Scenario reported by user:
+            // Feyenoord vs Como - Both Teams To Score & Over 2.5 Goals (Selection: Yes)
+            // Must NOT match "Both Teams To Score" or "Over Under Full Time"
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1", MarketName = "Full Time Result" },
+                new OddsPapiMarket { MarketId = "2", MarketName = "Both Teams To Score" },
+                new OddsPapiMarket { MarketId = "3", MarketName = "Over Under Full Time" }
+            };
+
+            var normalizedTargets = _marketMapper.NormalizeMarketName(
+                "Both Teams To Score & Over 2.5 Goals", 
+                "Feyenoord vs Como", 
+                "Yes");
+
+            Assert.DoesNotContain("Both Teams To Score", normalizedTargets);
+
+            var bestMarket = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "Both Teams To Score & Over 2.5 Goals",
+                "Feyenoord vs Como",
+                "Yes",
+                _marketMapper);
+
+            Assert.Null(bestMarket);
+        }
+
+        [Fact]
+        public void Test_PureBothTeamsToScore_MatchesCorrectly()
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1", MarketName = "Full Time Result" },
+                new OddsPapiMarket { MarketId = "2", MarketName = "Both Teams To Score" },
+                new OddsPapiMarket { MarketId = "3", MarketName = "Both Teams To Score - First Half" }
+            };
+
+            // Pure FT BTTS
+            var mFt = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "Both Teams To Score",
+                "Feyenoord vs Como",
+                "Yes",
+                _marketMapper);
+            Assert.NotNull(mFt);
+            Assert.Equal("2", mFt.MarketId);
+
+            // BTTS alias
+            var mBtts = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "BTTS",
+                "Feyenoord vs Como",
+                "Yes",
+                _marketMapper);
+            Assert.NotNull(mBtts);
+            Assert.Equal("2", mBtts.MarketId);
+
+            // First Half BTTS
+            var m1H = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "1st Half Both Teams To Score",
+                "Feyenoord vs Como",
+                "Yes",
+                _marketMapper);
+            Assert.NotNull(m1H);
+            Assert.Equal("3", m1H.MarketId);
+        }
+
+        [Theory]
+        [InlineData("Both Teams To Score & Over 2.5 Goals", true)]
+        [InlineData("Both Teams To Score & Over 3.5 Goals", true)]
+        [InlineData("Both Teams to Score and Over/Under 2.5 Goals", true)]
+        [InlineData("Both to Score and Total Goals", true)]
+        [InlineData("Match Result and Both Teams to Score", true)]
+        [InlineData("1x2 and Both to Score", true)]
+        [InlineData("Double Chance and Both Teams to Score", true)]
+        [InlineData("Lyn to win and both teams to score", true)]
+        [InlineData("Over 2.5 Match Total Goals And Both Teams To Score", true)]
+        [InlineData("Bet Builder (Match Result (1X2) + Player 1+ Goals or Assists)", true)]
+        [InlineData("Bet Builder (Total Goals 2.5 & Double Chance)", true)]
+        [InlineData("Match Result & Thun Total Corners", true)]
+        [InlineData("Match Result & Total Goals 2.5", true)]
+        [InlineData("Handicap (3 Way) -1 & Total Corners 5.5", true)]
+        [InlineData("Result / Both Teams to Score", true)]
+        [InlineData("Both Teams To Score", false)]
+        [InlineData("Both to Score", false)]
+        [InlineData("BTTS", false)]
+        [InlineData("Both Teams To Score - First Half", false)]
+        [InlineData("1st Half Both Teams To Score", false)]
+        [InlineData("Both Teams To Score - Second Half", false)]
+        [InlineData("Both Teams To Score - Full Time", false)]
+        [InlineData("Both Teams To Score (BTTS)", false)]
+        [InlineData("Both Teams to Score: Yes/No", false)]
+        [InlineData("Brighton & Hove Albion Total Goals", false)]
+        [InlineData("Player 1+ Shots", false)]
+        [InlineData("Player 2+ Fouls", false)]
+        [InlineData("Handicap (+0.5)", false)]
+        [InlineData("Total Goals", false)]
+        public void Test_IsCombinationMarket(string marketName, bool expectedIsCombo)
+        {
+            string matchName = marketName.Contains("Brighton") ? "Brighton & Hove Albion vs Chelsea" : "Feyenoord vs Como";
+            bool isCombo = MarketMappingService.IsCombinationMarket(marketName, matchName);
+            Assert.Equal(expectedIsCombo, isCombo);
+        }
+
+        [Theory]
+        [InlineData("Both Teams To Score & Over 2.5 Goals")]
+        [InlineData("Both Teams To Score & Over 3.5 Goals")]
+        [InlineData("Both Teams to Score and Over/Under 2.5 Goals")]
+        [InlineData("Both to Score and Total Goals")]
+        [InlineData("Match Result and Both Teams to Score")]
+        [InlineData("1x2 and Both to Score")]
+        [InlineData("Double Chance and Both Teams to Score")]
+        [InlineData("Lyn to win and both teams to score")]
+        [InlineData("Over 2.5 Match Total Goals And Both Teams To Score")]
+        [InlineData("Match Result & Thun Total Corners")]
+        [InlineData("Match Result & Total Goals 2.5")]
+        [InlineData("Bet Builder (Total Goals 2.5 & Double Chance)")]
+        [InlineData("Bet Builder (Match Result (1X2) + Player 1+ Goals or Assists)")]
+        [InlineData("Handicap (3 Way) -1 & Total Corners 5.5")]
+        public void Test_CombinationMarkets_DoNotMatchSingleMarkets(string marketName)
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1", MarketName = "Full Time Result" },
+                new OddsPapiMarket { MarketId = "2", MarketName = "Both Teams To Score" },
+                new OddsPapiMarket { MarketId = "3", MarketName = "Over Under Full Time" },
+                new OddsPapiMarket { MarketId = "4", MarketName = "Double Chance Full Time" },
+                new OddsPapiMarket { MarketId = "5", MarketName = "Corners - Over/Under Full Time" },
+                new OddsPapiMarket { MarketId = "6", MarketName = "3-Way Handicap" }
+            };
+
+            var bestMarket = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                marketName,
+                "Feyenoord vs Como",
+                "Yes",
+                _marketMapper);
+
+            Assert.Null(bestMarket);
+        }
+
+        [Fact]
+        public void Test_MostCorners_MatchesCorners1X2_NotOverUnderTeam()
+        {
+            // Scenario reported by user:
+            // Lyon vs Crystal Palace - Most Corners (Selection: Lyon)
+            // Must match "Corners - 1X2", NOT "Corners - Over Under Team 1"
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "10", MarketName = "Corners - Over/Under Full Time" },
+                new OddsPapiMarket { MarketId = "11", MarketName = "Corners - Over Under Team 1" },
+                new OddsPapiMarket { MarketId = "12", MarketName = "Corners - Over Under Team 2" },
+                new OddsPapiMarket { MarketId = "13", MarketName = "Corners - 1X2" }
+            };
+
+            var normalizedTargets = _marketMapper.NormalizeMarketName("Most Corners", "Lyon vs Crystal Palace", "Lyon");
+            Assert.Contains("Corners - 1X2", normalizedTargets);
+            Assert.DoesNotContain("Corners - Over Under Team 1", normalizedTargets);
+
+            var bestMarket = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "Most Corners",
+                "Lyon vs Crystal Palace",
+                "Lyon",
+                _marketMapper);
+
+            Assert.NotNull(bestMarket);
+            Assert.Equal("13", bestMarket.MarketId);
+            Assert.Equal("Corners - 1X2", bestMarket.MarketName);
+
+            // Verify outcome matching: Selection "Lyon" matches Outcome "1"
+            var leg = new AiVisionLeg
+            {
+                Match = "Lyon vs Crystal Palace",
+                Market = "Most Corners",
+                Selection = "Lyon"
+            };
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Lyon vs Crystal Palace"
+            };
+            string displayOName = OddsMatchingLogic.GetTranslatedOutcomeName("1", searchResult.MatchName);
+            bool isMatch = OddsMatchingLogic.IsOutcomeMatch("1", displayOName, leg, searchResult, "Corners - 1X2");
+            Assert.True(isMatch, "Outcome 1 should match Lyon for Most Corners");
+        }
     }
 }

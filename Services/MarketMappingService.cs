@@ -83,6 +83,14 @@ namespace BettingApp.Services
             if (string.IsNullOrWhiteSpace(rawMarketName)) return new List<string>();
 
             var clean = rawMarketName.Trim();
+
+            // Bet Builder / Combination markets (e.g. "Both Teams To Score & Over 2.5 Goals", "Match Result and Both Teams to Score")
+            // OddsPapi does not provide combined odds for Bet Builders or multi-market combinations.
+            // Do NOT normalize or reduce combination markets to a single sub-market (like pure BTTS or pure Total Goals).
+            if (IsCombinationMarket(clean, matchName) || (!string.IsNullOrEmpty(selectionName) && IsCombinationMarket(selectionName, matchName)))
+            {
+                return new List<string> { clean };
+            }
             
             if (clean.StartsWith("Alternative ", StringComparison.OrdinalIgnoreCase))
             {
@@ -119,16 +127,16 @@ namespace BettingApp.Services
                             return new List<string> { "Corners - Handicap" + halfSuffix };
                         }
 
-                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team1, selectionName)))
-                            return new List<string> { "Corners - Over Under Team 1" + halfSuffix };
-                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team2, selectionName)))
-                            return new List<string> { "Corners - Over Under Team 2" + halfSuffix };
-                        
                         if (clean.Contains("Most Corners", StringComparison.OrdinalIgnoreCase) || clean.Contains("Corners 1X2", StringComparison.OrdinalIgnoreCase) || clean.Contains("More Corners", StringComparison.OrdinalIgnoreCase))
                         {
                             if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Corners - 1X2" + halfSuffix };
                             return new List<string> { "Corners - 1X2" };
                         }
+
+                        if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team1, selectionName)))
+                            return new List<string> { "Corners - Over Under Team 1" + halfSuffix };
+                        if (MatchesTeam(team2, clean) || clean.Contains("Away", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team2, selectionName)))
+                            return new List<string> { "Corners - Over Under Team 2" + halfSuffix };
 
                         // Otherwise, generic corners (checking for 'Total Corners', 'Corners', or 'Half Corners')
                         if (clean.Contains("Total Corners", StringComparison.OrdinalIgnoreCase) || clean.Contains("Corners", StringComparison.OrdinalIgnoreCase))
@@ -272,15 +280,28 @@ namespace BettingApp.Services
                 return new List<string> { "Corners - Handicap" + halfSuffix };
             }
 
+            if (clean.Contains("Most Corners", StringComparison.OrdinalIgnoreCase) || clean.Contains("Corners 1X2", StringComparison.OrdinalIgnoreCase) || clean.Contains("More Corners", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Corners - 1X2" + halfSuffix };
+                return new List<string> { "Corners - 1X2" };
+            }
+
+            if (clean.Contains("Most Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards 1X2", StringComparison.OrdinalIgnoreCase) || clean.Contains("More Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Most Bookings", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Bookings - 1X2" + halfSuffix };
+                return new List<string> { "Bookings - 1X2" };
+            }
+
             if (clean.StartsWith("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Cards Over/Under", StringComparison.OrdinalIgnoreCase) || clean.Contains("Number of Cards", StringComparison.OrdinalIgnoreCase))
             {
                 if (halfSuffix == " First Half") return new List<string> { "Bookings - Over Under First Half" };
                 return new List<string> { "Bookings - Over Under Full Time" };
             }
 
-            if (clean.Contains("Both to Score", StringComparison.OrdinalIgnoreCase) || 
-                clean.Contains("Both Teams to Score", StringComparison.OrdinalIgnoreCase) || 
-                clean.Equals("BTTS", StringComparison.OrdinalIgnoreCase))
+            if (!IsCombinationMarket(clean, matchName) && 
+                (clean.Contains("Both to Score", StringComparison.OrdinalIgnoreCase) || 
+                 clean.Contains("Both Teams to Score", StringComparison.OrdinalIgnoreCase) || 
+                 clean.Equals("BTTS", StringComparison.OrdinalIgnoreCase)))
             {
                 if (halfSuffix == " First Half") return new List<string> { "Both Teams To Score - First Half", "Both Teams To Score First Half" };
                 if (halfSuffix == " Second Half") return new List<string> { "Both Teams To Score - Second Half", "Both Teams To Score Second Half" };
@@ -457,6 +478,114 @@ namespace BettingApp.Services
             string stripped = System.Text.RegularExpressions.Regex.Replace(text, @"\b(over|under|yes|no|total|team|home|away|goalkeeper|goal|keeper|saves|save|fouls|foul|shots|shot|target|tackles|tackle|points|point|cards|card|to|be|or)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             stripped = System.Text.RegularExpressions.Regex.Replace(stripped, @"[0-9\.\+\-:\(\)\/]", "").Trim();
             return stripped.Length >= 3;
+        }
+
+        public static bool IsCombinationMarket(string? marketName, string? matchName = null)
+        {
+            if (string.IsNullOrWhiteSpace(marketName)) return false;
+
+            var clean = marketName.Trim();
+
+            // 1. Explicit Bet Builder / SGP keywords
+            if (clean.Contains("Bet Builder", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Same Game Parlay", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("SGP", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // Strip out team names if matchName is provided so team names with & or "and" (e.g., Brighton & Hove Albion)
+            // don't trigger false positives.
+            string cleanWithoutTeams = clean;
+            if (!string.IsNullOrWhiteSpace(matchName))
+            {
+                var split = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                if (split.Length >= 2)
+                {
+                    string t1 = split[0].Trim();
+                    string t2 = split[1].Trim();
+                    var dm1 = System.Text.RegularExpressions.Regex.Match(t1, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (dm1.Success) t1 = t1.Substring(0, dm1.Index).Trim();
+                    var dm2 = System.Text.RegularExpressions.Regex.Match(t2, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (dm2.Success) t2 = t2.Substring(0, dm2.Index).Trim();
+
+                    cleanWithoutTeams = cleanWithoutTeams.Replace(t1, "", StringComparison.OrdinalIgnoreCase)
+                                                         .Replace(t2, "", StringComparison.OrdinalIgnoreCase);
+                }
+            }
+
+            // Also strip well-known entity names that contain & or "and" if matchName wasn't supplied
+            cleanWithoutTeams = cleanWithoutTeams.Replace("Brighton & Hove Albion", "", StringComparison.OrdinalIgnoreCase)
+                                                 .Replace("Brighton and Hove Albion", "", StringComparison.OrdinalIgnoreCase)
+                                                 .Replace("Dagenham & Redbridge", "", StringComparison.OrdinalIgnoreCase)
+                                                 .Replace("Dagenham and Redbridge", "", StringComparison.OrdinalIgnoreCase)
+                                                 .Replace("Trinidad & Tobago", "", StringComparison.OrdinalIgnoreCase)
+                                                 .Replace("Trinidad and Tobago", "", StringComparison.OrdinalIgnoreCase)
+                                                 .Replace("Bosnia & Herzegovina", "", StringComparison.OrdinalIgnoreCase)
+                                                 .Replace("Bosnia and Herzegovina", "", StringComparison.OrdinalIgnoreCase)
+                                                 .Replace("Antigua & Barbuda", "", StringComparison.OrdinalIgnoreCase)
+                                                 .Replace("Antigua and Barbuda", "", StringComparison.OrdinalIgnoreCase);
+
+            // 2. Contains ampersand '&'
+            if (cleanWithoutTeams.Contains('&'))
+            {
+                return true;
+            }
+
+            // 3. Contains isolated '+' (e.g. "Match Result + Total Goals", but NOT "1+" or "+1.5")
+            if (System.Text.RegularExpressions.Regex.IsMatch(cleanWithoutTeams, @"\s+\+\s+"))
+            {
+                return true;
+            }
+
+            // 4. Contains isolated 'and' (e.g. "Both Teams to Score and Over/Under 2.5 Goals", "Match Result and Both Teams to Score")
+            if (System.Text.RegularExpressions.Regex.IsMatch(cleanWithoutTeams, @"\b(?:and)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                return true;
+            }
+
+            // 5. Slash combinations (e.g. "Result / Both Teams to Score", "Match Result / Total Goals")
+            // Exclude single standard markets: Over/Under, Half Time / Full Time, HT/FT, 1/X/2, etc.
+            if (cleanWithoutTeams.Contains('/') && 
+                (cleanWithoutTeams.Contains("Both Teams To Score", StringComparison.OrdinalIgnoreCase) || 
+                 cleanWithoutTeams.Contains("BTTS", StringComparison.OrdinalIgnoreCase) || 
+                 cleanWithoutTeams.Contains("Both to Score", StringComparison.OrdinalIgnoreCase) ||
+                 cleanWithoutTeams.Contains("Total Goals", StringComparison.OrdinalIgnoreCase)) &&
+                (cleanWithoutTeams.Contains("Result", StringComparison.OrdinalIgnoreCase) || 
+                 cleanWithoutTeams.Contains("1X2", StringComparison.OrdinalIgnoreCase) || 
+                 cleanWithoutTeams.Contains("Double Chance", StringComparison.OrdinalIgnoreCase) || 
+                 cleanWithoutTeams.Contains("Winner", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            // 6. Both Teams To Score combined with another market without explicit connector
+            // e.g. "Both Teams To Score Over 2.5 Goals"
+            bool mentionsBtts = cleanWithoutTeams.Contains("Both Teams to Score", StringComparison.OrdinalIgnoreCase) ||
+                                cleanWithoutTeams.Contains("Both to Score", StringComparison.OrdinalIgnoreCase) ||
+                                System.Text.RegularExpressions.Regex.IsMatch(cleanWithoutTeams, @"\bBTTS\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (mentionsBtts)
+            {
+                bool mentionsOtherMarket = cleanWithoutTeams.Contains("Over", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("Under", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("Result", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("1X2", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("Double Chance", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("Winner", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("Corners", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("Cards", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("Bookings", StringComparison.OrdinalIgnoreCase) ||
+                                           cleanWithoutTeams.Contains("Handicap", StringComparison.OrdinalIgnoreCase);
+
+                if (mentionsOtherMarket)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

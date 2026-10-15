@@ -644,6 +644,14 @@ namespace BettingApp.Services
     public static BettingApp.Models.OddsPapiMarket? FindBestMarket(List<BettingApp.Models.OddsPapiMarket> markets, string marketCategory, string? matchName, string? selectionName, BettingApp.Services.MarketMappingService marketMapper)
     {
         if (markets == null || !markets.Any() || string.IsNullOrEmpty(marketCategory)) return null;
+
+        // If the betslip is for a Bet Builder or combination market (e.g. "Both Teams To Score & Over 2.5 Goals", "Match Result and Both Teams to Score", etc.),
+        // OddsPapi does not provide combined odds. Do not match any single market component.
+        if (BettingApp.Services.MarketMappingService.IsCombinationMarket(marketCategory, matchName) || 
+            (!string.IsNullOrEmpty(selectionName) && BettingApp.Services.MarketMappingService.IsCombinationMarket(selectionName, matchName)))
+        {
+            return null;
+        }
         
         var normalizedTargets = marketMapper.NormalizeMarketName(marketCategory, matchName, selectionName);
         
@@ -695,7 +703,7 @@ namespace BettingApp.Services
                         if (statKeywords.Any(kw => simM.Contains(kw))) return false;
                     }
 
-                    return simM.Contains(target) || target.Contains(simM);
+                    return simM.Contains(target) || (target.Contains(simM) && Math.Abs(target.Length - simM.Length) <= 4);
                 }).ToList();
 
                 if (potentialMatches.Count == 1)
