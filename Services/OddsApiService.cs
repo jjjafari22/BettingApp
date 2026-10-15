@@ -71,7 +71,8 @@ public class OddsApiService
                     Participant1Name = f.TryGetProperty("participant1Name", out var p1n) ? (p1n.GetString() ?? "") : "",
                     Participant2Name = f.TryGetProperty("participant2Name", out var p2n) ? (p2n.GetString() ?? "") : "",
                     TournamentName = f.TryGetProperty("tournamentName", out var tn) ? (tn.GetString() ?? "") : "",
-                    StatusId = f.TryGetProperty("statusId", out var sid) && sid.ValueKind == JsonValueKind.Number ? sid.GetInt32() : -1
+                    StatusId = f.TryGetProperty("statusId", out var sid) && sid.ValueKind == JsonValueKind.Number ? sid.GetInt32() : -1,
+                    HasOdds = f.TryGetProperty("hasOdds", out var ho) && ho.ValueKind == JsonValueKind.True
                 };
                         
                 dto.NormP1 = NormalizeTeamName(dto.Participant1Name);
@@ -270,8 +271,9 @@ public class OddsApiService
             DateTime startTime = DateTime.MinValue;
             bool isLive = false;
             string? flashscoreId = null;
+            int statusId = -1;
             
-            bool skipParse = _cache.TryGetValue($"OddspapiMatch3_{sportId}_{teamName}", out (string fid, string mn, DateTime st, bool il, string? fsid) cachedMatch);
+            bool skipParse = _cache.TryGetValue($"OddspapiMatch4_{sportId}_{teamName}", out (string fid, string mn, DateTime st, bool il, string? fsid, int sid) cachedMatch);
             if (skipParse)
             {
                 fixtureId = cachedMatch.fid;
@@ -279,6 +281,7 @@ public class OddsApiService
                 startTime = cachedMatch.st;
                 isLive = cachedMatch.il;
                 flashscoreId = cachedMatch.fsid;
+                statusId = cachedMatch.sid;
             }
             else
             {
@@ -371,6 +374,12 @@ public class OddsApiService
                 
                 if (score > 0)
                 {
+                    // Prioritize live and upcoming matches with odds over finished matches
+                    if (f.StatusId == 1) score += 300; // Live match gets huge priority
+                    else if (f.StatusId == 0) score += 200; // Upcoming match gets priority
+                    else if (f.StatusId == 2) score -= 300; // Finished match gets deprioritized
+                    if (f.HasOdds) score += 100;
+
                     bestMatches.Add((f, score));
                 }
             }
@@ -381,7 +390,7 @@ public class OddsApiService
                 return (null, $"No matching fixtures found for '{teamName}' in the next 7 days.");
             }
             
-            var bestFixture = bestMatches.OrderByDescending(m => m.score).First().fixture;
+            var bestFixture = bestMatches.OrderByDescending(m => m.score).ThenByDescending(m => m.fixture.StartTime).First().fixture;
             
             fixtureId = bestFixture.FixtureId;
             string finalP1 = bestFixture.Participant1Name;
@@ -395,20 +404,24 @@ public class OddsApiService
                 startTime = bestFixture.StartTime.Value;
             }
             
-            int statusId = bestFixture.StatusId;
-            if (statusId > 0 && statusId != 3)
+            statusId = bestFixture.StatusId;
+            if (statusId == 1)
             {
                 isLive = true;
             }
-            else if (statusId == 0 && startTime <= DateTime.UtcNow)
+            else if (statusId == 0 && startTime <= DateTime.UtcNow && startTime >= DateTime.UtcNow.AddHours(-4))
             {
-                // OddsPapi may be slow to update statusId to 1; if it's past start time and still 0 (pre-game), treat as live
+                // OddsPapi may be slow to update statusId to 1; if it's past start time, within 4 hours, and still 0 (pre-game), treat as live
                 isLive = true;
+            }
+            else
+            {
+                isLive = false;
             }
 
             flashscoreId = bestFixture.FlashscoreId;
             
-            _cache.Set($"OddspapiMatch3_{sportId}_{teamName}", (fixtureId, matchName, startTime, isLive, flashscoreId), TimeSpan.FromHours(12));
+            _cache.Set($"OddspapiMatch4_{sportId}_{teamName}", (fixtureId, matchName, startTime, isLive, flashscoreId, statusId), TimeSpan.FromHours(12));
             }
             if (_cache.TryGetValue($"OddspapiParsedResult_{fixtureId}", out BettingApp.Models.OddsPapiSearchResult? cachedResult) && cachedResult != null)
             {
@@ -447,6 +460,7 @@ public class OddsApiService
                 MatchName = matchName,
                 StartTime = startTime,
                 IsLive = isLive,
+                StatusId = statusId,
                 FlashscoreId = flashscoreId
             };
 

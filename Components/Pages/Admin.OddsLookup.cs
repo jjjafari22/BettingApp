@@ -321,7 +321,14 @@ public partial class Admin
         }
         else
         {
-            resultData.WarningMessage = $"The betslip is for '{preSelectCategory}', but OddsPapi doesn't offer it for this match.";
+            if (apiResult.StatusId == 2)
+            {
+                resultData.WarningMessage = "This match has already finished. Bookmakers do not offer odds on ended matches.";
+            }
+            else
+            {
+                resultData.WarningMessage = $"The betslip is for '{preSelectCategory}', but OddsPapi doesn't offer it for this match.";
+            }
         }
 
         resultData.LookedUpAt = DateTime.UtcNow;

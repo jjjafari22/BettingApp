@@ -572,6 +572,9 @@ else
                                                 @if (PapiSearchResult.IsLive) {
                                                     <span class="badge bg-danger ms-2 shadow-sm"><span class="pulse-dot bg-white rounded-circle d-inline-block me-1" style="width: 6px; height: 6px;"></span> LIVE ODDS</span>
                                                 }
+                                                else if (PapiSearchResult.StatusId == 2) {
+                                                    <span class="badge bg-secondary ms-2 shadow-sm">FINISHED</span>
+                                                }
                                             </div>
 
                                             <div class="mb-2">

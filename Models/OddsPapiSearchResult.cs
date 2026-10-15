@@ -25,6 +25,7 @@ public class OddsPapiSearchResult
     public string MatchName { get; set; } = "";
     public DateTime StartTime { get; set; }
     public bool IsLive { get; set; }
+    public int StatusId { get; set; }
     public string? FlashscoreId { get; set; }
     
     // List of all markets found for this match
@@ -48,5 +49,6 @@ public class OddsPapiFixtureDto
     public bool HasModifier { get; set; }
     public DateTime? StartTime { get; set; }
     public int StatusId { get; set; }
+    public bool HasOdds { get; set; }
     public string? FlashscoreId { get; set; }
 }
