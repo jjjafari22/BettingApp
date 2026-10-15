@@ -102,10 +102,11 @@ namespace BettingApp.Services
 
         Func<string, string> injectImplicitOdds = (string norm) => {
             norm = System.Text.RegularExpressions.Regex.Replace(norm, @"(\d+)\+", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
-            norm = System.Text.RegularExpressions.Regex.Replace(norm, @"(?:to score\s+)?(\d+)\s+or\s+more", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
+            norm = System.Text.RegularExpressions.Regex.Replace(norm, @"(?:to score\s+|to record\s+|to get\s+|to have\s+)?(\d+)\s+or\s+more", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
+            norm = System.Text.RegularExpressions.Regex.Replace(norm, @"(?:at\s+least\s+)(\d+)", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
 
             if (!norm.Contains("over ") && !norm.Contains("under ") && 
-                (norm.Contains("to provide") || norm.Contains("to score") || norm.Contains("to get") || norm.Contains("anytime") || norm.Contains("carded") || norm.Contains("booked")))
+                (norm.Contains("to provide") || norm.Contains("to score") || norm.Contains("to record") || norm.Contains("to get") || norm.Contains("anytime") || norm.Contains("carded") || norm.Contains("booked")))
             {
                 if (!norm.Contains("not ")) return norm + " over 0.5";
                 else return norm + " under 0.5";
@@ -604,40 +605,7 @@ namespace BettingApp.Services
                         
                         if (isValidNameMatch)
                         {
-                            bool hasHigherLineReq = System.Text.RegularExpressions.Regex.IsMatch($"{(ActiveLookupLeg?.Market ?? "")} {(ActiveLookupLeg?.Selection ?? "")}", @"(?:[2-9]|\d{2,})\s*(?:\+|or\s+more)|over\s*(?:[1-9]|\d\.\d)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-                            bool isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
-                                                  normSel.Contains(normOutcomePart) || 
-                                                  (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under"))) ||
-                                                  (normOutcomePart == "over0.5" && normSel.Contains("yes") && !normSel.Contains("no") && !normSel.Contains("under") && !hasHigherLineReq);
-                            
-                            if (!isOutcomeMatch && normOutcomePart.EndsWith("+"))
-                            {
-                                if (int.TryParse(normOutcomePart.TrimEnd('+'), out int plusVal))
-                                {
-                                    string eqOver = $"over{plusVal - 1}.5";
-                                    if (normSel.Contains(eqOver) || (plusVal == 1 && (normSel.Contains("assist") || normSel.Contains("score") || normSel.Contains("goal") || normSel.Contains("1or"))))
-                                    {
-                                        isOutcomeMatch = true;
-                                    }
-                                }
-                            }
-                            
-                            if (!isOutcomeMatch)
-                            {
-                                string fullLegText = $"{(ActiveLookupLeg?.Market ?? "")} {(ActiveLookupLeg?.Selection ?? "")}";
-                                var mktNumMatch = System.Text.RegularExpressions.Regex.Match(fullLegText, @"(?:to score\s+)?(\d+)\s+or\s+more", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                                if (mktNumMatch.Success && int.TryParse(mktNumMatch.Groups[1].Value, out int targetGoals))
-                                {
-                                    string expectedOver = $"over{targetGoals - 1}.5";
-                                    if (normOutcomePart == expectedOver && !normSel.Contains("no") && !normSel.Contains("under"))
-                                    {
-                                        isOutcomeMatch = true;
-                                    }
-                                }
-                            }
-                            
-                            if (isOutcomeMatch)
+                            if (IsPlayerPropOutcomeMatch(normOutcomePart, normSel, ActiveLookupLeg))
                             {
                                 isMatch = true;
                             }
@@ -655,23 +623,7 @@ namespace BettingApp.Services
                                 string outcomePart = (displayOName ?? "").Substring(0, simpleParenMatch.Index).Trim();
                                 string normOutcomePart = System.Text.RegularExpressions.Regex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), @"\.0+(?!\d)", "");
                                 
-                                bool isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
-                                                      normSel.Contains(normOutcomePart) || 
-                                                      (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under")));
-                                
-                                if (!isOutcomeMatch && normOutcomePart.EndsWith("+"))
-                                {
-                                    if (int.TryParse(normOutcomePart.TrimEnd('+'), out int plusVal))
-                                    {
-                                        string eqOver = $"over{plusVal - 1}.5";
-                                        if (normSel.Contains(eqOver) || (plusVal == 1 && (normSel.Contains("assist") || normSel.Contains("score") || normSel.Contains("goal") || normSel.Contains("1or"))))
-                                        {
-                                            isOutcomeMatch = true;
-                                        }
-                                    }
-                                }
-                                
-                                if (isOutcomeMatch)
+                                if (IsPlayerPropOutcomeMatch(normOutcomePart, normSel, ActiveLookupLeg))
                                 {
                                     isMatch = true;
                                 }
@@ -684,7 +636,8 @@ namespace BettingApp.Services
         
         string fallbackSel = (string.IsNullOrWhiteSpace(ActiveLookupLeg?.Market) ? "" : ActiveLookupLeg.Market + " ") + (ActiveLookupLeg?.Selection ?? "");
         fallbackSel = System.Text.RegularExpressions.Regex.Replace(fallbackSel, @"(\d+)\+", m => $"over {double.Parse(m.Groups[1].Value) - 0.5}");
-        fallbackSel = System.Text.RegularExpressions.Regex.Replace(fallbackSel, @"(?:to score\s+)?(\d+)\s+or\s+more", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
+        fallbackSel = System.Text.RegularExpressions.Regex.Replace(fallbackSel, @"(?:to score\s+|to record\s+|to get\s+|to have\s+)?(\d+)\s+or\s+more", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
+        fallbackSel = System.Text.RegularExpressions.Regex.Replace(fallbackSel, @"(?:at\s+least\s+)(\d+)", m => $"over {double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 0.5}");
         
         if (!isMatch && !string.IsNullOrEmpty(displayOName) && ActiveLookupLeg != null && !string.IsNullOrEmpty(ActiveLookupLeg.Selection))
         {
@@ -692,6 +645,85 @@ namespace BettingApp.Services
         }
         
         return isMatch;
+    }
+
+    private static bool IsPlayerPropOutcomeMatch(string normOutcomePart, string normSel, BettingApp.Services.AiVisionLeg? activeLeg)
+    {
+        string fullLegText = $"{(activeLeg?.Market ?? "")} {(activeLeg?.Selection ?? "")}";
+        
+        bool hasHigherLineReq = System.Text.RegularExpressions.Regex.IsMatch(
+            fullLegText,
+            @"\b(?:at\s+least\s+([2-9]|\d{2,})|([2-9]|\d{2,})\s*(?:\+|or\s+more|points?|goals?|assists?|shots?|saves?|cards?|tackles?|fouls?)|over\s*(?:0\.[6-9]|[1-9]|\d{2,}|[1-9]\.\d+))\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        double? targetLine = null;
+        var lineMatch = System.Text.RegularExpressions.Regex.Match(
+            fullLegText,
+            @"\b(?:(over|under)\s*(\d+(?:\.\d+)?)|at\s+least\s+(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:\+|or\s+more))\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        bool wantsUnder = normSel.Contains("under") || normSel.Contains("no");
+
+        if (lineMatch.Success)
+        {
+            string dirStr = lineMatch.Groups[1].Value.ToLowerInvariant();
+            if (dirStr == "under") wantsUnder = true;
+
+            string valStr = !string.IsNullOrEmpty(lineMatch.Groups[2].Value) ? lineMatch.Groups[2].Value :
+                            (!string.IsNullOrEmpty(lineMatch.Groups[3].Value) ? lineMatch.Groups[3].Value : lineMatch.Groups[4].Value);
+
+            if (double.TryParse(valStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedVal))
+            {
+                if (!string.IsNullOrEmpty(lineMatch.Groups[1].Value))
+                {
+                    targetLine = parsedVal;
+                }
+                else
+                {
+                    targetLine = parsedVal >= 1 ? parsedVal - 0.5 : parsedVal;
+                }
+            }
+        }
+
+        bool isOutcomeMatch = false;
+
+        if (targetLine.HasValue)
+        {
+            string cleanTarget = targetLine.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+            string expectedOver = $"over{cleanTarget}";
+            string expectedUnder = $"under{cleanTarget}";
+            string cleanOutcome = normOutcomePart.Replace(" ", "");
+
+            if (wantsUnder)
+            {
+                isOutcomeMatch = cleanOutcome == expectedUnder || cleanOutcome.Replace(".", "") == expectedUnder.Replace(".", "");
+            }
+            else
+            {
+                isOutcomeMatch = cleanOutcome == expectedOver || cleanOutcome.Replace(".", "") == expectedOver.Replace(".", "");
+            }
+        }
+        else
+        {
+            isOutcomeMatch = string.IsNullOrEmpty(normOutcomePart) || 
+                              normSel.Contains(normOutcomePart) || 
+                              (normOutcomePart == "yes" && (!normSel.Contains("no") && !normSel.Contains("under"))) ||
+                              (normOutcomePart == "over0.5" && normSel.Contains("yes") && !normSel.Contains("no") && !normSel.Contains("under") && !hasHigherLineReq);
+        }
+
+        if (!isOutcomeMatch && normOutcomePart.EndsWith("+"))
+        {
+            if (int.TryParse(normOutcomePart.TrimEnd('+'), out int plusVal))
+            {
+                string eqOver = $"over{plusVal - 1}.5";
+                if (normSel.Contains(eqOver) || (plusVal == 1 && (normSel.Contains("assist") || normSel.Contains("score") || normSel.Contains("goal") || normSel.Contains("point") || normSel.Contains("1or"))))
+                {
+                    isOutcomeMatch = true;
+                }
+            }
+        }
+
+        return isOutcomeMatch;
     }
 
     public static BettingApp.Models.OddsPapiMarket? FindBestMarket(List<BettingApp.Models.OddsPapiMarket> markets, string marketCategory, string? matchName, string? selectionName, BettingApp.Services.MarketMappingService marketMapper)

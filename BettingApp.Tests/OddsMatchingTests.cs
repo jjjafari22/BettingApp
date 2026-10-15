@@ -792,5 +792,125 @@ namespace BettingApp.Tests
             bool matchSame = OddsMatchingLogic.IsOutcomeMatch("1 (0.5)", displayPlus, legPlus, searchResult, "Corners - Handicap");
             Assert.True(matchSame, "Hajduk Split +0.5 must match Hajduk Split +0.5");
         }
+
+        [Fact]
+        public void Test_Hockey_MoneylineInclOvertimeAndShootout()
+        {
+            var targets = _marketMapper.NormalizeMarketName("Moneyline (Incl. Overtime and Shootout)", "Ottawa Senators vs New York Islanders", "Ottawa Senators");
+            Assert.Contains("Winner (incl. overtime and penalties)", targets);
+
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket
+                {
+                    MarketId = "Winner (incl. overtime and penalties)",
+                    MarketName = "Winner (incl. overtime and penalties)",
+                    OutcomeNames = new Dictionary<string, string> { { "151", "1" }, { "152", "2" } }
+                }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(markets, "Moneyline (Incl. Overtime and Shootout)", "Ottawa Senators vs New York Islanders", "Ottawa Senators", _marketMapper);
+            Assert.NotNull(best);
+            Assert.Equal("Winner (incl. overtime and penalties)", best.MarketName);
+
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Ottawa Senators vs New York Islanders"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "Ottawa Senators vs New York Islanders",
+                Market = "Moneyline (Incl. Overtime and Shootout)",
+                Selection = "Ottawa Senators"
+            };
+
+            string display1 = OddsMatchingLogic.GetTranslatedOutcomeName("1", searchResult.MatchName);
+            Assert.Equal("Ottawa Senators", display1);
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1", display1, leg, searchResult, best.MarketName));
+        }
+
+        [Fact]
+        public void Test_Hockey_PlayerToRecordAtLeast1Point()
+        {
+            var targets = _marketMapper.NormalizeMarketName("Player to Record at Least 1 Point (Including Overtime)", "Toronto Maple Leafs vs Buffalo Sabres", "Auston Matthews - Yes");
+            Assert.Contains("Over Under Player Points (incl. overtime)", targets);
+
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket
+                {
+                    MarketId = "Over Under Player Points (incl. overtime)",
+                    MarketName = "Over Under Player Points (incl. overtime)",
+                    OutcomeNames = new Dictionary<string, string>
+                    {
+                        { "1", "Over 0.5 (Matthews, Auston)" },
+                        { "2", "Over 1.5 (Matthews, Auston)" }
+                    }
+                }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(markets, "Player to Record at Least 1 Point (Including Overtime)", "Toronto Maple Leafs vs Buffalo Sabres", "Auston Matthews - Yes", _marketMapper);
+            Assert.NotNull(best);
+            Assert.Equal("Over Under Player Points (incl. overtime)", best.MarketName);
+
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Toronto Maple Leafs vs Buffalo Sabres"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "Toronto Maple Leafs vs Buffalo Sabres",
+                Market = "Player to Record at Least 1 Point (Including Overtime)",
+                Selection = "Auston Matthews - Yes"
+            };
+
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Matthews, Auston)", "Over 0.5 (Matthews, Auston)", leg, searchResult, best.MarketName));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Matthews, Auston)", "Over 1.5 (Matthews, Auston)", leg, searchResult, best.MarketName));
+        }
+
+        [Fact]
+        public void Test_Hockey_PlayerToScoreAtLeast2Points_MatchesOver15NotOver05()
+        {
+            var targets = _marketMapper.NormalizeMarketName("Player to Score at Least 2 Points - Including Overtime", "Detroit Red Wings vs Philadelphia Flyers", "Alex DeBrincat - Yes");
+            Assert.Contains("Over Under Player Points (incl. overtime)", targets);
+            Assert.DoesNotContain("Over Under Player Goals (incl. overtime)", targets);
+
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket
+                {
+                    MarketId = "Over Under Player Points (incl. overtime)",
+                    MarketName = "Over Under Player Points (incl. overtime)",
+                    OutcomeNames = new Dictionary<string, string>
+                    {
+                        { "1", "Over 0.5 (DeBrincat, Alex)" },
+                        { "2", "Over 1.5 (DeBrincat, Alex)" },
+                        { "3", "Over 2.5 (DeBrincat, Alex)" }
+                    }
+                }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(markets, "Player to Score at Least 2 Points - Including Overtime", "Detroit Red Wings vs Philadelphia Flyers", "Alex DeBrincat - Yes", _marketMapper);
+            Assert.NotNull(best);
+            Assert.Equal("Over Under Player Points (incl. overtime)", best.MarketName);
+
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Detroit Red Wings vs Philadelphia Flyers"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "Detroit Red Wings vs Philadelphia Flyers",
+                Market = "Player to Score at Least 2 Points - Including Overtime",
+                Selection = "Alex DeBrincat - Yes"
+            };
+
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (DeBrincat, Alex)", "Over 0.5 (DeBrincat, Alex)", leg, searchResult, best.MarketName));
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (DeBrincat, Alex)", "Over 1.5 (DeBrincat, Alex)", leg, searchResult, best.MarketName));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 2.5 (DeBrincat, Alex)", "Over 2.5 (DeBrincat, Alex)", leg, searchResult, best.MarketName));
+        }
     }
 }

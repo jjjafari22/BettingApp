@@ -12,8 +12,33 @@ namespace BettingApp.Services
         {
             // Example mappings (AI Output -> Kambi Category)
             { "Moneyline (incl. overtime and penalties)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Moneyline (incl. overtime and shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Moneyline (including overtime and shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Moneyline (incl. overtime & shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Moneyline (including overtime & shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Moneyline (incl. OT and Shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Moneyline (incl. OT & Shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Moneyline (incl. overtime)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Moneyline (including overtime)", "Winner (incl. overtime and penalties)|Moneyline" },
             { "Moneyline", "Winner (incl. overtime and penalties)|Full Time Result" },
+            { "Money Line", "Winner (incl. overtime and penalties)|Full Time Result" },
+            { "Money Line (Incl. Overtime and Shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Money Line (incl. overtime and penalties)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Money Line (incl. overtime)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Money Line (including overtime)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Match Winner (incl. overtime and penalties)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Match Winner (incl. overtime and shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Match Winner (including overtime and shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
+            { "Match Winner (incl. overtime)", "Winner (incl. overtime and penalties)|Moneyline" },
             { "Winner (incl. overtime and penalties)", "Winner (incl. overtime and penalties)" },
+            { "Winner (incl. overtime and shootout)", "Winner (incl. overtime and penalties)" },
+            { "Winner (including overtime and shootout)", "Winner (incl. overtime and penalties)" },
+            { "To Win (incl. overtime and shootout)", "Winner (incl. overtime and penalties)" },
+            { "To Win (including overtime and shootout)", "Winner (incl. overtime and penalties)" },
+            { "To Win (incl. overtime and penalties)", "Winner (incl. overtime and penalties)" },
+            { "To Win (including overtime and penalties)", "Winner (incl. overtime and penalties)" },
+            { "To Win (incl. overtime)", "Winner (incl. overtime and penalties)" },
+            { "To Win (including overtime)", "Winner (incl. overtime and penalties)" },
             { "Total Goals - Regular Time", "Total|Total Goals|Over Under Full Time" },
             { "Total Goals (incl. overtime and penalties)", "Total (incl. overtime and penalties)|Total|Total Goals|Over Under Full Time" },
             { "Anytime Goalscorer - Including Overtime", "Over Under Player Goals (incl. overtime)|Anytime Goal Scorer|Player Goals (incl. overtime)|Player Goals" },
@@ -23,6 +48,23 @@ namespace BettingApp.Services
             { "To Score 3 or More Goals", "Over Under Player Goals (incl. overtime)|Player Goals (incl. overtime)|Player Goals" },
             { "Player Points", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
             { "Player Points (incl. overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Points - Including Overtime", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Points (Including Overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Total Points", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Total Points (incl. overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Total Points - Including Overtime", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Record at Least 1 Point", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Record at Least 1 Point (Including Overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Record at Least 1 Point - Including Overtime", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Record at Least 2 Points", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Record at Least 2 Points (Including Overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Record at Least 2 Points - Including Overtime", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Score at Least 1 Point", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Score at Least 1 Point (Including Overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Score at Least 1 Point - Including Overtime", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Score at Least 2 Points", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Score at Least 2 Points (Including Overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player to Score at Least 2 Points - Including Overtime", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
             { "Player Shots on Goal", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target" },
             { "Player Shots On Goal (incl. overtime)", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)" },
             { "Asian Over/Under", "Over Under Full Time" },
@@ -346,6 +388,19 @@ namespace BettingApp.Services
                 }
             }
             
+            if (clean.Contains("Moneyline", StringComparison.OrdinalIgnoreCase) || 
+                clean.Contains("Money Line", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Winner", StringComparison.OrdinalIgnoreCase))
+            {
+                if (clean.Contains("overtime", StringComparison.OrdinalIgnoreCase) || 
+                    clean.Contains("shootout", StringComparison.OrdinalIgnoreCase) || 
+                    clean.Contains("penalties", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("ot", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<string> { "Winner (incl. overtime and penalties)", "Moneyline" };
+                }
+            }
+            
             if (clean.Contains("Corners", StringComparison.OrdinalIgnoreCase) && clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase))
             {
                 return new List<string> { "Corners - Handicap" + halfSuffix };
@@ -411,7 +466,24 @@ namespace BettingApp.Services
                 return new List<string> { "Over Under Player Goals or Assists (incl. overtime)", "Player Goal or Assist", "To Score or Assist", "Goal or Assist" };
             }
 
+            if (!isTeamOrTotalStat && (clean.Contains("Points", StringComparison.OrdinalIgnoreCase) || clean.Contains("Point", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName) || 
+                    clean.Contains("to record", StringComparison.OrdinalIgnoreCase) || 
+                    clean.Contains("to score", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("at least", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("over under", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (clean.Contains("Power Play", StringComparison.OrdinalIgnoreCase) || clean.Contains("Powerplay", StringComparison.OrdinalIgnoreCase) || System.Text.RegularExpressions.Regex.IsMatch(clean, @"\bPPP\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    {
+                        return new List<string> { "Over Under Player Power Play Points (incl. overtime)", "Player Power Play Points (incl. overtime)" };
+                    }
+                    return new List<string> { "Over Under Player Points (incl. overtime)", "Player Points (incl. overtime)", "Player Points" };
+                }
+            }
+
             if (!clean.Contains("Assist", StringComparison.OrdinalIgnoreCase) &&
+                !clean.Contains("Point", StringComparison.OrdinalIgnoreCase) &&
                (clean.Contains("Goalscorer", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Scorer", StringComparison.OrdinalIgnoreCase) || 
                (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase)) ||
                clean.Contains("Will/Will not Score", StringComparison.OrdinalIgnoreCase)))
@@ -546,7 +618,7 @@ namespace BettingApp.Services
         {
             if (string.IsNullOrWhiteSpace(text)) return false;
             if (text.Contains("Player", StringComparison.OrdinalIgnoreCase) || text.Contains("Player's", StringComparison.OrdinalIgnoreCase)) return true;
-            string stripped = System.Text.RegularExpressions.Regex.Replace(text, @"\b(over|under|yes|no|total|team|home|away|goalkeeper|goal|keeper|saves|save|fouls|foul|shots|shot|target|tackles|tackle|points|point|cards|card|to|be|or)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            string stripped = System.Text.RegularExpressions.Regex.Replace(text, @"\b(over|under|yes|no|total|team|home|away|goalkeeper|goal|keeper|saves|save|fouls|foul|shots|shot|target|tackles|tackle|points|point|cards|card|to|be|or|record|score|at|least)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             stripped = System.Text.RegularExpressions.Regex.Replace(stripped, @"[0-9\.\+\-:\(\)\/]", "").Trim();
             return stripped.Length >= 3;
         }
