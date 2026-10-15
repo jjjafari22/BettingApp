@@ -207,8 +207,14 @@ public partial class Admin
                 
                 StateHasChanged(); 
             }
-            catch (TaskCanceledException) { /* Ignore when user navigates away */ }
-            catch (Exception ex) { Logger.LogError($"Timezone error: {ex.Message}"); }
+            catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex.Message.Contains("circuit has disconnected") || ex.Message.Contains("disposed"))
+            {
+                /* Ignore normal disconnects when user navigates away or closes tab */
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Could not fetch timezone offset");
+            }
 
             UiNotifier.OnAdminNotification += HandleAdminNotification;
         }

@@ -161,9 +161,14 @@
         function patchBlazorInputFile() {
             if (window.Blazor && window.Blazor._internal && window.Blazor._internal.InputFile && !window.Blazor._internal.InputFile._nullGuarded) {
                 const origInit = window.Blazor._internal.InputFile.init;
-                window.Blazor._internal.InputFile.init = function(element) {
+                window.Blazor._internal.InputFile.init = function() {
+                    const element = arguments[1] || (arguments[0] instanceof Element ? arguments[0] : null);
                     if (!element) return;
-                    return origInit.apply(this, arguments);
+                    try {
+                        return origInit.apply(this, arguments);
+                    } catch (err) {
+                        console.warn("InputFile.init safely caught error:", err);
+                    }
                 };
                 window.Blazor._internal.InputFile._nullGuarded = true;
             }
