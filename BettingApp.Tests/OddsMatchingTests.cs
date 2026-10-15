@@ -574,5 +574,53 @@ namespace BettingApp.Tests
             Assert.False(matchOver05, "To Score 2 or More Goals must NOT match Over 0.5");
             Assert.True(matchOver15, "To Score 2 or More Goals MUST match Over 1.5");
         }
+
+        [Theory]
+        [InlineData("Match Odds - Regular Time")]
+        [InlineData("Match Odds (Regular Time)")]
+        [InlineData("Match Result - Regular Time")]
+        [InlineData("1X2 - Regular Time")]
+        [InlineData("3-Way - Regular Time")]
+        [InlineData("Regular Time Result")]
+        public void Test_Hockey_RegularTimeResult_MarketAndOutcomeMatching(string marketName)
+        {
+            var targets = _marketMapper.NormalizeMarketName(marketName, "San Diego Gulls vs Ontario Reign", "Draw");
+            Assert.Contains("Regular Time Result", targets);
+
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket
+                {
+                    MarketId = "Regular Time Result",
+                    MarketName = "Regular Time Result",
+                    OutcomeNames = new Dictionary<string, string>
+                    {
+                        { "153", "1" },
+                        { "154", "X" },
+                        { "155", "2" }
+                    }
+                }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(markets, marketName, "San Diego Gulls vs Ontario Reign", "Draw", _marketMapper);
+            Assert.NotNull(best);
+            Assert.Equal("Regular Time Result", best.MarketName);
+
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "San Diego Gulls vs Ontario Reign"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "San Diego Gulls vs Ontario Reign",
+                Market = marketName,
+                Selection = "Draw"
+            };
+
+            string displayOName = OddsMatchingLogic.GetTranslatedOutcomeName("X", searchResult.MatchName);
+            bool isMatch = OddsMatchingLogic.IsOutcomeMatch("X", displayOName, leg, searchResult, "Regular Time Result");
+            Assert.True(isMatch, "Draw selection should match Outcome X");
+        }
     }
 }

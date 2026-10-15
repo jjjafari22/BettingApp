@@ -42,14 +42,29 @@ namespace BettingApp.Services
             { "Player Shots on Target", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target|Player Shots on Target|Player Shots on Target (incl. overtime)" },
             { "Player Shots", "Over Under Player Shots (incl. overtime)|Player Shots (incl. overtime)|Player Shots" },
             { "Player Fouls Committed", "Over Under Player Fouls Committed (incl. overtime)|Player Fouls Committed (incl. overtime)|Player Fouls Committed" },
-            { "Full Time", "Full Time Result" },
-            { "Match Odds", "Full Time Result" },
-            { "Match Winner", "Full Time Result" },
-            { "1x2", "Full Time Result" },
-            { "Match Result", "Full Time Result" },
-            { "Match Result (1X2)", "Full Time Result" },
-            { "Double Chance", "Double Chance Full Time" },
-            { "Double Chance (1X2)", "Double Chance Full Time" },
+            { "Full Time", "Full Time Result|Regular Time Result" },
+            { "Match Odds", "Regular Time Result|Full Time Result" },
+            { "Match Winner", "Regular Time Result|Winner (incl. overtime and penalties)|Full Time Result" },
+            { "1x2", "Regular Time Result|Full Time Result" },
+            { "Match Result", "Regular Time Result|Full Time Result" },
+            { "Match Result (1X2)", "Regular Time Result|Full Time Result" },
+            { "Match Odds - Regular Time", "Regular Time Result|Full Time Result" },
+            { "Match Odds (Regular Time)", "Regular Time Result|Full Time Result" },
+            { "Match Result - Regular Time", "Regular Time Result|Full Time Result" },
+            { "Match Result (Regular Time)", "Regular Time Result|Full Time Result" },
+            { "1X2 - Regular Time", "Regular Time Result|Full Time Result" },
+            { "1X2 (Regular Time)", "Regular Time Result|Full Time Result" },
+            { "3-Way - Regular Time", "Regular Time Result|Full Time Result" },
+            { "3-Way (Regular Time)", "Regular Time Result|Full Time Result" },
+            { "3-Way Result", "Regular Time Result|Full Time Result" },
+            { "3 Way Result", "Regular Time Result|Full Time Result" },
+            { "Regular Time Result", "Regular Time Result" },
+            { "Regular Time 1X2", "Regular Time Result" },
+            { "Double Chance", "Double Chance Full Time|Double Chance" },
+            { "Double Chance (1X2)", "Double Chance Full Time|Double Chance" },
+            { "Double Chance - Regular Time", "Double Chance|Double Chance Full Time" },
+            { "Draw No Bet", "Draw No Bet|Draw No Bet (incl. overtime and penalties)" },
+            { "Draw No Bet - Regular Time", "Draw No Bet" },
             { "1st Half Result", "First Half Result" },
             { "1. Half Result", "First Half Result" },
             { "Half Time Result", "First Half Result" },
@@ -295,6 +310,40 @@ namespace BettingApp.Services
                     return new List<string> { "Total (incl. overtime and penalties)", "Total", "Total Goals", "Over Under Full Time" };
                 }
                 return new List<string> { "Total", "Total Goals", "Over Under Full Time" };
+            }
+
+            if (clean.Contains("Regular Time", StringComparison.OrdinalIgnoreCase))
+            {
+                if (clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<string> { "Handicap", "Asian Handicap" };
+                }
+                if (clean.Contains("Total", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goals", StringComparison.OrdinalIgnoreCase) || clean.Contains("Over", StringComparison.OrdinalIgnoreCase) || clean.Contains("Under", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<string> { "Total", "Total Goals", "Over Under Full Time" };
+                }
+                if (clean.Contains("Both Teams", StringComparison.OrdinalIgnoreCase) || clean.Contains("BTTS", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<string> { "Both Teams To Score" };
+                }
+                if (clean.Contains("Double Chance", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<string> { "Double Chance", "Double Chance Full Time" };
+                }
+                if (clean.Contains("Draw No Bet", StringComparison.OrdinalIgnoreCase) || clean.Contains("DNB", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<string> { "Draw No Bet" };
+                }
+                if (clean.Contains("Odds", StringComparison.OrdinalIgnoreCase) || 
+                    clean.Contains("Result", StringComparison.OrdinalIgnoreCase) || 
+                    clean.Contains("Winner", StringComparison.OrdinalIgnoreCase) || 
+                    clean.Contains("1X2", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("3-Way", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("3 Way", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Equals("Regular Time", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<string> { "Regular Time Result", "Full Time Result" };
+                }
             }
             
             if (clean.Contains("Corners", StringComparison.OrdinalIgnoreCase) && clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase))
