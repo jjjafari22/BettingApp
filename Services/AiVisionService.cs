@@ -208,8 +208,8 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
    - match: Team names translated into standard, globally recognized English names (e.g. 'FC Copenhagen' instead of 'FC København', 'Bayern Munich' instead of 'Bayern München'). STRICT DIRECTIVE: If the match or team header is NOT visible or cropped on the screenshot, output null. NEVER guess, assume, or hallucinate the match from player names or past memory!
    - sport: 'Soccer', 'Ice Hockey', 'American Football', 'Basketball', 'Baseball', 'Tennis', etc. Deduce from team names, market types, or tournament. STRICT RULE: For NFL or gridiron football, ALWAYS output 'American Football' (NEVER 'Football', to prevent confusion with soccer). For association football, ALWAYS output 'Soccer'.
    - market: The translated English market name.
-   - selection: The bet chosen including player condition (e.g. 'Marcus Rashford - Will Score', 'Erling Haaland - Over 0.5'). Transcribe player names letter-by-letter without autocorrecting.
-   - badges: Array of promo labels or visual icons (e.g. 'Power Sub', 'Sub on Play on', 'Super Sub', 'Early Payout', 'Super Boost', 'Live'). IMPORTANT: Substitution icons (such as two swap arrows pointing in opposite directions) next to a player indicate 'Power Sub'.
+   - selection: The bet chosen including player condition (e.g. 'Marcus Rashford - Will Score', 'Erling Haaland - Over 0.5'). Transcribe player names letter-by-letter without autocorrecting. CRITICAL FOR SUBSTITUTION PROMOTIONS: If the leg has a substitution promotion (such as 'Power Sub', 'Super Sub', 'Epic Sub', 'Sub on Play on', or substitution swap arrows icon), you MUST append ' (Power Sub)' to the selection text (e.g. 'Niklas Castro - 2+ Shots on Goal (Anytime) (Power Sub)')!
+   - badges: Array of promo labels or visual icons (e.g. 'Power Sub', 'Sub on Play on', 'Super Sub', 'Epic Sub', 'Early Payout', 'Super Boost', 'Live'). IMPORTANT: Substitution icons (such as two swap arrows pointing in opposite directions) next to a player indicate 'Power Sub'.
    - odds: The odds value (e.g. '1.95'). If multiple legs are part of a Bet Builder with shared odds, output the shared odds for the FIRST leg and null for subsequent legs.";
 
                 var fullPrompt = systemInstruction + "\n\nPlease extract the bet details from this screenshot according to the strict system instructions.";
@@ -261,7 +261,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                                             match = new { type = "STRING", nullable = true, description = "The match name (e.g. 'Team A vs Team B'). Output null if the match title/header is not visibly printed on the screenshot. Never guess or hallucinate." },
                                             sport = new { type = "STRING", nullable = true, description = "The sport of the match, e.g., 'Soccer', 'Ice Hockey', 'American Football', 'Basketball', 'Baseball', 'Tennis'." },
                                             market = new { type = "STRING", nullable = true },
-                                            selection = new { type = "STRING", nullable = true },
+                                            selection = new { type = "STRING", nullable = true, description = "The selection including condition. If covered by a substitution promotion (Power Sub, Epic Sub, Super Sub, swap arrows icon), append ' (Power Sub)'." },
                                             badges = new { type = "ARRAY", items = new { type = "STRING" } },
                                             odds = new { type = "STRING", nullable = true }
                                         },
@@ -394,6 +394,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                                 b.Contains("Power Sub", StringComparison.OrdinalIgnoreCase) || 
                                 b.Contains("Substitute", StringComparison.OrdinalIgnoreCase) ||
                                 b.Contains("Super Sub", StringComparison.OrdinalIgnoreCase) ||
+                                b.Contains("Epic Sub", StringComparison.OrdinalIgnoreCase) ||
                                 b.Contains("Sub on Play", StringComparison.OrdinalIgnoreCase) ||
                                 b.Contains("Sub On", StringComparison.OrdinalIgnoreCase))))
                             {
@@ -405,7 +406,8 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                                 string combinedText = $"{(leg.Market ?? "")} {(leg.Selection ?? "")}";
                                 if (combinedText.Contains("Power Sub", StringComparison.OrdinalIgnoreCase) || 
                                     combinedText.Contains("Sub on Play", StringComparison.OrdinalIgnoreCase) ||
-                                    combinedText.Contains("Super Sub", StringComparison.OrdinalIgnoreCase))
+                                    combinedText.Contains("Super Sub", StringComparison.OrdinalIgnoreCase) ||
+                                    combinedText.Contains("Epic Sub", StringComparison.OrdinalIgnoreCase))
                                 {
                                     isPowerSub = true;
                                 }
@@ -489,7 +491,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, T
 - RULE 1: If a player plays 0 minutes (not in squad, left on bench), outcome is ALWAYS 'Void' (even for live/Power Sub).
 - RULE 2: If `isLive: false`, the player MUST START. If they are subbed on later, it is 'Void'.
 - RULE 3: If `isLive: true`, the starter rule does not apply; if they play at all, the bet stands.
-- POWER SUB: If selection contains '(Power Sub)' and the named player STARTED, stats of their substitute are ADDED to theirs. Find this in the 'Substitution' events array ('swap'). If the named player didn't start, Power Sub is ignored (evaluate via rules above).
+- POWER SUB: If selection contains '(Power Sub)' (or market/selection mentions 'Epic Sub' / 'Super Sub' / 'Power Sub') and the named player STARTED, stats of their substitute are ADDED to theirs. Find this in the 'Substitution' events array ('swap'). If the named player didn't start, Power Sub is ignored (evaluate via rules above).
 
 # 5. MARKETS & LINES
 - ASIAN LINES (.0): Any line ending in exactly '.0', '.25', or '.75' is Asian. If it lands exactly on a '.0' line (tie), outcome is 'Void' (Refund), unless it explicitly says '3-way'.
