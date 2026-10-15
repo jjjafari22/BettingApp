@@ -622,5 +622,81 @@ namespace BettingApp.Tests
             bool isMatch = OddsMatchingLogic.IsOutcomeMatch("X", displayOName, leg, searchResult, "Regular Time Result");
             Assert.True(isMatch, "Draw selection should match Outcome X");
         }
+
+        [Fact]
+        public void Test_AcSpartaPraha_Matches_SpartaPrague()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Sparta Prague vs Lillestroem SK"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "Sparta Prague vs Lillestrom",
+                Market = "Match Result (1X2)",
+                Selection = "AC Sparta Praha"
+            };
+
+            string displayOName1 = OddsMatchingLogic.GetTranslatedOutcomeName("1", searchResult.MatchName);
+            bool isMatch1 = OddsMatchingLogic.IsOutcomeMatch("1", displayOName1, leg, searchResult, "Full Time Result");
+            Assert.True(isMatch1, "AC Sparta Praha should match 1 (Sparta Prague)");
+
+            string displayOName2 = OddsMatchingLogic.GetTranslatedOutcomeName("2", searchResult.MatchName);
+            bool isMatch2 = OddsMatchingLogic.IsOutcomeMatch("2", displayOName2, leg, searchResult, "Full Time Result");
+            Assert.False(isMatch2, "AC Sparta Praha should not match 2 (Lillestroem SK)");
+
+            string displayONameX = OddsMatchingLogic.GetTranslatedOutcomeName("X", searchResult.MatchName);
+            bool isMatchX = OddsMatchingLogic.IsOutcomeMatch("X", displayONameX, leg, searchResult, "Full Time Result");
+            Assert.False(isMatchX, "AC Sparta Praha should not match X (Draw)");
+        }
+
+        [Fact]
+        public void Test_LillestroemSK_Matches_Lillestrom()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Sparta Prague vs Lillestroem SK"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "Sparta Prague vs Lillestrom",
+                Market = "Match Result (1X2)",
+                Selection = "Lillestrom"
+            };
+
+            string displayOName2 = OddsMatchingLogic.GetTranslatedOutcomeName("2", searchResult.MatchName);
+            bool isMatch2 = OddsMatchingLogic.IsOutcomeMatch("2", displayOName2, leg, searchResult, "Full Time Result");
+            Assert.True(isMatch2, "Lillestrom should match 2 (Lillestroem SK)");
+        }
+
+        [Fact]
+        public void Test_CeltaVigo_Juventus_DoubleChance()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "RC Celta de Vigo vs Juventus Turin"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "Celta Vigo vs Juventus",
+                Market = "Double Chance",
+                Selection = "Juventus or Draw"
+            };
+
+            string display12 = OddsMatchingLogic.GetTranslatedOutcomeName("12", searchResult.MatchName);
+            bool match12 = OddsMatchingLogic.IsOutcomeMatch("12", display12, leg, searchResult, "Double Chance Full Time");
+            Assert.False(match12);
+
+            string display1X = OddsMatchingLogic.GetTranslatedOutcomeName("1X", searchResult.MatchName);
+            bool match1X = OddsMatchingLogic.IsOutcomeMatch("1X", display1X, leg, searchResult, "Double Chance Full Time");
+            Assert.False(match1X);
+
+            string display2X = OddsMatchingLogic.GetTranslatedOutcomeName("2X", searchResult.MatchName);
+            bool match2X = OddsMatchingLogic.IsOutcomeMatch("2X", display2X, leg, searchResult, "Double Chance Full Time");
+            Assert.True(match2X, "Juventus or Draw should match Outcome 2X (Juventus Turin or Draw)");
+        }
     }
 }

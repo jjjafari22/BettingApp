@@ -67,7 +67,7 @@ namespace BettingApp.Services
                     if (displayOName == "1") displayOName = t1;
                     else if (displayOName == "2") displayOName = t2;
                     else if (displayOName == "X" || displayOName.Equals("Draw", StringComparison.OrdinalIgnoreCase)) displayOName = "Draw";
-                    else if (displayOName.Equals("1X", StringComparison.OrdinalIgnoreCase)) displayOName = $"{t1} or Draw";
+                    else if (displayOName.Equals("1X", StringComparison.OrdinalIgnoreCase) || displayOName.Equals("X1", StringComparison.OrdinalIgnoreCase)) displayOName = $"{t1} or Draw";
                     else if (displayOName.Equals("X2", StringComparison.OrdinalIgnoreCase) || displayOName.Equals("2X", StringComparison.OrdinalIgnoreCase)) displayOName = $"{t2} or Draw";
                     else if (displayOName == "12") displayOName = $"{t1} or {t2}";
                     else {
@@ -340,11 +340,17 @@ namespace BettingApp.Services
                     }
                     else if (!string.IsNullOrEmpty(aiTarget))
                     {
-                        var basicHcMatch = System.Text.RegularExpressions.Regex.Match(oName, @"^(1|X|x|2|1X|X2|12)(?:\s*\(([^)]+)\))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        var basicHcMatch = System.Text.RegularExpressions.Regex.Match(oName, @"^(1|X|x|2|1X|X1|X2|2X|12)(?:\s*\(([^)]+)\))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                         if (basicHcMatch.Success)
                         {
                             string opTarget = basicHcMatch.Groups[1].Value.ToUpperInvariant();
-                            if (aiTarget == opTarget)
+                            if (opTarget == "2X") opTarget = "X2";
+                            if (opTarget == "X1") opTarget = "1X";
+                            string normAiTarget = aiTarget;
+                            if (normAiTarget == "2X") normAiTarget = "X2";
+                            if (normAiTarget == "X1") normAiTarget = "1X";
+
+                            if (normAiTarget == opTarget)
                             {
                                 string hcStr = basicHcMatch.Groups[2].Value.Trim();
                                 double? opHc = null;

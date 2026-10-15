@@ -104,7 +104,19 @@ namespace BettingApp.Services
             { "wolves", "wolverhampton wanderers" },
             { "qpr", "queens park rangers" },
             { "van buyuksehir belediyespor", "van spor kulubu" },
-            { "deportes union la calera", "union la calera" }
+            { "deportes union la calera", "union la calera" },
+            { "praha", "prague" },
+            { "sparta praha", "sparta prague" },
+            { "slavia praha", "slavia prague" },
+            { "bohemians praha", "bohemians prague" },
+            { "dukla praha", "dukla prague" },
+            { "bucuresti", "bucharest" },
+            { "warszawa", "warsaw" },
+            { "lisboa", "lisbon" },
+            { "wien", "vienna" },
+            { "moskva", "moscow" },
+            { "kyiv", "kiev" },
+            { "plzen", "pilsen" }
         };
 
         public static string ApplyTeamAliases(string name)
@@ -133,6 +145,9 @@ namespace BettingApp.Services
             // Replace hyphens, dashes, slashes, underscores, colons with spaces
             cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"[\-_/\\:]+", " ");
             cleaned = ApplyTeamAliases(cleaned);
+            cleaned = cleaned.Replace("oe", "o")
+                             .Replace("ae", "a")
+                             .Replace("aa", "a");
             // Remove punctuation, collapse spaces
             cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"[^\w\s]", "");
             return System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s+", " ").Trim();
@@ -177,7 +192,7 @@ namespace BettingApp.Services
             }
 
             // Token overlap: Check significant tokens (length >= 3, excluding generic words)
-            var genericWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "fc", "fk", "cf", "cd", "sc", "if", "bk", "club" };
+            var genericWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "fc", "fk", "cf", "cd", "sc", "if", "bk", "club", "ac", "sk", "as", "afc" };
             var tokensA = normA.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length >= 3 && !genericWords.Contains(t)).ToList();
             var tokensB = normB.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length >= 3 && !genericWords.Contains(t)).ToList();
 
@@ -207,7 +222,7 @@ namespace BettingApp.Services
             // e.g. "PSG (+1.5)" -> "PSG", "PSG Over 1.5 Goals" -> "PSG", "Manchester City -1" -> "Manchester City"
             string candidate = System.Text.RegularExpressions.Regex.Replace(sel, @"\([+-]?\d+(?:\.\d+)?\)", " ").Trim();
             candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"[+-]?\d+(?:\.\d+)?", " ").Trim();
-            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\b(over|under|goals?|corners?|cards?|bookings?|points?|to win|starts?|including|incl|overtime|ot|penalties|penalty|shootouts?|so|and|&)\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\b(over|under|goals?|corners?|cards?|bookings?|points?|to win|starts?|including|incl|overtime|ot|penalties|penalty|shootouts?|so|and|&|or|draw|tie|ties|oavgjort|uavgjort|kryss)\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
             candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\s+", " ").Trim();
             if (string.IsNullOrWhiteSpace(candidate)) candidate = sel;
 
@@ -229,6 +244,40 @@ namespace BettingApp.Services
                 if (normCand == n2) return 2;
                 if (n1.Contains(normCand) && !n2.Contains(normCand)) return 1;
                 if (n2.Contains(normCand) && !n1.Contains(normCand)) return 2;
+            }
+
+            if (!match1 && !match2)
+            {
+                var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
+                { 
+                    "fc", "fk", "united", "city", "cf", "cd", "bk", "sc", "ec", "if", "club",
+                    "ac", "sk", "as", "afc", "sv", "tsv", "vfb", "vfl", "ff", "ik", "town", "real", "athletic", "sporting"
+                };
+
+                string normCand = NormalizeForComparison(candidate);
+                var candTokens = normCand.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(t => t.Length >= 3 && !stopWords.Contains(t))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                if (candTokens.Any())
+                {
+                    string normT1 = NormalizeForComparison(team1Name) + " " + NormalizeForComparison(opTeam1);
+                    string normT2 = NormalizeForComparison(team2Name) + " " + NormalizeForComparison(opTeam2);
+
+                    var t1Tokens = normT1.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                        .Where(t => t.Length >= 3 && !stopWords.Contains(t))
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                    var t2Tokens = normT2.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                        .Where(t => t.Length >= 3 && !stopWords.Contains(t))
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                    bool overlapsT1 = candTokens.Any(t => t1Tokens.Contains(t));
+                    bool overlapsT2 = candTokens.Any(t => t2Tokens.Contains(t));
+
+                    if (overlapsT1 && !overlapsT2) return 1;
+                    if (overlapsT2 && !overlapsT1) return 2;
+                }
             }
 
             return 0;
