@@ -84,35 +84,37 @@ namespace BettingApp.Services
             // Execute in parallel (up to 3 concurrent checks to prevent Gemini 429 Rate Limits)
             await Parallel.ForEachAsync(dueBets, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = stoppingToken }, async (bet, ct) =>
             {
-                // Refresh bet from DB using a newly scoped context (since DbContext is not thread-safe)
-                using var taskContext = dbFactory.CreateDbContext();
-                var dbBet = await taskContext.Bets.Include(b => b.Legs).Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == bet.Id, ct);
-                if (dbBet == null || (dbBet.Status != "Approved" && dbBet.Status != "Won" && dbBet.Status != "Lost" && dbBet.Status != "Void")) return;
-                
-                if (dbBet.AiEvaluation == null)
-                {
-                    var existingEval = await taskContext.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id, ct);
-                    dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
-                }
-                
-                if (dbBet.AiEvaluation.AiOutcomeResult == "Admin Override")
-                {
-                    if (dbBet.NextCheckTime != null)
-                    {
-                        dbBet.NextCheckTime = null;
-                        await taskContext.SaveChangesAsync(ct);
-                    }
-                    return;
-                }
-
-                if (!AiVisionService.ProcessingOutcomeBetIds.TryAdd(dbBet.Id, true))
-                {
-                    return; // Already being checked by another thread or admin
-                }
-
                 try
                 {
-                    uiNotifier?.NotifyAdmin("Update");
+                    // Refresh bet from DB using a newly scoped context (since DbContext is not thread-safe)
+                    using var taskContext = dbFactory.CreateDbContext();
+                    var dbBet = await taskContext.Bets.Include(b => b.Legs).Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == bet.Id, ct);
+                    if (dbBet == null || (dbBet.Status != "Approved" && dbBet.Status != "Won" && dbBet.Status != "Lost" && dbBet.Status != "Void")) return;
+                    
+                    if (dbBet.AiEvaluation == null)
+                    {
+                        var existingEval = await taskContext.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == dbBet.Id, ct);
+                        dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
+                    }
+                    
+                    if (dbBet.AiEvaluation.AiOutcomeResult == "Admin Override")
+                    {
+                        if (dbBet.NextCheckTime != null)
+                        {
+                            dbBet.NextCheckTime = null;
+                            await taskContext.SaveChangesAsync(ct);
+                        }
+                        return;
+                    }
+
+                    if (!AiVisionService.ProcessingOutcomeBetIds.TryAdd(dbBet.Id, true))
+                    {
+                        return; // Already being checked by another thread or admin
+                    }
+
+                    try
+                    {
+                        uiNotifier?.NotifyAdmin("Update");
 
                 if (string.IsNullOrEmpty(dbBet.AiEvaluation.AiVisionResultJson))
                 {
@@ -321,6 +323,15 @@ namespace BettingApp.Services
                 AiVisionService.ProcessingOutcomeBetIds.TryRemove(dbBet.Id, out _);
                 uiNotifier?.NotifyAdmin("Update");
             }
+                }
+                catch (DbUpdateConcurrencyException ex)
+                {
+                    _logger.LogWarning($"[Bet #{bet.Id}] Concurrency conflict detected: bet was modified by an admin or another process while checking outcome ({ex.Message}). Skipping update; will re-evaluate on next cycle.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"[Bet #{bet.Id}] Unexpected error processing due bet in BetMonitoringService.");
+                }
             });
             
             if (anyUpdates)
