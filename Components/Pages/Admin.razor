@@ -364,12 +364,25 @@ else
                                                                     }
                                                                 }
                                                             }
+                                                            bool isGroupLive = group.Any(item => LegOddsCache.TryGetValue(item.Index, out var res) && res.SearchResult?.IsLive == true);
+                                                            bool isGroupFinished = !isGroupLive && group.Any(item => LegOddsCache.TryGetValue(item.Index, out var res) && res.SearchResult?.StatusId == 2);
                                                         }
-                                                        @if (displayStartTime != null) {
-                                                            <div class="text-primary lh-1 text-nowrap fw-semibold" style="font-size: 0.75em;">
-                                                                <i class="bi bi-clock me-1"></i>@ToUserLocal(displayStartTime.Value).ToString("dd.MMM HH:mm")
-                                                            </div>
-                                                        }
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            @if (isGroupLive) {
+                                                                <span class="badge bg-danger shadow-sm text-nowrap d-inline-flex align-items-center" style="font-size: 0.65em; padding: 0.25em 0.5em;" title="Live In-Play Match">
+                                                                    <span class="pulse-dot bg-white rounded-circle d-inline-block me-1" style="width: 5px; height: 5px;"></span> LIVE
+                                                                </span>
+                                                            } else if (isGroupFinished) {
+                                                                <span class="badge bg-secondary shadow-sm text-nowrap" style="font-size: 0.65em; padding: 0.25em 0.5em;" title="Match Finished">
+                                                                    FINISHED
+                                                                </span>
+                                                            }
+                                                            @if (displayStartTime != null) {
+                                                                <div class="text-primary lh-1 text-nowrap fw-semibold" style="font-size: 0.75em;">
+                                                                    <i class="bi bi-clock me-1"></i>@ToUserLocal(displayStartTime.Value).ToString("dd.MMM HH:mm")
+                                                                </div>
+                                                            }
+                                                        </div>
                                                     </div>
                                                     <div class="card-body p-0 d-flex flex-row">
                                                         <div class="flex-grow-1 p-2 pt-1" style="min-width: 0;">
