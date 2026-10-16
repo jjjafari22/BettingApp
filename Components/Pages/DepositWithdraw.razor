@@ -1,5 +1,5 @@
 @page "/deposit-withdraw"
-@rendermode @(new InteractiveServerRenderMode(prerender: true))
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using BettingApp.Data
 @using BettingApp.Services
 @using Microsoft.EntityFrameworkCore
@@ -318,13 +318,8 @@
         return utcDate.AddMinutes(-TimezoneOffset);
     }
 
-    [CascadingParameter]
-    private HttpContext? HttpContext { get; set; }
-
     protected override async Task OnInitializedAsync()
     {
-        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
-
         try
         {
             var auth = await AuthState.GetAuthenticationStateAsync();

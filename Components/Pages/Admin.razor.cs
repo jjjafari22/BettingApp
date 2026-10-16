@@ -115,13 +115,8 @@ public partial class Admin
         }
     }
 
-    private HttpContext? HttpContext { get; set; }
-
-
     protected override async Task OnInitializedAsync()
     {
-        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
-
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         currentAdminName = user.Identity?.Name;
@@ -192,8 +187,6 @@ public partial class Admin
                 var uaLower = ua.ToLowerInvariant();
                 isDesktop = !uaLower.Contains("mobi") && !uaLower.Contains("android") && !uaLower.Contains("iphone");
                 isAndroid = uaLower.Contains("android");
-                
-                StateHasChanged();
             }
             catch { }
 

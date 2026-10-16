@@ -12,7 +12,7 @@
 @inject BettingApp.Services.DiscordNotificationService DiscordService
 @inject IJSRuntime JS
 @implements IDisposable
-@rendermode @(new InteractiveServerRenderMode(prerender: true))
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h3>Admin Settings</h3>
 
@@ -182,13 +182,8 @@ else
     private string pwaPackageBetsson = "";
     private string pwaPackageCoolbet = "";
 
-    [CascadingParameter]
-    private HttpContext? HttpContext { get; set; }
-
     protected override async Task OnInitializedAsync()
     {
-        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
-
         try
         {
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -244,7 +239,7 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && HttpContext == null)
+        if (firstRender)
         {
             try
             {

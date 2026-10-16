@@ -20,7 +20,7 @@
 @inject ILogger<Admin> Logger
 @inject BettingApp.Services.BetProcessingService BetProcessor
 @attribute [Authorize]
-@rendermode @(new InteractiveServerRenderMode(prerender: true))
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IAsyncDisposable
 
 <h3>Admin Dashboard</h3>

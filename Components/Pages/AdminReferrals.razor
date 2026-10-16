@@ -11,7 +11,7 @@
 @inject IJSRuntime JSRuntime
 @inject DiscordNotificationService DiscordService
 @inject BettingApp.Services.DialogService DialogService
-@rendermode @(new InteractiveServerRenderMode(prerender: true))
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <PageTitle>Admin Referrals - Castle of Happiness</PageTitle>
 
@@ -293,13 +293,8 @@ else
     private string? errorMessage;
     private int TimezoneOffset { get; set; }
 
-    [CascadingParameter]
-    private HttpContext? HttpContext { get; set; }
-
     protected override async Task OnInitializedAsync()
     {
-        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
-
         try
         {
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();

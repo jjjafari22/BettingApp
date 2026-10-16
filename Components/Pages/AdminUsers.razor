@@ -15,7 +15,7 @@
 @inject IEmailSender<ApplicationUser> EmailSenderInterface
 @inject BettingApp.Services.DialogService DialogService
 @implements IDisposable
-@rendermode @(new InteractiveServerRenderMode(prerender: true))
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <style>
     /* Clickable Rows */
@@ -564,13 +564,8 @@ else
         }
     }
 
-    [CascadingParameter]
-    private HttpContext? HttpContext { get; set; }
-
     protected override async Task OnInitializedAsync()
     {
-        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
-
         try
         {
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();

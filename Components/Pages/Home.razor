@@ -464,13 +464,8 @@ else
         return utcDate.AddMinutes(-TimezoneOffset);
     }
 
-    [CascadingParameter]
-    private HttpContext? HttpContext { get; set; }
-
     protected override async Task OnInitializedAsync()
     {
-        if (HttpContext != null) return; // Prerendering: exit instantly to show spinner
-
         try
         {
             var auth = await AuthState.GetAuthenticationStateAsync();
@@ -492,6 +487,10 @@ else
                 newBet.UserId = userId;
                 newBet.UserName = userName;
                 UiNotifier.OnUserNotification += HandleUserNotification;
+            }
+            else
+            {
+                IsLoading = false;
             }
         }
         catch (Exception ex) when (ex is not NavigationException)

@@ -13,8 +13,10 @@
 
 <div class="top-row navbar navbar-dark d-flex align-items-center" style="padding-left: 1rem;">
     <div class="container-fluid d-flex flex-row align-items-center justify-content-start flex-nowrap pe-5 pe-md-2" style="padding-left: 0;">
-        <img src="images/logo.png" alt="Logo" class="me-2" style="width: 42px; height: 42px; min-width: 42px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.2);" />
-        <a class="navbar-brand mx-0 mb-0 fw-bold text-truncate" style="font-size: 1.05rem; line-height: 1.2; margin-left: 0 !important; white-space: nowrap;" href="">Castle of Happiness</a>
+        <a class="navbar-brand mx-0 mb-0 fw-bold text-truncate d-flex align-items-center text-white text-decoration-none" style="font-size: 1.05rem; line-height: 1.2; margin-left: 0 !important; white-space: nowrap;" href="@(isAdmin ? "admin" : "")">
+            <img src="images/logo.png" alt="Logo" class="me-2" style="width: 42px; height: 42px; min-width: 42px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.2);" />
+            <span>Castle of Happiness</span>
+        </a>
     </div>
 </div>
 
