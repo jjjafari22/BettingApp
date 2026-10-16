@@ -56,7 +56,7 @@ namespace BettingApp.Services
             }
 
             string originalStatus = dbBet.Status;
-            bool isUndo = originalStatus != "Pending" && newStatus == "Approved";
+            bool isUndo = (originalStatus == "Won" || originalStatus == "Lost" || originalStatus == "Void" || originalStatus == "Rejected" || originalStatus == "Cancelled") && newStatus == "Approved";
 
             if (originalStatus == "Pending" && (newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost"))
             {
@@ -72,6 +72,19 @@ namespace BettingApp.Services
             }
 
             decimal dbAmount = (decimal)(dbBet.AmountNOK ?? 0);
+
+            if (originalStatus != "Pending" && (newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost") && newAmount > dbAmount)
+            {
+                var currentBal = dbUser.Balance;
+                var creditLimit = (decimal)dbUser.CreditLimit;
+                var additionalAmount = newAmount - dbAmount;
+                
+                var availableCredit = currentBal + creditLimit - additionalAmount;
+                if (availableCredit < 0)
+                {
+                    return (false, $"Insufficient funds for stake increase. Available: {(currentBal + creditLimit):N0} kr. Additional Required: {additionalAmount:N0} kr.");
+                }
+            }
 
             // REVERSE OLD IMPACT
             // Statuses that have deducted balance: Approved, Won, Lost
@@ -148,10 +161,16 @@ namespace BettingApp.Services
 
             string details = customAuditDetails ?? $"Bet ID: {betId}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Payout: {dbBet.PotentialPayout:N0}";
             
+            string actionName = isUndo 
+                ? "Bet Undone (Reverted to Approved)" 
+                : (isAutoSettled 
+                    ? "Auto-Settled Bet" 
+                    : (originalStatus == "Approved" && newStatus == "Approved" ? "Bet Updated" : $"Bet {newStatus}"));
+
             context.AuditLogs.Add(new AuditLog
             {
                 AdminUserName = adminName,
-                Action = isUndo ? "Bet Undone (Reverted to Approved)" : (isAutoSettled ? "Auto-Settled Bet" : $"Bet {newStatus}"),
+                Action = actionName,
                 TargetUserName = dbUser.UserName ?? "",
                 Details = details
             });
@@ -230,7 +249,8 @@ namespace BettingApp.Services
             {
                 if (!string.IsNullOrEmpty(dbUser.DiscordUserId))
                 {
-                    _ = _discordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet, isUndo ? "Undone" : newStatus, isUpdate: isUndo);
+                    bool isBetUpdate = isUndo || (originalStatus == "Approved" && newStatus == "Approved");
+                    _ = _discordService.NotifyUserBetAsync(dbUser.DiscordUserId, dbBet, isUndo ? "Undone" : newStatus, isUpdate: isBetUpdate);
                 }
 
                 _uiNotificationService.NotifyUser(dbBet.UserId, $"Your bet status is now: {newStatus}");

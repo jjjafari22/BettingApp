@@ -288,7 +288,7 @@ public partial class Admin
         {
             if (originalBetModel.Status != "Pending" && (reviewingBetModel.Odds != originalBetModel.Odds || reviewingBetModel.AmountNOK != originalBetModel.AmountNOK))
             {
-                 bool confirmed = await DialogService.ConfirmAsync( "You have unsaved changes to Odds or Stake.\n\nPlease click a status button (Won, Lost, Void) to save them, or click OK to discard changes and close.");
+                 bool confirmed = await DialogService.ConfirmAsync("You have unsaved changes to Odds or Stake.\n\nClick OK to discard changes and close, or Cancel to continue editing.");
                  if (!confirmed) return;
             }
         }
@@ -324,6 +324,16 @@ public partial class Admin
     private async Task NavigateReview(int direction)
     {
         if (currentReviewList == null || currentReviewList.Count == 0) return;
+
+        if (reviewingBetModel != null && originalBetModel != null)
+        {
+            if (originalBetModel.Status != "Pending" && (reviewingBetModel.Odds != originalBetModel.Odds || reviewingBetModel.AmountNOK != originalBetModel.AmountNOK))
+            {
+                bool confirmed = await DialogService.ConfirmAsync("You have unsaved changes to Odds or Stake.\n\nClick OK to discard changes and switch bets, or Cancel to continue editing.");
+                if (!confirmed) return;
+            }
+        }
+
         int newIndex = currentReviewIndex + direction;
 
         if (newIndex < 0) 
@@ -395,8 +405,7 @@ public partial class Admin
 
             errorMessage = null;
             successMessage = null; 
-            string originalStatus = bet.Status;
-            bool isUndo = originalStatus != "Pending" && newStatus == "Approved";
+            string originalStatus = originalBetModel?.Status ?? bet.Status;
             int originalBetId = bet.Id;
             if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
@@ -439,11 +448,53 @@ public partial class Admin
             }
         }
 
-        if (!isAutoSettled && new[] { "Won", "Lost", "Void", "Completed", "Cancelled" }.Contains(originalStatus))
+        bool isCompletedStatus(string status) => 
+            status == "Won" || status == "Lost" || status == "Void" || status == "Rejected" || status == "Cancelled" || status == "Completed";
+
+        bool isDataChanged = originalBetModel != null && (bet.AmountNOK != originalBetModel.AmountNOK || bet.Odds != originalBetModel.Odds);
+        bool isStatusChanged = originalStatus != newStatus;
+
+        bool requiresConfirmation = !isAutoSettled && (
+            (originalStatus == "Approved" && isDataChanged) ||
+            (isCompletedStatus(originalStatus) && (isStatusChanged || isDataChanged))
+        );
+
+        if (requiresConfirmation)
         {
-             bool confirmed = await DialogService.ConfirmAsync( 
-                $"Update Bet #{bet.Id}?\n\n{originalStatus} -> {newStatus}\nAmount: {bet.AmountNOK} kr\nOdds: {bet.Odds}");
-             if (!confirmed) return;
+            string confirmMsg;
+            if (isStatusChanged && isDataChanged)
+            {
+                var changes = new List<string> { $"Status: {originalStatus} -> {newStatus}" };
+                if (originalBetModel != null && bet.AmountNOK != originalBetModel.AmountNOK)
+                    changes.Add($"Stake: {originalBetModel.AmountNOK:N0} kr -> {bet.AmountNOK:N0} kr");
+                if (originalBetModel != null && bet.Odds != originalBetModel.Odds)
+                    changes.Add($"Odds: {originalBetModel.Odds:N2} -> {bet.Odds:N2}");
+                confirmMsg = $"Update Bet #{bet.Id}?\n\n{string.Join("\n", changes)}";
+            }
+            else if (isStatusChanged)
+            {
+                confirmMsg = $"Update Bet #{bet.Id}?\n\nStatus: {originalStatus} -> {newStatus}\nStake: {bet.AmountNOK:N0} kr\nOdds: {bet.Odds:N2}";
+            }
+            else
+            {
+                var changes = new List<string>();
+                if (originalBetModel != null && bet.AmountNOK != originalBetModel.AmountNOK)
+                    changes.Add($"Stake: {originalBetModel.AmountNOK:N0} kr -> {bet.AmountNOK:N0} kr");
+                if (originalBetModel != null && bet.Odds != originalBetModel.Odds)
+                    changes.Add($"Odds: {originalBetModel.Odds:N2} -> {bet.Odds:N2}");
+                confirmMsg = $"Update Bet #{bet.Id}?\n\n{string.Join("\n", changes)}";
+            }
+
+            bool confirmed = await DialogService.ConfirmAsync(confirmMsg);
+            if (!confirmed)
+            {
+                if (originalBetModel != null)
+                {
+                    bet.AmountNOK = originalBetModel.AmountNOK;
+                    bet.Odds = originalBetModel.Odds;
+                }
+                return;
+            }
         }
 
 
@@ -551,6 +602,35 @@ public partial class Admin
             {
                 originalBetModel.Status = newStatus;
                 originalBetModel.IsAutoSettled = true;
+            }
+            StateHasChanged();
+            return;
+        }
+
+        if (originalStatus == newStatus)
+        {
+            successMessage = $"Bet #{bet.Id} updated.";
+            
+            var listModel = approvedBets.FirstOrDefault(b => b.Id == bet.Id) 
+                         ?? completedBets.FirstOrDefault(b => b.Id == bet.Id) 
+                         ?? pendingBets.FirstOrDefault(b => b.Id == bet.Id);
+            if (listModel != null)
+            {
+                listModel.AmountNOK = bet.AmountNOK;
+                listModel.Odds = bet.Odds;
+                listModel.Status = newStatus;
+            }
+            if (originalBetModel != null && originalBetModel.Id == bet.Id)
+            {
+                originalBetModel.AmountNOK = bet.AmountNOK;
+                originalBetModel.Odds = bet.Odds;
+                originalBetModel.Status = newStatus;
+            }
+            if (reviewingBetModel != null && reviewingBetModel.Id == bet.Id)
+            {
+                reviewingBetModel.AmountNOK = bet.AmountNOK;
+                reviewingBetModel.Odds = bet.Odds;
+                reviewingBetModel.Status = newStatus;
             }
             StateHasChanged();
             return;
