@@ -68,6 +68,12 @@ namespace BettingApp.Services
                 return ("baseball", "mlb");
             }
 
+            // Tennis (ATP and WTA)
+            if (s.Contains("tennis") || s == "atp" || s == "wta")
+            {
+                return ("tennis", s.Contains("wta") ? "wta" : "atp");
+            }
+
             return null;
         }
 
@@ -88,6 +94,12 @@ namespace BettingApp.Services
             var (sport, league) = mapping.Value;
             string emoji = GetSportEmoji(sportName);
 
+            // Tennis uses a tournament-based structure (tournaments -> groupings -> competitions -> athletes)
+            if (sport == "tennis")
+            {
+                return await GetTennisMatchStatsJsonAsync(matchName, sportName, league, betPlacedAt, betStartsAt, betId, betLabel);
+            }
+
             try
             {
                 // 1. Clean the match name to extract Home and Away terms
@@ -100,7 +112,8 @@ namespace BettingApp.Services
                 // 2. Determine target dates to inspect. 
                 // If betStartsAt is known, the date is already pinned down (check that date +/- 1 day).
                 // If betStartsAt is unknown (e.g. new bet), inspect today and up to +5 days ahead to discover start times (matching OddsPapi's 5-day future window).
-                var baseDate = (betStartsAt ?? betPlacedAt ?? DateTime.UtcNow).Date;
+                var targetTime = betStartsAt ?? betPlacedAt ?? DateTime.UtcNow;
+                var baseDate = targetTime.Date;
                 var datesToCheck = new List<string>();
 
                 if (betStartsAt.HasValue)
@@ -131,6 +144,7 @@ namespace BettingApp.Services
 
                 JsonElement? matchedEvent = null;
                 string matchedDate = "";
+                double minDiffMinutes = double.MaxValue;
 
                 foreach (var dateStr in datesToCheck)
                 {
@@ -144,14 +158,25 @@ namespace BettingApp.Services
                         {
                             if (IsEventMatch(ev, teamA, teamB))
                             {
-                                matchedEvent = ev.Clone();
-                                matchedDate = string.IsNullOrEmpty(dateStr) ? "current week" : dateStr;
-                                break;
+                                string evDateStr = ev.TryGetProperty("date", out var d) ? d.GetString() ?? "" : "";
+                                double diff = 0;
+                                if (DateTime.TryParse(evDateStr, out var evDt))
+                                {
+                                    diff = Math.Abs((evDt - targetTime).TotalMinutes);
+                                }
+
+                                if (diff < minDiffMinutes)
+                                {
+                                    minDiffMinutes = diff;
+                                    matchedEvent = ev.Clone();
+                                    matchedDate = string.IsNullOrEmpty(dateStr) ? "current week" : dateStr;
+                                }
                             }
                         }
                     }
 
-                    if (matchedEvent.HasValue) break;
+                    // If we found a match within 4 hours of target time, short-circuit
+                    if (matchedEvent.HasValue && minDiffMinutes < 240) break;
                 }
 
                 if (!matchedEvent.HasValue)
@@ -336,6 +361,7 @@ namespace BettingApp.Services
             var s when s.Contains("hockey") => "🏒",
             var s when s.Contains("basketball") => "🏀",
             var s when s.Contains("baseball") => "⚾",
+            var s when s.Contains("tennis") => "🎾",
             _ => "🎯"
         };
 
@@ -403,6 +429,233 @@ namespace BettingApp.Services
             {
                 _throttleLock.Release();
             }
+        }
+
+        private async Task<string?> GetTennisMatchStatsJsonAsync(
+            string matchName,
+            string sportName,
+            string initialLeague,
+            DateTime? betPlacedAt,
+            DateTime? betStartsAt,
+            int? betId,
+            string betLabel)
+        {
+            try
+            {
+                string[] split = matchName.Split(new[] { " vs ", " - ", " v ", " at ", " @ " }, StringSplitOptions.None);
+                if (split.Length < 2) return null;
+
+                string playerA = NormalizeTeam(split[0]);
+                string playerB = NormalizeTeam(split[1]);
+
+                var targetTime = betStartsAt ?? betPlacedAt ?? DateTime.UtcNow;
+                var baseDate = targetTime.Date;
+                var datesToCheck = new List<string>
+                {
+                    baseDate.ToString("yyyyMMdd"),
+                    baseDate.AddDays(1).ToString("yyyyMMdd"),
+                    baseDate.AddDays(-1).ToString("yyyyMMdd")
+                };
+
+                if (!betStartsAt.HasValue)
+                {
+                    datesToCheck.Add(baseDate.AddDays(2).ToString("yyyyMMdd"));
+                    datesToCheck.Add(baseDate.AddDays(3).ToString("yyyyMMdd"));
+                    datesToCheck.Add(baseDate.AddDays(4).ToString("yyyyMMdd"));
+                    datesToCheck.Add(baseDate.AddDays(5).ToString("yyyyMMdd"));
+                }
+
+                // If initialLeague is specified as "wta", search WTA first then ATP. Otherwise ATP first then WTA.
+                var leaguesToCheck = initialLeague == "wta" ? new[] { "wta", "atp" } : new[] { "atp", "wta" };
+
+                JsonElement? bestComp = null;
+                string matchedTourney = "";
+                string matchedLeague = "";
+                double minDiffMinutes = double.MaxValue;
+
+                foreach (var league in leaguesToCheck)
+                {
+                    foreach (var dateStr in datesToCheck)
+                    {
+                        var scoreboardJson = await GetScoreboardJsonCachedAsync("tennis", league, dateStr);
+                        if (string.IsNullOrEmpty(scoreboardJson)) continue;
+
+                        using var doc = JsonDocument.Parse(scoreboardJson);
+                        if (!doc.RootElement.TryGetProperty("events", out var events) || events.ValueKind != JsonValueKind.Array) continue;
+
+                        foreach (var ev in events.EnumerateArray())
+                        {
+                            string tourney = ev.TryGetProperty("name", out var tn) ? tn.GetString() ?? "" : "";
+                            if (!ev.TryGetProperty("groupings", out var groupings) || groupings.ValueKind != JsonValueKind.Array) continue;
+
+                            foreach (var g in groupings.EnumerateArray())
+                            {
+                                if (!g.TryGetProperty("competitions", out var comps) || comps.ValueKind != JsonValueKind.Array) continue;
+
+                                foreach (var c in comps.EnumerateArray())
+                                {
+                                    if (IsTennisMatch(c, playerA, playerB))
+                                    {
+                                        string dateStrUtc = c.TryGetProperty("date", out var d) ? d.GetString() ?? "" : "";
+                                        double diff = 0;
+                                        if (DateTime.TryParse(dateStrUtc, out var dt))
+                                        {
+                                            diff = Math.Abs((dt - targetTime).TotalMinutes);
+                                        }
+
+                                        if (diff < minDiffMinutes)
+                                        {
+                                            minDiffMinutes = diff;
+                                            bestComp = c.Clone();
+                                            matchedTourney = tourney;
+                                            matchedLeague = league;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (bestComp.HasValue && minDiffMinutes < 1440) break; // Found within 24h of target time
+                    }
+
+                    if (bestComp.HasValue) break;
+                }
+
+                if (!bestComp.HasValue)
+                {
+                    _logger.LogInformation($"{betLabel} ❌ [ESPN] Tennis match '{matchName}' not found in ATP/WTA scoreboards.");
+                    return null;
+                }
+
+                var comp = bestComp.Value;
+                string eventId = comp.TryGetProperty("id", out var idElem) ? idElem.GetString() ?? "" : "";
+                string startTimeUtc = comp.TryGetProperty("date", out var dElem) ? dElem.GetString() ?? "" : "";
+
+                string statusName = "";
+                bool isCompleted = false;
+                string statusDetail = "";
+                if (comp.TryGetProperty("status", out var stObj) && stObj.TryGetProperty("type", out var typ))
+                {
+                    statusName = typ.TryGetProperty("name", out var sn) ? sn.GetString() ?? "" : "";
+                    isCompleted = typ.TryGetProperty("completed", out var cBool) && cBool.GetBoolean();
+                    statusDetail = typ.TryGetProperty("detail", out var det) ? det.GetString() ?? "" : "";
+                }
+
+                bool isFinished = isCompleted && (statusName == "STATUS_FINAL" || statusName == "STATUS_RETIRED" || statusName == "STATUS_WALKOVER" || statusName == "STATUS_DEFAULT");
+
+                _logger.LogInformation($"{betLabel} ✅ [ESPN] Found Tennis Match ID {eventId} ('{matchName}') in {matchedTourney} ({matchedLeague.ToUpperInvariant()}) | Status: {statusName} ({statusDetail}) | StartTime: {startTimeUtc}");
+
+                var matchNotes = new List<string>();
+                if (comp.TryGetProperty("notes", out var notesArr) && notesArr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var n in notesArr.EnumerateArray())
+                    {
+                        if (n.TryGetProperty("text", out var txt)) matchNotes.Add(txt.GetString() ?? "");
+                    }
+                }
+
+                string roundName = comp.TryGetProperty("round", out var rObj) && rObj.TryGetProperty("displayName", out var rdn) ? rdn.GetString() ?? "" : "";
+                string venueName = comp.TryGetProperty("venue", out var vObj) && vObj.TryGetProperty("fullName", out var vn) ? vn.GetString() ?? "" : "";
+                string courtName = comp.TryGetProperty("venue", out var vObj2) && vObj2.TryGetProperty("court", out var cn) ? cn.GetString() ?? "" : "";
+
+                var competitorsList = new List<object>();
+                if (comp.TryGetProperty("competitors", out var competitors) && competitors.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var c in competitors.EnumerateArray())
+                    {
+                        string pName = "";
+                        string pCountry = "";
+                        if (c.TryGetProperty("athlete", out var a))
+                        {
+                            pName = a.TryGetProperty("displayName", out var dn) ? dn.GetString() ?? "" : "";
+                            if (a.TryGetProperty("flag", out var fl) && fl.TryGetProperty("alt", out var cAlt))
+                            {
+                                pCountry = cAlt.GetString() ?? "";
+                            }
+                        }
+
+                        bool winner = c.TryGetProperty("winner", out var w) && w.GetBoolean();
+                        var sets = new List<object>();
+                        if (c.TryGetProperty("linescores", out var linescores) && linescores.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var ls in linescores.EnumerateArray())
+                            {
+                                double scoreVal = ls.TryGetProperty("value", out var v) ? v.GetDouble() : 0;
+                                int? tiebreak = ls.TryGetProperty("tiebreak", out var tb) ? tb.GetInt32() : null;
+                                bool setWinner = ls.TryGetProperty("winner", out var sw) && sw.GetBoolean();
+                                sets.Add(new { setScore = scoreVal, tiebreak, wonSet = setWinner });
+                            }
+                        }
+
+                        competitorsList.Add(new
+                        {
+                            player = pName,
+                            country = pCountry,
+                            winner,
+                            sets
+                        });
+                    }
+                }
+
+                var payload = new Dictionary<string, object>
+                {
+                    ["provider"] = "ESPN",
+                    ["sport"] = "Tennis",
+                    ["league"] = matchedLeague.ToUpperInvariant(),
+                    ["tournament"] = matchedTourney,
+                    ["round"] = roundName,
+                    ["venue"] = $"{venueName} ({courtName})".Trim(),
+                    ["eventId"] = eventId,
+                    ["match"] = matchName,
+                    ["startTimeIso"] = startTimeUtc,
+                    ["isFinished"] = isFinished,
+                    ["status"] = isFinished ? "Final" : (statusName.Contains("PROGRESS") ? "In Progress" : "Scheduled"),
+                    ["statusDetail"] = statusDetail,
+                    ["resultSummary"] = matchNotes.Count > 0 ? string.Join("; ", matchNotes) : "",
+                    ["competitors"] = competitorsList,
+                    ["rawCompetition"] = comp
+                };
+
+                if (!isFinished)
+                {
+                    payload["WARNING"] = "MATCH NOT FINISHED YET. DO NOT SEARCH GOOGLE OR GRADE LEGS AS WON/LOST. MARK AS PENDING.";
+                }
+
+                return JsonSerializer.Serialize(payload);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"{betLabel} ESPN API Error fetching tennis stats for '{matchName}': {ex.Message}");
+                return null;
+            }
+        }
+
+        private bool IsTennisMatch(JsonElement comp, string playerA, string playerB)
+        {
+            if (!comp.TryGetProperty("competitors", out var competitors) || competitors.GetArrayLength() < 2) return false;
+
+            bool matchedA = false;
+            bool matchedB = false;
+
+            foreach (var c in competitors.EnumerateArray())
+            {
+                if (!c.TryGetProperty("athlete", out var a)) continue;
+
+                string displayName = NormalizeTeam(a.TryGetProperty("displayName", out var dn) ? dn.GetString() : "");
+                string fullName = NormalizeTeam(a.TryGetProperty("fullName", out var fn) ? fn.GetString() : "");
+                string shortName = NormalizeTeam(a.TryGetProperty("shortName", out var sn) ? sn.GetString() : "");
+
+                if (MatchesAny(playerA, displayName, fullName, shortName))
+                {
+                    matchedA = true;
+                }
+                else if (MatchesAny(playerB, displayName, fullName, shortName))
+                {
+                    matchedB = true;
+                }
+            }
+
+            return matchedA && matchedB;
         }
     }
 }

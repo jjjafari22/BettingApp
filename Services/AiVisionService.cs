@@ -469,7 +469,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 - EXTRA TIME: Events in Extra Time (e.g. 111th minute) DO NOT COUNT unless the market says 'To Qualify', 'To Lift Trophy', or 'Including Extra Time'. Regular time is 90 mins + injury time. For example, if a player receives a yellow card in Extra Time, a standard 'Player Booked' bet is LOST.
 
 # 2. GOOGLE SEARCH STRATEGY (2-STEP VERIFICATION)
-When evaluating matches without API JSON (e.g. European hockey, lower leagues, Tennis, MMA):
+When evaluating matches without API JSON (e.g. European hockey, lower leagues, MMA, Formula 1):
 - STEP 1 (CHECK MATCH STATUS & START TIME FIRST):
   Before searching for player stats, first verify whether the match scheduled for {betPlacedAt:yyyy-MM-dd} (Year: {betPlacedAt.Year}) has actually FINISHED!
   Always include the year '{betPlacedAt.Year}' in your search query (e.g. 'Buffalo Sabres vs Florida Panthers score {betPlacedAt.Year}' or '{betPlacedAt:yyyy-MM-dd}').
@@ -535,7 +535,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, T
                         }
                         else
                         {
-                            // 2. US Sports (American Football, Ice Hockey, Basketball, Baseball) -> ESPN
+                            // 2. US Sports (American Football, Ice Hockey, Basketball, Baseball) & Tennis -> ESPN
                             rawJson = await _espn.GetMatchStatsJsonAsync(matchName, legSport, betPlacedAt, matchStartTime, betId);
                             providerLabel = "ESPN";
                         }
