@@ -394,6 +394,8 @@ public partial class Admin
     {
         if (showOverlay && isSavingBet) return;
         CancelCheckingAllOdds();
+        Task? minOverlayTask = null;
+        bool isSuccess = false;
         try
         {
             errorMessage = null;
@@ -495,6 +497,7 @@ public partial class Admin
             isSavingBet = true;
             StateHasChanged();
             await Task.Delay(1); // Give Blazor Server time to push UI state to client
+            minOverlayTask = UiExecutionHelper.StartDelay();
         }
 
 
@@ -570,6 +573,8 @@ public partial class Admin
             StateHasChanged();
             return;
         }
+
+        isSuccess = true;
 
         // Do not block the UI waiting for 3 heavy table scans! 
         // Run them sequentially in the background to avoid spiking DB DTU, and update UI when done.
@@ -687,6 +692,7 @@ public partial class Admin
         {
             if (showOverlay)
             {
+                await UiExecutionHelper.AwaitMinDurationAsync(minOverlayTask, isSuccess);
                 isSavingBet = false;
                 StateHasChanged();
             }

@@ -1903,11 +1903,14 @@ else
     private async Task AddTransaction()
     {
         if (isSavingTransaction) return;
+        Task? minOverlayTask = null;
+        bool isSuccess = false;
         try
         {
             isSavingTransaction = true;
             StateHasChanged();
             await Task.Delay(1);
+            minOverlayTask = UiExecutionHelper.StartDelay();
 
             successMessage = null;
             errorMessage = null;
@@ -2112,9 +2115,11 @@ else
         ClearForm();
         
         await LoadTransactions(context);
+        isSuccess = true;
         }
         finally
         {
+            await UiExecutionHelper.AwaitMinDurationAsync(minOverlayTask, isSuccess);
             isSavingTransaction = false;
             StateHasChanged();
         }
