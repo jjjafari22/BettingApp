@@ -396,13 +396,6 @@ public partial class Admin
         CancelCheckingAllOdds();
         try
         {
-            if (showOverlay)
-            {
-                isSavingBet = true;
-                StateHasChanged();
-                await Task.Delay(1); // Give Blazor Server time to push UI state to client
-            }
-
             errorMessage = null;
             successMessage = null; 
             string originalStatus = originalBetModel?.Status ?? bet.Status;
@@ -495,6 +488,13 @@ public partial class Admin
                 }
                 return;
             }
+        }
+
+        if (showOverlay)
+        {
+            isSavingBet = true;
+            StateHasChanged();
+            await Task.Delay(1); // Give Blazor Server time to push UI state to client
         }
 
 
@@ -673,6 +673,10 @@ public partial class Admin
             successMessage = $"Bet #{bet.Id} processed. Queue empty.";
         }
         StateHasChanged();
+        }
+        catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || ex is JSDisconnectedException)
+        {
+            // Operation cancelled or circuit disconnected normally (e.g. user dismissed dialog or navigated)
         }
         catch (Exception ex)
         {
