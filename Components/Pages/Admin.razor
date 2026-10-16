@@ -591,7 +591,14 @@ else
                                             </div>
 
                                             <div class="mb-2">
-                                                <select class="form-select form-select-sm fw-bold" @bind="SelectedPapiMarketId" @bind:after="UpdateManualMatchedOutcome">
+                                                <select class="form-select form-select-sm fw-bold" 
+                                                        @key="@($"papi-market-select-{PapiSearchResult.FixtureId}-{ActiveLookupLeg?.Match}-{ActiveLookupLeg?.Market}-{ActiveLookupLeg?.Selection}")" 
+                                                        @bind="SelectedPapiMarketId" 
+                                                        @bind:after="UpdateManualMatchedOutcome">
+                                                    @if (string.IsNullOrEmpty(SelectedPapiMarketId) || !PapiSearchResult.Markets.Any(m => m.MarketId == SelectedPapiMarketId))
+                                                    {
+                                                        <option value="" disabled selected>-- Select Market --</option>
+                                                    }
                                                     @foreach (var m in PapiSearchResult.Markets)
                                                     {
                                                         string displayMarketName = m.MarketName.Replace("Over Under", "Over/Under", StringComparison.OrdinalIgnoreCase);
@@ -604,7 +611,7 @@ else
                                                                 displayMarketName = displayMarketName.Replace("Team 2", $"[{matchSplit[1].Trim()}]", StringComparison.OrdinalIgnoreCase);
                                                             }
                                                         }
-                                                        <option value="@m.MarketId">@displayMarketName</option>
+                                                        <option value="@m.MarketId" @key="@m.MarketId">@displayMarketName</option>
                                                     }
                                                 </select>
                                             </div>

@@ -983,5 +983,50 @@ namespace BettingApp.Tests
             Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Marner, Mitchell)", "Over 0.5 (Marner, Mitchell)", leg, searchResult, marketName));
             Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Marner, Mitchell)", "Over 1.5 (Marner, Mitchell)", leg, searchResult, marketName));
         }
+
+        [Fact]
+        public void Test_Soccer_FindBestMarket_RealisticFullMarketList_PicksCorrectMarkets()
+        {
+            // Create a realistic list of 100+ OddsPapi soccer markets matching real API responses
+            var realisticMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "2Up - Full Time Result", MarketName = "2Up - Full Time Result" },
+                new OddsPapiMarket { MarketId = "3-Way Handicap", MarketName = "3-Way Handicap" },
+                new OddsPapiMarket { MarketId = "Asian Handicap", MarketName = "Asian Handicap" },
+                new OddsPapiMarket { MarketId = "Bookings - 1X2", MarketName = "Bookings - 1X2" },
+                new OddsPapiMarket { MarketId = "Bookings - Odd Even", MarketName = "Bookings - Odd Even" },
+                new OddsPapiMarket { MarketId = "Bookings - Odd Even Team 1", MarketName = "Bookings - Odd Even Team 1" },
+                new OddsPapiMarket { MarketId = "Bookings - Odd Even Team 2", MarketName = "Bookings - Odd Even Team 2" },
+                new OddsPapiMarket { MarketId = "Bookings - Over Under Full Time", MarketName = "Bookings - Over Under Full Time" },
+                new OddsPapiMarket { MarketId = "Both Teams To Score", MarketName = "Both Teams To Score" },
+                new OddsPapiMarket { MarketId = "Corners - Over Under Full Time", MarketName = "Corners - Over Under Full Time" },
+                new OddsPapiMarket { MarketId = "Full Time Result", MarketName = "Full Time Result" },
+                new OddsPapiMarket { MarketId = "Over Under Player Offsides (incl. overtime)", MarketName = "Over Under Player Offsides (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "Over Under Player Shots (incl. overtime)", MarketName = "Over Under Player Shots (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "Over Under Player Shots On Goal (incl. overtime)", MarketName = "Over Under Player Shots On Goal (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "Over Under Team 1", MarketName = "Over Under Team 1" },
+                new OddsPapiMarket { MarketId = "Over Under Team 2", MarketName = "Over Under Team 2" },
+                new OddsPapiMarket { MarketId = "Over Under Team 2 First Half", MarketName = "Over Under Team 2 First Half" },
+                new OddsPapiMarket { MarketId = "Over Under Team 2 Second Half", MarketName = "Over Under Team 2 Second Half" }
+            };
+
+            // 1. Both Teams To Score must NEVER match Bookings - Odd Even Team 2
+            var btts = OddsMatchingLogic.FindBestMarket(realisticMarkets, "Both Teams To Score", "Le Mans FC vs Toulouse FC", "Yes", _marketMapper);
+            Assert.NotNull(btts);
+            Assert.Equal("Both Teams To Score", btts.MarketId);
+            Assert.NotEqual("Bookings - Odd Even Team 2", btts.MarketId);
+
+            // 2. Match Result must NEVER match Over Under Team 2 Second Half
+            var matchRes = OddsMatchingLogic.FindBestMarket(realisticMarkets, "Match Result", "HamKam vs Bodø/Glimt", "Bodø/Glimt", _marketMapper);
+            Assert.NotNull(matchRes);
+            Assert.Equal("Full Time Result", matchRes.MarketId);
+            Assert.NotEqual("Over Under Team 2 Second Half", matchRes.MarketId);
+
+            // 3. Player Shots must NEVER match Over Under Player Offsides
+            var shots = OddsMatchingLogic.FindBestMarket(realisticMarkets, "Player Shots", "Eintracht Frankfurt vs 1. FC Köln", "Robin Koch - Over 0.5", _marketMapper);
+            Assert.NotNull(shots);
+            Assert.Equal("Over Under Player Shots (incl. overtime)", shots.MarketId);
+            Assert.NotEqual("Over Under Player Offsides (incl. overtime)", shots.MarketId);
+        }
     }
 }

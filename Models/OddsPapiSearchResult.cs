@@ -22,6 +22,7 @@ public class OddsData
 
 public class OddsPapiSearchResult
 {
+    public string FixtureId { get; set; } = "";
     public string MatchName { get; set; } = "";
     public DateTime StartTime { get; set; }
     public bool IsLive { get; set; }

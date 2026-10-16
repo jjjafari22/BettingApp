@@ -467,6 +467,7 @@ public class OddsApiService
 
             var result = new BettingApp.Models.OddsPapiSearchResult
             {
+                FixtureId = fixtureId,
                 MatchName = matchName,
                 StartTime = startTime,
                 IsLive = isLive,

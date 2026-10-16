@@ -459,6 +459,17 @@ public partial class Admin
         {
             PapiSearchResult = cached.SearchResult;
             SelectedPapiMarketId = cached.SelectedMarketId ?? "";
+
+            if ((string.IsNullOrEmpty(SelectedPapiMarketId) || !PapiSearchResult.Markets.Any(m => m.MarketId == SelectedPapiMarketId)) && PapiSearchResult.Markets.Any())
+            {
+                var best = BettingApp.Services.OddsMatchingLogic.FindBestMarket(PapiSearchResult.Markets, leg.Market ?? "", leg.Match, leg.Selection, MarketMapper);
+                if (best != null)
+                {
+                    SelectedPapiMarketId = best.MarketId;
+                    cached.SelectedMarketId = best.MarketId;
+                }
+            }
+
             OddsLookupErrorMessage = cached.ErrorMessage;
             OddsLookupWarningMessage = cached.WarningMessage;
             IsSearchingOdds = false;
