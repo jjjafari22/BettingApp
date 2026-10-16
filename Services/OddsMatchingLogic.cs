@@ -93,6 +93,34 @@ namespace BettingApp.Services
         return displayOName;
     }
 
+    public static bool CheckPlayerInitialsMatch(string firstNameFromOdds, string sel, string lastName)
+    {
+        if (string.IsNullOrWhiteSpace(firstNameFromOdds) || string.IsNullOrWhiteSpace(sel)) return false;
+
+        string normSel = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(sel).ToLowerInvariant();
+        string cleanFirst = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(firstNameFromOdds).ToLowerInvariant().Replace(".", "").Replace(" ", "").Replace("-", "");
+        
+        string cleanSel = System.Text.RegularExpressions.Regex.Replace(normSel, @"\b(over|under|yes|no|total|points?|goals?|assists?|shots?|saves?)\b", " ");
+        cleanSel = System.Text.RegularExpressions.Regex.Replace(cleanSel, @"\d+(?:\.\d+)?", " ");
+        cleanSel = System.Text.RegularExpressions.Regex.Replace(cleanSel, @"[.+\-/:()"",]", " ");
+        
+        var words = cleanSel.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                            .Where(w => !w.Equals(lastName, StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+        
+        if (!words.Any()) return false;
+
+        if (words.Any(w => w.Equals(cleanFirst, StringComparison.OrdinalIgnoreCase))) return true;
+
+        string initials = string.Concat(words.Select(w => w[0]));
+        if (initials.Equals(cleanFirst, StringComparison.OrdinalIgnoreCase)) return true;
+        if (cleanFirst.Length == 1 && words.Any(w => w.StartsWith(cleanFirst, StringComparison.OrdinalIgnoreCase))) return true;
+        if (initials.StartsWith(cleanFirst, StringComparison.OrdinalIgnoreCase)) return true;
+        if (cleanFirst.StartsWith(initials, StringComparison.OrdinalIgnoreCase) && initials.Length >= 2) return true;
+
+        return false;
+    }
+
     public static bool IsFuzzyPlayerMatch(string str1, string str2)
     {
         if (string.IsNullOrWhiteSpace(str1) || string.IsNullOrWhiteSpace(str2)) return false;
@@ -203,6 +231,27 @@ namespace BettingApp.Services
                     tokens2List.RemoveAt(initIdx);
                 }
             }
+            else if (t1.Length <= 3 && t1.All(char.IsLetter)) // Multi-initial like "jj"
+            {
+                var matchingTokens = new List<int>();
+                int t1CharIdx = 0;
+                for (int j = 0; j < tokens2List.Count && t1CharIdx < t1.Length; j++)
+                {
+                    if (tokens2List[j].StartsWith(t1[t1CharIdx].ToString()))
+                    {
+                        matchingTokens.Add(j);
+                        t1CharIdx++;
+                    }
+                }
+                if (t1CharIdx == t1.Length)
+                {
+                    matchCount++;
+                    foreach (var idx in matchingTokens.OrderByDescending(x => x))
+                    {
+                        tokens2List.RemoveAt(idx);
+                    }
+                }
+            }
         }
         if (matchCount == tokens1.Count) return true;
         
@@ -223,6 +272,27 @@ namespace BettingApp.Services
                 {
                     reverseMatch++;
                     tokens1List.RemoveAt(initIdx);
+                }
+            }
+            else if (t2.Length <= 3 && t2.All(char.IsLetter)) // Multi-initial like "jj"
+            {
+                var matchingTokens = new List<int>();
+                int t2CharIdx = 0;
+                for (int j = 0; j < tokens1List.Count && t2CharIdx < t2.Length; j++)
+                {
+                    if (tokens1List[j].StartsWith(t2[t2CharIdx].ToString()))
+                    {
+                        matchingTokens.Add(j);
+                        t2CharIdx++;
+                    }
+                }
+                if (t2CharIdx == t2.Length)
+                {
+                    reverseMatch++;
+                    foreach (var idx in matchingTokens.OrderByDescending(x => x))
+                    {
+                        tokens1List.RemoveAt(idx);
+                    }
                 }
             }
         }
@@ -459,24 +529,54 @@ namespace BettingApp.Services
             @"(?:\bat\s+least\s+([2-9]|\d{2,})\b|\b([2-9]|\d{2,})\s*(?:\+(?!\d)|or\s+more\b|\s*(?:points?|goals?|assists?|shots?|saves?|cards?|tackles?|fouls?)\b)|\bover\s*(?:0\.[6-9]|[1-9]|\d{2,}|[1-9]\.\d+)\b)",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        var lineMatch = System.Text.RegularExpressions.Regex.Match(
-            fullLegText,
-            @"(?:\b(over|under)\s*(\d+(?:\.\d+)?)\b|\bat\s+least\s+(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:\+(?!\d)|or\s+more\b))",
+        // Direction (Over vs Under): Selection ALWAYS takes precedence over market category!
+        bool selHasUnder = System.Text.RegularExpressions.Regex.IsMatch(NormSelRaw, @"\b(?:under|no|nei|not)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        bool selHasOver = System.Text.RegularExpressions.Regex.IsMatch(NormSelRaw, @"\b(?:over|yes|ja)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (selHasUnder && !selHasOver)
+        {
+            WantsUnder = true;
+        }
+        else if (selHasOver)
+        {
+            WantsUnder = false;
+        }
+        else
+        {
+            string mkt = leg.Market ?? "";
+            bool isTwoWayMarket = System.Text.RegularExpressions.Regex.IsMatch(mkt, @"\b(?:over\s*[\/-]\s*under|under\s*[\/-]\s*over|o\/u)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ||
+                                  (mkt.Contains("over", StringComparison.OrdinalIgnoreCase) && mkt.Contains("under", StringComparison.OrdinalIgnoreCase));
+
+            if (!isTwoWayMarket && System.Text.RegularExpressions.Regex.IsMatch(mkt, @"\b(?:under|no|nei|not)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                WantsUnder = true;
+            }
+            else
+            {
+                WantsUnder = false;
+            }
+        }
+
+        // Target Line: prefer Selection line over Market line
+        var selLineMatch = System.Text.RegularExpressions.Regex.Match(
+            leg.Selection ?? "",
+            @"(?:\b(?:over|under)\s*(\d+(?:\.\d+)?)\b|\bat\s+least\s+(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:\+(?!\d)|or\s+more\b))",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        WantsUnder = NormSel.Contains("under") || NormSel.Contains("no");
+        var mktLineMatch = System.Text.RegularExpressions.Regex.Match(
+            leg.Market ?? "",
+            @"(?:\b(?:over|under)\s*(\d+(?:\.\d+)?)\b|\bat\s+least\s+(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:\+(?!\d)|or\s+more\b))",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        if (lineMatch.Success)
+        var activeLineMatch = selLineMatch.Success ? selLineMatch : mktLineMatch;
+        if (activeLineMatch.Success)
         {
-            string dirStr = lineMatch.Groups[1].Value.ToLowerInvariant();
-            if (dirStr == "under") WantsUnder = true;
-
-            string valStr = !string.IsNullOrEmpty(lineMatch.Groups[2].Value) ? lineMatch.Groups[2].Value :
-                            (!string.IsNullOrEmpty(lineMatch.Groups[3].Value) ? lineMatch.Groups[3].Value : lineMatch.Groups[4].Value);
+            string valStr = !string.IsNullOrEmpty(activeLineMatch.Groups[1].Value) ? activeLineMatch.Groups[1].Value :
+                            (!string.IsNullOrEmpty(activeLineMatch.Groups[2].Value) ? activeLineMatch.Groups[2].Value : activeLineMatch.Groups[3].Value);
 
             if (double.TryParse(valStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedVal))
             {
-                if (!string.IsNullOrEmpty(lineMatch.Groups[1].Value))
+                if (!string.IsNullOrEmpty(activeLineMatch.Groups[1].Value))
                 {
                     TargetLine = parsedVal;
                 }
@@ -701,6 +801,15 @@ namespace BettingApp.Services
 
                     bool matchLast = ctx.NormSel.Contains(lastName);
                     bool matchFirst = ctx.NormSel.Contains(firstName);
+
+                    if (!matchFirst && matchLast)
+                    {
+                        matchFirst = CheckPlayerInitialsMatch(firstName, ctx.Leg?.Selection ?? "", lastName);
+                    }
+                    else if (!matchLast && matchFirst)
+                    {
+                        matchLast = CheckPlayerInitialsMatch(lastName, ctx.Leg?.Selection ?? "", firstName);
+                    }
 
                     string outcomePart = (displayOName ?? "").Substring(0, parenMatch.Index).Trim();
                     string normOutcomePart = _dotZeroRegex.Replace(BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(outcomePart).ToLowerInvariant().Replace(" ", "").Replace("(", "").Replace(")", "").Replace(":", "-"), "");

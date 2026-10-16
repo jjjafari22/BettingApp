@@ -51,8 +51,13 @@ namespace BettingApp.Services
             { "Player Points - Including Overtime", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
             { "Player Points (Including Overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
             { "Player Total Points", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Total Points Over/Under", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Points Over/Under", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
             { "Player Total Points (incl. overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
             { "Player Total Points - Including Overtime", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
+            { "Player Total Assists", "Over Under Player Assists (incl. overtime)|Player Assists (incl. overtime)" },
+            { "Player Total Assists Over/Under", "Over Under Player Assists (incl. overtime)|Player Assists (incl. overtime)" },
+            { "Player Assists Over/Under", "Over Under Player Assists (incl. overtime)|Player Assists (incl. overtime)" },
             { "Player to Record at Least 1 Point", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
             { "Player to Record at Least 1 Point (Including Overtime)", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
             { "Player to Record at Least 1 Point - Including Overtime", "Over Under Player Points (incl. overtime)|Player Points (incl. overtime)" },
@@ -344,6 +349,22 @@ namespace BettingApp.Services
                 return new List<string> { mapped };
             }
 
+            string cleanBase = System.Text.RegularExpressions.Regex.Replace(clean, @"\s+(?:Over\s*[\/-]\s*Under|Over\/Under|Under\/Over)(?:\s+\d+(?:\.\d+)?)?$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            if (!string.Equals(cleanBase, clean, StringComparison.OrdinalIgnoreCase) && _marketAliases.TryGetValue(cleanBase, out var mappedBase))
+            {
+                if (mappedBase.Contains('|'))
+                {
+                    return mappedBase.Split('|').Select(m => m.Trim()).ToList();
+                }
+                return new List<string> { mappedBase };
+            }
+
+            if ((cleanBase.Equals("Total Points", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Total Points", StringComparison.OrdinalIgnoreCase)) && 
+                !string.IsNullOrEmpty(selectionName) && HasPlayerName(selectionName))
+            {
+                return new List<string> { "Over Under Player Points (incl. overtime)", "Player Points (incl. overtime)", "Player Points" };
+            }
+
             // Clean up common AI hallucinations where it appends numbers to Total Goals
             if (clean.StartsWith("Total Goals", StringComparison.OrdinalIgnoreCase))
             {
@@ -444,13 +465,17 @@ namespace BettingApp.Services
             }
 
             // --- Dynamic Player Prop Catch-Alls (handles when AI appends player names to the market) ---
-            bool isTeamOrTotalStat = clean.Contains("Total", StringComparison.OrdinalIgnoreCase) ||
-                                     clean.Contains("Team", StringComparison.OrdinalIgnoreCase) ||
-                                     clean.Contains("Home", StringComparison.OrdinalIgnoreCase) ||
-                                     clean.Contains("Away", StringComparison.OrdinalIgnoreCase);
-
             bool isExplicitPlayerProp = clean.Contains("Player", StringComparison.OrdinalIgnoreCase) ||
                                         clean.Contains("Player's", StringComparison.OrdinalIgnoreCase);
+
+            bool isTeamOrTotalStat = !isExplicitPlayerProp && (
+                                     clean.Contains("Team 1", StringComparison.OrdinalIgnoreCase) ||
+                                     clean.Contains("Team 2", StringComparison.OrdinalIgnoreCase) ||
+                                     ((clean.Contains("Team", StringComparison.OrdinalIgnoreCase) ||
+                                       clean.Contains("Home", StringComparison.OrdinalIgnoreCase) ||
+                                       clean.Contains("Away", StringComparison.OrdinalIgnoreCase) ||
+                                       clean.Contains("Total", StringComparison.OrdinalIgnoreCase)) && 
+                                      !HasPlayerName(selectionName) && !HasPlayerName(clean)));
 
             // Combined Goal or Assist / Score or Assist (distinct from pure goals or pure assists)
             // Note: OddsPapi does not provide odds for combined Goal OR Assist props (it only provides pure Goals or pure Assists).

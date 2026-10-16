@@ -1028,5 +1028,99 @@ namespace BettingApp.Tests
             Assert.Equal("Over Under Player Shots (incl. overtime)", shots.MarketId);
             Assert.NotEqual("Over Under Player Offsides (incl. overtime)", shots.MarketId);
         }
+
+        [Fact]
+        public void Test_Hockey_Bet1025_TotalPointsOverUnder()
+        {
+            // Bet #1025: Total Points Over/Under 1.5, Nathan MacKinnon - Over 1.5
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "Total", MarketName = "Total" },
+                new OddsPapiMarket { MarketId = "Over Under Player Points (incl. overtime)", MarketName = "Over Under Player Points (incl. overtime)" }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(markets, "Total Points Over/Under 1.5", "Colorado Avalanche vs Pittsburgh Penguins", "Nathan MacKinnon - Over 1.5", _marketMapper);
+            Assert.NotNull(best);
+            Assert.Equal("Over Under Player Points (incl. overtime)", best.MarketId);
+
+            var leg = new AiVisionLeg { Match = "Colorado Avalanche vs Pittsburgh Penguins", Sport = "Ice Hockey", Market = "Total Points Over/Under 1.5", Selection = "Nathan MacKinnon - Over 1.5" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, null, best.MarketName);
+            Assert.False(ctx.WantsUnder);
+            Assert.Equal(1.5, ctx.TargetLine);
+
+            bool matchOver = OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (MacKinnon, Nathan)", "Over 1.5 (MacKinnon, Nathan)", ctx);
+            bool matchUnder = OddsMatchingLogic.IsOutcomeMatch("Under 1.5 (MacKinnon, Nathan)", "Under 1.5 (MacKinnon, Nathan)", ctx);
+            Assert.True(matchOver);
+            Assert.False(matchUnder);
+        }
+
+        [Fact]
+        public void Test_Hockey_Bet1024_PlayerTotalAssists_DirectionIntegrity()
+        {
+            // Bet #1024: Selection is Over 1.5, must NEVER match Under 1.5 despite market having "Over/Under"
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "Over Under Player Assists (incl. overtime)", MarketName = "Over Under Player Assists (incl. overtime)" }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(markets, "Player Total Assists Over/Under 1.5", "Colorado Avalanche vs Pittsburgh Penguins", "Cale Makar - Over 1.5", _marketMapper);
+            Assert.NotNull(best);
+            Assert.Equal("Over Under Player Assists (incl. overtime)", best.MarketId);
+
+            var leg = new AiVisionLeg { Match = "Colorado Avalanche vs Pittsburgh Penguins", Sport = "Ice Hockey", Market = "Player Total Assists Over/Under 1.5", Selection = "Cale Makar - Over 1.5" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, null, best.MarketName);
+            Assert.False(ctx.WantsUnder, "WantsUnder must be FALSE because user selected Over 1.5!");
+            Assert.Equal(1.5, ctx.TargetLine);
+
+            bool matchOver = OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Makar, Cale)", "Over 1.5 (Makar, Cale)", ctx);
+            bool matchUnder = OddsMatchingLogic.IsOutcomeMatch("Under 1.5 (Makar, Cale)", "Under 1.5 (Makar, Cale)", ctx);
+            Assert.True(matchOver, "Must match Over 1.5 (Makar, Cale)");
+            Assert.False(matchUnder, "Must NOT match Under 1.5 (Makar, Cale)");
+        }
+
+        [Fact]
+        public void Test_Hockey_Bet1023_PlayerTotalPoints()
+        {
+            // Bet #1023: Player Total Points Over/Under 1.5, Cale Makar - Over 1.5
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "Total", MarketName = "Total" },
+                new OddsPapiMarket { MarketId = "Over Under Player Points (incl. overtime)", MarketName = "Over Under Player Points (incl. overtime)" }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(markets, "Player Total Points Over/Under 1.5", "Colorado Avalanche vs Pittsburgh Penguins", "Cale Makar - Over 1.5", _marketMapper);
+            Assert.NotNull(best);
+            Assert.Equal("Over Under Player Points (incl. overtime)", best.MarketId);
+
+            var leg = new AiVisionLeg { Match = "Colorado Avalanche vs Pittsburgh Penguins", Sport = "Ice Hockey", Market = "Player Total Points Over/Under 1.5", Selection = "Cale Makar - Over 1.5" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, null, best.MarketName);
+            Assert.False(ctx.WantsUnder);
+            Assert.Equal(1.5, ctx.TargetLine);
+
+            bool matchOver = OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Makar, Cale)", "Over 1.5 (Makar, Cale)", ctx);
+            Assert.True(matchOver);
+        }
+
+        [Fact]
+        public void Test_Hockey_Bet1021_PeterkaJJ_InitialsMatch()
+        {
+            // Bet #1021: John-Jason Peterka - Yes vs Peterka, JJ
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "Over Under Player Points (incl. overtime)", MarketName = "Over Under Player Points (incl. overtime)" }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(markets, "Player to Record at Least 1 Point - Including Overtime", "Anaheim Ducks vs Boston Bruins", "John-Jason Peterka - Yes", _marketMapper);
+            Assert.NotNull(best);
+            Assert.Equal("Over Under Player Points (incl. overtime)", best.MarketId);
+
+            var leg = new AiVisionLeg { Match = "Anaheim Ducks vs Boston Bruins", Sport = "Ice Hockey", Market = "Player to Record at Least 1 Point - Including Overtime", Selection = "John-Jason Peterka - Yes" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, null, best.MarketName);
+            Assert.False(ctx.WantsUnder);
+            Assert.Equal(0.5, ctx.TargetLine);
+
+            bool matchOver = OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Peterka, JJ)", "Over 0.5 (Peterka, JJ)", ctx);
+            Assert.True(matchOver, "'Over 0.5 (Peterka, JJ)' must match 'John-Jason Peterka - Yes' via initials");
+        }
     }
 }
