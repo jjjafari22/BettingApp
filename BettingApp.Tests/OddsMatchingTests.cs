@@ -912,5 +912,76 @@ namespace BettingApp.Tests
             Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (DeBrincat, Alex)", "Over 1.5 (DeBrincat, Alex)", leg, searchResult, best.MarketName));
             Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 2.5 (DeBrincat, Alex)", "Over 2.5 (DeBrincat, Alex)", leg, searchResult, best.MarketName));
         }
+
+        [Fact]
+        public void Test_Hockey_MarkStone_2PlusPoints_Matches_Over1_5()
+        {
+            var searchResult = new OddsPapiSearchResult { MatchName = "Vegas Golden Knights vs Calgary Flames" };
+            var leg = new AiVisionLeg
+            {
+                Match = "Vegas Golden Knights vs Calgary Flames",
+                Market = "Player to Record 2+ Points (Incl. Overtime)",
+                Selection = "Mark Stone - Yes"
+            };
+
+            string marketName = "Over Under Player Points (incl. overtime)";
+
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Stone, Mark)", "Over 0.5 (Stone, Mark)", leg, searchResult, marketName));
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Stone, Mark)", "Over 1.5 (Stone, Mark)", leg, searchResult, marketName));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 2.5 (Stone, Mark)", "Over 2.5 (Stone, Mark)", leg, searchResult, marketName));
+        }
+
+        [Fact]
+        public void Test_Hockey_TomasHertl_2PlusGoals_Matches_Over1_5()
+        {
+            var searchResult = new OddsPapiSearchResult { MatchName = "Vegas Golden Knights vs Calgary Flames" };
+            var leg = new AiVisionLeg
+            {
+                Match = "Vegas Golden Knights vs Calgary Flames",
+                Market = "To Score 2+ Goals (Incl. Overtime)",
+                Selection = "Tomas Hertl - Yes"
+            };
+
+            string marketName = "Over Under Player Goals (incl. overtime)";
+
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Hertl, Tomas)", "Over 0.5 (Hertl, Tomas)", leg, searchResult, marketName));
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Hertl, Tomas)", "Over 1.5 (Hertl, Tomas)", leg, searchResult, marketName));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 2.5 (Hertl, Tomas)", "Over 2.5 (Hertl, Tomas)", leg, searchResult, marketName));
+        }
+
+        [Fact]
+        public void Test_Hockey_TomasHertl_3PlusGoals_Matches_Over2_5()
+        {
+            var searchResult = new OddsPapiSearchResult { MatchName = "Vegas Golden Knights vs Calgary Flames" };
+            var leg = new AiVisionLeg
+            {
+                Match = "Vegas Golden Knights vs Calgary Flames",
+                Market = "To Score 3+ Goals (Incl. Overtime)",
+                Selection = "Tomas Hertl - Yes"
+            };
+
+            string marketName = "Over Under Player Goals (incl. overtime)";
+
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Hertl, Tomas)", "Over 0.5 (Hertl, Tomas)", leg, searchResult, marketName));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Hertl, Tomas)", "Over 1.5 (Hertl, Tomas)", leg, searchResult, marketName));
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 2.5 (Hertl, Tomas)", "Over 2.5 (Hertl, Tomas)", leg, searchResult, marketName));
+        }
+
+        [Fact]
+        public void Test_Hockey_MitchMarner_2PlusAssists_Matches_Over1_5()
+        {
+            var searchResult = new OddsPapiSearchResult { MatchName = "Vegas Golden Knights vs Calgary Flames" };
+            var leg = new AiVisionLeg
+            {
+                Match = "Vegas Golden Knights vs Calgary Flames",
+                Market = "Player to Record 2+ Assists (Incl. Overtime)",
+                Selection = "Mitch Marner - Yes"
+            };
+
+            string marketName = "Over Under Player Assists (incl. overtime)";
+
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Marner, Mitchell)", "Over 0.5 (Marner, Mitchell)", leg, searchResult, marketName));
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Marner, Mitchell)", "Over 1.5 (Marner, Mitchell)", leg, searchResult, marketName));
+        }
     }
 }

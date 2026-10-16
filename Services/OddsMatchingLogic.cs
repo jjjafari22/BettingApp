@@ -456,12 +456,12 @@ namespace BettingApp.Services
         string fullLegText = $"{(leg.Market ?? "")} {(leg.Selection ?? "")}";
         HasHigherLineReq = System.Text.RegularExpressions.Regex.IsMatch(
             fullLegText,
-            @"\b(?:at\s+least\s+([2-9]|\d{2,})|([2-9]|\d{2,})\s*(?:\+|or\s+more|points?|goals?|assists?|shots?|saves?|cards?|tackles?|fouls?)|over\s*(?:0\.[6-9]|[1-9]|\d{2,}|[1-9]\.\d+))\b",
+            @"(?:\bat\s+least\s+([2-9]|\d{2,})\b|\b([2-9]|\d{2,})\s*(?:\+(?!\d)|or\s+more\b|\s*(?:points?|goals?|assists?|shots?|saves?|cards?|tackles?|fouls?)\b)|\bover\s*(?:0\.[6-9]|[1-9]|\d{2,}|[1-9]\.\d+)\b)",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         var lineMatch = System.Text.RegularExpressions.Regex.Match(
             fullLegText,
-            @"\b(?:(over|under)\s*(\d+(?:\.\d+)?)|at\s+least\s+(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:\+|or\s+more))\b",
+            @"(?:\b(over|under)\s*(\d+(?:\.\d+)?)\b|\bat\s+least\s+(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:\+(?!\d)|or\s+more\b))",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         WantsUnder = NormSel.Contains("under") || NormSel.Contains("no");
@@ -763,13 +763,29 @@ namespace BettingApp.Services
         if (ctx.TargetLine.HasValue)
         {
             string cleanOutcome = normOutcomePart.Replace(" ", "");
-            if (ctx.WantsUnder)
+            bool isUnder = cleanOutcome.Contains("under") || cleanOutcome.Contains("no");
+            if (isUnder == ctx.WantsUnder)
             {
-                isOutcomeMatch = cleanOutcome == ctx.CleanExpectedUnder || cleanOutcome.Replace(".", "") == ctx.CleanExpectedUnder.Replace(".", "");
-            }
-            else
-            {
-                isOutcomeMatch = cleanOutcome == ctx.CleanExpectedOver || cleanOutcome.Replace(".", "") == ctx.CleanExpectedOver.Replace(".", "");
+                if (ctx.WantsUnder)
+                {
+                    isOutcomeMatch = cleanOutcome == ctx.CleanExpectedUnder || cleanOutcome.Replace(".", "") == ctx.CleanExpectedUnder.Replace(".", "");
+                }
+                else
+                {
+                    isOutcomeMatch = cleanOutcome == ctx.CleanExpectedOver || cleanOutcome.Replace(".", "") == ctx.CleanExpectedOver.Replace(".", "");
+                }
+
+                if (!isOutcomeMatch)
+                {
+                    var numMatch = System.Text.RegularExpressions.Regex.Match(cleanOutcome, @"\d+(?:\.\d+)?");
+                    if (numMatch.Success && double.TryParse(numMatch.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedOutcomeLine))
+                    {
+                        if (Math.Abs(parsedOutcomeLine - ctx.TargetLine.Value) < 0.001)
+                        {
+                            isOutcomeMatch = true;
+                        }
+                    }
+                }
             }
         }
         else
@@ -784,10 +800,18 @@ namespace BettingApp.Services
         {
             if (int.TryParse(normOutcomePart.TrimEnd('+'), out int plusVal))
             {
-                string eqOver = $"over{plusVal - 1}.5";
-                if (ctx.NormSel.Contains(eqOver) || (plusVal == 1 && (ctx.NormSel.Contains("assist") || ctx.NormSel.Contains("score") || ctx.NormSel.Contains("goal") || ctx.NormSel.Contains("point") || ctx.NormSel.Contains("1or"))))
+                double eqLine = plusVal >= 1 ? plusVal - 0.5 : plusVal;
+                if (ctx.TargetLine.HasValue && Math.Abs(ctx.TargetLine.Value - eqLine) < 0.001)
                 {
                     isOutcomeMatch = true;
+                }
+                else
+                {
+                    string eqOver = $"over{plusVal - 1}.5";
+                    if (ctx.NormSel.Contains(eqOver) || (plusVal == 1 && (ctx.NormSel.Contains("assist") || ctx.NormSel.Contains("score") || ctx.NormSel.Contains("goal") || ctx.NormSel.Contains("point") || ctx.NormSel.Contains("1or"))))
+                    {
+                        isOutcomeMatch = true;
+                    }
                 }
             }
         }
