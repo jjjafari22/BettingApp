@@ -259,6 +259,15 @@ public class OddsApiService
             return (null, $"Castle doesn't yet pay for odds for {sport}.");
         }
 
+        // Fast Path: If match fixture AND parsed odds result are already cached, return immediately without acquiring any rate limiter!
+        if (_cache.TryGetValue($"OddspapiMatch4_{sportId}_{teamName}", out (string fid, string mn, DateTime st, bool il, string? fsid, int sid) quickMatch))
+        {
+            if (_cache.TryGetValue($"OddspapiParsedResult_{quickMatch.fid}", out BettingApp.Models.OddsPapiSearchResult? cachedParsed) && cachedParsed != null)
+            {
+                return (cachedParsed, null);
+            }
+        }
+
         await _apiRateLimiter.WaitAsync(cancellationToken);
         try
         {

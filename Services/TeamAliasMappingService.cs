@@ -119,6 +119,10 @@ namespace BettingApp.Services
             { "plzen", "pilsen" }
         };
 
+        private static readonly System.Text.RegularExpressions.Regex _aliasesCombinedRegex = new(
+            @"\b(" + string.Join("|", _teamAliases.Keys.OrderByDescending(k => k.Length).Select(System.Text.RegularExpressions.Regex.Escape)) + @")\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
         public static string ApplyTeamAliases(string name)
         {
             if (string.IsNullOrEmpty(name)) return name;
@@ -130,12 +134,7 @@ namespace BettingApp.Services
                 return directAlias;
             }
 
-            foreach (var alias in _teamAliases)
-            {
-                result = System.Text.RegularExpressions.Regex.Replace(result, $@"\b{System.Text.RegularExpressions.Regex.Escape(alias.Key)}\b", alias.Value, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            }
-            
-            return result;
+            return _aliasesCombinedRegex.Replace(result, m => _teamAliases.TryGetValue(m.Value, out var val) ? val : m.Value);
         }
 
         public static string NormalizeForComparison(string? name)

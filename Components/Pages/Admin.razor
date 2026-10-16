@@ -591,7 +591,7 @@ else
                                             </div>
 
                                             <div class="mb-2">
-                                                <select class="form-select form-select-sm fw-bold" @bind="SelectedPapiMarketId">
+                                                <select class="form-select form-select-sm fw-bold" @bind="SelectedPapiMarketId" @bind:after="UpdateManualMatchedOutcome">
                                                     @foreach (var m in PapiSearchResult.Markets)
                                                     {
                                                         string displayMarketName = m.MarketName.Replace("Over Under", "Over/Under", StringComparison.OrdinalIgnoreCase);
@@ -665,7 +665,7 @@ else
                                                                 var oId = kvp.Key;
                                                                 var oName = kvp.Value;
                                                                 string displayOName = BettingApp.Services.OddsMatchingLogic.GetTranslatedOutcomeName(oName, PapiSearchResult?.MatchName ?? "");
-                                                                bool isMatch = BettingApp.Services.OddsMatchingLogic.IsOutcomeMatch(oName, displayOName, ActiveLookupLeg, PapiSearchResult, selectedMarket?.MarketName);
+                                                                bool isMatch = !string.IsNullOrEmpty(ManualMatchedOutcome) && (oName == ManualMatchedOutcome || displayOName == ManualMatchedOutcome);
 
                                                                 <tr id="@(isMatch ? "highlighted-odds-row" : "")" class="@(isMatch ? "table-warning" : "") align-top">
                                                                     <td class="text-start fw-bold @(isMatch ? "text-dark" : "")">

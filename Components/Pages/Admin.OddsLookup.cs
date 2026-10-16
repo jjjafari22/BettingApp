@@ -46,6 +46,7 @@ public partial class Admin
     private string SelectedPapiMarketId = "";
     private string? OddsLookupErrorMessage = null;
     private string? OddsLookupWarningMessage = null;
+    private string? ManualMatchedOutcome = null;
 
     private bool openInNativeApp = false;
     private bool isDesktop = false;
@@ -142,14 +143,13 @@ public partial class Admin
         {
             try
             {
-                for (int i = 0; i < legs.Count; i++)
+                var tasks = legs.Select(async (leg, i) =>
                 {
                     if (ct.IsCancellationRequested || reviewingBetModel == null || reviewingBetModel.Id != runningBetId)
                     {
-                        break;
+                        return;
                     }
 
-                    var leg = legs[i];
                     string teamToSearch = leg.Match ?? leg.Selection ?? "";
                     bool isLive = AiVisionResult?.IsLive ?? false;
 
@@ -157,12 +157,11 @@ public partial class Admin
 
                     if (ct.IsCancellationRequested || reviewingBetModel == null || reviewingBetModel.Id != runningBetId)
                     {
-                        break;
+                        return;
                     }
 
                     // Process heavy market matching and outcome translation off the UI thread
                     var legResult = ProcessLegOddsBackground(leg, apiResult, error);
-                    int legIndex = i;
 
                     await InvokeAsync(() =>
                     {
@@ -171,11 +170,13 @@ public partial class Admin
                             return;
                         }
 
-                        LegOddsCache[legIndex] = legResult;
+                        LegOddsCache[i] = legResult;
                         CheckedLegsCount++;
                         StateHasChanged();
                     });
-                }
+                }).ToList();
+
+                await Task.WhenAll(tasks);
 
                 if (!ct.IsCancellationRequested && reviewingBetModel != null && reviewingBetModel.Id == runningBetId)
                 {
@@ -312,6 +313,7 @@ public partial class Admin
             if (apiResult.BookmakerOdds.TryGetValue(bestMatch.MarketId, out var bookiesDict))
             {
                 string? bestOutcome = null;
+                var ctx = new BettingApp.Services.OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, bestMatch.MarketName);
 
                 foreach (var kvp in bestMatch.OutcomeNames)
                 {
@@ -319,7 +321,7 @@ public partial class Admin
                     string oName = kvp.Value;
                     string displayOName = BettingApp.Services.OddsMatchingLogic.GetTranslatedOutcomeName(oName, apiResult.MatchName ?? "");
                     
-                    bool isMatch = BettingApp.Services.OddsMatchingLogic.IsOutcomeMatch(oName, displayOName, leg, apiResult, bestMatch.MarketName);
+                    bool isMatch = BettingApp.Services.OddsMatchingLogic.IsOutcomeMatch(oName, displayOName, ctx);
 
                     if (isMatch)
                     {
@@ -450,6 +452,33 @@ public partial class Admin
         
         OddsSearchTeam = leg.Match;
         ShowOddsLookup = true;
+
+        // Instant reuse: Check if this leg was already processed by CheckAllOdds or a previous lookup
+        int legIndex = AiVisionResult?.Legs != null ? AiVisionResult.Legs.IndexOf(leg) : -1;
+        if (legIndex >= 0 && LegOddsCache.TryGetValue(legIndex, out var cached) && cached != null && !cached.IsLoading && cached.SearchResult != null)
+        {
+            PapiSearchResult = cached.SearchResult;
+            SelectedPapiMarketId = cached.SelectedMarketId ?? "";
+            OddsLookupErrorMessage = cached.ErrorMessage;
+            OddsLookupWarningMessage = cached.WarningMessage;
+            IsSearchingOdds = false;
+            UpdateManualMatchedOutcome();
+            StateHasChanged();
+
+            if (!string.IsNullOrEmpty(SelectedPapiMarketId))
+            {
+                _ = Task.Run(async () => {
+                    await Task.Delay(100);
+                    await InvokeAsync(async () => {
+                        try {
+                            await JSRuntime.InvokeVoidAsync("scrollToElementId", "highlighted-odds-row");
+                        } catch { }
+                    });
+                });
+            }
+            return;
+        }
+
         _ = SearchOdds(leg.Market);
     }
 
@@ -481,6 +510,7 @@ public partial class Admin
         
         if (result == null)
         {
+            ManualMatchedOutcome = null;
             OddsLookupErrorMessage = error ?? "No OddsPapi matches found for that team, or error occurred.";
             Logger.LogInformation($" [Bet #{reviewingBetModel?.Id}] OddsPapi: {OddsLookupErrorMessage} (Searched: '{OddsSearchTeam}')");
         }
@@ -614,6 +644,8 @@ public partial class Admin
                     SelectedPapiMarketId = result.Markets.FirstOrDefault()?.MarketId ?? "";
                 }
             }
+
+            UpdateManualMatchedOutcome();
         }
 
         IsSearchingOdds = false;
@@ -634,6 +666,29 @@ public partial class Admin
         }
     }
 
+    private void UpdateManualMatchedOutcome()
+    {
+        ManualMatchedOutcome = null;
+        if (string.IsNullOrEmpty(SelectedPapiMarketId) || PapiSearchResult == null || ActiveLookupLeg == null) return;
+        var selectedMarket = PapiSearchResult.Markets.FirstOrDefault(m => m.MarketId == SelectedPapiMarketId);
+        if (selectedMarket == null) return;
 
+        var ctx = new BettingApp.Services.OddsMatchingLogic.OutcomeMatchingContext(
+            ActiveLookupLeg,
+            PapiSearchResult,
+            selectedMarket.MarketName
+        );
+
+        foreach (var kvp in selectedMarket.OutcomeNames)
+        {
+            string oName = kvp.Value;
+            string displayOName = BettingApp.Services.OddsMatchingLogic.GetTranslatedOutcomeName(oName, PapiSearchResult.MatchName ?? "");
+            if (BettingApp.Services.OddsMatchingLogic.IsOutcomeMatch(oName, displayOName, ctx))
+            {
+                ManualMatchedOutcome = oName;
+                break;
+            }
+        }
+    }
 
 }
