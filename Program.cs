@@ -179,11 +179,14 @@ else
 app.UseStaticFiles();
 app.MapStaticAssets();
 
-// --- FIX: Prevent Android Chrome from displaying "Showing offline" cached copies
+// --- Anti-Indexing & Anti-Caching Headers ---
 app.Use(async (context, next) =>
 {
     context.Response.OnStarting(() =>
     {
+        // Instruct all search crawlers (Google, Bing, etc.) to never index or follow links
+        context.Response.Headers.Append("X-Robots-Tag", "noindex, nofollow");
+
         // Only apply to HTML documents (Blazor pages) to prevent caching
         if (context.Response.ContentType?.StartsWith("text/html") == true)
         {
