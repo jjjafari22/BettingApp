@@ -270,7 +270,14 @@
             _debounceTimer.AutoReset = false;
             _debounceTimer.Elapsed += async (s, e) =>
             {
-                await RefreshTasksAsync();
+                try
+                {
+                    await RefreshTasksAsync();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error in NavMenu debounced refresh.");
+                }
             };
         }
 
@@ -283,9 +290,16 @@
         if (_isDisposed || !isAdmin) return;
 
         // If another refresh is already in progress, flag it so a follow-up check runs after it finishes
-        if (!await _refreshLock.WaitAsync(0))
+        try
         {
-            _hasPendingRefresh = true;
+            if (!await _refreshLock.WaitAsync(0))
+            {
+                _hasPendingRefresh = true;
+                return;
+            }
+        }
+        catch (ObjectDisposedException)
+        {
             return;
         }
 
@@ -304,7 +318,14 @@
         }
         finally
         {
-            _refreshLock.Release();
+            try
+            {
+                _refreshLock.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Component was disposed while refreshing, safe to ignore
+            }
         }
     }
 

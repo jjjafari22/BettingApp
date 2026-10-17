@@ -217,23 +217,31 @@ else
         }
     }
 
+    private bool _isDisposed;
+
     private void HandleAdminNotification(string? message)
     {
+        if (_isDisposed) return;
         if (message != null && message.Contains("Settings"))
         {
-            _ = InvokeAsync(async () =>
+            try
             {
-                try
+                _ = InvokeAsync(async () =>
                 {
-                    using var ctx = DbFactory.CreateDbContext();
-                    await LoadSettings(ctx);
-                    StateHasChanged();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error reloading admin settings: {ex.Message}");
-                }
-            });
+                    try
+                    {
+                        if (_isDisposed) return;
+                        using var ctx = DbFactory.CreateDbContext();
+                        await LoadSettings(ctx);
+                        StateHasChanged();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error reloading admin settings: {ex.Message}");
+                    }
+                });
+            }
+            catch { }
         }
     }
 
@@ -342,7 +350,17 @@ else
     private void RefreshDiscordCache()
     {
         DiscordService.InvalidateChannelCache();
-        _ = Task.Run(async () => await DiscordService.GetGuildTextChannelsAsync());
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await DiscordService.GetGuildTextChannelsAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AdminSettings] Failed to refresh discord channel cache: {ex.Message}");
+            }
+        });
         discordMessage = "Discord cache refreshed successfully!";
         showDiscordSuccess = true;
     }
@@ -370,6 +388,7 @@ else
 
     public void Dispose()
     {
+        _isDisposed = true;
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
     }
 }

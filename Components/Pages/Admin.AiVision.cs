@@ -448,12 +448,19 @@ public partial class Admin
             finally
             {
                 BettingApp.Services.AiVisionService.ProcessingOutcomeBetIds.TryRemove(capturingBetId, out _);
-                await InvokeAsync(() =>
+                try
                 {
-                    ConfirmingOutcomeBetIds.Remove(capturingBetId);
-                    shouldFocusReviewModal = true;
-                    StateHasChanged();
-                });
+                    if (!_isDisposed)
+                    {
+                        await InvokeAsync(() =>
+                        {
+                            ConfirmingOutcomeBetIds.Remove(capturingBetId);
+                            shouldFocusReviewModal = true;
+                            StateHasChanged();
+                        });
+                    }
+                }
+                catch { }
                 UiNotifier.NotifyAdmin("Update");
             }
         });

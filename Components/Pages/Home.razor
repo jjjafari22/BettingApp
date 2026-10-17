@@ -408,24 +408,41 @@ else
     
     private bool IsLoading = true;
     private bool IsSubmitting = false;
+    private bool _isDisposed = false;
     private CancellationTokenSource? _messageCts;
     private void AutoClearMessages()
     {
-        _messageCts?.Cancel();
-        _messageCts = new CancellationTokenSource();
-        var token = _messageCts.Token;
+        if (_isDisposed) return;
+        try
+        {
+            _messageCts?.Cancel();
+        }
+        catch { }
+
+        var cts = new CancellationTokenSource();
+        _messageCts = cts;
+        var token = cts.Token;
         _ = Task.Run(async () => 
         {
-            try { await Task.Delay(5000, token); } catch (TaskCanceledException) { return; }
-            if (!token.IsCancellationRequested)
+            try
             {
-                await InvokeAsync(() => 
+                await Task.Delay(5000, token);
+                if (!token.IsCancellationRequested && !_isDisposed)
                 {
-                    _errorMessage = null;
-                    _successMessage = null;
-                    StateHasChanged();
-                });
+                    try
+                    {
+                        await InvokeAsync(() => 
+                        {
+                            if (_isDisposed) return;
+                            _errorMessage = null;
+                            _successMessage = null;
+                            StateHasChanged();
+                        });
+                    }
+                    catch { }
+                }
             }
+            catch { }
         });
     }
 
@@ -502,20 +519,26 @@ else
 
     private void HandleUserNotification(string targetUserId, string? message)
     {
+        if (_isDisposed) return;
         if (targetUserId == userId)
         {
-            _ = InvokeAsync(async () =>
+            try
             {
-                try
+                _ = InvokeAsync(async () =>
                 {
-                    await LoadData();
-                    StateHasChanged();
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Error refreshing home user data");
-                }
-            });
+                    try
+                    {
+                        if (_isDisposed) return;
+                        await LoadData();
+                        StateHasChanged();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Error refreshing home user data");
+                    }
+                });
+            }
+            catch { }
         }
     }
 
@@ -530,6 +553,10 @@ else
                 {
                     await LoadData();
                 }
+            }
+            catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex.Message.Contains("circuit has disconnected") || ex.Message.Contains("disposed"))
+            {
+                /* Ignore normal disconnects when user navigates away or closes tab */
             }
             catch (Exception ex)
             {
@@ -983,7 +1010,13 @@ else
 
     public void Dispose()
     {
+        _isDisposed = true;
         UiNotifier.OnUserNotification -= HandleUserNotification;
-        _messageCts?.Dispose();
+        try
+        {
+            _messageCts?.Cancel();
+            _messageCts?.Dispose();
+        }
+        catch { }
     }
 }

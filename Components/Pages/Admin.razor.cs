@@ -60,16 +60,25 @@ public partial class Admin
         set { _errorMessage = value; if (value != null) AutoClearMessages(); }
     }
 
+    private bool _isDisposed = false;
+
     private void AutoClearMessages()
     {
+        if (_isDisposed) return;
         _ = Task.Run(async () =>
         {
-            await Task.Delay(5000);
-            var changed = false;
-            if (_successMessage != null) { _successMessage = null; changed = true; }
-            if (_errorMessage != null) { _errorMessage = null; changed = true; }
-            if (_successMessage != null) { _successMessage = null; changed = true; }
-            if (changed) await InvokeAsync(StateHasChanged);
+            try
+            {
+                await Task.Delay(5000);
+                var changed = false;
+                if (_successMessage != null) { _successMessage = null; changed = true; }
+                if (_errorMessage != null) { _errorMessage = null; changed = true; }
+                if (changed && !_isDisposed)
+                {
+                    try { await InvokeAsync(StateHasChanged); } catch { }
+                }
+            }
+            catch { }
         });
     }
     private System.Timers.Timer? adminDebounceTimer;
@@ -195,7 +204,14 @@ public partial class Admin
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
                 
                 uiRefreshTimer = new System.Timers.Timer(15000); // 15 seconds
-                uiRefreshTimer.Elapsed += (s, e) => InvokeAsync(StateHasChanged);
+                uiRefreshTimer.Elapsed += (s, e) =>
+                {
+                    try
+                    {
+                        if (!_isDisposed) _ = InvokeAsync(StateHasChanged);
+                    }
+                    catch { }
+                };
                 uiRefreshTimer.Start();
                 
                 StateHasChanged(); 
@@ -225,59 +241,67 @@ public partial class Admin
             adminDebounceTimer.AutoReset = false;
             adminDebounceTimer.Elapsed += async (s, e) => 
             {
-                await InvokeAsync(async () =>
+                try
                 {
-                    try
+                    if (_isDisposed) return;
+                    await InvokeAsync(async () =>
                     {
-                        await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
-                        
-                        if (reviewingBetModel != null)
+                        try
                         {
-                            var matchingBet = pendingBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
-                                           ?? approvedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
-                                           ?? completedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id);
-                            if (matchingBet != null)
+                            await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
+                            
+                            if (reviewingBetModel != null)
                             {
-                                if (matchingBet.AiOutcomeResult != reviewingBetModel.AiOutcomeResult ||
-                                    matchingBet.Status != reviewingBetModel.Status ||
-                                    matchingBet.NextCheckTime != reviewingBetModel.NextCheckTime ||
-                                    matchingBet.ArrivedPendingAt != reviewingBetModel.ArrivedPendingAt ||
-                                    matchingBet.AiVisionResultJson != reviewingBetModel.AiVisionResultJson)
+                                var matchingBet = pendingBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
+                                               ?? approvedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
+                                               ?? completedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id);
+                                if (matchingBet != null)
                                 {
-                                    reviewingBetModel.AiOutcomeResult = matchingBet.AiOutcomeResult;
-                                    reviewingBetModel.Status = matchingBet.Status;
-                                    reviewingBetModel.NextCheckTime = matchingBet.NextCheckTime;
-                                    reviewingBetModel.ArrivedPendingAt = matchingBet.ArrivedPendingAt;
-                                    reviewingBetModel.MatchStartTime = matchingBet.MatchStartTime;
-                                    reviewingBetModel.AiVisionResultJson = matchingBet.AiVisionResultJson;
-                                    reviewingBetModel.AiVisionError = matchingBet.AiVisionError;
-                                    if (matchingBet.Legs != null)
+                                    if (matchingBet.AiOutcomeResult != reviewingBetModel.AiOutcomeResult ||
+                                        matchingBet.Status != reviewingBetModel.Status ||
+                                        matchingBet.NextCheckTime != reviewingBetModel.NextCheckTime ||
+                                        matchingBet.ArrivedPendingAt != reviewingBetModel.ArrivedPendingAt ||
+                                        matchingBet.AiVisionResultJson != reviewingBetModel.AiVisionResultJson)
                                     {
-                                        reviewingBetModel.Legs = matchingBet.Legs.ToList();
-                                    }
-                                    
-                                    if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) && 
-                                        !reviewingBetModel.AiOutcomeResult.StartsWith("Error") && 
-                                        !reviewingBetModel.AiOutcomeResult.StartsWith("Exception"))
-                                    {
-                                        try {
-                                            ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
-                                                reviewingBetModel.AiOutcomeResult, 
-                                                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                                            );
-                                        } catch { }
+                                        reviewingBetModel.AiOutcomeResult = matchingBet.AiOutcomeResult;
+                                        reviewingBetModel.Status = matchingBet.Status;
+                                        reviewingBetModel.NextCheckTime = matchingBet.NextCheckTime;
+                                        reviewingBetModel.ArrivedPendingAt = matchingBet.ArrivedPendingAt;
+                                        reviewingBetModel.MatchStartTime = matchingBet.MatchStartTime;
+                                        reviewingBetModel.AiVisionResultJson = matchingBet.AiVisionResultJson;
+                                        reviewingBetModel.AiVisionError = matchingBet.AiVisionError;
+                                        if (matchingBet.Legs != null)
+                                        {
+                                            reviewingBetModel.Legs = matchingBet.Legs.ToList();
+                                        }
+                                        
+                                        if (!string.IsNullOrEmpty(reviewingBetModel.AiOutcomeResult) && 
+                                            !reviewingBetModel.AiOutcomeResult.StartsWith("Error") && 
+                                            !reviewingBetModel.AiOutcomeResult.StartsWith("Exception"))
+                                        {
+                                            try {
+                                                ParsedAiOutcome = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
+                                                    reviewingBetModel.AiOutcomeResult, 
+                                                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                                                );
+                                            } catch { }
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        StateHasChanged();
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogWarning(ex, "Failed to refresh bets on admin notification.");
-                    }
-                });
+                            StateHasChanged();
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogWarning(ex, "Failed to refresh bets on admin notification.");
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Failed to invoke debounced refresh on admin notification.");
+                }
             };
         }
         
@@ -287,6 +311,7 @@ public partial class Admin
 
     public async ValueTask DisposeAsync()
     {
+        _isDisposed = true;
         CancelCheckingAllOdds();
         uiRefreshTimer?.Dispose();
         adminDebounceTimer?.Dispose();

@@ -561,10 +561,12 @@ public partial class Admin
 
             errorMessage = result.ErrorMessage;
             _ = InvokeAsync(async () => {
-                await LoadPendingBets();
-                await LoadApprovedBets();
-                await LoadCompletedBets();
-                StateHasChanged();
+                try {
+                    await LoadPendingBets();
+                    await LoadApprovedBets();
+                    await LoadCompletedBets();
+                    StateHasChanged();
+                } catch { }
             });
             if (!isAutoSettled)
             {
@@ -579,10 +581,12 @@ public partial class Admin
         // Do not block the UI waiting for 3 heavy table scans! 
         // Run them sequentially in the background to avoid spiking DB DTU, and update UI when done.
         _ = InvokeAsync(async () => {
-            await LoadPendingBets();
-            await LoadApprovedBets();
-            await LoadCompletedBets();
-            StateHasChanged();
+            try {
+                await LoadPendingBets();
+                await LoadApprovedBets();
+                await LoadCompletedBets();
+                StateHasChanged();
+            } catch { }
         });
         UiNotifier.NotifyAdmin("Update");
         

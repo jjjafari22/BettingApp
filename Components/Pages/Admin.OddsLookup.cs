@@ -196,14 +196,21 @@ public partial class Admin
             }
             finally
             {
-                await InvokeAsync(() =>
+                try
                 {
-                    if (reviewingBetModel?.Id == runningBetId)
+                    if (!_isDisposed)
                     {
-                        IsCheckingAllOdds = false;
-                        StateHasChanged();
+                        await InvokeAsync(() =>
+                        {
+                            if (reviewingBetModel?.Id == runningBetId)
+                            {
+                                IsCheckingAllOdds = false;
+                                StateHasChanged();
+                            }
+                        });
                     }
-                });
+                }
+                catch { }
             }
         }, ct);
     }
@@ -479,12 +486,19 @@ public partial class Admin
             if (!string.IsNullOrEmpty(SelectedPapiMarketId))
             {
                 _ = Task.Run(async () => {
-                    await Task.Delay(100);
-                    await InvokeAsync(async () => {
-                        try {
-                            await JSRuntime.InvokeVoidAsync("scrollToElementId", "highlighted-odds-row");
-                        } catch { }
-                    });
+                    try
+                    {
+                        await Task.Delay(100);
+                        if (!_isDisposed)
+                        {
+                            await InvokeAsync(async () => {
+                                try {
+                                    await JSRuntime.InvokeVoidAsync("scrollToElementId", "highlighted-odds-row");
+                                } catch { }
+                            });
+                        }
+                    }
+                    catch { }
                 });
             }
             return;
@@ -667,12 +681,19 @@ public partial class Admin
         {
             // Give DOM a tiny moment to render the new table rows, then scroll
             _ = Task.Run(async () => {
-                await Task.Delay(100);
-                await InvokeAsync(async () => {
-                    try {
-                        await JSRuntime.InvokeVoidAsync("scrollToElementId", "highlighted-odds-row");
-                    } catch { }
-                });
+                try
+                {
+                    await Task.Delay(100);
+                    if (!_isDisposed)
+                    {
+                        await InvokeAsync(async () => {
+                            try {
+                                await JSRuntime.InvokeVoidAsync("scrollToElementId", "highlighted-odds-row");
+                            } catch { }
+                        });
+                    }
+                }
+                catch { }
             });
         }
     }

@@ -492,25 +492,32 @@ else
         }
     }
 
+    private bool _isDisposed = false;
     private System.Timers.Timer? _debounceTimer;
 
     private void HandleAdminNotification(string? msg)
     {
+        if (_isDisposed) return;
         if (_debounceTimer == null)
         {
             _debounceTimer = new System.Timers.Timer(1000);
             _debounceTimer.AutoReset = false;
             _debounceTimer.Elapsed += async (s, e) =>
             {
-                await InvokeAsync(async () =>
+                try
                 {
-                    try
+                    if (_isDisposed) return;
+                    await InvokeAsync(async () =>
                     {
-                        await LoadLogs();
-                        StateHasChanged();
-                    }
-                    catch { }
-                });
+                        try
+                        {
+                            await LoadLogs();
+                            StateHasChanged();
+                        }
+                        catch { }
+                    });
+                }
+                catch { }
             };
         }
         _debounceTimer.Stop();
@@ -660,6 +667,7 @@ else
 
     public void Dispose()
     {
+        _isDisposed = true;
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
         _debounceTimer?.Dispose();
     }

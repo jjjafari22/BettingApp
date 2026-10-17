@@ -499,6 +499,7 @@ else
     private bool hasAccess = false;
     private bool isLoading = true;
     private string? successMessage;
+    private bool _isDisposed = false;
     private System.Timers.Timer? userDebounceTimer;
     private string sortColumn = "LastActive";
     private bool sortAscending = false; 
@@ -602,13 +603,26 @@ else
 
     private void HandleAdminNotification(string? msg)
     {
+        if (_isDisposed) return;
         if (userDebounceTimer == null)
         {
             userDebounceTimer = new System.Timers.Timer(1000);
             userDebounceTimer.AutoReset = false;
             userDebounceTimer.Elapsed += async (s, e) => 
             {
-                await InvokeAsync(async () => await RefreshData());
+                try
+                {
+                    if (_isDisposed) return;
+                    await InvokeAsync(async () =>
+                    {
+                        try
+                        {
+                            await RefreshData();
+                        }
+                        catch { }
+                    });
+                }
+                catch { }
             };
         }
         userDebounceTimer.Stop();
@@ -1046,8 +1060,10 @@ else
             
             DiscordService.InvalidateChannelCache();
             _ = Task.Run(async () => {
-                await DiscordService.GetGuildTextChannelsAsync();
-                await DiscordService.SortUserChannelsAlphabeticallyAsync();
+                try {
+                    await DiscordService.GetGuildTextChannelsAsync();
+                    await DiscordService.SortUserChannelsAlphabeticallyAsync();
+                } catch { }
             });
             
             successMessage = $"Successfully updated Referred By to '{newValueDisplay}'.";
@@ -1088,8 +1104,10 @@ else
             
             DiscordService.InvalidateChannelCache();
             _ = Task.Run(async () => {
-                await DiscordService.GetGuildTextChannelsAsync();
-                await DiscordService.SortUserChannelsAlphabeticallyAsync();
+                try {
+                    await DiscordService.GetGuildTextChannelsAsync();
+                    await DiscordService.SortUserChannelsAlphabeticallyAsync();
+                } catch { }
             });
             
             successMessage = $"Successfully updated Discord ID to '{newValueDisplay}'.";
@@ -1130,8 +1148,10 @@ else
             
             DiscordService.InvalidateChannelCache();
             _ = Task.Run(async () => {
-                await DiscordService.GetGuildTextChannelsAsync();
-                await DiscordService.SortUserChannelsAlphabeticallyAsync();
+                try {
+                    await DiscordService.GetGuildTextChannelsAsync();
+                    await DiscordService.SortUserChannelsAlphabeticallyAsync();
+                } catch { }
             });
             
             successMessage = $"Successfully updated Discord Username to '{newValueDisplay}'.";
@@ -1302,6 +1322,7 @@ else
 
     public void Dispose()
     {
+        _isDisposed = true;
         userDebounceTimer?.Dispose();
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
     }

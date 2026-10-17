@@ -271,24 +271,41 @@
     private string userId = string.Empty;
     private bool IsLoading = true;
     private bool IsSubmitting = false;
+    private bool _isDisposed = false;
     private CancellationTokenSource? _messageCts;
     private void AutoClearMessages()
     {
-        _messageCts?.Cancel();
-        _messageCts = new CancellationTokenSource();
-        var token = _messageCts.Token;
+        if (_isDisposed) return;
+        try
+        {
+            _messageCts?.Cancel();
+        }
+        catch { }
+
+        var cts = new CancellationTokenSource();
+        _messageCts = cts;
+        var token = cts.Token;
         _ = Task.Run(async () => 
         {
-            try { await Task.Delay(5000, token); } catch (TaskCanceledException) { return; }
-            if (!token.IsCancellationRequested)
+            try
             {
-                await InvokeAsync(() => 
+                await Task.Delay(5000, token);
+                if (!token.IsCancellationRequested && !_isDisposed)
                 {
-                    _errorMessage = null;
-                    _successMessage = null;
-                    StateHasChanged();
-                });
+                    try
+                    {
+                        await InvokeAsync(() => 
+                        {
+                            if (_isDisposed) return;
+                            _errorMessage = null;
+                            _successMessage = null;
+                            StateHasChanged();
+                        });
+                    }
+                    catch { }
+                }
             }
+            catch { }
         });
     }
 
@@ -341,20 +358,26 @@
 
     private void HandleUserNotification(string targetUserId, string? message)
     {
+        if (_isDisposed) return;
         if (targetUserId == userId)
         {
-            _ = InvokeAsync(async () =>
+            try
             {
-                try
+                _ = InvokeAsync(async () =>
                 {
-                    await LoadData();
-                    StateHasChanged();
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Error refreshing cashier data");
-                }
-            });
+                    try
+                    {
+                        if (_isDisposed) return;
+                        await LoadData();
+                        StateHasChanged();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError(ex, "Error refreshing cashier data");
+                    }
+                });
+            }
+            catch { }
         }
     }
 
@@ -548,6 +571,13 @@
 
     public void Dispose()
     {
+        _isDisposed = true;
         UiNotifier.OnUserNotification -= HandleUserNotification;
+        try
+        {
+            _messageCts?.Cancel();
+            _messageCts?.Dispose();
+        }
+        catch { }
     }
 }

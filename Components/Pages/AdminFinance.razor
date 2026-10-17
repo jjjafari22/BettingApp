@@ -219,13 +219,16 @@
         }
     }
 
-    private void HandleAdminNotification(string? msg) => _ = TriggerLiveRefresh();
-    private void HandleUserNotification(string userId, string? msg) => _ = TriggerLiveRefresh();
+    private bool _isDisposed = false;
+
+    private void HandleAdminNotification(string? msg) { if (!_isDisposed) _ = TriggerLiveRefresh(); }
+    private void HandleUserNotification(string userId, string? msg) { if (!_isDisposed) _ = TriggerLiveRefresh(); }
 
     private async Task TriggerLiveRefresh()
     {
         try
         {
+            if (_isDisposed) return;
             using var context = DbFactory.CreateDbContext();
             await RefreshLiveLiability(context);
         }
@@ -269,6 +272,7 @@
 
     private async Task RefreshLiveLiability(ApplicationDbContext context)
     {
+        if (_isDisposed) return;
         var activeBets = await context.Bets
             .Where(b => b.Status == "Approved" && !context.Users.Any(u => u.Id == b.UserId && u.IsTestUser))
             .AsNoTracking()
@@ -276,7 +280,11 @@
             
         netOpenLiability = activeBets.Sum(b => b.NetLiability);
         netOpenProfitIfLost = activeBets.Sum(b => ((decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount));
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            if (!_isDisposed) await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     private void GoToCurrent()
@@ -358,115 +366,129 @@
 
     private async Task LoadMetricsAsync()
     {
-        using var context = DbFactory.CreateDbContext();
-        await RefreshLiveLiability(context);
-
-        DateTime startBase;
-        DateTime endBase;
-
-        switch (viewMode)
+        try
         {
-            case ViewMode.Daily:
-                startBase = currentViewDate.Date;
-                endBase = startBase.AddDays(1);
-                break;
-            case ViewMode.Weekly:
-                startBase = GetStartOfWeek(currentViewDate);
-                endBase = startBase.AddDays(7);
-                break;
-            case ViewMode.Monthly:
-                startBase = new DateTime(currentViewDate.Year, currentViewDate.Month, 1);
-                endBase = startBase.AddMonths(1);
-                break;
-            case ViewMode.Yearly:
-                startBase = new DateTime(currentViewDate.Year, 1, 1);
-                endBase = startBase.AddYears(1);
-                break;
-            case ViewMode.Custom:
-                startBase = customStartDate?.Date ?? currentViewDate.Date;
-                endBase = (customEndDate?.Date ?? currentViewDate.Date).AddDays(1);
-                break;
-            default:
-                startBase = currentViewDate.Date;
-                endBase = startBase.AddDays(1);
-                break;
-        }
+            if (_isDisposed) return;
+            using var context = DbFactory.CreateDbContext();
+            await RefreshLiveLiability(context);
+            if (_isDisposed) return;
 
-        DateTime startUtc = GetUtcFromBaseTime(startBase);
-        DateTime endUtc = GetUtcFromBaseTime(endBase);
+            DateTime startBase;
+            DateTime endBase;
 
-        // Fetch free bet transactions
-        var freeBetTransactions = await context.Transactions
-            .Where(t => t.UpdatedAt >= startUtc && t.UpdatedAt < endUtc && t.Type == "Free Bet" && t.Status == "Completed")
-            .Where(t => !context.Users.Any(u => u.Id == t.UserId && u.IsTestUser))
-            .AsNoTracking()
-            .ToListAsync();
-        
-        totalFreeBetsCount = freeBetTransactions.Count;
-        totalFreeBetsAmount = freeBetTransactions.Sum(t => (decimal)t.AmountNOK);
-
-        // Fetch settled bets ONLY (using UpdatedAt instead of CreatedAt)
-        // EXCLUDES Test Users.
-        var validStatuses = new[] { "Won", "Lost", "Void" };
-        var stats = await context.Bets
-            .Where(b => b.UpdatedAt >= startUtc && b.UpdatedAt < endUtc && validStatuses.Contains(b.Status))
-            .Where(b => !context.Users.Any(u => u.Id == b.UserId && u.IsTestUser))
-            .GroupBy(b => 1)
-            .Select(g => new
+            switch (viewMode)
             {
-                Count = g.Count(),
-                TotalAmountNOK = g.Sum(b => (decimal)(b.AmountNOK ?? 0)),
-                TotalStakes = g.Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount),
-                WonPayouts = g.Where(b => b.Status == "Won").Sum(b => (decimal)(b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount),
-                VoidRefunds = g.Where(b => b.Status == "Void").Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount),
-                TotalWageredForOdds = g.Where(b => b.Odds > 0).Sum(b => (decimal)(b.AmountNOK ?? 0)),
-                WeightedOddsProduct = g.Where(b => b.Odds > 0).Sum(b => (decimal)(b.AmountNOK ?? 0) * b.Odds),
-                ArithmeticAverageOdds = g.Where(b => b.Odds > 0).Average(b => (decimal?)b.Odds) ?? 0m,
-                TotalNetLiability = g.Sum(b => (decimal)(b.AmountNOK ?? 0) * (b.Odds - 1)),
-                AvgNetLiability = g.Average(b => (decimal?)((decimal)(b.AmountNOK ?? 0) * (b.Odds - 1))) ?? 0m
-            })
-            .SingleOrDefaultAsync();
+                case ViewMode.Daily:
+                    startBase = currentViewDate.Date;
+                    endBase = startBase.AddDays(1);
+                    break;
+                case ViewMode.Weekly:
+                    startBase = GetStartOfWeek(currentViewDate);
+                    endBase = startBase.AddDays(7);
+                    break;
+                case ViewMode.Monthly:
+                    startBase = new DateTime(currentViewDate.Year, currentViewDate.Month, 1);
+                    endBase = startBase.AddMonths(1);
+                    break;
+                case ViewMode.Yearly:
+                    startBase = new DateTime(currentViewDate.Year, 1, 1);
+                    endBase = startBase.AddYears(1);
+                    break;
+                case ViewMode.Custom:
+                    startBase = customStartDate?.Date ?? currentViewDate.Date;
+                    endBase = (customEndDate?.Date ?? currentViewDate.Date).AddDays(1);
+                    break;
+                default:
+                    startBase = currentViewDate.Date;
+                    endBase = startBase.AddDays(1);
+                    break;
+            }
+
+            DateTime startUtc = GetUtcFromBaseTime(startBase);
+            DateTime endUtc = GetUtcFromBaseTime(endBase);
+
+            // Fetch free bet transactions
+            var freeBetTransactions = await context.Transactions
+                .Where(t => t.UpdatedAt >= startUtc && t.UpdatedAt < endUtc && t.Type == "Free Bet" && t.Status == "Completed")
+                .Where(t => !context.Users.Any(u => u.Id == t.UserId && u.IsTestUser))
+                .AsNoTracking()
+                .ToListAsync();
             
-        if (stats == null || stats.Count == 0)
-        {
-            totalBets = 0;
-            totalStakes = 0;
-            handle = 0;
-            netProfit = 0;
-            holdPercentage = 0;
-            avgOdds = 0;
-            avgBetSize = 0;
-            avgNetLiability = 0;
-            totalNetLiability = 0;
-        }
-        else
-        {
-            totalBets = stats.Count;
-            totalStakes = stats.TotalStakes;
-            handle = stats.TotalAmountNOK;
-            decimal totalPayouts = Math.Floor(stats.WonPayouts) + stats.VoidRefunds;
-            netProfit = totalStakes - totalPayouts;
-            holdPercentage = handle > 0 ? (netProfit / handle) * 100 : 0;
-            
-            if (stats.TotalWageredForOdds > 0)
+            totalFreeBetsCount = freeBetTransactions.Count;
+            totalFreeBetsAmount = freeBetTransactions.Sum(t => (decimal)t.AmountNOK);
+
+            // Fetch settled bets ONLY (using UpdatedAt instead of CreatedAt)
+            // EXCLUDES Test Users.
+            var validStatuses = new[] { "Won", "Lost", "Void" };
+            var stats = await context.Bets
+                .Where(b => b.UpdatedAt >= startUtc && b.UpdatedAt < endUtc && validStatuses.Contains(b.Status))
+                .Where(b => !context.Users.Any(u => u.Id == b.UserId && u.IsTestUser))
+                .GroupBy(b => 1)
+                .Select(g => new
+                {
+                    Count = g.Count(),
+                    TotalAmountNOK = g.Sum(b => (decimal)(b.AmountNOK ?? 0)),
+                    TotalStakes = g.Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount),
+                    WonPayouts = g.Where(b => b.Status == "Won").Sum(b => (decimal)(b.AmountNOK ?? 0) * b.Odds - b.FreeBetAmount),
+                    VoidRefunds = g.Where(b => b.Status == "Void").Sum(b => (decimal)(b.AmountNOK ?? 0) - b.FreeBetAmount),
+                    TotalWageredForOdds = g.Where(b => b.Odds > 0).Sum(b => (decimal)(b.AmountNOK ?? 0)),
+                    WeightedOddsProduct = g.Where(b => b.Odds > 0).Sum(b => (decimal)(b.AmountNOK ?? 0) * b.Odds),
+                    ArithmeticAverageOdds = g.Where(b => b.Odds > 0).Average(b => (decimal?)b.Odds) ?? 0m,
+                    TotalNetLiability = g.Sum(b => (decimal)(b.AmountNOK ?? 0) * (b.Odds - 1)),
+                    AvgNetLiability = g.Average(b => (decimal?)((decimal)(b.AmountNOK ?? 0) * (b.Odds - 1))) ?? 0m
+                })
+                .SingleOrDefaultAsync();
+                
+            if (stats == null || stats.Count == 0)
             {
-                avgOdds = stats.WeightedOddsProduct / stats.TotalWageredForOdds;
+                totalBets = 0;
+                totalStakes = 0;
+                handle = 0;
+                netProfit = 0;
+                holdPercentage = 0;
+                avgOdds = 0;
+                avgBetSize = 0;
+                avgNetLiability = 0;
+                totalNetLiability = 0;
             }
             else
             {
-                avgOdds = stats.ArithmeticAverageOdds;
+                totalBets = stats.Count;
+                totalStakes = stats.TotalStakes;
+                handle = stats.TotalAmountNOK;
+                decimal totalPayouts = Math.Floor(stats.WonPayouts) + stats.VoidRefunds;
+                netProfit = totalStakes - totalPayouts;
+                holdPercentage = handle > 0 ? (netProfit / handle) * 100 : 0;
+                
+                if (stats.TotalWageredForOdds > 0)
+                {
+                    avgOdds = stats.WeightedOddsProduct / stats.TotalWageredForOdds;
+                }
+                else
+                {
+                    avgOdds = stats.ArithmeticAverageOdds;
+                }
+                
+                avgBetSize = stats.Count > 0 ? stats.TotalAmountNOK / stats.Count : 0;
+                avgNetLiability = Math.Floor(stats.AvgNetLiability);
+                totalNetLiability = Math.Floor(stats.TotalNetLiability);
             }
-            
-            avgBetSize = stats.Count > 0 ? stats.TotalAmountNOK / stats.Count : 0;
-            avgNetLiability = Math.Floor(stats.AvgNetLiability);
-            totalNetLiability = Math.Floor(stats.TotalNetLiability);
-        }
 
-        await InvokeAsync(StateHasChanged);
+            try
+            {
+                if (!_isDisposed) await InvokeAsync(StateHasChanged);
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading finance metrics: {ex.Message}");
+        }
     }
 
     public void Dispose()
     {
+        _isDisposed = true;
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
         UiNotifier.OnUserNotification -= HandleUserNotification;
     }

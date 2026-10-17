@@ -195,20 +195,28 @@ else
         }
     }
 
+    private bool _isDisposed;
+
     private void HandleAdminNotification(string? message)
     {
-        _ = InvokeAsync(async () =>
+        if (_isDisposed) return;
+        try
         {
-            try
+            _ = InvokeAsync(async () =>
             {
-                await LoadUsers();
-                StateHasChanged();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error reloading credit limits: {ex.Message}");
-            }
-        });
+                try
+                {
+                    if (_isDisposed) return;
+                    await LoadUsers();
+                    StateHasChanged();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error reloading credit limits: {ex.Message}");
+                }
+            });
+        }
+        catch { }
     }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -358,6 +366,7 @@ else
 
     public void Dispose()
     {
+        _isDisposed = true;
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
     }
 }

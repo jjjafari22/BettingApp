@@ -24,6 +24,7 @@ public partial class AdminTransactions : IDisposable
     private bool isProcessingAction = false;
     private string? currentAdminName;
     private System.Timers.Timer? _debounceTimer;
+    private bool _isDisposed = false;
 
     private int TimezoneOffset { get; set; }
 
@@ -91,25 +92,31 @@ public partial class AdminTransactions : IDisposable
 
     private void HandleAdminNotification(string? message)
     {
+        if (_isDisposed) return;
         if (_debounceTimer == null)
         {
             _debounceTimer = new System.Timers.Timer(1000);
             _debounceTimer.AutoReset = false;
             _debounceTimer.Elapsed += async (s, e) =>
             {
-                await InvokeAsync(async () =>
+                try
                 {
-                    try
+                    if (_isDisposed) return;
+                    await InvokeAsync(async () =>
                     {
-                        using var context = DbFactory.CreateDbContext();
-                        await LoadTransactions(context);
-                        StateHasChanged();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error reloading transactions: {ex.Message}");
-                    }
-                });
+                        try
+                        {
+                            using var context = DbFactory.CreateDbContext();
+                            await LoadTransactions(context);
+                            StateHasChanged();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error reloading transactions: {ex.Message}");
+                        }
+                    });
+                }
+                catch { }
             };
         }
         _debounceTimer.Stop();
@@ -135,12 +142,14 @@ public partial class AdminTransactions : IDisposable
         successMessage = message;
         StateHasChanged();
         await Task.Delay(3000);
+        if (_isDisposed) return;
         successMessage = null;
         StateHasChanged();
     }
 
     public void Dispose()
     {
+        _isDisposed = true;
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
         _debounceTimer?.Dispose();
     }

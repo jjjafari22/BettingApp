@@ -573,7 +573,7 @@
         }
 
         isLoading = false;
-        await InvokeAsync(StateHasChanged);
+        try { await InvokeAsync(StateHasChanged); } catch { }
     }
 
     private async Task NextPage()
