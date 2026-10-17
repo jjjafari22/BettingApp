@@ -438,7 +438,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
             }
         }
 
-        public async Task<string?> ConfirmOutcomeAsync(string extractedBetDataJson, DateTime betPlacedAt, DateTime? matchStartTime = null, int? betId = null)
+        public async Task<string?> ConfirmOutcomeAsync(string extractedBetDataJson, DateTime betPlacedAt, DateTime? matchStartTime = null, int? betId = null, string thinkingLevel = "medium")
         {
             var token = await GetVertexAccessTokenAsync();
             if (string.IsNullOrEmpty(token)) return "Error: Gemini Auth Token missing.";
@@ -607,6 +607,10 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                     };
                 }
 
+                // If any leg falls back to Google Search, elevate thinking to "high" for rigorous cross-referencing and verification.
+                // For standard API-verified matches (FotMob/ESPN), use "medium" to save tokens and prevent quota throttling.
+                string effectiveThinkingLevel = anyLegNeedsGoogleSearch ? "high" : thinkingLevel;
+
                 payload["generationConfig"] = new Dictionary<string, object>
                 {
                     ["maxOutputTokens"] = 8192,
@@ -614,7 +618,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                     ["responseSchema"] = JsonSerializer.Deserialize<object>(schemaJson, options)!,
                     ["thinkingConfig"] = new Dictionary<string, object>
                     {
-                        ["thinkingLevel"] = "high"
+                        ["thinkingLevel"] = effectiveThinkingLevel
                     }
                 };
 
@@ -629,11 +633,11 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                 betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
                 if (anyLegNeedsGoogleSearch)
                 {
-                    _logger.LogInformation($"{betLabel}🔍 [Outcome Check] Calling Gemini with Google Search Grounding ENABLED (Model: {resolvedModel})...");
+                    _logger.LogInformation($"{betLabel}🔍 [Outcome Check] Calling Gemini with Google Search Grounding ENABLED (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
                 }
                 else
                 {
-                    _logger.LogInformation($"{betLabel}🛡️ [Outcome Check] Calling Gemini with Google Search Grounding DISABLED - $0 Search Cost (Model: {resolvedModel})...");
+                    _logger.LogInformation($"{betLabel}🛡️ [Outcome Check] Calling Gemini with Google Search Grounding DISABLED - $0 Search Cost (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
                 }
                 
                 var (response, elapsedMs) = await SendWithRetryAsync(url, jsonPayload, betLabel, token, timeoutSeconds: 300);
