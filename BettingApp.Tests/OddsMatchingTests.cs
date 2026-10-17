@@ -1122,5 +1122,93 @@ namespace BettingApp.Tests
             bool matchOver = OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Peterka, JJ)", "Over 0.5 (Peterka, JJ)", ctx);
             Assert.True(matchOver, "'Over 0.5 (Peterka, JJ)' must match 'John-Jason Peterka - Yes' via initials");
         }
+
+        [Fact]
+        public void Test_Bet1031_Leg2_TotalGoals_Over25Goals_MatchesOver25()
+        {
+            // Bet #1031 Leg 2: Total Goals, Over 2.5 Goals
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket
+                {
+                    MarketId = "Over Under Full Time",
+                    MarketName = "Over Under Full Time",
+                    OutcomeNames = new Dictionary<string, string>
+                    {
+                        ["o1"] = "Over 0.5",
+                        ["o2"] = "Under 0.5",
+                        ["o3"] = "Over 1.5",
+                        ["o4"] = "Under 1.5",
+                        ["o5"] = "Over 2.5",
+                        ["o6"] = "Under 2.5",
+                        ["o7"] = "Over 3.5",
+                        ["o8"] = "Under 3.5"
+                    }
+                }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(markets, "Total Goals", "Brentford vs Liverpool", "Over 2.5 Goals", _marketMapper);
+            Assert.NotNull(best);
+            Assert.Equal("Over Under Full Time", best.MarketId);
+
+            var leg = new AiVisionLeg { Match = "Brentford vs Liverpool", Sport = "Soccer", Market = "Total Goals", Selection = "Over 2.5 Goals" };
+            var apiResult = new OddsPapiSearchResult { MatchName = "Brentford vs Liverpool" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, best.MarketName);
+
+            Assert.False(ctx.WantsUnder);
+            Assert.Equal(2.5, ctx.TargetLine);
+
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 2.5", "Over 2.5", ctx), "Over 2.5 Goals must match Over 2.5");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Under 2.5", "Under 2.5", ctx), "Over 2.5 Goals must not match Under 2.5");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 1.5", "Over 1.5", ctx), "Over 2.5 Goals must not match Over 1.5");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 3.5", "Over 3.5", ctx), "Over 2.5 Goals must not match Over 3.5");
+        }
+
+        [Theory]
+        [InlineData("Over 2.5 Goals", "Over Under Full Time", "Over 2.5", true)]
+        [InlineData("Over 2.5", "Over Under Full Time", "Over 2.5", true)]
+        [InlineData("Over 2.5 Mål", "Over Under Full Time", "Over 2.5", true)]
+        [InlineData("3+ Goals", "Over Under Full Time", "Over 2.5", true)]
+        [InlineData("At least 3 goals", "Over Under Full Time", "Over 2.5", true)]
+        [InlineData("Under 2.5 Goals", "Over Under Full Time", "Under 2.5", true)]
+        [InlineData("Under 2.5 Goals", "Over Under Full Time", "Over 2.5", false)]
+        [InlineData("Over 0.5 Goals", "Over Under First Half", "Over 0.5", true)]
+        [InlineData("Over 9.5 Corners", "Total Corners", "Over 9.5", true)]
+        [InlineData("Over 3.5 Cards", "Total Cards", "Over 3.5", true)]
+        [InlineData("Over 2.5", "Asian Over Under", "Over 2.5 (0:0)", true)]
+        public void Test_PureOverUnderOutcomeMatching_VariousFormats(string selection, string opMarket, string opOutcome, bool expected)
+        {
+            var leg = new AiVisionLeg { Match = "Brentford vs Liverpool", Sport = "Soccer", Market = "Total Goals", Selection = selection };
+            var apiResult = new OddsPapiSearchResult { MatchName = "Brentford vs Liverpool" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, opMarket);
+
+            bool isMatch = OddsMatchingLogic.IsOutcomeMatch(opOutcome, opOutcome, ctx);
+            Assert.Equal(expected, isMatch);
+        }
+
+        [Fact]
+        public void Test_PlayerProp_DoesNotAccidentallyMatch_MatchTotalGoals()
+        {
+            // Kiernan Dewsbury-Hall - Over 1.5 (Power Sub) must not match 'Over 1.5' in 'Over Under Full Time'
+            var leg = new AiVisionLeg { Match = "Brentford vs Liverpool", Sport = "Soccer", Market = "", Selection = "Kiernan Dewsbury-Hall - Over 1.5 (Power Sub)" };
+            var apiResult = new OddsPapiSearchResult { MatchName = "Brentford vs Liverpool" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "Over Under Full Time");
+
+            bool isMatch = OddsMatchingLogic.IsOutcomeMatch("Over 1.5", "Over 1.5", ctx);
+            Assert.False(isMatch, "Player prop selection must never match a generic match total outcome");
+        }
+
+        [Fact]
+        public void Test_TeamTotalGoals_TeamAlignment()
+        {
+            var brentfordLeg = new AiVisionLeg { Match = "Brentford vs Liverpool", Sport = "Soccer", Market = "Brentford Total Goals", Selection = "Over 1.5 Goals" };
+            var apiResult = new OddsPapiSearchResult { MatchName = "Brentford vs Liverpool" };
+            
+            var ctxTeam1 = new OddsMatchingLogic.OutcomeMatchingContext(brentfordLeg, apiResult, "Over Under Team 1");
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 1.5", "Over 1.5", ctxTeam1), "Brentford total must match Over Under Team 1");
+
+            var ctxTeam2 = new OddsMatchingLogic.OutcomeMatchingContext(brentfordLeg, apiResult, "Over Under Team 2");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 1.5", "Over 1.5", ctxTeam2), "Brentford total must NOT match Over Under Team 2");
+        }
     }
 }

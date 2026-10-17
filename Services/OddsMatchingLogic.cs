@@ -586,6 +586,24 @@ namespace BettingApp.Services
                 }
             }
         }
+        else
+        {
+            var fallbackLineMatch = System.Text.RegularExpressions.Regex.Match(
+                $"{(leg.Selection ?? "")} {(leg.Market ?? "")}",
+                @"(?:\b(?:total\s+goals?|total|goals?|mål|mal|o\/u|line)\s*(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:goals?|mål|mal)\b|\b(\d+\.\d+)\b)",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (fallbackLineMatch.Success)
+            {
+                string valStr = !string.IsNullOrEmpty(fallbackLineMatch.Groups[1].Value) ? fallbackLineMatch.Groups[1].Value :
+                                (!string.IsNullOrEmpty(fallbackLineMatch.Groups[2].Value) ? fallbackLineMatch.Groups[2].Value : fallbackLineMatch.Groups[3].Value);
+
+                if (double.TryParse(valStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedVal))
+                {
+                    TargetLine = parsedVal;
+                }
+            }
+        }
 
         if (TargetLine.HasValue)
         {
@@ -697,6 +715,11 @@ namespace BettingApp.Services
         }
         else
         {
+            if (IsPureOverUnderOutcomeMatch(oName, displayOName, ctx))
+            {
+                return true;
+            }
+
             string displayONameSafe = _powerSubRegex.Replace(displayOName ?? "", "");
             string normOName = _dotZeroRegex.Replace(BettingApp.Services.TeamAliasMappingService.StripToAlphaNumeric(displayONameSafe), "");
             bool isLineSel = ctx.NormSel.StartsWith("over") || ctx.NormSel.StartsWith("under") || normOName.StartsWith("over") || normOName.StartsWith("under");
@@ -745,10 +768,19 @@ namespace BettingApp.Services
                         {
                             string baseOName = normOName.Substring(0, numOName.Index);
                             string baseSel = ctx.NormSel.Substring(0, ctx.NumSelIndex);
-                            if (!string.IsNullOrEmpty(baseOName) && !string.IsNullOrEmpty(baseSel) &&
-                                (baseOName.Contains(baseSel) || baseSel.Contains(baseOName) || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(baseOName, baseSel)))
+                            if (!string.IsNullOrEmpty(baseOName) && !string.IsNullOrEmpty(baseSel))
                             {
-                                isMatch = true;
+                                if (baseOName == "over" || baseOName == "under" || baseSel == "over" || baseSel == "under")
+                                {
+                                    if (baseOName == baseSel)
+                                    {
+                                        isMatch = true;
+                                    }
+                                }
+                                else if (baseOName.Contains(baseSel) || baseSel.Contains(baseOName) || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(baseOName, baseSel))
+                                {
+                                    isMatch = true;
+                                }
                             }
                         }
                     }
@@ -771,7 +803,11 @@ namespace BettingApp.Services
                         }
                         else if (ctx.NormSel.Contains(normOName))
                         {
-                            if (normOName.Length >= 4)
+                            if (normOName.StartsWith("over") || normOName.StartsWith("under"))
+                            {
+                                // Pure line outcome must not match a player prop via substring
+                            }
+                            else if (normOName.Length >= 4)
                             {
                                 isMatch = true;
                             }
@@ -863,6 +899,65 @@ namespace BettingApp.Services
         }
 
         return isMatch;
+    }
+
+    private static bool IsPureOverUnderOutcomeMatch(string oName, string? displayOName, OutcomeMatchingContext ctx)
+    {
+        if (!ctx.TargetLine.HasValue) return false;
+
+        // If outcome has player parentheses (LastName, FirstName), it's a player prop, not a pure total
+        if (_parenMatchRegex.IsMatch(displayOName ?? "")) return false;
+
+        var simpleParen = _simpleParenMatchRegex.Match(displayOName ?? "");
+        if (simpleParen.Success && !System.Text.RegularExpressions.Regex.IsMatch(simpleParen.Groups[1].Value, @"^\d+:\d+$|^\d+-\d+$"))
+        {
+            if (!double.TryParse(simpleParen.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _))
+            {
+                return false;
+            }
+        }
+
+        // Check if selection has a player name
+        // Strip common total words, numbers, and punctuation
+        string selRemaining = ctx.NormSelRaw ?? "";
+        selRemaining = System.Text.RegularExpressions.Regex.Replace(selRemaining, @"\b(?:over|under|o\/u|goals?|mål|mal|scoringer|points?|poeng|pts|cards?|kort|corners?|hjørnespark|hjornespark|shots?|skudd|saves?|redninger|tackles?|taklinger|fouls?|frispark|runs?|games?|sets?|innings?|frames?|power\s*sub|super\s*sub|total|totalt|antall|full\s*time|ft|regular\s*time|incl|overtime|penalties|ot|at\s+least|or\s+more)\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        selRemaining = System.Text.RegularExpressions.Regex.Replace(selRemaining, @"\d+(?:\.\d+)?", " ");
+        selRemaining = System.Text.RegularExpressions.Regex.Replace(selRemaining, @"[^\w\s]", " ");
+        if (!string.IsNullOrEmpty(ctx.NormT1)) selRemaining = System.Text.RegularExpressions.Regex.Replace(selRemaining, $@"\b{System.Text.RegularExpressions.Regex.Escape(ctx.NormT1)}\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!string.IsNullOrEmpty(ctx.NormT2)) selRemaining = System.Text.RegularExpressions.Regex.Replace(selRemaining, $@"\b{System.Text.RegularExpressions.Regex.Escape(ctx.NormT2)}\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        selRemaining = System.Text.RegularExpressions.Regex.Replace(selRemaining, @"\s+", "").Trim();
+
+        // If there's still text left in the selection (e.g. player name like "kiernandewsburyhall"), don't match as pure total
+        if (selRemaining.Length > 2) return false;
+
+        // Check if outcome has combo words like " and " or " & "
+        string dispLower = (displayOName ?? "").ToLowerInvariant();
+        if (dispLower.Contains(" and ") || dispLower.Contains(" & ") || dispLower.Contains(" og ")) return false;
+
+        // Team alignment check for Team 1 / Team 2 markets
+        string combinedLeg = $"{(ctx.Leg?.Market ?? "")} {(ctx.Leg?.Selection ?? "")}";
+        int legTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(combinedLeg, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2);
+        string normOp = ctx.NormOpMarket ?? "";
+        if (legTeam == 1 && normOp.Contains("team2")) return false;
+        if (legTeam == 2 && normOp.Contains("team1")) return false;
+
+        // Extract line and direction from outcome
+        var opMatch = System.Text.RegularExpressions.Regex.Match(displayOName ?? "", @"\b(over|under)\s*(\d+(?:\.\d+)?)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!opMatch.Success && !string.IsNullOrEmpty(oName))
+        {
+            opMatch = System.Text.RegularExpressions.Regex.Match(oName, @"\b(over|under)\s*(\d+(?:\.\d+)?)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+        if (!opMatch.Success) return false;
+
+        bool opIsUnder = opMatch.Groups[1].Value.Equals("under", StringComparison.OrdinalIgnoreCase);
+        if (opIsUnder != ctx.WantsUnder) return false;
+
+        if (double.TryParse(opMatch.Groups[2].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double opLine))
+        {
+            return Math.Abs(opLine - ctx.TargetLine.Value) < 0.001;
+        }
+
+        return false;
     }
 
     private static bool IsPlayerPropOutcomeMatchFast(string normOutcomePart, OutcomeMatchingContext ctx)
