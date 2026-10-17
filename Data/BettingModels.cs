@@ -176,6 +176,8 @@ namespace BettingApp.Data
         
         public string? PaymentDetails { get; set; }
         
+        public string? Note { get; set; }
+        
         public DateTime Date { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

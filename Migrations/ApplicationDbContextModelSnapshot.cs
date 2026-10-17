@@ -584,6 +584,9 @@ namespace BettingApp.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("Note")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("PaymentDetails")
                         .HasColumnType("nvarchar(max)");
 
