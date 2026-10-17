@@ -311,8 +311,28 @@ namespace BettingApp.Services
                             if (pageProps.TryGetProperty("header", out var header))
                             {
                                 var trimmedHeader = new System.Collections.Generic.Dictionary<string, object>();
-                                if (header.TryGetProperty("status", out var stat)) trimmedHeader["status"] = stat;
-                                if (header.TryGetProperty("teams", out var teams)) trimmedHeader["teams"] = teams;
+                                if (header.TryGetProperty("status", out var stat))
+                                {
+                                    var leanStat = new System.Collections.Generic.Dictionary<string, object>();
+                                    if (stat.TryGetProperty("finished", out var fin)) leanStat["finished"] = fin;
+                                    if (stat.TryGetProperty("started", out var st)) leanStat["started"] = st;
+                                    if (stat.TryGetProperty("cancelled", out var cn)) leanStat["cancelled"] = cn;
+                                    if (stat.TryGetProperty("scoreStr", out var sc)) leanStat["scoreStr"] = sc;
+                                    if (stat.TryGetProperty("reason", out var re)) leanStat["reason"] = re;
+                                    trimmedHeader["status"] = leanStat;
+                                }
+                                if (header.TryGetProperty("teams", out var teams))
+                                {
+                                    var leanTeams = new System.Collections.Generic.List<object>();
+                                    foreach (var t in teams.EnumerateArray())
+                                    {
+                                        var tDict = new System.Collections.Generic.Dictionary<string, object>();
+                                        if (t.TryGetProperty("name", out var nm)) tDict["name"] = nm.GetString() ?? "";
+                                        if (t.TryGetProperty("score", out var sc)) tDict["score"] = sc.GetInt32();
+                                        leanTeams.Add(tDict);
+                                    }
+                                    trimmedHeader["teams"] = leanTeams;
+                                }
                                 trimmedData["header"] = trimmedHeader;
                             }
 
@@ -321,7 +341,7 @@ namespace BettingApp.Services
                                 if (content.TryGetProperty("matchFacts", out var matchFacts))
                                 {
                                     var trimmedFacts = new System.Collections.Generic.Dictionary<string, object>();
-                                    if (matchFacts.TryGetProperty("infoBox", out var infoBox)) trimmedFacts["infoBox"] = infoBox;
+                                    // Omit bulky infoBox (Stadium GPS coordinates, capacity, surface, referee photos, attendance)
                                     if (matchFacts.TryGetProperty("events", out var events)) 
                                     {
                                         trimmedFacts["events"] = FlattenEvents(events);
@@ -500,6 +520,13 @@ namespace BettingApp.Services
             return names;
         }
 
+        private static readonly System.Collections.Generic.HashSet<string> CoreBettingStats = new(System.StringComparer.OrdinalIgnoreCase)
+        {
+            "Minutes played", "Goals", "Assists", "Total shots", "Shots on target", 
+            "Shots off target", "Blocked shots", "Fouls committed", "Was fouled", 
+            "Tackles", "Offsides", "Yellow cards", "Red cards"
+        };
+
         private object FlattenPlayerStats(System.Text.Json.JsonElement playerStatsElement)
         {
             var flatStats = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, object>>();
@@ -525,7 +552,7 @@ namespace BettingApp.Services
                                         foreach (var statProp in innerStats.EnumerateObject())
                                         {
                                             string statName = statProp.Name;
-                                            if (statProp.Value.TryGetProperty("stat", out var statVal) && statVal.TryGetProperty("value", out var val))
+                                            if (CoreBettingStats.Contains(statName) && statProp.Value.TryGetProperty("stat", out var statVal) && statVal.TryGetProperty("value", out var val))
                                             {
                                                 if (val.ValueKind == System.Text.Json.JsonValueKind.Number)
                                                     pStats[statName] = val.GetDouble();
