@@ -95,7 +95,7 @@ public partial class AdminTransactions
                 {
                     dbTrans.Status = "Completed";
                     dbTrans.UpdatedAt = DateTime.UtcNow;
-                    context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Confirmed Withdrawal", TargetUserName = t.UserName, Details = $"Amount: {t.AmountNOK}, Platform: {t.Platform}" });
+                    context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Confirmed Withdrawal", TargetUserName = t.UserName, Details = $"ID: {t.Id}, Amount: {t.AmountNOK}, Platform: {t.Platform}" });
                     await context.SaveChangesAsync();
                     UiNotifier.NotifyUser(t.UserId, "Withdrawal confirmed");
                     UiNotifier.NotifyAdmin("Withdrawal confirmed");

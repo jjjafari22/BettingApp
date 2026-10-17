@@ -356,15 +356,20 @@ public partial class AdminTransactions
             }
 
             context.Transactions.AddRange(transactionsToAdd);
-            var auditAction = string.Join(" & ", transactionsToAdd.Select(t => t.Type).Distinct());
-            context.AuditLogs.Add(new AuditLog
+            await context.SaveChangesAsync();
+
+            foreach (var tx in transactionsToAdd)
             {
-                AdminUserName = currentAdminName ?? "Unknown",
-                Action = $"Added {auditAction}",
-                TargetUserName = "Multiple",
-                Details = $"Amount: {amount}, From: {addTransSenderType}, To: {addTransReceiverType}" +
-                          (!string.IsNullOrWhiteSpace(newTrans.Note) ? $", Note: {newTrans.Note.Trim()}" : "")
-            });
+                string targetUser = !string.IsNullOrEmpty(tx.UserName) ? tx.UserName : "System";
+                context.AuditLogs.Add(new AuditLog
+                {
+                    AdminUserName = currentAdminName ?? "Unknown",
+                    Action = $"Added {tx.Type}",
+                    TargetUserName = targetUser,
+                    Details = $"Transaction ID: {tx.Id}, Amount: {tx.AmountNOK}, From: {addTransSenderType}, To: {addTransReceiverType}" +
+                              (!string.IsNullOrWhiteSpace(newTrans.Note) ? $", Note: {newTrans.Note.Trim()}" : "")
+                });
+            }
             await context.SaveChangesAsync();
 
             foreach (var tx in transactionsToAdd)

@@ -574,11 +574,7 @@ else
 
         referrer.FreeBetBalance += payout;
         
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var adminName = authState.User.Identity?.Name ?? "System";
-        context.AuditLogs.Add(new AuditLog { AdminUserName = adminName, Action = $"Paid Referral Bonus ({msg})", TargetUserName = referrer.UserName ?? "Unknown", Details = $"Amount: {payout} FB, Referred: {dbRef.ReferredUserName}" });
-        
-        context.Transactions.Add(new Transaction
+        var bonusTx = new Transaction
         {
             UserId = referrer.Id,
             UserName = referrer.UserName ?? "Unknown",
@@ -595,8 +591,13 @@ else
             ReceiverName = referrer.UserName ?? "Unknown",
             Date = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
-        });
-        
+        };
+        context.Transactions.Add(bonusTx);
+        await context.SaveChangesAsync();
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var adminName = authState.User.Identity?.Name ?? "System";
+        context.AuditLogs.Add(new AuditLog { AdminUserName = adminName, Action = $"Paid Referral Bonus ({msg})", TargetUserName = referrer.UserName ?? "Unknown", Details = $"Transaction ID: {bonusTx.Id}, Amount: {payout} FB, Referred: {dbRef.ReferredUserName}" });
         await context.SaveChangesAsync();
         UiNotifier.NotifyUser(referrer.Id, $"You received a referral bonus of {payout:N0} FB!");
         UiNotifier.NotifyAdmin($"Referral bonus of {payout:N0} FB paid to {referrer.UserName}");

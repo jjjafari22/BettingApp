@@ -4,6 +4,8 @@
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
 @using BettingApp.Services
+@using BettingApp.Components.Shared
+@using System.Text.RegularExpressions
 @attribute [Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
@@ -13,7 +15,12 @@
 @implements IDisposable
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
-<h3>Audit Logs (@totalLogs)</h3>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center gap-2">
+        <h3 class="mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>Audit Logs</h3>
+        <span class="badge bg-secondary rounded-pill fs-6">@totalLogs.ToString("N0")</span>
+    </div>
+</div>
 
 @if (isInitializing)
 {
@@ -25,92 +32,250 @@ else if (!isAdmin)
 }
 else
 {
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-2">
-                    <label class="form-label">Affected User</label>
-                    <input type="text" class="form-control" 
-                           @bind="targetFilter" 
-                           @onkeyup="HandleKeyUp"
-                           placeholder="Search user..." />
+    <!-- Standardized Search & Filter Toolbar -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body p-3">
+            <div class="row g-2 align-items-center">
+                <!-- 1. ID Filter (Smart Bet / Tx ID) -->
+                <div class="col-6 col-md-2 col-lg-2">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white text-muted"><i class="bi bi-hash"></i></span>
+                        <input type="text" class="form-control" 
+                               @bind="idFilter" 
+                               @onkeyup="HandleKeyUp"
+                               placeholder="Bet or Tx ID..." />
+                        @if (!string.IsNullOrEmpty(idFilter))
+                        {
+                            <button class="btn btn-outline-secondary" type="button" @onclick="async () => { idFilter = string.Empty; await SearchLogs(); }">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        }
+                    </div>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label">Admin</label>
-                    <input type="text" class="form-control" 
-                           @bind="adminFilter" 
-                           @onkeyup="HandleKeyUp"
-                           placeholder="Search admin..." />
+
+                <!-- 2. Admin Dropdown Filter -->
+                <div class="col-6 col-md-3 col-lg-2">
+                    <select class="form-select form-select-sm" @bind="adminFilter" @bind:after="SearchLogs">
+                        <option value="">All Admins</option>
+                        @foreach (var opt in adminOptions)
+                        {
+                            <option value="@opt.Value">@opt.Label</option>
+                        }
+                    </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label">Bet/Trans ID</label>
-                    <input type="text" class="form-control" 
-                           @bind="idFilter" 
-                           @onkeyup="HandleKeyUp"
-                           placeholder="Search ID..." />
+
+                <!-- 3. User / Details Search -->
+                <div class="col-12 col-md-4 col-lg-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" 
+                               @bind="targetFilter" 
+                               @onkeyup="HandleKeyUp"
+                               placeholder="Search user or details..." />
+                        @if (!string.IsNullOrEmpty(targetFilter))
+                        {
+                            <button class="btn btn-outline-secondary" type="button" @onclick="async () => { targetFilter = string.Empty; await SearchLogs(); }">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        }
+                    </div>
                 </div>
-                 <div class="col-md-2">
-                    <label class="form-label">Start Date</label>
-                    <input type="date" class="form-control" @bind="startDate" />
+
+                <!-- 4. Action Dropdown Filter -->
+                <div class="col-12 col-md-3 col-lg-2">
+                    <select class="form-select form-select-sm" @bind="actionFilter" @bind:after="SearchLogs">
+                        <option value="">All Actions</option>
+                        <optgroup label="Bets">
+                            <option value="group:bets">All Bet Actions</option>
+                            <option value="Bet Approved">Bet Approved</option>
+                            <option value="Bet Rejected">Bet Rejected</option>
+                            <option value="Bet Won">Bet Won</option>
+                            <option value="Bet Lost">Bet Lost</option>
+                            <option value="Bet Void">Bet Void</option>
+                            <option value="Bet Updated">Bet Updated</option>
+                            <option value="Bet Undone">Bet Undone</option>
+                            <option value="Auto-Settled Bet">Auto-Settled Bet</option>
+                        </optgroup>
+                        <optgroup label="Transactions">
+                            <option value="group:transactions">All Transaction Actions</option>
+                            <option value="Added Deposit">Added Deposit</option>
+                            <option value="Added Withdrawal">Added Withdrawal</option>
+                            <option value="Confirmed Withdrawal">Confirmed Withdrawal</option>
+                            <option value="Rejected Withdrawal">Rejected Withdrawal</option>
+                            <option value="Edited Pending Withdrawal">Edited Pending Withdrawal</option>
+                            <option value="Cleared Fulfilled Withdrawal">Cleared Fulfilled Withdrawal</option>
+                            <option value="Added Transfer">Added Transfer</option>
+                            <option value="Paid Referral Bonus">Paid Referral Bonus</option>
+                        </optgroup>
+                        <optgroup label="Users & Security">
+                            <option value="group:users">All User Admin Actions</option>
+                            <option value="Approve Registration">Approve Registration</option>
+                            <option value="Reject Registration">Reject Registration</option>
+                            <option value="Toggle Verification">Toggle Verification</option>
+                            <option value="Toggle Admin Role">Toggle Admin Role</option>
+                            <option value="Toggle Test User">Toggle Test User</option>
+                        </optgroup>
+                        <optgroup label="Limits & System">
+                            <option value="Changed Credit Limit">Changed Credit Limit</option>
+                            <option value="Changed Max Liability">Changed Max Liability</option>
+                            <option value="Changed System Settings">Changed System Settings</option>
+                            <option value="Created Referral">Created Referral</option>
+                            <option value="Deleted Referral">Deleted Referral</option>
+                        </optgroup>
+                    </select>
                 </div>
-                <div class="col-md-2">
-                     <label class="form-label">End Date</label>
-                    <input type="date" class="form-control" @bind="endDate" />
-                </div>
-                <div class="col-md-2 d-flex align-items-end gap-2">
-                    <button class="btn btn-primary flex-grow-1" @onclick="SearchLogs">Search</button>
-                     <button class="btn btn-outline-secondary" @onclick="ClearFilters" title="Clear Filters">
-                        <i class="bi bi-x-lg"></i>
+
+                <!-- 5. Search & Reset Buttons -->
+                <div class="col-12 col-md-12 col-lg-3 d-flex gap-2 justify-content-md-end">
+                    <button class="btn btn-sm btn-primary flex-grow-1 flex-md-grow-0 px-3 fw-bold shadow-sm" @onclick="SearchLogs">
+                        <i class="bi bi-search me-1"></i> Search
                     </button>
+                    @if (HasActiveFilters)
+                    {
+                        <button class="btn btn-sm btn-outline-danger" @onclick="ClearFilters" title="Reset all filters">
+                            <i class="bi bi-x-circle me-1"></i> Reset
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <!-- Bottom Row: Date Range Picker & Record Count -->
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2 pt-2 border-top">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="text-muted small fw-bold"><i class="bi bi-calendar3 me-1"></i>Date Range:</span>
+                    <DateRangePicker @bind-StartDate="startDate" @bind-EndDate="endDate" OnFilterApplied="SearchLogs" />
+                </div>
+
+                <div class="text-muted small">
+                    Showing <strong class="text-dark">@logs.Count</strong> of <strong class="text-dark">@totalLogs.ToString("N0")</strong> logs
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="table-responsive">
-        <table class="table table-sm table-striped table-hover align-middle text-nowrap">
-            <thead class="table-dark">
-                <tr>
-                    <th>Time (Local)</th>
-                    <th>Time (Norway)</th>
-                    <th>Admin</th>
-                     <th>Action</th>
-                    <th>Target User</th>
-                    <th>Discord Username</th>
-                    <th>Last Name</th>
-                    <th>Details</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var log in logs)
-                {
+    <!-- Audit Logs Table -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-dark">
                     <tr>
-                         <td>@log.Timestamp.AddMinutes(-TimezoneOffset).ToString("g")</td>
-                        <td>@TimeHelpers.GetNorwayTime(log.Timestamp).ToString("g")</td>
-                        <td><span class="badge bg-secondary">@log.AdminUserName</span></td>
-                        <td><span class="fw-bold">@log.Action</span></td>
-                        <td>@log.TargetUserName</td>
-                         <td>@(userLookup.TryGetValue(log.TargetUserName, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : "")</td>
-                        <td>@(userLookup.TryGetValue(log.TargetUserName, out var u2) ? u2.LastName : "")</td>
-                        <td class="text-muted small">@log.Details</td>
+                        <th style="min-width: 95px;">Time</th>
+                        <th style="min-width: 120px;">Admin</th>
+                        <th style="min-width: 150px;">Action</th>
+                        <th style="min-width: 95px;">Ref ID</th>
+                        <th style="min-width: 160px;">Target User</th>
+                        <th style="min-width: 220px;">Details</th>
                     </tr>
-                }
-                 @if (logs.Count == 0)
-                {
-                    <tr>
-                        <td colspan="8" class="text-center text-muted">No logs found matching criteria.</td>
-                     </tr>
-                }
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    @foreach (var log in logs)
+                    {
+                        var (refType, refId) = GetReferenceInfo(log);
+                        var localTime = log.Timestamp.AddMinutes(-TimezoneOffset);
+                        <tr>
+                            <!-- Timestamp: Local time (HH:mm:ss on top, dd.MM.yyyy below) -->
+                            <td class="text-nowrap py-1">
+                                <div class="fw-bold">@localTime.ToString("HH:mm:ss")</div>
+                                <div class="small text-muted">@localTime.ToString("dd.MM.yyyy")</div>
+                            </td>
+
+                            <!-- Admin: Full name display -->
+                            <td>
+                                @if (log.AdminUserName == "SYSTEM_AUTO")
+                                {
+                                    <span>SYSTEM_AUTO</span>
+                                }
+                                else
+                                {
+                                    string displayName = adminNameLookup.TryGetValue(log.AdminUserName, out var name) && !string.IsNullOrEmpty(name) ? name : log.AdminUserName;
+                                    <span>@displayName</span>
+                                }
+                            </td>
+
+                            <!-- Action -->
+                            <td>
+                                <span class="badge @GetActionBadgeClass(log.Action) text-wrap text-start">@log.Action</span>
+                            </td>
+
+                            <!-- Ref ID: Unified Bet / Tx / Ref badge without trailing punctuation -->
+                            <td>
+                                @if (refType == "Bet")
+                                {
+                                    <span class="badge bg-primary text-white"><i class="bi bi-ticket-detailed me-1"></i>Bet #@refId</span>
+                                }
+                                else if (refType == "Tx")
+                                {
+                                    <span class="badge bg-success text-white"><i class="bi bi-arrow-left-right me-1"></i>Tx #@refId</span>
+                                }
+                                else if (refType == "Ref")
+                                {
+                                    <span class="badge bg-info text-dark"><i class="bi bi-people me-1"></i>Ref #@refId</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+
+                            <!-- Target User: Discord username primary, Full name secondary -->
+                            <td>
+                                @if (log.TargetUserName == "System")
+                                {
+                                    <span class="badge bg-light text-dark border">System</span>
+                                }
+                                else if (log.TargetUserName == "Multiple")
+                                {
+                                    <span class="badge bg-info text-dark">Multiple</span>
+                                }
+                                else if (userLookup.TryGetValue(log.TargetUserName, out var u))
+                                {
+                                    @if (!string.IsNullOrEmpty(u.DiscordName))
+                                    {
+                                        <div><strong class="text-dark">@u.DiscordName</strong></div>
+                                        <div class="small text-muted" title="@log.TargetUserName">@($"{u.FirstName} {u.LastName}".Trim())</div>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(u.FirstName) || !string.IsNullOrWhiteSpace(u.LastName))
+                                    {
+                                        <div><strong>@($"{u.FirstName} {u.LastName}".Trim())</strong></div>
+                                        <div class="small text-muted" title="@log.TargetUserName">@log.TargetUserName</div>
+                                    }
+                                    else
+                                    {
+                                        <span title="@log.TargetUserName">@log.TargetUserName</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span title="@log.TargetUserName">@log.TargetUserName</span>
+                                }
+                            </td>
+
+                            <!-- Details -->
+                            <td class="small text-break" style="min-width: 220px;">
+                                @log.Details
+                            </td>
+                        </tr>
+                    }
+                    @if (logs.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                                No logs found matching criteria.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     </div>
 
     @* Pagination Controls *@
-    <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
         <button class="btn btn-sm @(currentPage <= 1 ? "btn-outline-secondary" : "btn-primary shadow-sm")" @onclick="PrevPage" disabled="@(currentPage <= 1)">
             <i class="bi bi-arrow-left"></i> Previous
         </button>
-        <span class="text-muted fw-bold">Page @currentPage of @totalPages</span>
+        <span class="text-muted fw-bold small">Page @currentPage of @totalPages</span>
         <button class="btn btn-sm @(!hasNextPage ? "btn-outline-secondary" : "btn-primary shadow-sm fw-bold")" @onclick="NextPage" disabled="@(!hasNextPage)">
             Next <i class="bi bi-arrow-right"></i>
         </button>
@@ -119,12 +284,23 @@ else
 
 @code {
     private List<AuditLog> logs = new();
-    private Dictionary<string, (string DiscordName, string LastName)> userLookup = new();
+    private Dictionary<string, (string DiscordName, string FirstName, string LastName)> userLookup = new();
+    private List<AdminOption> adminOptions = new();
+    private Dictionary<string, string> adminNameLookup = new();
+    
     private string targetFilter = "";
+    private string actionFilter = "";
     private string adminFilter = "";
     private string idFilter = "";
     private DateTime? startDate;
     private DateTime? endDate;
+
+    private bool HasActiveFilters => !string.IsNullOrWhiteSpace(targetFilter) 
+                                  || !string.IsNullOrWhiteSpace(actionFilter) 
+                                  || !string.IsNullOrWhiteSpace(adminFilter) 
+                                  || !string.IsNullOrWhiteSpace(idFilter) 
+                                  || startDate.HasValue 
+                                  || endDate.HasValue;
     
     private int currentPage = 1;
     private const int pageSize = 25;
@@ -135,15 +311,149 @@ else
     private bool hasNextPage => currentPage < totalPages;
     private int TimezoneOffset { get; set; }
 
+    private class AdminOption
+    {
+        public string Value { get; set; } = "";
+        public string Label { get; set; } = "";
+    }
+
+    private static (string Type, string Id) GetReferenceInfo(AuditLog log)
+    {
+        if (string.IsNullOrEmpty(log.Details)) return ("", "");
+
+        // 1. Explicit Bet patterns
+        var betMatch = Regex.Match(log.Details, @"Bet ID:\s*(\d+)", RegexOptions.IgnoreCase);
+        if (betMatch.Success)
+        {
+            return ("Bet", betMatch.Groups[1].Value);
+        }
+
+        // 2. Explicit Transaction patterns (matches single or comma-separated numbers, strips trailing punctuation)
+        var txMatch = Regex.Match(log.Details, @"(?:Transaction ID|Tx ID|Trans ID):\s*([0-9]+(?:\s*,\s*[0-9]+)*)", RegexOptions.IgnoreCase);
+        if (txMatch.Success)
+        {
+            var cleanId = txMatch.Groups[1].Value.Trim().TrimEnd(',', ' ', '.');
+            return ("Tx", cleanId);
+        }
+
+        // 3. Transactions / withdrawals with "ID: 123"
+        if (log.Action.Contains("Withdrawal") || log.Action.Contains("Deposit") || log.Action.Contains("Transfer") || log.Action.Contains("Transaction"))
+        {
+            var idMatch = Regex.Match(log.Details, @"(?:^|[\s,])ID:\s*([0-9]+(?:\s*,\s*[0-9]+)*)", RegexOptions.IgnoreCase);
+            if (idMatch.Success)
+            {
+                var cleanId = idMatch.Groups[1].Value.Trim().TrimEnd(',', ' ', '.');
+                return ("Tx", cleanId);
+            }
+        }
+
+        // 4. Referral patterns
+        if (log.Action.Contains("Referral"))
+        {
+            var refMatch = Regex.Match(log.Details, @"(?:Referral ID|Ref ID):\s*(\d+)", RegexOptions.IgnoreCase);
+            if (refMatch.Success)
+            {
+                return ("Ref", refMatch.Groups[1].Value);
+            }
+        }
+
+        // 5. Generic fallback
+        var genericMatch = Regex.Match(log.Details, @"(?:^|[\s,])ID:\s*(\d+)", RegexOptions.IgnoreCase);
+        if (genericMatch.Success)
+        {
+            return (log.Action.StartsWith("Bet") ? "Bet" : "Ref", genericMatch.Groups[1].Value);
+        }
+
+        return ("", "");
+    }
+
+    private static string GetActionBadgeClass(string action)
+    {
+        if (string.IsNullOrWhiteSpace(action)) return "bg-secondary";
+        if (action.Contains("Approved") || action.Contains("Deposit") || action.Contains("Confirmed") || action.Contains("Approve Registration"))
+            return "bg-success";
+        if (action.Contains("Rejected") || action.Contains("Lost") || action.Contains("Reject Registration"))
+            return "bg-danger";
+        if (action.Contains("Won") || action.Contains("Paid Referral"))
+            return "bg-primary";
+        if (action.Contains("Void") || action.Contains("Undone") || action.Contains("Edited") || action.Contains("Cleared"))
+            return "bg-warning text-dark";
+        if (action.Contains("Updated") || action.Contains("Auto-Settled") || action.Contains("Created Referral"))
+            return "bg-info text-dark";
+        return "bg-secondary";
+    }
+
+    private async Task LoadAdminsAsync()
+    {
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            var adminUsers = await context.Users
+                .Where(u => u.IsAdmin)
+                .Select(u => new { u.UserName, u.Email, u.FirstName, u.LastName, u.DiscordUsername })
+                .ToListAsync();
+
+            foreach (var a in adminUsers)
+            {
+                string fullName = $"{a.FirstName} {a.LastName}".Trim();
+                string displayName = !string.IsNullOrEmpty(fullName) 
+                    ? fullName 
+                    : (!string.IsNullOrEmpty(a.DiscordUsername) ? a.DiscordUsername : (a.UserName ?? "Admin"));
+
+                if (!string.IsNullOrEmpty(a.UserName)) adminNameLookup[a.UserName] = displayName;
+                if (!string.IsNullOrEmpty(a.Email)) adminNameLookup[a.Email] = displayName;
+            }
+
+            var options = new List<AdminOption>();
+
+            foreach (var a in adminUsers)
+            {
+                string fullName = $"{a.FirstName} {a.LastName}".Trim();
+                string displayName = !string.IsNullOrEmpty(fullName) 
+                    ? fullName 
+                    : (!string.IsNullOrEmpty(a.DiscordUsername) ? a.DiscordUsername : (a.UserName ?? "Admin"));
+
+                if (!string.IsNullOrEmpty(a.UserName)) adminNameLookup[a.UserName] = displayName;
+                if (!string.IsNullOrEmpty(a.Email)) adminNameLookup[a.Email] = displayName;
+
+                if (!string.IsNullOrEmpty(a.UserName) && !options.Any(o => o.Label == displayName))
+                {
+                    options.Add(new AdminOption { Value = a.UserName, Label = displayName });
+                }
+            }
+
+            adminNameLookup["SYSTEM_AUTO"] = "SYSTEM_AUTO";
+            options.Add(new AdminOption { Value = "SYSTEM_AUTO", Label = "SYSTEM_AUTO" });
+
+            adminOptions = options.OrderBy(o => o.Label == "SYSTEM_AUTO" ? 1 : 0).ThenBy(o => o.Label).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AdminAuditLogs] Error loading admins: {ex.Message}");
+        }
+    }
+
     private async Task PopulateUserLookup(IEnumerable<string> targetUserNames)
     {
-        var missingNames = targetUserNames.Except(userLookup.Keys).Distinct().ToList();
+        var missingNames = targetUserNames
+            .Where(n => !string.IsNullOrEmpty(n) && n != "System" && n != "Multiple")
+            .Except(userLookup.Keys)
+            .Distinct()
+            .ToList();
+
         if (missingNames.Any())
         {
             using var context = DbFactory.CreateDbContext();
-            var users = await context.Users.Where(u => missingNames.Contains(u.UserName!)).Select(u => new { u.UserName, u.DiscordUsername, u.LastName }).ToListAsync();
-            foreach(var u in users) {
-                userLookup[u.UserName!] = (u.DiscordUsername ?? "", u.LastName ?? "");
+            var users = await context.Users
+                .Where(u => missingNames.Contains(u.UserName!) || (u.Email != null && missingNames.Contains(u.Email)))
+                .Select(u => new { u.UserName, u.Email, u.DiscordUsername, u.FirstName, u.LastName })
+                .ToListAsync();
+
+            foreach (var u in users)
+            {
+                var data = (u.DiscordUsername ?? "", u.FirstName ?? "", u.LastName ?? "");
+                if (!string.IsNullOrEmpty(u.UserName)) userLookup[u.UserName] = data;
+                if (!string.IsNullOrEmpty(u.Email)) userLookup[u.Email] = data;
             }
         }
     }
@@ -168,6 +478,7 @@ else
                 return;
             }
 
+            await LoadAdminsAsync();
             await LoadLogs();
             UiNotifier.OnAdminNotification += HandleAdminNotification;
         }
@@ -181,22 +492,34 @@ else
         }
     }
 
+    private System.Timers.Timer? _debounceTimer;
+
     private void HandleAdminNotification(string? msg)
     {
-        _ = InvokeAsync(async () =>
+        if (_debounceTimer == null)
         {
-            try
+            _debounceTimer = new System.Timers.Timer(1000);
+            _debounceTimer.AutoReset = false;
+            _debounceTimer.Elapsed += async (s, e) =>
             {
-                await LoadLogs();
-                StateHasChanged();
-            }
-            catch { }
-        });
+                await InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await LoadLogs();
+                        StateHasChanged();
+                    }
+                    catch { }
+                });
+            };
+        }
+        _debounceTimer.Stop();
+        _debounceTimer.Start();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) // FIXED: Removed && isAdmin to ensure offset loads properly
+        if (firstRender)
         {
             try
             {
@@ -218,11 +541,13 @@ else
     private async Task ClearFilters()
     {
         targetFilter = "";
+        actionFilter = "";
         adminFilter = "";
         idFilter = "";
         startDate = null;
         endDate = null;
-        await SearchLogs();
+        currentPage = 1;
+        await LoadLogs();
     }
 
     private async Task SearchLogs()
@@ -238,43 +563,71 @@ else
 
         if (!string.IsNullOrWhiteSpace(targetFilter))
         {
-            var term = targetFilter.Trim().ToLower();
+            var term = targetFilter.Trim();
             var matchingUserNames = await context.Users
-                .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(term)) 
-                         || (u.LastName != null && u.LastName.ToLower().Contains(term))
-                         || (u.UserName != null && u.UserName.ToLower().Contains(term)))
+                .Where(u => (u.DiscordUsername != null && u.DiscordUsername.Contains(term)) 
+                         || (u.FirstName != null && u.FirstName.Contains(term))
+                         || (u.LastName != null && u.LastName.Contains(term))
+                         || (u.UserName != null && u.UserName.Contains(term))
+                         || (u.Email != null && u.Email.Contains(term)))
                 .Select(u => u.UserName)
                 .ToListAsync();
 
-            query = query.Where(l => matchingUserNames.Contains(l.TargetUserName) || l.TargetUserName.ToLower().Contains(term));
+            query = query.Where(l => matchingUserNames.Contains(l.TargetUserName) 
+                                  || l.TargetUserName.Contains(term)
+                                  || l.Details.Contains(term));
         }
 
-        if (!string.IsNullOrWhiteSpace(idFilter))
+        if (!string.IsNullOrWhiteSpace(actionFilter))
         {
-            var term = idFilter.Trim().ToLower();
-            query = query.Where(l => l.Details.ToLower().Contains($"id: {term},") 
-                                  || l.Details.ToLower().Contains($"id: {term} ") 
-                                  || l.Details.ToLower().EndsWith($"id: {term}"));
+            if (actionFilter == "group:bets")
+            {
+                query = query.Where(l => l.Action.StartsWith("Bet ") || l.Action == "Auto-Settled Bet");
+            }
+            else if (actionFilter == "group:transactions")
+            {
+                query = query.Where(l => l.Action.Contains("Withdrawal") || l.Action.Contains("Deposit") || l.Action.Contains("Transfer") || l.Action.Contains("Referral Bonus"));
+            }
+            else if (actionFilter == "group:users")
+            {
+                query = query.Where(l => l.Action.Contains("Registration") || l.Action.StartsWith("Toggle "));
+            }
+            else
+            {
+                query = query.Where(l => l.Action.StartsWith(actionFilter));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(adminFilter))
         {
-            var term = adminFilter.Trim().ToLower();
-            query = query.Where(l => l.AdminUserName.ToLower().Contains(term));
+            query = query.Where(l => l.AdminUserName == adminFilter);
+        }
+
+        if (!string.IsNullOrWhiteSpace(idFilter))
+        {
+            var rawTerm = idFilter.Trim();
+            var numMatch = Regex.Match(rawTerm, @"\d+");
+            var term = numMatch.Success ? numMatch.Value : rawTerm;
+
+            query = query.Where(l => l.Details.Contains("ID: " + term + ",") 
+                                  || l.Details.Contains("ID: " + term + " ") 
+                                  || l.Details.Contains("ID: " + term + ".")
+                                  || l.Details.EndsWith("ID: " + term)
+                                  || l.Details.EndsWith("ID: " + term + ".")
+                                  || l.Details.Contains("ID:" + term)
+                                  || l.Details.Contains("ID: #" + term));
         }
 
         if (startDate.HasValue)
         {
-            var startLocal = startDate.Value.Date;
-            var startUtc = startLocal.AddMinutes(TimezoneOffset);
+            var startUtc = startDate.Value;
             query = query.Where(l => l.Timestamp >= startUtc);
         }
 
         if (endDate.HasValue)
         {
-            var endLocal = endDate.Value.Date.AddDays(1);
-            var endUtc = endLocal.AddMinutes(TimezoneOffset);
-            query = query.Where(l => l.Timestamp < endUtc);
+            var endUtc = endDate.Value;
+            query = query.Where(l => l.Timestamp <= endUtc);
         }
 
         totalLogs = await query.CountAsync();
@@ -283,6 +636,7 @@ else
             .Skip((currentPage - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
+
         await PopulateUserLookup(logs.Select(l => l.TargetUserName));
     }
 
@@ -307,5 +661,6 @@ else
     public void Dispose()
     {
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
+        _debounceTimer?.Dispose();
     }
 }
