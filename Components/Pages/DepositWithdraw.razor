@@ -392,8 +392,22 @@
                     await LoadData();
                 }
             }
-            catch (Exception ex) { Logger.LogError(ex, "An error occurred"); }
-            finally { IsLoading = false; StateHasChanged(); }
+            catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex.Message.Contains("circuit has disconnected") || ex.Message.Contains("disposed"))
+            {
+                /* Ignore normal disconnects when user navigates away or closes tab */
+            }
+            catch (Exception ex) 
+            { 
+                Logger.LogError(ex, "An error occurred"); 
+            }
+            finally 
+            { 
+                if (!_isDisposed)
+                {
+                    IsLoading = false; 
+                    StateHasChanged(); 
+                }
+            }
         }
     }
 

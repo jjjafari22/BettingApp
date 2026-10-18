@@ -565,8 +565,11 @@ else
             }
             finally
             {
-                IsLoading = false;
-                StateHasChanged();
+                if (!_isDisposed)
+                {
+                    IsLoading = false;
+                    StateHasChanged();
+                }
             }
         }
 
