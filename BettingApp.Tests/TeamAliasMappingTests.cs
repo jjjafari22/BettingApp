@@ -25,11 +25,24 @@ namespace BettingApp.Tests
         [InlineData("Inter Milan", "internazionale")]
         [InlineData("Inter Milano", "internazionale")]
         [InlineData("Internazionale Milano", "internazionale")]
+        [InlineData("Atletico Paranaense", "athletico parananse")]
+        [InlineData("Athletico Paranaense", "athletico parananse")]
+        [InlineData("Atletico PR", "athletico parananse")]
         [InlineData("FC United", "fc united")] // Should fallback to full string since both are stopwords
         public void Test_NormalizeTeamName(string input, string expected)
         {
             string normalized = _mapper.NormalizeTeamName(input, removeStopWords: true);
             Assert.Equal(expected, normalized);
+        }
+
+        [Theory]
+        [InlineData("Atletico Paranaense", "Athletico Paranaense")]
+        [InlineData("Atletico PR", "Athletico Paranaense")]
+        [InlineData("Atletico-PR", "Athletico Paranaense")]
+        [InlineData("Athletico-PR", "Athletico Paranaense")]
+        public void Test_IsTeamMatch_Paranaense(string teamA, string teamB)
+        {
+            Assert.True(TeamAliasMappingService.IsTeamMatch(teamA, teamB));
         }
     }
 }
