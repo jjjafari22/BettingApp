@@ -505,6 +505,7 @@ __azurite_db*
 AzuriteConfig
 BettingApp.db
 scratch/
+reports/
 betting.db
 betting.db-shm
 betting.db-wal
