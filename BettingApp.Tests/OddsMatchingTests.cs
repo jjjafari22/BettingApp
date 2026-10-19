@@ -1210,5 +1210,76 @@ namespace BettingApp.Tests
             var ctxTeam2 = new OddsMatchingLogic.OutcomeMatchingContext(brentfordLeg, apiResult, "Over Under Team 2");
             Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 1.5", "Over 1.5", ctxTeam2), "Brentford total must NOT match Over Under Team 2");
         }
+
+        [Theory]
+        [InlineData("Tottenham/Tottenham", "1/1", true)]
+        [InlineData("Tottenham / Tottenham", "1/1", true)]
+        [InlineData("Tottenham - Tottenham", "1/1", true)]
+        [InlineData("Tottenham/Coventry City", "1/2", true)]
+        [InlineData("Tottenham / Coventry City", "1/2", true)]
+        [InlineData("Tottenham/Draw", "1/X", true)]
+        [InlineData("Tottenham / Draw", "1/X", true)]
+        [InlineData("Tottenham / Uavgjort", "1/X", true)]
+        [InlineData("Draw/Tottenham", "X/1", true)]
+        [InlineData("Draw / Tottenham", "X/1", true)]
+        [InlineData("Draw/Draw", "X/X", true)]
+        [InlineData("Coventry City/Tottenham", "2/1", true)]
+        [InlineData("Coventry City/Coventry City", "2/2", true)]
+        [InlineData("Coventry City/Draw", "2/X", true)]
+        [InlineData("1/1", "1/1", true)]
+        [InlineData("1 / 1", "1/1", true)]
+        [InlineData("1/X", "1/X", true)]
+        [InlineData("X/1", "X/1", true)]
+        [InlineData("2/2", "2/2", true)]
+        [InlineData("Tottenham/Tottenham", "1/2", false)]
+        [InlineData("Tottenham/Tottenham", "2/1", false)]
+        [InlineData("Tottenham/Tottenham", "2/2", false)]
+        [InlineData("Tottenham/Tottenham", "1/X", false)]
+        [InlineData("Coventry City/Tottenham", "1/2", false)]
+        public void Test_HalfTimeFullTime_OutcomeMatching_VariousFormats(string selection, string opOutcome, bool expected)
+        {
+            var leg = new AiVisionLeg
+            {
+                Match = "Tottenham vs Coventry City",
+                Sport = "Soccer",
+                Market = "Half Time / Full Time",
+                Selection = selection
+            };
+            var apiResult = new OddsPapiSearchResult
+            {
+                MatchName = "Tottenham vs Coventry City"
+            };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "Half Time / Full Time");
+            string displayOutcome = OddsMatchingLogic.GetTranslatedOutcomeName(opOutcome, apiResult.MatchName);
+
+            bool isMatch = OddsMatchingLogic.IsOutcomeMatch(opOutcome, displayOutcome, ctx);
+            Assert.Equal(expected, isMatch);
+        }
+
+        [Fact]
+        public void Test_HalfTimeFullTime_SwappedTeams()
+        {
+            // Leg match has Coventry City vs Tottenham (AiT1 = Coventry, AiT2 = Tottenham)
+            // OddsPapi match has Tottenham vs Coventry City (OpT1 = Tottenham, OpT2 = Coventry)
+            var leg = new AiVisionLeg
+            {
+                Match = "Coventry City vs Tottenham",
+                Sport = "Soccer",
+                Market = "Half Time / Full Time",
+                Selection = "Tottenham/Tottenham"
+            };
+            var apiResult = new OddsPapiSearchResult
+            {
+                MatchName = "Tottenham vs Coventry City"
+            };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "Half Time / Full Time");
+            
+            // Tottenham in OddsPapi is Team 1, so Tottenham/Tottenham must match "1/1"
+            string display11 = OddsMatchingLogic.GetTranslatedOutcomeName("1/1", apiResult.MatchName);
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1/1", display11, ctx), "Tottenham/Tottenham must match 1/1 when teams are swapped");
+            
+            string display22 = OddsMatchingLogic.GetTranslatedOutcomeName("2/2", apiResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2/2", display22, ctx), "Tottenham/Tottenham must NOT match 2/2 when teams are swapped");
+        }
     }
 }

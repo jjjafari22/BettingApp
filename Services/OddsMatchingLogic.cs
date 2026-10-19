@@ -310,7 +310,19 @@ namespace BettingApp.Services
     private static readonly System.Text.RegularExpressions.Regex _htftRegex = new(@"^(1|X|2)/(1|X|2)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
     private static readonly System.Text.RegularExpressions.Regex _powerSubRegex = new(@"\b(power sub|super sub)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
     private static readonly System.Text.RegularExpressions.Regex _dotZeroRegex = new(@"\.0+(?!\d)", System.Text.RegularExpressions.RegexOptions.Compiled);
-    private static readonly System.Text.RegularExpressions.Regex _drawTieRegex = new(@"\b(?:draw|tie)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex _drawTieRegex = new(@"\b(?:draw|tie|ties|oavgjort|uavgjort|kryss|likt|x)\b|^x$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static string ResolveHtftCode(string part, int teamNum)
+    {
+        string p = (part ?? "").Trim().ToLowerInvariant();
+        if (p == "1") return "1";
+        if (p == "2") return "2";
+        if (p == "x") return "X";
+        if (teamNum == 1) return "1";
+        if (teamNum == 2) return "2";
+        if (_drawTieRegex.IsMatch(p)) return "X";
+        return "";
+    }
 
     public class OutcomeMatchingContext
     {
@@ -408,17 +420,37 @@ namespace BettingApp.Services
                     TargetOp1 = IsSwapped ? OpT2 : OpT1;
                     TargetOp2 = IsSwapped ? OpT1 : OpT2;
 
-                    if (NormSelRaw.Contains(" / ") || NormSelRaw.Contains(" - "))
+                    string cleanNormSel = NormSelRaw.Replace(" ", "");
+                    if (_htftRegex.IsMatch(cleanNormSel))
                     {
-                        var htftSplit = NormSelRaw.Split(new[] { " / ", " - " }, StringSplitOptions.RemoveEmptyEntries);
-                        if (htftSplit.Length == 2)
+                        HtftTarget = cleanNormSel.ToUpperInvariant();
+                    }
+                    else
+                    {
+                        string[]? htftSplit = null;
+                        if (NormSelRaw.Contains("/"))
+                        {
+                            htftSplit = NormSelRaw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                        }
+                        else if (NormSelRaw.Contains(" - "))
+                        {
+                            htftSplit = NormSelRaw.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
+                        }
+                        else if (NormSelRaw.Contains("-") &&
+                                 ((leg.Market != null && (leg.Market.Contains("Half", StringComparison.OrdinalIgnoreCase) || leg.Market.Contains("HT", StringComparison.OrdinalIgnoreCase) || leg.Market.Contains("Pause", StringComparison.OrdinalIgnoreCase) || leg.Market.Contains("Halvtid", StringComparison.OrdinalIgnoreCase))) ||
+                                  (opMarketName != null && opMarketName.Contains("Half", StringComparison.OrdinalIgnoreCase))))
+                        {
+                            htftSplit = NormSelRaw.Split('-', StringSplitOptions.RemoveEmptyEntries);
+                        }
+
+                        if (htftSplit != null && htftSplit.Length == 2)
                         {
                             string ht = htftSplit[0].Trim();
                             string ft = htftSplit[1].Trim();
                             int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, NormT1, NormT2, TargetOp1, TargetOp2);
                             int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, NormT1, NormT2, TargetOp1, TargetOp2);
-                            string htCode = htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (_drawTieRegex.IsMatch(ht) ? "X" : ""));
-                            string ftCode = ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (_drawTieRegex.IsMatch(ft) ? "X" : ""));
+                            string htCode = ResolveHtftCode(ht, htTeam);
+                            string ftCode = ResolveHtftCode(ft, ftTeam);
                             if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
                             {
                                 HtftTarget = $"{htCode}/{ftCode}";
@@ -633,33 +665,89 @@ namespace BettingApp.Services
         bool isMatch = false;
         bool logicallyMatched = false;
 
+        string opHtftTarget = "";
+        string cleanOName = oName.Replace(" ", "");
+        if (_htftRegex.IsMatch(cleanOName))
+        {
+            opHtftTarget = cleanOName.ToUpperInvariant();
+        }
+        else if (oName.Contains("/") || oName.Contains(" - "))
+        {
+            string normONameRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(oName).ToLowerInvariant();
+            string[]? opHtftSplit = null;
+            if (normONameRaw.Contains("/"))
+            {
+                opHtftSplit = normONameRaw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            }
+            else if (normONameRaw.Contains(" - "))
+            {
+                opHtftSplit = normONameRaw.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
+            }
+
+            if (opHtftSplit != null && opHtftSplit.Length == 2)
+            {
+                string ht = opHtftSplit[0].Trim();
+                string ft = opHtftSplit[1].Trim();
+                int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2);
+                int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2);
+                string htCode = ResolveHtftCode(ht, htTeam);
+                string ftCode = ResolveHtftCode(ft, ftTeam);
+                if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
+                {
+                    opHtftTarget = $"{htCode}/{ftCode}";
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(opHtftTarget) && !string.IsNullOrEmpty(displayOName) && displayOName.Contains("/"))
+        {
+            string normDispRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayOName).ToLowerInvariant();
+            var dispSplit = normDispRaw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (dispSplit.Length == 2)
+            {
+                string ht = dispSplit[0].Trim();
+                string ft = dispSplit[1].Trim();
+                int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2);
+                int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2);
+                string htCode = ResolveHtftCode(ht, htTeam);
+                string ftCode = ResolveHtftCode(ft, ftTeam);
+                if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
+                {
+                    opHtftTarget = $"{htCode}/{ftCode}";
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(ctx.HtftTarget) && !string.IsNullOrEmpty(opHtftTarget))
+        {
+            if (string.Equals(opHtftTarget, ctx.HtftTarget, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            return false;
+        }
+
         if (!string.IsNullOrEmpty(ctx.HtftTarget) && string.Equals(oName, ctx.HtftTarget, StringComparison.OrdinalIgnoreCase))
         {
             logicallyMatched = true;
         }
-        else if (oName.Contains("/") && ctx.NormT1.Length > 0)
+        else if (!logicallyMatched && ctx.NormSelRaw.Contains("/") && !string.IsNullOrEmpty(displayOName) && displayOName.Contains("/"))
         {
-            string normONameRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(oName).ToLowerInvariant();
-            if (normONameRaw.Contains(" / ") || normONameRaw.Contains(" - "))
+            var selParts = ctx.NormSelRaw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            string normDispRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(displayOName).ToLowerInvariant();
+            var dispParts = normDispRaw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (selParts.Length == 2 && dispParts.Length == 2)
             {
-                var opHtftSplit = normONameRaw.Split(new[] { " / ", " - " }, StringSplitOptions.RemoveEmptyEntries);
-                if (opHtftSplit.Length == 2)
+                string s1 = selParts[0].Trim();
+                string s2 = selParts[1].Trim();
+                string d1 = dispParts[0].Trim();
+                string d2 = dispParts[1].Trim();
+                bool p1Match = s1 == d1 || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(s1, d1) || (_drawTieRegex.IsMatch(s1) && _drawTieRegex.IsMatch(d1));
+                bool p2Match = s2 == d2 || BettingApp.Services.TeamAliasMappingService.IsTeamMatch(s2, d2) || (_drawTieRegex.IsMatch(s2) && _drawTieRegex.IsMatch(d2));
+                if (p1Match && p2Match)
                 {
-                    string ht = opHtftSplit[0].Trim();
-                    string ft = opHtftSplit[1].Trim();
-                    int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2);
-                    int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2);
-                    string htCode = (ht == "1" || ht == "2" || ht == "x") ? ht.ToUpper() : (htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (_drawTieRegex.IsMatch(ht) ? "X" : "")));
-                    string ftCode = (ft == "1" || ft == "2" || ft == "x") ? ft.ToUpper() : (ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (_drawTieRegex.IsMatch(ft) ? "X" : "")));
-                    if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode) && $"{htCode}/{ftCode}" == ctx.HtftTarget)
-                    {
-                        logicallyMatched = true;
-                    }
+                    logicallyMatched = true;
                 }
-            }
-            else if (_htftRegex.IsMatch(oName) && string.Equals(oName, ctx.HtftTarget, StringComparison.OrdinalIgnoreCase))
-            {
-                logicallyMatched = true;
             }
         }
 
@@ -895,7 +983,10 @@ namespace BettingApp.Services
 
         if (!isMatch && !string.IsNullOrEmpty(displayOName) && ctx.Leg != null && !string.IsNullOrEmpty(ctx.Leg.Selection))
         {
-            isMatch = IsFuzzyPlayerMatch(ctx.FallbackSel, displayOName);
+            if (string.IsNullOrEmpty(ctx.HtftTarget) && string.IsNullOrEmpty(opHtftTarget))
+            {
+                isMatch = IsFuzzyPlayerMatch(ctx.FallbackSel, displayOName);
+            }
         }
 
         return isMatch;
@@ -1094,17 +1185,31 @@ namespace BettingApp.Services
                     string htftTarget = "";
                     string opHtftTarget = "";
                     
-                    if (normSelRaw.Contains(" / ") || normSelRaw.Contains(" - "))
+                    string cleanNormSel = normSelRaw.Replace(" ", "");
+                    if (_htftRegex.IsMatch(cleanNormSel))
                     {
-                        var htftSplit = normSelRaw.Split(new[] { " / ", " - " }, StringSplitOptions.RemoveEmptyEntries);
-                        if (htftSplit.Length == 2)
+                        htftTarget = cleanNormSel.ToUpperInvariant();
+                    }
+                    else
+                    {
+                        string[]? htftSplit = null;
+                        if (normSelRaw.Contains("/"))
+                        {
+                            htftSplit = normSelRaw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                        }
+                        else if (normSelRaw.Contains(" - "))
+                        {
+                            htftSplit = normSelRaw.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
+                        }
+
+                        if (htftSplit != null && htftSplit.Length == 2)
                         {
                             string ht = htftSplit[0].Trim();
                             string ft = htftSplit[1].Trim();
                             int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, normT1, normT2, targetOp1, targetOp2);
                             int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, normT1, normT2, targetOp1, targetOp2);
-                            string htCode = htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (System.Text.RegularExpressions.Regex.IsMatch(ht, @"\b(?:draw|tie)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "X" : ""));
-                            string ftCode = ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (System.Text.RegularExpressions.Regex.IsMatch(ft, @"\b(?:draw|tie)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "X" : ""));
+                            string htCode = ResolveHtftCode(ht, htTeam);
+                            string ftCode = ResolveHtftCode(ft, ftTeam);
                             if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
                             {
                                 htftTarget = $"{htCode}/{ftCode}";
@@ -1112,29 +1217,37 @@ namespace BettingApp.Services
                         }
                     }
 
-                    string normONameRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(oName).ToLowerInvariant();
-                    if (normONameRaw.Contains(" / ") || normONameRaw.Contains(" - "))
+                    string cleanOName = oName.Replace(" ", "");
+                    if (_htftRegex.IsMatch(cleanOName))
                     {
-                        var opHtftSplit = normONameRaw.Split(new[] { " / ", " - " }, StringSplitOptions.RemoveEmptyEntries);
-                        if (opHtftSplit.Length == 2)
+                        opHtftTarget = cleanOName.ToUpperInvariant();
+                    }
+                    else if (oName.Contains("/") || oName.Contains(" - "))
+                    {
+                        string normONameRaw = BettingApp.Services.TeamAliasMappingService.RemoveDiacritics(oName).ToLowerInvariant();
+                        string[]? opHtftSplit = null;
+                        if (normONameRaw.Contains("/"))
+                        {
+                            opHtftSplit = normONameRaw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                        }
+                        else if (normONameRaw.Contains(" - "))
+                        {
+                            opHtftSplit = normONameRaw.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
+                        }
+
+                        if (opHtftSplit != null && opHtftSplit.Length == 2)
                         {
                             string ht = opHtftSplit[0].Trim();
                             string ft = opHtftSplit[1].Trim();
                             int htTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ht, normT1, normT2, targetOp1, targetOp2);
                             int ftTeam = BettingApp.Services.TeamAliasMappingService.ResolveTeamSelection(ft, normT1, normT2, targetOp1, targetOp2);
-                            
-                            string htCode = (ht == "1" || ht == "2" || ht == "x") ? ht.ToUpper() : (htTeam == 1 ? "1" : (htTeam == 2 ? "2" : (System.Text.RegularExpressions.Regex.IsMatch(ht, @"\b(?:draw|tie)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "X" : "")));
-                            string ftCode = (ft == "1" || ft == "2" || ft == "x") ? ft.ToUpper() : (ftTeam == 1 ? "1" : (ftTeam == 2 ? "2" : (System.Text.RegularExpressions.Regex.IsMatch(ft, @"\b(?:draw|tie)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? "X" : "")));
-                            
+                            string htCode = ResolveHtftCode(ht, htTeam);
+                            string ftCode = ResolveHtftCode(ft, ftTeam);
                             if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
                             {
                                 opHtftTarget = $"{htCode}/{ftCode}";
                             }
                         }
-                    }
-                    else if (System.Text.RegularExpressions.Regex.IsMatch(oName, @"^(1|X|2)/(1|X|2)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-                    {
-                        opHtftTarget = oName.ToUpperInvariant();
                     }
                     
                     if (string.IsNullOrEmpty(htftTarget))

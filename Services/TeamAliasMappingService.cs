@@ -216,9 +216,9 @@ namespace BettingApp.Services
             string normSel = NormalizeForComparison(sel);
 
             // Direct outcome codes
-            if (sel == "1" || normSel == "1" || normSel.Equals("home", StringComparison.OrdinalIgnoreCase)) return 1;
-            if (sel == "2" || normSel == "2" || normSel.Equals("away", StringComparison.OrdinalIgnoreCase)) return 2;
-            if (sel.Equals("x", StringComparison.OrdinalIgnoreCase) || normSel.Equals("draw", StringComparison.OrdinalIgnoreCase) || normSel.Equals("tie", StringComparison.OrdinalIgnoreCase)) return 0;
+            if (sel == "1" || normSel == "1" || normSel.Equals("home", StringComparison.OrdinalIgnoreCase) || normSel.Equals("hjemme", StringComparison.OrdinalIgnoreCase) || normSel.Equals("hemmalag", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (sel == "2" || normSel == "2" || normSel.Equals("away", StringComparison.OrdinalIgnoreCase) || normSel.Equals("borte", StringComparison.OrdinalIgnoreCase) || normSel.Equals("bortalag", StringComparison.OrdinalIgnoreCase)) return 2;
+            if (sel.Equals("x", StringComparison.OrdinalIgnoreCase) || normSel.Equals("draw", StringComparison.OrdinalIgnoreCase) || normSel.Equals("tie", StringComparison.OrdinalIgnoreCase) || normSel.Equals("uavgjort", StringComparison.OrdinalIgnoreCase) || normSel.Equals("oavgjort", StringComparison.OrdinalIgnoreCase) || normSel.Equals("kryss", StringComparison.OrdinalIgnoreCase)) return 0;
 
             // Strip line numbers, handicaps, prop conditions to isolate team candidate
             // e.g. "PSG (+1.5)" -> "PSG", "PSG Over 1.5 Goals" -> "PSG", "Manchester City -1" -> "Manchester City"
