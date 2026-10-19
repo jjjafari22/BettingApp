@@ -507,8 +507,16 @@ namespace BettingApp.Services
                 }
             }
 
+            if ((clean.Contains("Score", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal", StringComparison.OrdinalIgnoreCase)) &&
+                (clean.Contains("Book", StringComparison.OrdinalIgnoreCase) || clean.Contains("Card", StringComparison.OrdinalIgnoreCase)))
+            {
+                return new List<string> { "Player to Score or be Booked", "Player to Score or Carded", "To Score or be Booked", "Score or Booked" };
+            }
+
             if (!clean.Contains("Assist", StringComparison.OrdinalIgnoreCase) &&
                 !clean.Contains("Point", StringComparison.OrdinalIgnoreCase) &&
+                !clean.Contains("Book", StringComparison.OrdinalIgnoreCase) &&
+                !clean.Contains("Card", StringComparison.OrdinalIgnoreCase) &&
                (clean.Contains("Goalscorer", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Scorer", StringComparison.OrdinalIgnoreCase) || 
                (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase)) ||
                clean.Contains("Will/Will not Score", StringComparison.OrdinalIgnoreCase)))
@@ -560,7 +568,8 @@ namespace BettingApp.Services
                 }
                 return new List<string> { clean };
             }
-            if (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) || (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Card", StringComparison.OrdinalIgnoreCase)))
+            if (!clean.Contains("Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Goal", StringComparison.OrdinalIgnoreCase) &&
+               (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) || (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Card", StringComparison.OrdinalIgnoreCase))))
             {
                 return new List<string> { "Player To Be Carded (incl. overtime)", "Player To Be Carded", "Player Cards", "To Be Carded", "To Be Booked", "Cards", "Card" };
             }
@@ -755,6 +764,13 @@ namespace BettingApp.Services
                 {
                     return true;
                 }
+            }
+
+            // 7. Player combo markets combining goals/scoring and cards/bookings (e.g. "To Score or be Booked", "Score or be Carded", "To Score or Carded", "Score or Booked")
+            if ((cleanWithoutTeams.Contains("Score", StringComparison.OrdinalIgnoreCase) || cleanWithoutTeams.Contains("Goal", StringComparison.OrdinalIgnoreCase)) &&
+                (cleanWithoutTeams.Contains("Book", StringComparison.OrdinalIgnoreCase) || cleanWithoutTeams.Contains("Card", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
             }
 
             return false;

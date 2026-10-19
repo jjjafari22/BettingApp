@@ -1281,5 +1281,123 @@ namespace BettingApp.Tests
             string display22 = OddsMatchingLogic.GetTranslatedOutcomeName("2/2", apiResult.MatchName);
             Assert.False(OddsMatchingLogic.IsOutcomeMatch("2/2", display22, ctx), "Tottenham/Tottenham must NOT match 2/2 when teams are swapped");
         }
+
+        [Fact]
+        public void Test_AsianHandicap_MatchingAndSorting_Bet1048()
+        {
+            var leg = new AiVisionLeg
+            {
+                Match = "Getafe vs Rayo Vallecano",
+                Sport = "Soccer",
+                Market = "Asian Handicap",
+                Selection = "Rayo Vallecano +0.5"
+            };
+            var apiResult = new OddsPapiSearchResult
+            {
+                MatchName = "Getafe CF vs Rayo Vallecano"
+            };
+
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "Asian Handicap");
+
+            // Must match "2 (-0.5)" (which translates to Rayo Vallecano +0.5)
+            string displayMatch = OddsMatchingLogic.GetTranslatedOutcomeName("2 (-0.5)", apiResult.MatchName);
+            Assert.Equal("Rayo Vallecano +0.5", displayMatch);
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("2 (-0.5)", displayMatch, ctx), "Rayo Vallecano +0.5 must match 2 (-0.5)");
+
+            // Must NOT match "2" (plain Rayo Vallecano with no handicap / 0 handicap)
+            string displayZero = OddsMatchingLogic.GetTranslatedOutcomeName("2", apiResult.MatchName);
+            Assert.Equal("Rayo Vallecano", displayZero);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2", displayZero, ctx), "Rayo Vallecano +0.5 must NOT match 2 without handicap");
+
+            // Must NOT match "1 (-0.5)" (Getafe CF -0.5)
+            string displayOpposite = OddsMatchingLogic.GetTranslatedOutcomeName("1 (-0.5)", apiResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("1 (-0.5)", displayOpposite, ctx), "Rayo Vallecano +0.5 must NOT match 1 (-0.5)");
+
+            // Test sorting: Team 1 outcomes should all sort before Team 2, and handicaps should be in ascending order
+            var rawOutcomes = new List<string> { "2", "1 (-1.5)", "2 (-0.5)", "1 (0.5)", "1", "2 (0.5)", "1 (-0.5)", "2 (-1.5)" };
+            var sorted = rawOutcomes.OrderBy(o => OddsMatchingLogic.GetSortKey(o)).ToList();
+
+            // Expected order:
+            // Team 1: 1 (-1.5), 1 (-0.5), 1, 1 (0.5)
+            // Team 2: 2 (0.5) [-0.5], 2 [0], 2 (-0.5) [+0.5], 2 (-1.5) [+1.5]
+            var expected = new List<string> { "1 (-1.5)", "1 (-0.5)", "1", "1 (0.5)", "2 (0.5)", "2", "2 (-0.5)", "2 (-1.5)" };
+            Assert.Equal(expected, sorted);
+        }
+
+        [Fact]
+        public void Test_PlayerToScoreOrBeBooked_Bet1047()
+        {
+            var leg = new AiVisionLeg
+            {
+                Match = "Tottenham vs Coventry City",
+                Sport = "Soccer",
+                Market = "Player to Score or be Booked",
+                Selection = "Bobby Thomas - To Score or be Booked (Power Sub)"
+            };
+
+            // 1. Must be recognized as combination market
+            Assert.True(MarketMappingService.IsCombinationMarket(leg.Market, leg.Match), "Player to Score or be Booked must be recognized as combination market");
+            Assert.True(MarketMappingService.IsCombinationMarket(leg.Selection, leg.Match), "Bobby Thomas - To Score or be Booked must be recognized as combination market");
+
+            // 2. FindBestMarket must return null when only Goals and Carded markets exist
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1", MarketName = "Over Under Player Goals (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "2", MarketName = "Player To Be Carded (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "3", MarketName = "Full Time Result" }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(mockMarkets, leg.Market, leg.Match, leg.Selection, _marketMapper);
+            Assert.Null(best);
+
+            // 3. Even if evaluated directly against Over Under Player Goals, IsOutcomeMatch must reject it
+            var apiResult = new OddsPapiSearchResult { MatchName = "Tottenham Hotspur vs Coventry City" };
+            var ctxGoals = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "Over Under Player Goals (incl. overtime)");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Thomas, Bobby)", "Over 0.5 (Thomas, Bobby)", ctxGoals),
+                "Bobby Thomas - To Score or be Booked must NOT match Over 0.5 in Over Under Player Goals");
+
+            var ctxCards = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "Player To Be Carded (incl. overtime)");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Thomas, Bobby", "Thomas, Bobby", ctxCards),
+                "Bobby Thomas - To Score or be Booked must NOT match in Player To Be Carded");
+        }
+
+        [Fact]
+        public void Test_ThreeWayHandicap_Matching_Bet1049()
+        {
+            var leg = new AiVisionLeg
+            {
+                Match = "Al Hilal vs Al Hazem",
+                Sport = "Soccer",
+                Market = "3-Way Handicap (0-2)",
+                Selection = "Al Hilal"
+            };
+            var apiResult = new OddsPapiSearchResult
+            {
+                MatchName = "Al Hilal SFC vs Al-Hazm"
+            };
+
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "3-Way Handicap");
+
+            // Must match "1 (0-2.0)" (Al Hilal SFC -2)
+            string display2 = OddsMatchingLogic.GetTranslatedOutcomeName("1 (0-2.0)", apiResult.MatchName);
+            Assert.Equal("Al Hilal SFC -2", display2);
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1 (0-2.0)", display2, ctx), "Al Hilal with (0-2) market handicap must match 1 (0-2.0)");
+
+            // Must NOT match "1 (0-1.0)" (Al Hilal SFC -1)
+            string display1 = OddsMatchingLogic.GetTranslatedOutcomeName("1 (0-1.0)", apiResult.MatchName);
+            Assert.Equal("Al Hilal SFC -1", display1);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("1 (0-1.0)", display1, ctx), "Al Hilal with (0-2) market handicap must NOT match 1 (0-1.0)");
+
+            // Must NOT match "1 (0-3.0)" (Al Hilal SFC -3)
+            string display3 = OddsMatchingLogic.GetTranslatedOutcomeName("1 (0-3.0)", apiResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("1 (0-3.0)", display3, ctx), "Al Hilal with (0-2) market handicap must NOT match 1 (0-3.0)");
+
+            // Must NOT match Draw (-2) or Al-Hazm (+2)
+            string displayDraw = OddsMatchingLogic.GetTranslatedOutcomeName("X (0-2.0)", apiResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("X (0-2.0)", displayDraw, ctx), "Al Hilal must NOT match Draw");
+
+            string displayAway = OddsMatchingLogic.GetTranslatedOutcomeName("2 (0-2.0)", apiResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2 (0-2.0)", displayAway, ctx), "Al Hilal must NOT match Al-Hazm");
+        }
     }
 }

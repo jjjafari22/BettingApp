@@ -650,15 +650,16 @@ namespace BettingApp.Services
     {
         if (ctx.Leg == null || string.IsNullOrEmpty(ctx.Leg.Selection)) return false;
 
-        if (ctx.HasSelHc)
+        // Prevent "Player to Score or be Booked" from matching plain Goals or plain Cards markets
+        bool selIsScoreAndBooked = ((ctx.NormMarket.Contains("score") || ctx.NormMarket.Contains("goal")) && (ctx.NormMarket.Contains("book") || ctx.NormMarket.Contains("card"))) ||
+                                   ((ctx.NormSelRaw.Contains("score") || ctx.NormSelRaw.Contains("goal")) && (ctx.NormSelRaw.Contains("book") || ctx.NormSelRaw.Contains("card")));
+        if (selIsScoreAndBooked)
         {
-            var mOName = _hcSignRegex.Match(displayOName ?? "");
-            if (mOName.Success && double.TryParse(mOName.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double valO))
+            bool opHasScore = (ctx.OpMarketName ?? "").Contains("score", StringComparison.OrdinalIgnoreCase) || (ctx.OpMarketName ?? "").Contains("goal", StringComparison.OrdinalIgnoreCase);
+            bool opHasBooked = (ctx.OpMarketName ?? "").Contains("book", StringComparison.OrdinalIgnoreCase) || (ctx.OpMarketName ?? "").Contains("card", StringComparison.OrdinalIgnoreCase);
+            if (!opHasScore || !opHasBooked)
             {
-                if (Math.Abs(valO - ctx.SelHcVal) > 0.001)
-                {
-                    return false;
-                }
+                return false;
             }
         }
 
@@ -793,6 +794,14 @@ namespace BettingApp.Services
 
                     if (opHc.HasValue && ctx.AiHc.HasValue && Math.Abs(opHc.Value - ctx.AiHc.Value) < 0.001) logicallyMatched = true;
                     else if (!opHc.HasValue && !ctx.AiHc.HasValue) logicallyMatched = true;
+                    else
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
                 }
             }
         }
@@ -1754,10 +1763,60 @@ namespace BettingApp.Services
     public static string GetSortKey(string input)
     {
         if (string.IsNullOrEmpty(input)) return input;
-        
-        string normalized = input.Replace(" ", "").Replace("(", "").Replace(")", "").Replace("+", "");
 
-        return System.Text.RegularExpressions.Regex.Replace(normalized, @"([-]?\d+(?:\.\d+)?)", m => 
+        // 1. Handicap & 1X2 pattern: "1", "2", "X", "1 (-1.5)", "2 (-0.5)", "X (0:1)"
+        var hcMatch = System.Text.RegularExpressions.Regex.Match(input.Trim(), @"^(1|X|x|2)(?:\s*\(([^)]+)\))?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (hcMatch.Success)
+        {
+            string team = hcMatch.Groups[1].Value.ToUpperInvariant();
+            int teamOrder = team == "1" ? 1 : (team == "X" ? 2 : 3);
+            string hcStr = hcMatch.Groups[2].Success ? hcMatch.Groups[2].Value.Trim() : "";
+
+            double actualHc = 0.0;
+            if (!string.IsNullOrEmpty(hcStr))
+            {
+                if (hcStr.Contains("-") && hcStr.Length > 2 && !hcStr.StartsWith("-"))
+                {
+                    var parts = hcStr.Split('-');
+                    if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) &&
+                        double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                    {
+                        actualHc = team == "1" ? (p1 - p2) : (team == "2" ? (p2 - p1) : (p1 - p2));
+                    }
+                }
+                else if (hcStr.Contains(":"))
+                {
+                    var parts = hcStr.Split(':');
+                    if (parts.Length == 2 && double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p1) &&
+                        double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double p2))
+                    {
+                        actualHc = team == "1" ? (p1 - p2) : (team == "2" ? (p2 - p1) : (p1 - p2));
+                    }
+                }
+                else if (double.TryParse(hcStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
+                {
+                    actualHc = team == "2" ? -val : val;
+                }
+            }
+
+            return $"{teamOrder}_{(actualHc + 1000):0000.0000}";
+        }
+
+        // 2. Double Chance
+        string upper = input.Trim().ToUpperInvariant();
+        if (upper == "1X") return "dc_1";
+        if (upper == "12") return "dc_2";
+        if (upper == "X2" || upper == "2X") return "dc_3";
+
+        // 3. BTTS / Yes/No
+        if (upper == "YES" || upper == "JA") return "btts_1";
+        if (upper == "NO" || upper == "NEI") return "btts_2";
+
+        // 4. Default natural sort with space-delimited normalization to prevent digits merging
+        // Replace parentheses with space so "1 (0.5)" doesn't become "10.5"
+        string normalized = System.Text.RegularExpressions.Regex.Replace(input, @"[()]", " ").Trim();
+
+        return System.Text.RegularExpressions.Regex.Replace(normalized, @"([-]?\d+(?:\.\d+)?)", m =>
         {
             if (double.TryParse(m.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
             {
