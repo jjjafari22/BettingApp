@@ -617,12 +617,17 @@
             };
         }).OrderBy(c => c.DisplayName).ToList();
 
-        // 2. Creditors
-        var creditorsQuery = await context.Transactions
-            .Where(t => t.Type == "Withdrawal" && t.Status == "Pending" && t.UserName != null)
-            .Select(t => t.UserName!)
-            .Distinct()
+        // 2. Creditors (Only users with pending withdrawals that have a remaining balance to pay)
+        var pendingWithdrawals = await context.Transactions
+            .Where(t => t.Type == "Withdrawal" && t.Status == "Pending" && !string.IsNullOrEmpty(t.UserName))
+            .Select(t => new { t.UserName, t.AmountNOK, t.FulfilledAmount })
             .ToListAsync();
+
+        var creditorsQuery = pendingWithdrawals
+            .GroupBy(t => t.UserName!)
+            .Where(g => g.Sum(x => Math.Max(0m, (decimal)x.AmountNOK - x.FulfilledAmount)) > 0)
+            .Select(g => g.Key)
+            .ToList();
 
         var creditorUsers = await context.Users
             .Where(u => u.UserName != null && creditorsQuery.Contains(u.UserName))

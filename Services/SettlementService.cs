@@ -32,18 +32,35 @@ namespace BettingApp.Services
 
             // 2. Get Creditors (Pending Withdrawals)
             var pendingWithdrawals = await context.Transactions
-                .Where(t => t.Type == "Withdrawal" && t.Status == "Pending")
-                .Select(t => new { t.UserName, t.AmountNOK, t.PaymentDetails })
+                .Where(t => t.Type == "Withdrawal" && t.Status == "Pending" && !string.IsNullOrEmpty(t.UserName))
+                .Select(t => new { t.UserName, t.AmountNOK, t.FulfilledAmount, t.PaymentDetails })
                 .ToListAsync();
 
-            // Group pending withdrawals by user in case they made multiple requests
+            // Group pending withdrawals by user in case they made multiple requests, using the remaining amount to pay
             var creditorsList = pendingWithdrawals
-                .GroupBy(t => t.UserName)
-                .Select(g => new { 
-                    UserName = g.Key, 
-                    TotalAmount = (decimal)g.Sum(x => x.AmountNOK),
-                    PaymentDetails = string.Join(" / ", g.Select(x => x.PaymentDetails).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct())
+                .GroupBy(t => t.UserName!)
+                .Select(g => {
+                    var remainingDetails = g.Where(x => ((decimal)x.AmountNOK - x.FulfilledAmount) > 0)
+                        .Select(x => x.PaymentDetails)
+                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                        .Distinct()
+                        .ToList();
+
+                    if (!remainingDetails.Any())
+                    {
+                        remainingDetails = g.Select(x => x.PaymentDetails)
+                            .Where(p => !string.IsNullOrWhiteSpace(p))
+                            .Distinct()
+                            .ToList();
+                    }
+
+                    return new { 
+                        UserName = g.Key, 
+                        TotalAmount = g.Sum(x => Math.Max(0m, (decimal)x.AmountNOK - x.FulfilledAmount)),
+                        PaymentDetails = string.Join(" / ", remainingDetails)
+                    };
                 })
+                .Where(c => c.TotalAmount > 0)
                 .ToList();
 
             var result = new SettlementResult { Date = DateTime.UtcNow };
