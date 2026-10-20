@@ -20,6 +20,10 @@
 {
     <LoadingData Text="Loading Transactions..." />
 }
+else if (!isAdmin)
+{
+    <div class="alert alert-danger">You are not authorized to view this page.</div>
+}
 else
 {
 

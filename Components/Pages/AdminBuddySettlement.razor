@@ -19,6 +19,16 @@
 <PageTitle>Buddy Settlement - Castle of Happiness</PageTitle>
 
 <div class="container mt-4">
+    @if (isLoading)
+    {
+        <LoadingData Text="Loading Settlements..." />
+    }
+    else if (!isAdmin)
+    {
+        <div class="alert alert-danger">You are not authorized to view this page.</div>
+    }
+    else
+    {
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2>Buddy Settlement Snapshots</h2>
@@ -93,12 +103,6 @@
         </div>
     }
 
-    @if (isLoading)
-    {
-        <LoadingData Text="Loading Settlements..." />
-    }
-    else
-    {
         <div class="table-responsive">
             <table class="table table-hover align-middle">
                 <thead class="table-dark">
@@ -477,6 +481,7 @@
     private List<(ulong Id, string Name, string CategoryName)> availableChannels = new();
     
     private bool isLoading = true;
+    private bool isAdmin = false;
     private bool showConfirmation = false;
     
     // Pagination
@@ -503,7 +508,8 @@
             
             var currentUserName = user.Identity?.Name;
             var dbUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == currentUserName);
-            if (dbUser?.IsAdmin != true)
+            isAdmin = dbUser?.IsAdmin ?? false;
+            if (!isAdmin)
             {
                 NavigationManager.NavigateTo("/");
                 return;
@@ -596,6 +602,7 @@
 
     private async Task ConfirmSnapshot()
     {
+        if (!isAdmin) return;
         using var context = DbFactory.CreateDbContext();
         
         // 1. Debtors
@@ -669,6 +676,7 @@
 
     private async Task ExecuteSnapshot()
     {
+        if (!isAdmin) return;
         showConfirmation = false;
         isLoading = true;
         await Task.Delay(50);

@@ -22,6 +22,7 @@ namespace BettingApp.Components.Pages;
 public partial class Admin
 {
     private bool isInitializing = true;
+    private bool isAdmin = false;
     private bool isSavingBet = false;
 
     private List<Bet> pendingBets = new();
@@ -135,7 +136,8 @@ public partial class Admin
             using var context = DbFactory.CreateDbContext();
             var currentUserName = user.Identity?.Name;
             var dbUser = currentUserName != null ? await context.Users.FirstOrDefaultAsync(u => u.UserName == currentUserName) : null;
-            if (dbUser == null || !dbUser.IsAdmin)
+            isAdmin = dbUser?.IsAdmin ?? false;
+            if (!isAdmin)
             {
                 Nav.NavigateTo("/");
                 return;

@@ -92,6 +92,10 @@
             <p class="mt-2 text-muted">Loading schedule...</p>
         </div>
     }
+    else if (!isAdmin)
+    {
+        <div class="alert alert-danger">You are not authorized to view this page.</div>
+    }
     else
     {
         <h4 class="mb-3 text-center">Week of @startOfDisplayWeek.ToString("MMMM d, yyyy") (Norway Time)</h4>

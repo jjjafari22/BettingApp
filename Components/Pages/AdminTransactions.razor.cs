@@ -18,6 +18,7 @@ public partial class AdminTransactions : IDisposable
 {
     private string activeTab = "pending";
     private bool isInitializing = true;
+    private bool isAdmin = false;
     private string? successMessage;
     private string? errorMessage;
     private bool isSavingTransaction = false;
@@ -70,7 +71,8 @@ public partial class AdminTransactions : IDisposable
                 dbUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == userName);
             }
 
-            if (dbUser == null || !dbUser.IsAdmin)
+            isAdmin = dbUser?.IsAdmin ?? false;
+            if (!isAdmin)
             {
                 Nav.NavigateTo("/");
                 return;
