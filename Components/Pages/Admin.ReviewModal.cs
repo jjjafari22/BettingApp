@@ -400,7 +400,8 @@ public partial class Admin
         {
             errorMessage = null;
             successMessage = null; 
-            string originalStatus = originalBetModel?.Status ?? bet.Status;
+            var matchingOriginal = (originalBetModel != null && originalBetModel.Id == bet.Id) ? originalBetModel : null;
+            string originalStatus = matchingOriginal?.Status ?? bet.Status;
             int originalBetId = bet.Id;
             if (newStatus != "Rejected" && newStatus != "Cancelled")
         {
@@ -415,7 +416,7 @@ public partial class Admin
 
             bool wasStaked = originalStatus == "Approved" || originalStatus == "Won" || originalStatus == "Lost";
             bool willBeStaked = newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost";
-            bool isNewOrModified = (!wasStaked && willBeStaked) || (originalBetModel != null && (bet.AmountNOK != originalBetModel.AmountNOK || bet.Odds != originalBetModel.Odds));
+            bool isNewOrModified = (!wasStaked && willBeStaked) || (matchingOriginal != null && (bet.AmountNOK != matchingOriginal.AmountNOK || bet.Odds != matchingOriginal.Odds));
 
             if (isNewOrModified)
             {
@@ -448,7 +449,7 @@ public partial class Admin
         bool isCompletedStatus(string status) => 
             status == "Won" || status == "Lost" || status == "Void" || status == "Rejected" || status == "Cancelled" || status == "Completed";
 
-        bool isDataChanged = originalBetModel != null && (bet.AmountNOK != originalBetModel.AmountNOK || bet.Odds != originalBetModel.Odds);
+        bool isDataChanged = matchingOriginal != null && (bet.AmountNOK != matchingOriginal.AmountNOK || bet.Odds != matchingOriginal.Odds);
         bool isStatusChanged = originalStatus != newStatus;
 
         bool requiresConfirmation = !isAutoSettled && (
@@ -462,10 +463,10 @@ public partial class Admin
             if (isStatusChanged && isDataChanged)
             {
                 var changes = new List<string> { $"Status: {originalStatus} -> {newStatus}" };
-                if (originalBetModel != null && bet.AmountNOK != originalBetModel.AmountNOK)
-                    changes.Add($"Stake: {originalBetModel.AmountNOK:N0} kr -> {bet.AmountNOK:N0} kr");
-                if (originalBetModel != null && bet.Odds != originalBetModel.Odds)
-                    changes.Add($"Odds: {originalBetModel.Odds:N2} -> {bet.Odds:N2}");
+                if (matchingOriginal != null && bet.AmountNOK != matchingOriginal.AmountNOK)
+                    changes.Add($"Stake: {matchingOriginal.AmountNOK:N0} kr -> {bet.AmountNOK:N0} kr");
+                if (matchingOriginal != null && bet.Odds != matchingOriginal.Odds)
+                    changes.Add($"Odds: {matchingOriginal.Odds:N2} -> {bet.Odds:N2}");
                 confirmMsg = $"Update Bet #{bet.Id}?\n\n{string.Join("\n", changes)}";
             }
             else if (isStatusChanged)
@@ -475,20 +476,20 @@ public partial class Admin
             else
             {
                 var changes = new List<string>();
-                if (originalBetModel != null && bet.AmountNOK != originalBetModel.AmountNOK)
-                    changes.Add($"Stake: {originalBetModel.AmountNOK:N0} kr -> {bet.AmountNOK:N0} kr");
-                if (originalBetModel != null && bet.Odds != originalBetModel.Odds)
-                    changes.Add($"Odds: {originalBetModel.Odds:N2} -> {bet.Odds:N2}");
+                if (matchingOriginal != null && bet.AmountNOK != matchingOriginal.AmountNOK)
+                    changes.Add($"Stake: {matchingOriginal.AmountNOK:N0} kr -> {bet.AmountNOK:N0} kr");
+                if (matchingOriginal != null && bet.Odds != matchingOriginal.Odds)
+                    changes.Add($"Odds: {matchingOriginal.Odds:N2} -> {bet.Odds:N2}");
                 confirmMsg = $"Update Bet #{bet.Id}?\n\n{string.Join("\n", changes)}";
             }
 
             bool confirmed = await DialogService.ConfirmAsync(confirmMsg);
             if (!confirmed)
             {
-                if (originalBetModel != null)
+                if (matchingOriginal != null)
                 {
-                    bet.AmountNOK = originalBetModel.AmountNOK;
-                    bet.Odds = originalBetModel.Odds;
+                    bet.AmountNOK = matchingOriginal.AmountNOK;
+                    bet.Odds = matchingOriginal.Odds;
                 }
                 return;
             }

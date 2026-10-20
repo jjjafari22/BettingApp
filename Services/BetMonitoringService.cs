@@ -279,6 +279,9 @@ namespace BettingApp.Services
                                 
                                 if (targetStatus != null)
                                 {
+                                    // Keep a 15-minute retry window in case ProcessBetAsync fails; ProcessBetAsync clears NextCheckTime to null on success
+                                    dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(15);
+
                                     // Save the extracted legs and outcome string first
                                     await taskContext.SaveChangesAsync(ct);
 
