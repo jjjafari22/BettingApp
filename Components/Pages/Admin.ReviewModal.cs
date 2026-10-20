@@ -413,7 +413,9 @@ public partial class Admin
             if (Math.Round(bet.Odds, 2) != bet.Odds) { errorMessage = "Odds max 2 decimals";
                 return; }
 
-            bool isNewOrModified = originalStatus == "Pending" || (originalBetModel != null && (bet.AmountNOK != originalBetModel.AmountNOK || bet.Odds != originalBetModel.Odds));
+            bool wasStaked = originalStatus == "Approved" || originalStatus == "Won" || originalStatus == "Lost";
+            bool willBeStaked = newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost";
+            bool isNewOrModified = (!wasStaked && willBeStaked) || (originalBetModel != null && (bet.AmountNOK != originalBetModel.AmountNOK || bet.Odds != originalBetModel.Odds));
 
             if (isNewOrModified)
             {
@@ -551,26 +553,21 @@ public partial class Admin
 
         if (!result.Success)
         {
-            if (result.ErrorMessage.Contains("concurrently"))
-            {
-                // Simple retry for concurrency (matches previous behavior for ApplicationUser)
-                if (showOverlay) isSavingBet = false;
-                await ProcessBet(bet, newStatus, isAutoSettled, customAuditDetails, showOverlay);
-                return;
-            }
-
             errorMessage = result.ErrorMessage;
-            _ = InvokeAsync(async () => {
-                try {
-                    await LoadPendingBets();
-                    await LoadApprovedBets();
-                    await LoadCompletedBets();
-                    StateHasChanged();
-                } catch { }
-            });
-            if (!isAutoSettled)
+            if (!result.IsValidationError)
             {
-                reviewingBetModel = null;
+                _ = InvokeAsync(async () => {
+                    try {
+                        await LoadPendingBets();
+                        await LoadApprovedBets();
+                        await LoadCompletedBets();
+                        StateHasChanged();
+                    } catch { }
+                });
+                if (!isAutoSettled)
+                {
+                    reviewingBetModel = null;
+                }
             }
             StateHasChanged();
             return;

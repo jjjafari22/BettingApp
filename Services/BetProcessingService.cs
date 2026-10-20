@@ -26,7 +26,7 @@ namespace BettingApp.Services
             _logger = logger;
         }
 
-        public async Task<(bool Success, string ErrorMessage)> ProcessBetAsync(
+        public async Task<(bool Success, string ErrorMessage, bool IsValidationError)> ProcessBetAsync(
             int betId,
             string newStatus,
             string adminName,
@@ -43,10 +43,10 @@ namespace BettingApp.Services
                 using var context = _dbFactory.CreateDbContext();
                 
                 var dbBet = await context.Bets.Include(b => b.Legs).Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == betId);
-                if (dbBet == null) return (false, "Bet not found.");
+                if (dbBet == null) return (false, "Bet not found.", false);
                 
                 var dbUser = await context.Users.FindAsync(dbBet.UserId);
-                if (dbUser == null) return (false, "User not found.");
+                if (dbUser == null) return (false, "User not found.", false);
 
                 if (dbBet.Status != expectedOriginalStatus)
                 {
@@ -56,28 +56,31 @@ namespace BettingApp.Services
                         .FirstOrDefaultAsync();
                     
                     string otherAdminName = lastAudit != null ? lastAudit.AdminUserName : "another admin";
-                    return (false, $"Action aborted: Bet #{betId} was already updated to '{dbBet.Status}' by Admin {otherAdminName}.");
+                    return (false, $"Action aborted: Bet #{betId} was already updated to '{dbBet.Status}' by Admin {otherAdminName}.", false);
                 }
 
                 string originalStatus = dbBet.Status;
                 bool isUndo = (originalStatus == "Won" || originalStatus == "Lost" || originalStatus == "Void" || originalStatus == "Rejected" || originalStatus == "Cancelled") && newStatus == "Approved";
+                bool wasStaked = originalStatus == "Approved" || originalStatus == "Won" || originalStatus == "Lost";
+                bool willBeStaked = newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost";
+                bool isFirstApproval = originalStatus == "Pending" || originalStatus == "Rejected" || originalStatus == "Cancelled";
 
-                if (originalStatus == "Pending" && (newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost"))
+                if (!wasStaked && willBeStaked)
                 {
                     var currentBal = dbUser.Balance;
-                    var freeBetBal = dbUser.FreeBetBalance;
+                    var freeBetBal = isFirstApproval ? dbUser.FreeBetBalance : Math.Min(dbBet.FreeBetAmount, dbUser.FreeBetBalance);
                     var creditLimit = (decimal)dbUser.CreditLimit;
                     
                     var availableCredit = currentBal + freeBetBal + creditLimit - newAmount;
                     if (availableCredit < 0)
                     {
-                        return (false, $"Insufficient funds. Available: {(currentBal + freeBetBal + creditLimit):N0} kr. Required: {newAmount:N0} kr.");
+                        return (false, $"Insufficient funds. Available: {(currentBal + freeBetBal + creditLimit):N0} kr. Required: {newAmount:N0} kr.", true);
                     }
                 }
 
                 decimal dbAmount = (decimal)(dbBet.AmountNOK ?? 0);
 
-                if (originalStatus != "Pending" && (newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost") && newAmount > dbAmount)
+                if (wasStaked && willBeStaked && newAmount > dbAmount)
                 {
                     var currentBal = dbUser.Balance;
                     var creditLimit = (decimal)dbUser.CreditLimit;
@@ -86,7 +89,7 @@ namespace BettingApp.Services
                     var availableCredit = currentBal + creditLimit - additionalAmount;
                     if (availableCredit < 0)
                     {
-                        return (false, $"Insufficient funds for stake increase. Available: {(currentBal + creditLimit):N0} kr. Additional Required: {additionalAmount:N0} kr.");
+                        return (false, $"Insufficient funds for stake increase. Available: {(currentBal + creditLimit):N0} kr. Additional Required: {additionalAmount:N0} kr.", true);
                     }
                 }
 
@@ -122,15 +125,15 @@ namespace BettingApp.Services
                     dbBet.IsAutoSettled = true;
                 }
 
-                if (originalStatus == "Pending")
+                if (isFirstApproval)
                 {
                     // Automatic consumption if user has free bet balance
                     dbBet.FreeBetAmount = Math.Min(newAmount, dbUser.FreeBetBalance);
                 }
                 else 
                 {
-                     // Safety: Capping free bet amount if admin reduced the total stake
-                     dbBet.FreeBetAmount = Math.Min(dbBet.FreeBetAmount, newAmount);
+                     // Safety: Capping free bet amount if admin reduced the total stake or if refunded free bet was already spent
+                     dbBet.FreeBetAmount = Math.Min(Math.Min(dbBet.FreeBetAmount, newAmount), dbUser.FreeBetBalance);
                 }
 
                 // APPLY NEW STATUS IMPACT
@@ -245,12 +248,12 @@ namespace BettingApp.Services
                         await Task.Delay(50 * attempt);
                         continue;
                     }
-                    return (false, $"Action aborted: Bet #{betId} was modified concurrently.");
+                    return (false, $"Action aborted: Bet #{betId} was modified concurrently.", false);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, $"Failed to process bet {betId}");
-                    return (false, "Database error during bet processing.");
+                    return (false, "Database error during bet processing.", false);
                 }
 
                 // Notifications
@@ -270,10 +273,10 @@ namespace BettingApp.Services
                     _logger.LogWarning(ex, $"Failed to send notifications for bet {betId}");
                 }
 
-                return (true, "");
+                return (true, "", false);
             }
 
-            return (false, $"Action aborted: Bet #{betId} was modified concurrently.");
+            return (false, $"Action aborted: Bet #{betId} was modified concurrently.", false);
         }
     }
 }
