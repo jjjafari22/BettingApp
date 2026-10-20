@@ -194,17 +194,11 @@ namespace BettingApp.Services
                     }
                 }
 
-                dbBet.AiEvaluation.AiOutcomeResult = result;
-                
                 try 
                 {
-                    if (string.IsNullOrEmpty(result))
+                    BettingApp.Services.AiOutcomeResultData? parsedData = null;
+                    if (!string.IsNullOrEmpty(result) && !result.StartsWith("Error", StringComparison.OrdinalIgnoreCase) && !result.StartsWith("Exception", StringComparison.OrdinalIgnoreCase))
                     {
-                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
-                    }
-                    else
-                    {
-                        BettingApp.Services.AiOutcomeResultData? parsedData = null;
                         try 
                         {
                             parsedData = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
@@ -212,107 +206,118 @@ namespace BettingApp.Services
                             );
                         }
                         catch { }
+                    }
 
-                        if (parsedData != null)
+                    if (parsedData == null)
+                    {
+                        if (string.IsNullOrEmpty(dbBet.AiEvaluation.AiOutcomeResult))
                         {
-                            var status = parsedData.OverallStatus?.Trim().ToUpperInvariant() ?? "";
-                            var isFinished = status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
-                                             status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
-                                             status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
-                                             status == "UNKNOWN";
+                            dbBet.AiEvaluation.AiOutcomeResult = result;
+                        }
+                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(15);
+                        _logger.LogWarning($"[Bet #{dbBet.Id}] [Outcome Check] Outcome check did not return valid JSON. Scheduling next check in 15 minutes.");
+                    }
+                    else
+                    {
+                        dbBet.AiEvaluation.AiOutcomeResult = result;
 
-                            string? bestStartTimeIso = parsedData.Legs?
-                                .Where(l => l.Outcome?.ToUpperInvariant() == "PENDING" && !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                        var status = parsedData.OverallStatus?.Trim().ToUpperInvariant() ?? "";
+                        var isFinished = status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
+                                         status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
+                                         status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
+                                         status == "UNKNOWN";
+
+                        string? bestStartTimeIso = parsedData.Legs?
+                            .Where(l => l.Outcome?.ToUpperInvariant() == "PENDING" && !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                            .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
+                            .FirstOrDefault()?.MatchStartTimeIso;
+                            
+                        if (string.IsNullOrEmpty(bestStartTimeIso))
+                        {
+                            bestStartTimeIso = parsedData.Legs?
+                                .Where(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))
                                 .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
                                 .FirstOrDefault()?.MatchStartTimeIso;
+                        }
+                        if (!string.IsNullOrEmpty(bestStartTimeIso) && DateTime.TryParse(bestStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime parsedStart))
+                        {
+                            dbBet.MatchStartTime = parsedStart;
+                        }
+
+                        // --- UPDATE DB BET LEGS ---
+                        if (parsedData.Legs != null && dbBet.Legs != null && dbBet.Legs.Count > 0)
+                        {
+                            var dbLegsList = dbBet.Legs.OrderBy(l => l.Id).ToList();
+                            for (int i = 0; i < dbLegsList.Count; i++)
+                            {
+                                var dbLeg = dbLegsList[i];
+                                var parsedLeg = parsedData.Legs.Count > i ? parsedData.Legs[i] : parsedData.Legs.FirstOrDefault(l => string.Equals(l.Match, dbLeg.Match, StringComparison.OrdinalIgnoreCase));
                                 
-                            if (string.IsNullOrEmpty(bestStartTimeIso))
-                            {
-                                bestStartTimeIso = parsedData.Legs?
-                                    .Where(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))
-                                    .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
-                                    .FirstOrDefault()?.MatchStartTimeIso;
-                            }
-                            if (!string.IsNullOrEmpty(bestStartTimeIso) && DateTime.TryParse(bestStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime parsedStart))
-                            {
-                                dbBet.MatchStartTime = parsedStart;
-                            }
-
-                            // --- UPDATE DB BET LEGS ---
-                            if (parsedData.Legs != null && dbBet.Legs != null && dbBet.Legs.Count > 0)
-                            {
-                                var dbLegsList = dbBet.Legs.OrderBy(l => l.Id).ToList();
-                                for (int i = 0; i < dbLegsList.Count; i++)
+                                if (parsedLeg != null)
                                 {
-                                    var dbLeg = dbLegsList[i];
-                                    var parsedLeg = parsedData.Legs.Count > i ? parsedData.Legs[i] : parsedData.Legs.FirstOrDefault(l => string.Equals(l.Match, dbLeg.Match, StringComparison.OrdinalIgnoreCase));
+                                    dbLeg.Outcome = string.IsNullOrEmpty(parsedLeg.Outcome) ? "Pending" : parsedLeg.Outcome;
+                                    dbLeg.Stats = parsedLeg.Stats ?? "";
+                                    dbLeg.VerificationSource = string.IsNullOrEmpty(parsedLeg.VerificationSource) ? "Unknown" : parsedLeg.VerificationSource;
                                     
-                                    if (parsedLeg != null)
+                                    if (!string.IsNullOrEmpty(parsedLeg.MatchStartTimeIso) && DateTime.TryParse(parsedLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
                                     {
-                                        dbLeg.Outcome = string.IsNullOrEmpty(parsedLeg.Outcome) ? "Pending" : parsedLeg.Outcome;
-                                        dbLeg.Stats = parsedLeg.Stats ?? "";
-                                        dbLeg.VerificationSource = string.IsNullOrEmpty(parsedLeg.VerificationSource) ? "Unknown" : parsedLeg.VerificationSource;
-                                        
-                                        if (!string.IsNullOrEmpty(parsedLeg.MatchStartTimeIso) && DateTime.TryParse(parsedLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
-                                        {
-                                            dbLeg.StartTime = st;
-                                        }
+                                        dbLeg.StartTime = st;
                                     }
                                 }
                             }
-                            // --------------------------
+                        }
+                        // --------------------------
 
-                            if (isFinished)
+                        if (isFinished)
+                        {
+                            dbBet.NextCheckTime = null;
+
+                            // --- GATEKEEPER AUTO-SETTLEMENT LOGIC ---
+                            if (dbBet.Status == "Approved")
                             {
-                                dbBet.NextCheckTime = null;
-
-                                // --- GATEKEEPER AUTO-SETTLEMENT LOGIC ---
-                                if (dbBet.Status == "Approved")
+                                string? targetStatus = BetSchedulingLogic.DetermineAutoSettleStatus(parsedData.OverallStatus, parsedData.Legs);
+                                
+                                if (targetStatus != null)
                                 {
-                                    string? targetStatus = BetSchedulingLogic.DetermineAutoSettleStatus(parsedData.OverallStatus, parsedData.Legs);
-                                    
-                                    if (targetStatus != null)
+                                    // Save the extracted legs and outcome string first
+                                    await taskContext.SaveChangesAsync(ct);
+
+                                    var betProcessor = scope.ServiceProvider.GetRequiredService<BettingApp.Services.BetProcessingService>();
+                                    var processResult = await betProcessor.ProcessBetAsync(
+                                        betId: dbBet.Id,
+                                        newStatus: targetStatus,
+                                        adminName: "SYSTEM_AUTO",
+                                        expectedOriginalStatus: "Approved",
+                                        newAmount: (decimal)(dbBet.AmountNOK ?? 0),
+                                        newOdds: dbBet.Odds,
+                                        isAutoSettled: true
+                                    );
+
+                                    if (processResult.Success)
                                     {
-                                        // Save the extracted legs and outcome string first
-                                        await taskContext.SaveChangesAsync(ct);
-
-                                        var betProcessor = scope.ServiceProvider.GetRequiredService<BettingApp.Services.BetProcessingService>();
-                                        var processResult = await betProcessor.ProcessBetAsync(
-                                            betId: dbBet.Id,
-                                            newStatus: targetStatus,
-                                            adminName: "SYSTEM_AUTO",
-                                            expectedOriginalStatus: "Approved",
-                                            newAmount: (decimal)(dbBet.AmountNOK ?? 0),
-                                            newOdds: dbBet.Odds,
-                                            isAutoSettled: true
-                                        );
-
-                                        if (processResult.Success)
-                                        {
-                                            _logger.LogInformation($"Auto-settled Bet {dbBet.Id} to {targetStatus}");
-                                        }
-                                        else
-                                        {
-                                            _logger.LogWarning($"Failed to auto-settle Bet {dbBet.Id}: {processResult.ErrorMessage}");
-                                        }
-
-                                        anyUpdates = true;
-                                        return; // We already saved and processed, skip the final SaveChangesAsync below
+                                        _logger.LogInformation($"Auto-settled Bet {dbBet.Id} to {targetStatus}");
                                     }
+                                    else
+                                    {
+                                        _logger.LogWarning($"Failed to auto-settle Bet {dbBet.Id}: {processResult.ErrorMessage}");
+                                    }
+
+                                    anyUpdates = true;
+                                    return; // We already saved and processed, skip the final SaveChangesAsync below
                                 }
-                                // ----------------------------------------
                             }
-                            else
-                            {
-                                dbBet.NextCheckTime = BettingApp.Services.BetSchedulingLogic.CalculateNextCheckTime(dbBet);
-                            }
+                            // ----------------------------------------
+                        }
+                        else
+                        {
+                            dbBet.NextCheckTime = BettingApp.Services.BetSchedulingLogic.CalculateNextCheckTime(dbBet);
                         }
                     }
                 }
                 catch 
                 {
-                    // If AI fails to return valid JSON, try again in 60 mins
-                    dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                    // If AI fails to return valid JSON, try again in 15 mins
+                    dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(15);
                 }
 
                 await taskContext.SaveChangesAsync(ct);

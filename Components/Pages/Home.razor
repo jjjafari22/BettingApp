@@ -744,7 +744,6 @@ else
             _ = Task.Run(async () =>
             {
                 try {
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Starting background task for {betIdsToProcess.Count} bets\n");
                     using var scope = ScopeFactory.CreateScope();
                     var aiVision = scope.ServiceProvider.GetRequiredService<BettingApp.Services.AiVisionService>();
                     var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BettingApp.Data.ApplicationDbContext>>();
@@ -755,11 +754,18 @@ else
                     var semaphore = new SemaphoreSlim(3);
                     var tasks = betIdsToProcess.Select(async id =>
                     {
-                        await semaphore.WaitAsync();
+                        using var deadlineCts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(115));
+                        bool acquiredSemaphore = false;
                         try {
+                            try {
+                                await semaphore.WaitAsync(deadlineCts.Token);
+                                acquiredSemaphore = true;
+                            } catch (OperationCanceledException) {
+                                Logger.LogWarning($"[Bet #{id}] [Auto-Read] Timed out waiting for concurrency slot (> 115s). Moving directly to Pending.");
+                            }
+
                             BettingApp.Services.AiVisionService.ProcessingAutoReadBetIds.TryAdd(id, true);
                             try {
-                                System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Processing bet ID {id}\n");
                                 using var bgContext = dbFactory.CreateDbContext();
                                 var dbBet = await bgContext.Bets.Include(b => b.Legs).Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == id);
                                 if (dbBet != null && !string.IsNullOrEmpty(dbBet.ScreenshotUrl))
@@ -770,19 +776,26 @@ else
                                         dbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = dbBet.Id };
                                     }
 
-                                    System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Calling AI Vision for URL {dbBet.ScreenshotUrl}\n");
-                                    var (result, error) = await aiVision.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl, id);
+                                    BettingApp.Services.AiVisionExtractionResult? result = null;
+                                    string? error = null;
+
+                                    if (acquiredSemaphore && !deadlineCts.IsCancellationRequested)
+                                    {
+                                        (result, error) = await aiVision.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl, id, deadlineCts.Token);
+                                    }
+                                    else
+                                    {
+                                        error = "AI Auto-Read timed out (> 115s). Please use 'AI Auto-Read' to retry or review manually.";
+                                    }
                                     
                                     if (error != null)
                                     {
-                                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI ERROR: {error}\n");
-                                        Logger.LogError($"[AiVisionService] AI Auto-Read failed for bet #{id}: {error}");
+                                        Logger.LogError($"[AiVisionService] [Bet #{id}] [Auto-Read] Failed: {error}");
                                         dbBet.AiVisionError = error;
                                     }
                                     
                                     if (result != null)
                                     {
-                                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] AI SUCCESS. Serializing result...\n");
                                         dbBet.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(result);
                                         dbBet.AiVisionError = null;
                                         
@@ -855,7 +868,6 @@ else
                                         }
 
                                         await bgContext.SaveChangesAsync();
-                                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Saved to DB (Pending) and broadcasted SignalR.\n");
                                         
                                         var submitterUser = await bgContext.Users.AsNoTracking().Where(u => u.Id == dbBet.UserId).Select(u => new { u.DiscordUsername }).FirstOrDefaultAsync();
                                         var displayUserName = !string.IsNullOrEmpty(submitterUser?.DiscordUsername) ? submitterUser.DiscordUsername : dbBet.UserName;
@@ -863,21 +875,19 @@ else
                                         uiNotifier.NotifyAdmin($"New pick submitted by {displayUserName}");
                                         await discord.NotifyAdminNewPickAsync(dbBet);
                                     }
-                                    else
-                                    {
-                                        System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] Bet #{id} was cancelled by user during AI reading. Aborting.\n");
-                                    }
                                 }
                             } finally {
                                 BettingApp.Services.AiVisionService.ProcessingAutoReadBetIds.TryRemove(id, out _);
                             }
                         } finally {
-                            semaphore.Release();
+                            if (acquiredSemaphore)
+                            {
+                                semaphore.Release();
+                            }
                         }
                     });
                     await Task.WhenAll(tasks);
                 } catch (Exception ex) {  
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "bg_debug.txt"), $"[{DateTime.Now}] EXCEPTION: {ex}\n");
                     Logger.LogError($"[AiVisionService] Exception in background processing: {ex}");
                 }
             });

@@ -32,10 +32,10 @@ namespace BettingApp.Services
         /// (Live > Soonest Upcoming > Recently Finished within 24h).
         /// Handles both Club and National Team fixtures seamlessly.
         /// </summary>
-        public async Task<string?> ResolvePlayerMatchAsync(string selection, DateTime? betPlacedAt, int? betId = null)
+        public async Task<string?> ResolvePlayerMatchAsync(string selection, DateTime? betPlacedAt, int? betId = null, System.Threading.CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(selection)) return null;
-            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
+            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] [Auto-Read] " : "[Auto-Read] ";
 
             try
             {
@@ -50,14 +50,14 @@ namespace BettingApp.Services
 
                 // 2. Query FotMob suggest API to find player ID
                 string searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(playerName)}";
-                var suggestResponse = await _httpClient.GetAsync(searchUrl);
+                var suggestResponse = await _httpClient.GetAsync(searchUrl, cancellationToken);
                 if (!suggestResponse.IsSuccessStatusCode)
                 {
                     _logger.LogWarning($"{betLabel}PlayerMatchResolver: Suggest API failed for '{playerName}' with status {suggestResponse.StatusCode}");
                     return null;
                 }
 
-                string suggestJson = await suggestResponse.Content.ReadAsStringAsync();
+                string suggestJson = await suggestResponse.Content.ReadAsStringAsync(cancellationToken);
                 using var suggestDoc = JsonDocument.Parse(suggestJson);
 
                 if (!suggestDoc.RootElement.TryGetProperty("squadMemberSuggest", out var playerSuggests) || playerSuggests.GetArrayLength() == 0)
@@ -82,14 +82,14 @@ namespace BettingApp.Services
 
                 // 3. Fetch Player Overview page on FotMob
                 string playerUrl = $"https://www.fotmob.com/players/{playerId}/overview";
-                var playerResponse = await _httpClient.GetAsync(playerUrl);
+                var playerResponse = await _httpClient.GetAsync(playerUrl, cancellationToken);
                 if (!playerResponse.IsSuccessStatusCode)
                 {
                     _logger.LogWarning($"{betLabel}PlayerMatchResolver: Failed to fetch player profile for ID {playerId} ({playerName})");
                     return null;
                 }
 
-                string playerHtml = await playerResponse.Content.ReadAsStringAsync();
+                string playerHtml = await playerResponse.Content.ReadAsStringAsync(cancellationToken);
                 var nextDataMatch = Regex.Match(playerHtml, @"<script id=""__NEXT_DATA__"" type=""application/json"">(.*?)</script>");
                 if (!nextDataMatch.Success)
                 {
@@ -194,12 +194,17 @@ namespace BettingApp.Services
                 if (payload.TryGetProperty("teamId", out var teamIdProp))
                 {
                     string teamId = teamIdProp.GetInt32().ToString();
-                    string? teamFallbackMatch = await ResolveFromTeamFixturesAsync(teamId, targetDate, betLabel, playerName);
+                    string? teamFallbackMatch = await ResolveFromTeamFixturesAsync(teamId, targetDate, betLabel, playerName, cancellationToken);
                     if (!string.IsNullOrEmpty(teamFallbackMatch))
                     {
                         return teamFallbackMatch;
                     }
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning($"{betLabel}PlayerMatchResolver: Timed out while resolving player match for '{selection}'");
+                return null;
             }
             catch (Exception ex)
             {
@@ -209,11 +214,11 @@ namespace BettingApp.Services
             return null;
         }
 
-        private async Task<string?> ResolveFromTeamFixturesAsync(string teamId, DateTime targetDate, string betLabel, string playerName)
+        private async Task<string?> ResolveFromTeamFixturesAsync(string teamId, DateTime targetDate, string betLabel, string playerName, System.Threading.CancellationToken cancellationToken = default)
         {
             try
             {
-                string teamHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/teams/{teamId}/overview/team");
+                string teamHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/teams/{teamId}/overview/team", cancellationToken);
                 var regex = Regex.Match(teamHtml, @"<script id=""__NEXT_DATA__"" type=""application/json"">(.*?)</script>");
                 if (!regex.Success) return null;
 

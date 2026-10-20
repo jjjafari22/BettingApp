@@ -159,7 +159,7 @@ namespace BettingApp.Services
         }
 
 
-        public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl, int? betId = null)
+        public async Task<(AiVisionExtractionResult? Result, string? Error)> ExtractBetSlipDataAsync(string imageUrl, int? betId = null, System.Threading.CancellationToken callerToken = default)
         {
             var token = await GetVertexAccessTokenAsync();
             if (string.IsNullOrEmpty(token))
@@ -167,10 +167,17 @@ namespace BettingApp.Services
                 return (null, "Google Vertex Auth Token is missing or invalid. Check credentials.");
             }
 
+            string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] [Auto-Read] " : "[Auto-Read] ";
+
+            // Enforce a strict single 110s timeout across image download, Gemini API (including fast 429 retries), and FotMob match resolution
+            using var autoReadTimeoutCts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(callerToken);
+            autoReadTimeoutCts.CancelAfter(TimeSpan.FromSeconds(110));
+            var timeoutToken = autoReadTimeoutCts.Token;
+
             try
             {
                 // 1. Download the image bytes from the URL
-                var imageBytes = await _httpClient.GetByteArrayAsync(imageUrl);
+                var imageBytes = await _httpClient.GetByteArrayAsync(imageUrl, timeoutToken);
                 var base64Image = Convert.ToBase64String(imageBytes);
 
                 // Determine mime type (rough guess based on extension, though Gemini usually figures it out)
@@ -282,11 +289,10 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 
                 var apiUrl = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
-                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
-                _logger.LogInformation($"{betLabel}AI Auto-Read calling Gemini (Model: {resolvedModel})...");
+                _logger.LogInformation($"{betLabel}Calling Gemini (Model: {resolvedModel})...");
 
-                var (response, elapsedMs) = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token, timeoutSeconds: 90);
-                string responseString = await response.Content.ReadAsStringAsync();
+                var (response, elapsedMs) = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token, timeoutSeconds: 110, callerToken: timeoutToken);
+                string responseString = await response.Content.ReadAsStringAsync(timeoutToken);
                 
                 if (response.IsSuccessStatusCode)
                 {
@@ -355,7 +361,13 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                                     continue;
                                 }
 
-                                string? resolvedMatch = await _matchResolver.ResolvePlayerMatchAsync(leg.Selection, DateTime.UtcNow, betId);
+                                if (timeoutToken.IsCancellationRequested)
+                                {
+                                    _logger.LogWarning($"{betLabel}Skipping remaining player match resolution due to Auto-Read timeout.");
+                                    break;
+                                }
+
+                                string? resolvedMatch = await _matchResolver.ResolvePlayerMatchAsync(leg.Selection, DateTime.UtcNow, betId, timeoutToken);
                                 if (!string.IsNullOrEmpty(resolvedMatch))
                                 {
                                     leg.Match = resolvedMatch;
@@ -429,10 +441,13 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 
                 return (null, "No candidates returned from Gemini.");
             }
-
+            catch (Exception ex) when (ex is OperationCanceledException || ex is TimeoutException)
+            {
+                _logger.LogWarning($"{betLabel}AI Auto-Read timed out: {ex.Message}");
+                return (null, "AI Auto-Read timed out (> 110s). Please use 'AI Auto-Read' to retry or review manually.");
+            }
             catch (Exception ex)
             {
-                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "[Extraction] ";
                 _logger.LogError($"{betLabel}EXCEPTION in ExtractBetSlipDataAsync: {ex.ToString()}");
                 return (null, $"Exception: {ex.Message}");
             }
@@ -451,7 +466,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 
             try
             {
-                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
+                string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] [Outcome Check] " : "[Outcome Check] ";
 
                                 var prompt = $@"You are a sports betting expert analyzing a bet slip uploaded on {betPlacedAt:yyyy-MM-dd HH:mm} UTC (Year: {betPlacedAt.Year}).
 {extractedBetDataJson}
@@ -549,7 +564,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                         }
                         else
                         {
-                            _logger.LogInformation($"{betLabel}⚠️ [Outcome Check] {providerLabel} data not found for '{matchName}' -> Falling back to Google Search.");
+                            _logger.LogInformation($"{betLabel}⚠️ {providerLabel} data not found for '{matchName}' -> Falling back to Google Search.");
                             // Neither provider found data for this match -> Leg requires Google Search fallback
                             anyLegNeedsGoogleSearch = true;
                         }
@@ -630,14 +645,13 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
 
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
-                betLabel = betId.HasValue ? $"[Bet #{betId.Value}] " : "";
                 if (anyLegNeedsGoogleSearch)
                 {
-                    _logger.LogInformation($"{betLabel}🔍 [Outcome Check] Calling Gemini with Google Search Grounding ENABLED (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
+                    _logger.LogInformation($"{betLabel}🔍 Calling Gemini with Google Search Grounding ENABLED (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
                 }
                 else
                 {
-                    _logger.LogInformation($"{betLabel}🛡️ [Outcome Check] Calling Gemini with Google Search Grounding DISABLED - $0 Search Cost (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
+                    _logger.LogInformation($"{betLabel}🛡️ Calling Gemini with Google Search Grounding DISABLED - $0 Search Cost (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
                 }
                 
                 var (response, elapsedMs) = await SendWithRetryAsync(url, jsonPayload, betLabel, token, timeoutSeconds: 300);
@@ -792,17 +806,16 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                             finalJson = JsonSerializer.Serialize(resultObj, new JsonSerializerOptions { WriteIndented = false });
                         }
                         
-                        string localBetLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
                         string status = resultObj?.OverallStatus ?? "UNKNOWN";
                         bool hasStartTime = !string.IsNullOrEmpty(resultObj?.MatchStartTimeIso);
                         
                         if (status == "MATCH IN PROGRESS" && hasStartTime)
                         {
-                            _logger.LogInformation($"{localBetLabel} AI: Found start time -> {resultObj!.MatchStartTimeIso}");
+                            _logger.LogInformation($"{betLabel}AI: Found start time -> {resultObj!.MatchStartTimeIso}");
                         }
                         else
                         {
-                            _logger.LogInformation($"{localBetLabel} AI: Checked outcome -> Status: {status}");
+                            _logger.LogInformation($"{betLabel}AI: Checked outcome -> Status: {status}");
                         }
                     }
                     catch { } // ignore parsing errors
@@ -888,7 +901,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
             return null;
         }
 
-        private async Task<(HttpResponseMessage Response, long ElapsedMs)> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "", string token = "", int timeoutSeconds = 180)
+        private async Task<(HttpResponseMessage Response, long ElapsedMs)> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "", string token = "", int timeoutSeconds = 180, System.Threading.CancellationToken callerToken = default)
         {
             int maxRetries = 3;
             for (int i = 0; i < maxRetries; i++)
@@ -896,7 +909,8 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                 var attemptSw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+                    using var cts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(callerToken);
+                    cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
                     var request = new HttpRequestMessage(HttpMethod.Post, url);
                     request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
                     if (!string.IsNullOrEmpty(token))
@@ -909,11 +923,11 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                     
                     if (response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable || response.StatusCode == (System.Net.HttpStatusCode)429)
                     {
-                        if (i < maxRetries - 1)
+                        if (i < maxRetries - 1 && !callerToken.IsCancellationRequested)
                         {
                             int delaySec = 3 * (i + 1);
                             _logger.LogWarning($"{logLabel}Gemini API returned {response.StatusCode} in {attemptSw.ElapsedMilliseconds}ms. Retrying in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
-                            await Task.Delay(delaySec * 1000);
+                            await Task.Delay(delaySec * 1000, callerToken);
                             continue;
                         }
                     }
@@ -927,21 +941,26 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                 catch (OperationCanceledException)
                 {
                     attemptSw.Stop();
+                    if (callerToken.IsCancellationRequested)
+                    {
+                        _logger.LogWarning($"{logLabel}Gemini API request reached overall deadline after {attemptSw.ElapsedMilliseconds}ms. Aborting retries.");
+                        throw new TimeoutException($"Gemini API timed out after {attemptSw.ElapsedMilliseconds / 1000}s.");
+                    }
                     if (i < maxRetries - 1)
                     {
                         int delaySec = 2 * (i + 1);
-                        _logger.LogWarning($"{logLabel}Gemini API request timed out after {attemptSw.ElapsedMilliseconds}ms (> {timeoutSeconds}s). Retrying on fresh connection in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
-                        await Task.Delay(delaySec * 1000);
+                        _logger.LogWarning($"{logLabel}Gemini API request timed out after {attemptSw.ElapsedMilliseconds}ms (> {timeoutSeconds}s). Retrying in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
+                        await Task.Delay(delaySec * 1000, callerToken);
                         continue;
                     }
                     _logger.LogError($"{logLabel}Gemini API request timed out after {maxRetries} attempts of {timeoutSeconds}s each.");
                     throw new TimeoutException($"Gemini API timed out after {maxRetries} attempts of {timeoutSeconds}s.");
                 }
-                catch (Exception ex) when (i < maxRetries - 1)
+                catch (Exception ex) when (i < maxRetries - 1 && !callerToken.IsCancellationRequested)
                 {
                     attemptSw.Stop();
                     _logger.LogWarning($"{logLabel}Gemini API call failed ({ex.Message}). Retrying in 3s... (Attempt {i+1}/{maxRetries-1})");
-                    await Task.Delay(3000);
+                    await Task.Delay(3000, callerToken);
                     continue;
                 }
             }
