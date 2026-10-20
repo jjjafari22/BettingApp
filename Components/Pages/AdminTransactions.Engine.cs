@@ -298,7 +298,7 @@ public partial class AdminTransactions
                 if (addTransReceiverType == "User" && receiverUser != null)
                 {
                     var pendingW = await context.Transactions
-                        .Where(t => t.UserId == receiverUser.Id && t.Type == "Withdrawal" && t.Status == "Pending")
+                        .Where(t => t.UserId == receiverUser.Id && t.Type == "Withdrawal" && t.Status == "Pending" && t.FulfilledAmount < t.AmountNOK)
                         .OrderBy(t => t.Date)
                         .FirstOrDefaultAsync();
 

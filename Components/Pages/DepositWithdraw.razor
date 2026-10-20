@@ -433,16 +433,22 @@
         hasMoreTrans = totalTransactions > (transPage * PageSize);
     }
 
-    private async Task RequestWithdrawal()
+    private Task RequestWithdrawal() => SubmitWithdrawalAsync(confirmedOneMethod: false);
+
+    private Task ConfirmWithdrawal()
+    {
+        showOneMethodWarning = false;
+        return SubmitWithdrawalAsync(confirmedOneMethod: true);
+    }
+
+    private async Task SubmitWithdrawalAsync(bool confirmedOneMethod)
     {
         if (IsSubmitting) return;
         IsSubmitting = true;
-        try
+        try 
         {
             ErrorMessage = null;
             SuccessMessage = null;
-            
-            await LoadData(); 
 
             if (!withdrawalAmount.HasValue || withdrawalAmount.Value <= 0)
             {
@@ -450,11 +456,7 @@
                 return;
             }
 
-            if (withdrawalAmount.Value > Balance)
-            {
-                ErrorMessage = "You cannot withdraw more than your current balance.";
-                return;
-            }
+            int amountToWithdraw = withdrawalAmount.Value;
 
             var validationResult = BettingApp.Services.PaymentValidationHelper.ValidatePaymentMethods(
                 vippsDetails, revolutDetails, bankTransferDetails, otherPlatformName, otherDetails, requireAtLeastOne: true);
@@ -471,50 +473,7 @@
             bool hasOther = !string.IsNullOrWhiteSpace(otherPlatformName) && !string.IsNullOrWhiteSpace(otherDetails);
             int methodsCount = (hasVipps ? 1 : 0) + (hasRevolut ? 1 : 0) + (hasBank ? 1 : 0) + (hasOther ? 1 : 0);
 
-            if (methodsCount == 1)
-            {
-                showOneMethodWarning = true;
-                return;
-            }
-        }
-        finally
-        {
-            IsSubmitting = false;
-        }
-
-        await ExecuteWithdrawal();
-    }
-
-    private async Task ConfirmWithdrawal()
-    {
-        if (IsSubmitting) return;
-        showOneMethodWarning = false;
-        await ExecuteWithdrawal();
-    }
-
-    private async Task ExecuteWithdrawal()
-    {
-        if (IsSubmitting) return;
-        IsSubmitting = true;
-        try 
-        {
-            if (!withdrawalAmount.HasValue || withdrawalAmount.Value <= 0)
-            {
-                ErrorMessage = "Amount must be greater than 0.";
-                return;
-            }
-
-            int amountToWithdraw = withdrawalAmount.Value;
-
-            bool hasVipps = !string.IsNullOrWhiteSpace(vippsDetails);
-            bool hasRevolut = !string.IsNullOrWhiteSpace(revolutDetails);
-            bool hasBank = !string.IsNullOrWhiteSpace(bankTransferDetails);
-            bool hasOther = !string.IsNullOrWhiteSpace(otherPlatformName) && !string.IsNullOrWhiteSpace(otherDetails);
-
             using var context = DbFactory.CreateDbContext();
-            var auth = await AuthState.GetAuthenticationStateAsync();
-            var userName = auth.User.Identity?.Name ?? "Unknown";
-            
             var user = await context.Users.FindAsync(userId);
             if (user == null)
             {
@@ -522,12 +481,31 @@
                 return;
             }
 
+            Balance = user.Balance;
+            FreeBetBalance = user.FreeBetBalance;
+
             if (amountToWithdraw > user.Balance)
             {
                 ErrorMessage = "You cannot withdraw more than your current balance.";
-                await LoadData();
                 return;
             }
+
+            bool hasPendingWithdrawal = await context.Transactions.AnyAsync(
+                t => t.UserId == userId && t.Type == "Withdrawal" && t.Status == "Pending" && t.FulfilledAmount < t.AmountNOK);
+            if (hasPendingWithdrawal)
+            {
+                ErrorMessage = "You cannot have two pending withdrawals. Reach out to the Castle team for more info.";
+                return;
+            }
+
+            if (!confirmedOneMethod && methodsCount == 1)
+            {
+                showOneMethodWarning = true;
+                return;
+            }
+
+            var auth = await AuthState.GetAuthenticationStateAsync();
+            var userName = auth.User.Identity?.Name ?? "Unknown";
 
             user.Balance -= amountToWithdraw;
             

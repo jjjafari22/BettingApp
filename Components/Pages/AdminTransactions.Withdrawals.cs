@@ -70,16 +70,15 @@ public partial class AdminTransactions
             var displayUser = userLookup.TryGetValue(t.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : t.UserName;
 
             var remaining = t.AmountNOK - t.FulfilledAmount;
-            var msg = remaining <= 0
-                ? $"This withdrawal has been fully fulfilled. Clear this {t.AmountNOK}kr request for {displayUser}?"
-                : $"Confirm payout of {remaining} kr to {displayUser}?";
+            if (remaining > 0) return;
+
+            var msg = $"This withdrawal has been fully fulfilled. Clear this {t.AmountNOK}kr request for {displayUser}?";
 
             var confirmed = await DialogService.ConfirmAsync(msg);
             if (!confirmed) return;
 
             using var context = DbFactory.CreateDbContext();
 
-            var user = await context.Users.FindAsync(t.UserId);
             var dbTrans = await context.Transactions.FindAsync(t.Id);
             if (dbTrans != null)
             {
@@ -90,24 +89,8 @@ public partial class AdminTransactions
                     context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Cleared Fulfilled Withdrawal", TargetUserName = t.UserName, Details = $"ID: {t.Id}" });
                     await context.SaveChangesAsync();
                     _ = ShowSuccess("Fulfilled withdrawal request cleared.");
+                    await LoadTransactions(context);
                 }
-                else
-                {
-                    dbTrans.Status = "Completed";
-                    dbTrans.UpdatedAt = DateTime.UtcNow;
-                    context.AuditLogs.Add(new AuditLog { AdminUserName = currentAdminName ?? "Unknown", Action = "Confirmed Withdrawal", TargetUserName = t.UserName, Details = $"ID: {t.Id}, Amount: {t.AmountNOK}, Platform: {t.Platform}" });
-                    await context.SaveChangesAsync();
-                    UiNotifier.NotifyUser(t.UserId, "Withdrawal confirmed");
-                    UiNotifier.NotifyAdmin("Withdrawal confirmed");
-
-                    if (user != null && !string.IsNullOrEmpty(user.DiscordUserId))
-                    {
-                        await DiscordService.NotifyUserWithdrawalAsync(user.DiscordUserId, t, "Completed");
-                    }
-                    _ = ShowSuccess("Withdrawal confirmed.");
-                }
-
-                await LoadTransactions(context);
             }
         }
         finally
