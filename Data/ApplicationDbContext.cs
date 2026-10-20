@@ -107,8 +107,27 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<AuditLog>().HasIndex(a => a.Timestamp);
     }
 
+    private void UpdateModifiedUserConcurrencyStamps()
+    {
+        foreach (var userEntry in ChangeTracker.Entries<ApplicationUser>())
+        {
+            if (userEntry.State == EntityState.Modified)
+            {
+                userEntry.Entity.ConcurrencyStamp = Guid.NewGuid().ToString();
+            }
+        }
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        UpdateModifiedUserConcurrencyStamps();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        UpdateModifiedUserConcurrencyStamps();
+
         try
         {
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);

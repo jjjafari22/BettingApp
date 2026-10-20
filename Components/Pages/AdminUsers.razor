@@ -865,7 +865,16 @@ else
                 Details = "User approved by admin.",
                 Timestamp = DateTime.UtcNow
             });
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await RefreshData();
+                StateHasChanged();
+                return;
+            }
             
             if (!string.IsNullOrEmpty(user.Email))
             {
@@ -905,7 +914,16 @@ else
                 Details = "User rejected and deleted by admin.",
                 Timestamp = DateTime.UtcNow
             });
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await RefreshData();
+                StateHasChanged();
+                return;
+            }
             
             UiNotifier.NotifyAdmin("Update");
             await RefreshData();
@@ -948,7 +966,16 @@ else
                     Details = $"Manual verification set to {user.IsManuallyVerified}",
                     Timestamp = DateTime.UtcNow
                 });
+                try
+            {
                 await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await RefreshData();
+                StateHasChanged();
+                return;
+            }
                 await RefreshData();
                 
                 successMessage = $"User {user.UserName} is now {(user.IsManuallyVerified ? "Verified" : "Unverified")}.";
@@ -988,7 +1015,16 @@ else
                 Details = $"Admin status set to {user.IsAdmin}",
                 Timestamp = DateTime.UtcNow
             });
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await RefreshData();
+                StateHasChanged();
+                return;
+            }
             await RefreshData();
             StateHasChanged();
         }
@@ -1019,7 +1055,16 @@ else
                 Details = $"TestUser status set to {user.IsTestUser}",
                 Timestamp = DateTime.UtcNow
             });
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await RefreshData();
+                StateHasChanged();
+                return;
+            }
             await RefreshData();
             StateHasChanged();
         }
@@ -1052,7 +1097,16 @@ else
         {
             user.ReferredBy = newReferral;
             user.UpdatedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await RefreshData();
+                StateHasChanged();
+                return;
+            }
             
             if (vm != null) vm.ReferredBy = newReferral;
             var pvm = pendingUsersVM.FirstOrDefault(u => u.Id == userId);
@@ -1098,7 +1152,16 @@ else
         {
             user.DiscordUserId = newId;
             user.UpdatedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await RefreshData();
+                StateHasChanged();
+                return;
+            }
             
             if (vm != null) vm.DiscordUserId = newId;
             
@@ -1142,7 +1205,16 @@ else
         {
             user.DiscordUsername = newUsername;
             user.UpdatedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await RefreshData();
+                StateHasChanged();
+                return;
+            }
 
             if (vm != null) vm.DiscordUsername = newUsername;
             

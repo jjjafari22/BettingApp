@@ -402,6 +402,12 @@ public partial class AdminTransactions
             await LoadTransactions(context);
             isSuccess = true;
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            using var reloadContext = DbFactory.CreateDbContext();
+            await LoadTransactions(reloadContext);
+            errorMessage = "Concurrency conflict: The user's balance was modified at the exact same time. Please verify and try again.";
+        }
         finally
         {
             await UiExecutionHelper.AwaitMinDurationAsync(minOverlayTask, isSuccess);

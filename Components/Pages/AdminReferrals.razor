@@ -410,7 +410,15 @@ else
         if (dbUser != null)
         {
             dbUser.IsReferralDiscarded = true;
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await LoadData();
+                return;
+            }
             UiNotifier.NotifyAdmin($"Referral discarded for {user.UserName}");
             await LoadData();
             successMessage = $"Discarded possible referral for {FormatAdminDisplay(user, user.Email ?? "")}.";
@@ -593,7 +601,16 @@ else
             UpdatedAt = DateTime.UtcNow
         };
         context.Transactions.Add(bonusTx);
-        await context.SaveChangesAsync();
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await LoadData();
+            errorMessage = "Concurrency conflict: User balance was modified at the same time. Please try again.";
+            return;
+        }
 
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var adminName = authState.User.Identity?.Name ?? "System";

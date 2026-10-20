@@ -356,7 +356,15 @@ else
                 Details = logDetails
             });
 
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await LoadUsers();
+                return;
+            }
             UiNotifier.NotifyAdmin($"{fieldName} updated for {displayUser}");
             successMessage = $"{fieldName} updated for {displayUser}!";
             

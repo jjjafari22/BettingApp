@@ -207,8 +207,8 @@
                     <p class="mb-0 text-muted">We highly recommend adding at least two options so that you will get paid faster.</p>
                 </div>
                 <div class="modal-footer bg-light border-0">
-                    <button type="button" class="btn btn-outline-secondary fw-bold" @onclick="() => showOneMethodWarning = false">Add more payment methods</button>
-                    <button type="button" class="btn btn-primary fw-bold px-4 shadow-sm" @onclick="ConfirmWithdrawal">Withdraw anyways</button>
+                    <button type="button" class="btn btn-outline-secondary fw-bold" @onclick="() => showOneMethodWarning = false" disabled="@IsSubmitting">Add more payment methods</button>
+                    <button type="button" class="btn btn-primary fw-bold px-4 shadow-sm" @onclick="ConfirmWithdrawal" disabled="@IsSubmitting">Withdraw anyways</button>
                 </div>
             </div>
         </div>
@@ -435,42 +435,51 @@
 
     private async Task RequestWithdrawal()
     {
-        ErrorMessage = null;
-        SuccessMessage = null;
-        
-        await LoadData(); 
-
-        if (!withdrawalAmount.HasValue || withdrawalAmount.Value <= 0)
+        if (IsSubmitting) return;
+        IsSubmitting = true;
+        try
         {
-            ErrorMessage = "Amount must be greater than 0.";
-            return;
-        }
-
-        if (withdrawalAmount.Value > Balance)
-        {
-            ErrorMessage = "You cannot withdraw more than your current balance.";
-            return;
-        }
-
-        var validationResult = BettingApp.Services.PaymentValidationHelper.ValidatePaymentMethods(
-            vippsDetails, revolutDetails, bankTransferDetails, otherPlatformName, otherDetails, requireAtLeastOne: true);
+            ErrorMessage = null;
+            SuccessMessage = null;
             
-        if (!validationResult.isValid)
-        {
-            ErrorMessage = validationResult.errorMessage;
-            return;
+            await LoadData(); 
+
+            if (!withdrawalAmount.HasValue || withdrawalAmount.Value <= 0)
+            {
+                ErrorMessage = "Amount must be greater than 0.";
+                return;
+            }
+
+            if (withdrawalAmount.Value > Balance)
+            {
+                ErrorMessage = "You cannot withdraw more than your current balance.";
+                return;
+            }
+
+            var validationResult = BettingApp.Services.PaymentValidationHelper.ValidatePaymentMethods(
+                vippsDetails, revolutDetails, bankTransferDetails, otherPlatformName, otherDetails, requireAtLeastOne: true);
+                
+            if (!validationResult.isValid)
+            {
+                ErrorMessage = validationResult.errorMessage;
+                return;
+            }
+
+            bool hasVipps = !string.IsNullOrWhiteSpace(vippsDetails);
+            bool hasRevolut = !string.IsNullOrWhiteSpace(revolutDetails);
+            bool hasBank = !string.IsNullOrWhiteSpace(bankTransferDetails);
+            bool hasOther = !string.IsNullOrWhiteSpace(otherPlatformName) && !string.IsNullOrWhiteSpace(otherDetails);
+            int methodsCount = (hasVipps ? 1 : 0) + (hasRevolut ? 1 : 0) + (hasBank ? 1 : 0) + (hasOther ? 1 : 0);
+
+            if (methodsCount == 1)
+            {
+                showOneMethodWarning = true;
+                return;
+            }
         }
-
-        bool hasVipps = !string.IsNullOrWhiteSpace(vippsDetails);
-        bool hasRevolut = !string.IsNullOrWhiteSpace(revolutDetails);
-        bool hasBank = !string.IsNullOrWhiteSpace(bankTransferDetails);
-        bool hasOther = !string.IsNullOrWhiteSpace(otherPlatformName) && !string.IsNullOrWhiteSpace(otherDetails);
-        int methodsCount = (hasVipps ? 1 : 0) + (hasRevolut ? 1 : 0) + (hasBank ? 1 : 0) + (hasOther ? 1 : 0);
-
-        if (methodsCount == 1)
+        finally
         {
-            showOneMethodWarning = true;
-            return;
+            IsSubmitting = false;
         }
 
         await ExecuteWithdrawal();
@@ -478,15 +487,25 @@
 
     private async Task ConfirmWithdrawal()
     {
+        if (IsSubmitting) return;
         showOneMethodWarning = false;
         await ExecuteWithdrawal();
     }
 
     private async Task ExecuteWithdrawal()
     {
+        if (IsSubmitting) return;
         IsSubmitting = true;
         try 
         {
+            if (!withdrawalAmount.HasValue || withdrawalAmount.Value <= 0)
+            {
+                ErrorMessage = "Amount must be greater than 0.";
+                return;
+            }
+
+            int amountToWithdraw = withdrawalAmount.Value;
+
             bool hasVipps = !string.IsNullOrWhiteSpace(vippsDetails);
             bool hasRevolut = !string.IsNullOrWhiteSpace(revolutDetails);
             bool hasBank = !string.IsNullOrWhiteSpace(bankTransferDetails);
@@ -497,10 +516,20 @@
             var userName = auth.User.Identity?.Name ?? "Unknown";
             
             var user = await context.Users.FindAsync(userId);
-            if (user != null)
+            if (user == null)
             {
-                user.Balance -= withdrawalAmount!.Value;
+                ErrorMessage = "User not found.";
+                return;
             }
+
+            if (amountToWithdraw > user.Balance)
+            {
+                ErrorMessage = "You cannot withdraw more than your current balance.";
+                await LoadData();
+                return;
+            }
+
+            user.Balance -= amountToWithdraw;
             
             var providedMethods = new List<string>();
             string primaryPlatform = "Mixed";
@@ -537,9 +566,9 @@
                 UserName = userName,
                 ReceiverId = userId,
                 ReceiverType = "User",
-                ReceiverName = $"{user?.FirstName} {user?.LastName}".Trim(),
+                ReceiverName = $"{user.FirstName} {user.LastName}".Trim(),
                 Type = "Withdrawal",
-                AmountNOK = withdrawalAmount!.Value,
+                AmountNOK = amountToWithdraw,
                 Platform = primaryPlatform,
                 PaymentDetails = finalDetails,
                 Date = DateTime.UtcNow,
@@ -561,6 +590,11 @@
             otherPlatformName = "";
             otherDetails = "";
             await LoadData();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await LoadData();
+            ErrorMessage = "Your balance was just updated. Please review your balance and try again.";
         }
         catch (Exception ex)
         {

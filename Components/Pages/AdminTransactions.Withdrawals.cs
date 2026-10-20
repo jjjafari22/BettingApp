@@ -220,7 +220,17 @@ public partial class AdminTransactions
                 Details = $"ID: {t.Id}, OldAmt: {oldAmount}, NewAmt: {editingTransactionAmount}, OldDet: {oldDetails}, NewDet: {newDetailsStr}"
             });
 
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                using var reloadContext = DbFactory.CreateDbContext();
+                await LoadTransactions(reloadContext);
+                errorMessage = "Concurrency conflict: This user or withdrawal was modified concurrently. Please try again.";
+                return;
+            }
             UiNotifier.NotifyUser(t.UserId, "Withdrawal amount updated");
             UiNotifier.NotifyAdmin("Withdrawal amount updated");
 
@@ -242,7 +252,7 @@ public partial class AdminTransactions
             using var context = DbFactory.CreateDbContext();
             var dbTrans = await context.Transactions.FindAsync(t.Id);
             var user = await context.Users.FindAsync(t.UserId);
-            if (dbTrans != null && user != null)
+            if (dbTrans != null && user != null && dbTrans.Status == "Pending")
             {
                 dbTrans.Status = "Rejected";
                 dbTrans.UpdatedAt = DateTime.UtcNow;
@@ -261,6 +271,12 @@ public partial class AdminTransactions
                 _ = ShowSuccess("Withdrawal rejected.");
                 await LoadTransactions(context);
             }
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            using var reloadContext = DbFactory.CreateDbContext();
+            await LoadTransactions(reloadContext);
+            errorMessage = "Concurrency conflict: This user or withdrawal was modified concurrently. Please try again.";
         }
         finally
         {
