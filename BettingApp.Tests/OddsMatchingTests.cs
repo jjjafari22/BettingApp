@@ -1399,5 +1399,179 @@ namespace BettingApp.Tests
             string displayAway = OddsMatchingLogic.GetTranslatedOutcomeName("2 (0-2.0)", apiResult.MatchName);
             Assert.False(OddsMatchingLogic.IsOutcomeMatch("2 (0-2.0)", displayAway, ctx), "Al Hilal must NOT match Al-Hazm");
         }
+
+        [Fact]
+        public void Test_TeamTotalGoals_BareOverSelection_DoesNotFallThroughOnWrongTeam()
+        {
+            // Regression test: when Selection is bare "Over 1.5" (without "Goals"),
+            // evaluating against "Over Under Team 2" for a Team 1 leg must return false
+            // and MUST NOT fall through to normOName == ctx.NormSel ("over15" == "over15").
+            var brentfordLeg = new AiVisionLeg
+            {
+                Match = "Brentford vs Liverpool",
+                Sport = "Soccer",
+                Market = "Brentford Total Goals",
+                Selection = "Over 1.5"
+            };
+            var apiResult = new OddsPapiSearchResult { MatchName = "Brentford vs Liverpool" };
+
+            var ctxTeam1 = new OddsMatchingLogic.OutcomeMatchingContext(brentfordLeg, apiResult, "Over Under Team 1");
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 1.5", "Over 1.5", ctxTeam1));
+
+            var ctxTeam2 = new OddsMatchingLogic.OutcomeMatchingContext(brentfordLeg, apiResult, "Over Under Team 2");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 1.5", "Over 1.5", ctxTeam2),
+                "Bare 'Over 1.5' for Team 1 must never match 'Over 1.5' in 'Over Under Team 2'");
+        }
+
+        [Fact]
+        public void Test_PlayerSharingTeamNameToken_DoesNotMatchTeamTotalBet()
+        {
+            // If a player's name happens to share a token with a team in the match (e.g. "Roma, Marco"),
+            // a team total bet ("Total Goalkeeper Saves - Roma", "Over 5.5") must NEVER match that player prop.
+            var leg = new AiVisionLeg
+            {
+                Match = "Roma vs Real Madrid",
+                Market = "Total Goalkeeper Saves - Roma",
+                Selection = "Over 5.5"
+            };
+            var searchResult = new OddsPapiSearchResult { MatchName = "Roma vs Real Madrid" };
+
+            bool isMatch = OddsMatchingLogic.IsOutcomeMatch(
+                "Over 5.5 (Roma, Marco)",
+                "Over 5.5 (Roma, Marco)",
+                leg,
+                searchResult,
+                "Over Under Player Goalkeeper Saves (incl. overtime)");
+
+            Assert.False(isMatch);
+        }
+
+        [Fact]
+        public void Test_FullDictionarySimulation_ThreeWayHandicap_SelectsExactLineOnly()
+        {
+            // Simulates Admin.OddsLookup.cs iterating through the full OddsPapi outcome dictionary in order
+            var leg = new AiVisionLeg
+            {
+                Match = "Al Hilal vs Al Hazem",
+                Sport = "Soccer",
+                Market = "3-Way Handicap (0-2)",
+                Selection = "Al Hilal"
+            };
+            var apiResult = new OddsPapiSearchResult { MatchName = "Al Hilal SFC vs Al-Hazm" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "3-Way Handicap");
+
+            var outcomesInOrder = new[]
+            {
+                "1 (0-1.0)", "X (0-1.0)", "2 (0-1.0)",
+                "1 (0-2.0)", "X (0-2.0)", "2 (0-2.0)",
+                "1 (0-3.0)", "X (0-3.0)", "2 (0-3.0)"
+            };
+
+            var matchedOutcomes = outcomesInOrder
+                .Where(o => OddsMatchingLogic.IsOutcomeMatch(o, OddsMatchingLogic.GetTranslatedOutcomeName(o, apiResult.MatchName), ctx))
+                .ToList();
+
+            Assert.Single(matchedOutcomes);
+            Assert.Equal("1 (0-2.0)", matchedOutcomes[0]);
+        }
+
+        [Fact]
+        public void Test_FullDictionarySimulation_AsianHandicap_SelectsExactLineOnly()
+        {
+            // Simulates Admin.OddsLookup.cs iterating through the full OddsPapi Asian Handicap dictionary
+            // where "2" (0 handicap) and "2 (0.5)" (-0.5) appear before "2 (-0.5)" (+0.5)
+            var leg = new AiVisionLeg
+            {
+                Match = "Getafe vs Rayo Vallecano",
+                Sport = "Soccer",
+                Market = "Asian Handicap",
+                Selection = "Rayo Vallecano +0.5"
+            };
+            var apiResult = new OddsPapiSearchResult { MatchName = "Getafe CF vs Rayo Vallecano" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "Asian Handicap");
+
+            var outcomesInOrder = new[]
+            {
+                "1", "2",
+                "1 (0.5)", "2 (0.5)",
+                "1 (-0.5)", "2 (-0.5)",
+                "1 (-1.5)", "2 (-1.5)"
+            };
+
+            var matchedOutcomes = outcomesInOrder
+                .Where(o => OddsMatchingLogic.IsOutcomeMatch(o, OddsMatchingLogic.GetTranslatedOutcomeName(o, apiResult.MatchName), ctx))
+                .ToList();
+
+            Assert.Single(matchedOutcomes);
+            Assert.Equal("2 (-0.5)", matchedOutcomes[0]);
+        }
+
+        [Theory]
+        [InlineData("New York Rangers vs Anaheim Ducks", "Player to Record at Least 1 Assist (Inc. Overtime)", "Adam Fox - No", "Over Under Player Assists (incl. overtime)", "Fox, Adam", "Under 0.5 (Fox, Adam)")]
+        [InlineData("Philadelphia Flyers vs Colorado Avalanche", "Player to Record at Least 1 Assist (Inc. Overtime)", "Cale Makar - No", "Over Under Player Assists (incl. overtime)", "Makar, Cale", "Under 0.5 (Makar, Cale)")]
+        [InlineData("Toronto Maple Leafs vs San Jose Sharks", "Player to Record at Least 1 Assist (Inc. Overtime)", "Macklin Celebrini - No", "Over Under Player Assists (incl. overtime)", "Celebrini, Macklin", "Under 0.5 (Celebrini, Macklin)")]
+        [InlineData("Utah Mammoth vs Pittsburgh Penguins", "Player to Record at Least 2 Points (Inc. Overtime)", "Clayton Keller - Yes", "Over Under Player Points (incl. overtime)", "Keller, Clayton", "Over 1.5 (Keller, Clayton)")]
+        public void Test_Bet1050_AllFourLegs_FullDictionarySimulation_SelectsExactLineAndDirection(
+            string matchName,
+            string marketName,
+            string selection,
+            string opMarketName,
+            string opPlayerName,
+            string expectedOutcome)
+        {
+            var leg = new AiVisionLeg
+            {
+                Match = matchName,
+                Sport = "Ice Hockey",
+                Market = marketName,
+                Selection = selection
+            };
+            var apiResult = new OddsPapiSearchResult { MatchName = matchName };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, opMarketName);
+
+            var outcomesInOrder = new[]
+            {
+                $"Over 0.5 ({opPlayerName})",
+                $"Over 1.5 ({opPlayerName})",
+                $"Over 2.5 ({opPlayerName})",
+                $"Under 0.5 ({opPlayerName})",
+                $"Under 1.5 ({opPlayerName})",
+                $"Under 2.5 ({opPlayerName})"
+            };
+
+            var matchedOutcomes = outcomesInOrder
+                .Where(o => OddsMatchingLogic.IsOutcomeMatch(o, o, ctx))
+                .ToList();
+
+            Assert.Single(matchedOutcomes);
+            Assert.Equal(expectedOutcome, matchedOutcomes[0]);
+        }
+
+        [Fact]
+        public void Test_NegativePlayerProp_FuzzyAndUnparenthesizedFallback_SelectsUnderAndRejectsOver()
+        {
+            // Verify IsFuzzyPlayerMatch directly when market says "at least 1" and selection is "- No"
+            Assert.False(OddsMatchingLogic.IsFuzzyPlayerMatch(
+                "Player to Record at Least 1 Assist (Inc. Overtime) Adam Fox - No",
+                "Over 0.5 (Fox, Adam)"));
+            Assert.True(OddsMatchingLogic.IsFuzzyPlayerMatch(
+                "Player to Record at Least 1 Assist (Inc. Overtime) Adam Fox - No",
+                "Under 0.5 (Fox, Adam)"));
+
+            // Verify unparenthesized outcomes ("Adam Fox Over 0.5", "Adam Fox Under 0.5", bare "Adam Fox")
+            var leg = new AiVisionLeg
+            {
+                Match = "New York Rangers vs Anaheim Ducks",
+                Sport = "Ice Hockey",
+                Market = "Player to Record at Least 1 Assist (Inc. Overtime)",
+                Selection = "Adam Fox - No"
+            };
+            var apiResult = new OddsPapiSearchResult { MatchName = "New York Rangers vs Anaheim Ducks" };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, "Over Under Player Assists (incl. overtime)");
+
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Adam Fox Over 0.5", "Adam Fox Over 0.5", ctx));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Adam Fox", "Adam Fox", ctx));
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Adam Fox Under 0.5", "Adam Fox Under 0.5", ctx));
+        }
     }
 }

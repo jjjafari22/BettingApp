@@ -204,16 +204,22 @@ public class OddsApiService
                                     oName = $"Over {overVal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}";
                                 }
 
-                                if ((isPlayerGoalsMerge || isPlayerAssistsMerge || isPlayerTacklesMerge || isPlayerPointsMerge || isPlayerShotsMerge) && string.IsNullOrEmpty(handicapSuffix))
+                                string outcomeHandicapSuffix = handicapSuffix;
+                                if ((isPlayerGoalsMerge || isPlayerAssistsMerge || isPlayerTacklesMerge || isPlayerPointsMerge || isPlayerShotsMerge) && string.IsNullOrEmpty(outcomeHandicapSuffix))
                                 {
                                     if (oName == "1" || oName.Equals("Yes", StringComparison.OrdinalIgnoreCase))
                                     {
                                         oName = "Over";
-                                        handicapSuffix = " 0.5";
+                                        outcomeHandicapSuffix = " 0.5";
+                                    }
+                                    else if (oName.Equals("No", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        oName = "Under";
+                                        outcomeHandicapSuffix = " 0.5";
                                     }
                                 }
 
-                                string combined = oName + handicapSuffix;
+                                string combined = oName + outcomeHandicapSuffix;
                                 combined = System.Text.RegularExpressions.Regex.Replace(combined, @"^(Over|Under)\s*\(([^)]+)\)$", "$1 $2", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                                 baseMarketObj.OutcomeNames[oId] = combined;
                             }
