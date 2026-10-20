@@ -223,7 +223,8 @@ namespace BettingApp.Services
                     }
 
                     // Goals Team 1/2
-                    if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goals", StringComparison.OrdinalIgnoreCase))
+                    if ((clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goals", StringComparison.OrdinalIgnoreCase)) &&
+                        !clean.Contains("Player", StringComparison.OrdinalIgnoreCase))
                     {
                         if (MatchesTeam(team1, clean) || clean.Contains("Home", StringComparison.OrdinalIgnoreCase) || (!string.IsNullOrEmpty(selectionName) && MatchesTeam(team1, selectionName)))
                             return new List<string> { "Over Under Team 1" + halfSuffix };
@@ -243,7 +244,8 @@ namespace BettingApp.Services
                     }
 
                     // Cards Team 1/2
-                    if (clean.Contains("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Bookings", StringComparison.OrdinalIgnoreCase))
+                    if ((clean.Contains("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Bookings", StringComparison.OrdinalIgnoreCase)) &&
+                        !clean.Contains("Player", StringComparison.OrdinalIgnoreCase))
                     {
                         if (clean.Contains("Most Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards 1X2", StringComparison.OrdinalIgnoreCase) || clean.Contains("More Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Most Bookings", StringComparison.OrdinalIgnoreCase))
                         {
@@ -291,7 +293,11 @@ namespace BettingApp.Services
                     }
 
                     // Fouls Team 1/2 or Match Total
-                    if (clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) || clean.Contains("Foul", StringComparison.OrdinalIgnoreCase))
+                    if ((clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) || clean.Contains("Foul", StringComparison.OrdinalIgnoreCase)) &&
+                        !clean.Contains("Suffered", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Won", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Drawn", StringComparison.OrdinalIgnoreCase))
                     {
                         if (!clean.Contains("Player", StringComparison.OrdinalIgnoreCase))
                         {
@@ -513,13 +519,21 @@ namespace BettingApp.Services
                 return new List<string> { "Player to Score or be Booked", "Player to Score or Carded", "To Score or be Booked", "Score or Booked" };
             }
 
-            if (!clean.Contains("Assist", StringComparison.OrdinalIgnoreCase) &&
+            bool isFirstLastOrNextGoalscorer = System.Text.RegularExpressions.Regex.IsMatch(
+                clean,
+                @"\b(?:first|last|next|1st|2nd|3rd)\s+(?:goal\s*scorer|player\s+to\s+score|to\s+score)\b|\bGoal\s+\d+\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (!isFirstLastOrNextGoalscorer &&
+                !clean.Contains("Assist", StringComparison.OrdinalIgnoreCase) &&
                 !clean.Contains("Point", StringComparison.OrdinalIgnoreCase) &&
                 !clean.Contains("Book", StringComparison.OrdinalIgnoreCase) &&
                 !clean.Contains("Card", StringComparison.OrdinalIgnoreCase) &&
                (clean.Contains("Goalscorer", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Scorer", StringComparison.OrdinalIgnoreCase) || 
-               (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase)) ||
-               clean.Contains("Will/Will not Score", StringComparison.OrdinalIgnoreCase)))
+               (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Both", StringComparison.OrdinalIgnoreCase)) ||
+               clean.Contains("Will/Will not Score", StringComparison.OrdinalIgnoreCase) ||
+               clean.Equals("Will Score", StringComparison.OrdinalIgnoreCase) ||
+               (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Goal", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Goalkeeper", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Shot", StringComparison.OrdinalIgnoreCase))))
             {
                 return new List<string> { "Over Under Player Goals (incl. overtime)", "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals", "Goals", "Goal" };
             }
@@ -547,7 +561,11 @@ namespace BettingApp.Services
                 }
                 return new List<string> { clean };
             }
-            if (!isTeamOrTotalStat && clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase))
+            if (!isTeamOrTotalStat && clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) &&
+                !clean.Contains("Suffered", StringComparison.OrdinalIgnoreCase) &&
+                !clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase) &&
+                !clean.Contains("Won", StringComparison.OrdinalIgnoreCase) &&
+                !clean.Contains("Drawn", StringComparison.OrdinalIgnoreCase))
             {
                 if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
                 {
@@ -569,7 +587,13 @@ namespace BettingApp.Services
                 return new List<string> { clean };
             }
             if (!clean.Contains("Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Goal", StringComparison.OrdinalIgnoreCase) &&
-               (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) || (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Card", StringComparison.OrdinalIgnoreCase))))
+               (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("To Be Carded", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("To Receive a Card", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("To Get a Card", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Shown a Card", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("get Booked", StringComparison.OrdinalIgnoreCase) ||
+                (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && (clean.Contains("Card", StringComparison.OrdinalIgnoreCase) || clean.Contains("Book", StringComparison.OrdinalIgnoreCase)))))
             {
                 return new List<string> { "Player To Be Carded (incl. overtime)", "Player To Be Carded", "Player Cards", "To Be Carded", "To Be Booked", "Cards", "Card" };
             }
@@ -704,6 +728,11 @@ namespace BettingApp.Services
             cleanWithoutTeams = System.Text.RegularExpressions.Regex.Replace(
                 cleanWithoutTeams,
                 @"\b(?:including\s+|incl\.?\s+)?(?:overtime|ot)\s*(?:and|&|\/)\s*(?:penalties|penalty|shootouts?|so)\b",
+                "",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            cleanWithoutTeams = System.Text.RegularExpressions.Regex.Replace(
+                cleanWithoutTeams,
+                @"\b(?:one|two|three|four|five|\d+)\s+and\s+more\b",
                 "",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 

@@ -20,6 +20,36 @@ namespace BettingApp.Services
             return "";
         }
 
+        internal static string StripTwoWayMarketPhrases(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            return Regex.Replace(
+                text,
+                @"\b(?:over\s*(?:[\/-]\s*|\s+)under|under\s*(?:[\/-]\s*|\s+)over|o\s*\/\s*u|will\s*(?:[\/-]\s*|\s+or\s+)will\s+not|yes\s*(?:[\/-]\s*|\s+)no|no\s*(?:[\/-]\s*|\s+)yes|ja\s*(?:[\/-]\s*|\s+)nei|nei\s*(?:[\/-]\s*|\s+)ja|draw\s+no\s+bet)\b",
+                " ",
+                RegexOptions.IgnoreCase);
+        }
+
+        internal static string NormalizeLinePhrases(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            string s = text;
+            s = Regex.Replace(s, @"\b(?:a\s+)?hat(?:\s*-\s*|\s+)?trick\b", "3 or more", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\b(?:a\s+)?brace\b", "2 or more", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\b(at\s+least\s+)one(?!\s+half)\b", "${1}1", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\b(at\s+least\s+)two\b", "${1}2", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\b(at\s+least\s+)three\b", "${1}3", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\b(at\s+least\s+)four\b", "${1}4", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\b(at\s+least\s+)five\b", "${1}5", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\bone(\s+(?:or|and)\s+more)\b", "1$1", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\btwo(\s+(?:or|and)\s+more)\b", "2$1", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\bthree(\s+(?:or|and)\s+more)\b", "3$1", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\bfour(\s+(?:or|and)\s+more)\b", "4$1", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\bfive(\s+(?:or|and)\s+more)\b", "5$1", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\b(\d+)\s+and\s+more\b", "$1 or more", RegexOptions.IgnoreCase);
+            return s;
+        }
+
         public class OutcomeMatchingContext
         {
             public AiVisionLeg? Leg { get; }
@@ -212,7 +242,8 @@ namespace BettingApp.Services
 
                 // Direction (Over vs Under): Selection ALWAYS takes precedence over market category!
                 bool selHasUnder = Regex.IsMatch(NormSelRaw, @"\b(?:under|no|nei|not)\b", RegexOptions.IgnoreCase);
-                bool selHasOver = Regex.IsMatch(NormSelRaw, @"\b(?:over|yes|ja)\b", RegexOptions.IgnoreCase);
+                bool selHasOver = Regex.IsMatch(NormSelRaw, @"\b(?:over|yes|ja)\b", RegexOptions.IgnoreCase) ||
+                                  (!selHasUnder && Regex.IsMatch(NormSelRaw, @"\b(?:will\s+(?:score|get|be|assist|give|provide|record|have|make|receive)|to\s+(?:score|give|provide|get|be|receive|record|make|have)|anytime)\b", RegexOptions.IgnoreCase));
 
                 if (selHasUnder && !selHasOver)
                 {
@@ -224,17 +255,19 @@ namespace BettingApp.Services
                 }
                 else
                 {
-                    string mkt = leg.Market ?? "";
-                    bool isTwoWayMarket = Regex.IsMatch(mkt, @"\b(?:over\s*[\/-]\s*under|under\s*[\/-]\s*over|o\/u)\b", RegexOptions.IgnoreCase) ||
-                                          (mkt.Contains("over", StringComparison.OrdinalIgnoreCase) && mkt.Contains("under", StringComparison.OrdinalIgnoreCase));
+                    string mktRaw = leg.Market ?? "";
+                    string mktCleaned = StripTwoWayMarketPhrases(mktRaw);
+                    bool isTwoWayMarket = mktRaw.Contains("over", StringComparison.OrdinalIgnoreCase) && mktRaw.Contains("under", StringComparison.OrdinalIgnoreCase);
 
-                    WantsUnder = !isTwoWayMarket && Regex.IsMatch(mkt, @"\b(?:under|no|nei|not)\b", RegexOptions.IgnoreCase);
+                    WantsUnder = !isTwoWayMarket && Regex.IsMatch(mktCleaned, @"\b(?:under|no|nei|not)\b", RegexOptions.IgnoreCase);
                 }
 
                 string dirKeyword = WantsUnder ? "under" : "over";
 
-                string rawSel = leg.Selection;
+                string rawSel = NormalizeLinePhrases(leg.Selection);
                 rawSel = Regex.Replace(rawSel, @"(\d+)\+", m => $"{dirKeyword} {double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) - 0.5}", RegexOptions.IgnoreCase);
+                rawSel = Regex.Replace(rawSel, @"(?:to score\s+|to record\s+|to get\s+|to have\s+)?(\d+)\s+or\s+more", m => $"{dirKeyword} {double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) - 0.5}", RegexOptions.IgnoreCase);
+                rawSel = Regex.Replace(rawSel, @"(?:at\s+least\s+)(\d+)", m => $"{dirKeyword} {double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) - 0.5}", RegexOptions.IgnoreCase);
                 rawSel = Regex.Replace(rawSel, @"\btie\b", "draw", RegexOptions.IgnoreCase);
                 rawSel = _powerSubRegex.Replace(rawSel, "");
                 RawSel = rawSel;
@@ -261,13 +294,16 @@ namespace BettingApp.Services
 
                 PlayerNameFromAiSel = NormSel.Replace("yes", "").Replace("no", "").Replace("over05", "").Replace("under05", "").Replace("toprovideanassist", "").Replace("powersub", "").Replace("-", "");
 
-                string fb = (string.IsNullOrWhiteSpace(leg.Market) ? "" : leg.Market + " ") + leg.Selection;
+                string cleanMktForFb = StripTwoWayMarketPhrases(leg.Market ?? "");
+                string fb = NormalizeLinePhrases((string.IsNullOrWhiteSpace(cleanMktForFb) ? "" : cleanMktForFb + " ") + leg.Selection);
                 fb = Regex.Replace(fb, @"(\d+)\+", m => $"{dirKeyword} {double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) - 0.5}", RegexOptions.IgnoreCase);
                 fb = Regex.Replace(fb, @"(?:to score\s+|to record\s+|to get\s+|to have\s+)?(\d+)\s+or\s+more", m => $"{dirKeyword} {double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) - 0.5}", RegexOptions.IgnoreCase);
                 fb = Regex.Replace(fb, @"(?:at\s+least\s+)(\d+)", m => $"{dirKeyword} {double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) - 0.5}", RegexOptions.IgnoreCase);
                 FallbackSel = fb;
 
-                string fullLegText = $"{(leg.Market ?? "")} {(leg.Selection ?? "")}";
+                string normLineSel = NormalizeLinePhrases(leg.Selection ?? "");
+                string normLineMkt = NormalizeLinePhrases(leg.Market ?? "");
+                string fullLegText = $"{normLineMkt} {normLineSel}";
                 HasHigherLineReq = Regex.IsMatch(
                     fullLegText,
                     @"(?:\bat\s+least\s+([2-9]|\d{2,})\b|\b([2-9]|\d{2,})\s*(?:\+(?!\d)|or\s+more\b|\s*(?:points?|goals?|assists?|shots?|saves?|cards?|tackles?|fouls?)\b)|\bover\s*(?:0\.[6-9]|[1-9]|\d{2,}|[1-9]\.\d+)\b)",
@@ -275,12 +311,12 @@ namespace BettingApp.Services
 
                 // Target Line: prefer Selection line over Market line
                 var selLineMatch = Regex.Match(
-                    leg.Selection ?? "",
+                    normLineSel,
                     @"(?:\b(?:over|under)\s*(\d+(?:\.\d+)?)\b|\bat\s+least\s+(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:\+(?!\d)|or\s+more\b))",
                     RegexOptions.IgnoreCase);
 
                 var mktLineMatch = Regex.Match(
-                    leg.Market ?? "",
+                    normLineMkt,
                     @"(?:\b(?:over|under)\s*(\d+(?:\.\d+)?)\b|\bat\s+least\s+(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:\+(?!\d)|or\s+more\b))",
                     RegexOptions.IgnoreCase);
 
@@ -300,8 +336,8 @@ namespace BettingApp.Services
                 else
                 {
                     var fallbackLineMatch = Regex.Match(
-                        $"{(leg.Selection ?? "")} {(leg.Market ?? "")}",
-                        @"(?:\b(?:total\s+goals?|total|goals?|mål|mal|o\/u|line)\s*(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:goals?|mål|mal)\b|\b(\d+\.\d+)\b)",
+                        $"{normLineSel} {normLineMkt}",
+                        @"(?:\b(?:total\s+goals?|total|goals?|mål|mal|o\/u|line)\s*(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:goals?|mål|mal)\b|(?<![+-])\b(\d+\.\d+)\b)",
                         RegexOptions.IgnoreCase);
 
                     if (fallbackLineMatch.Success)

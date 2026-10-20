@@ -1573,5 +1573,207 @@ namespace BettingApp.Tests
             Assert.False(OddsMatchingLogic.IsOutcomeMatch("Adam Fox", "Adam Fox", ctx));
             Assert.True(OddsMatchingLogic.IsOutcomeMatch("Adam Fox Under 0.5", "Adam Fox Under 0.5", ctx));
         }
+
+        [Fact]
+        public void Test_Bet1060_Dev_AllLegs_EndToEndMarketAndOutcomeMatching()
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "goals", MarketName = "Over Under Player Goals (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "assists", MarketName = "Over Under Player Assists (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "shots", MarketName = "Over Under Player Shots (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "cards", MarketName = "Player To Be Carded (incl. overtime)" }
+            };
+
+            // Leg 1: AS Roma vs Slovan Bratislava | Will/Will not Score | Donyell Malen - Will Score
+            var leg1 = new AiVisionLeg { Match = "AS Roma vs Slovan Bratislava", Sport = "Soccer", Market = "Will/Will not Score", Selection = "Donyell Malen - Will Score" };
+            var mkt1 = OddsMatchingLogic.FindBestMarket(mockMarkets, leg1.Market, leg1.Match, leg1.Selection, _marketMapper);
+            Assert.NotNull(mkt1);
+            Assert.Equal("Over Under Player Goals (incl. overtime)", mkt1.MarketName);
+
+            var ctx1 = new OddsMatchingLogic.OutcomeMatchingContext(leg1, new OddsPapiSearchResult { MatchName = leg1.Match }, mkt1.MarketName);
+            Assert.False(ctx1.WantsUnder, "Will/Will not Score with 'Will Score' must have WantsUnder = false");
+
+            var outcomes1 = new[]
+            {
+                "Over 0.5 (Malen, Donyell)", "Under 0.5 (Malen, Donyell)",
+                "Over 1.5 (Malen, Donyell)", "Under 1.5 (Malen, Donyell)",
+                "Over 0.5 (Dybala, Paulo)", "Under 0.5 (Dybala, Paulo)"
+            };
+            var matched1 = outcomes1.Where(o => OddsMatchingLogic.IsOutcomeMatch(o, o, ctx1)).ToList();
+            Assert.Single(matched1);
+            Assert.Equal("Over 0.5 (Malen, Donyell)", matched1[0]);
+
+            // Leg 2: Paris Saint-Germain vs FC Barcelona | Will/Will not Score | Ousmane Dembele - Will Score
+            var leg2 = new AiVisionLeg { Match = "Paris Saint-Germain vs FC Barcelona", Sport = "Soccer", Market = "Will/Will not Score", Selection = "Ousmane Dembele - Will Score" };
+            var mkt2 = OddsMatchingLogic.FindBestMarket(mockMarkets, leg2.Market, leg2.Match, leg2.Selection, _marketMapper);
+            Assert.NotNull(mkt2);
+            Assert.Equal("Over Under Player Goals (incl. overtime)", mkt2.MarketName);
+
+            var ctx2 = new OddsMatchingLogic.OutcomeMatchingContext(leg2, new OddsPapiSearchResult { MatchName = leg2.Match }, mkt2.MarketName);
+            Assert.False(ctx2.WantsUnder);
+
+            var outcomes2 = new[]
+            {
+                "Over 0.5 (Dembele, Ousmane)", "Under 0.5 (Dembele, Ousmane)",
+                "Over 1.5 (Dembele, Ousmane)", "Under 1.5 (Dembele, Ousmane)"
+            };
+            var matched2 = outcomes2.Where(o => OddsMatchingLogic.IsOutcomeMatch(o, o, ctx2)).ToList();
+            Assert.Single(matched2);
+            Assert.Equal("Over 0.5 (Dembele, Ousmane)", matched2[0]);
+
+            // Leg 3: VfB Stuttgart vs Atletico Madrid | To Score or give an Assist | Alex Baena - Yes
+            // OddsPapi does not offer combined Goal+Assist market; must return null rather than matching pure Goals or pure Assists
+            var leg3 = new AiVisionLeg { Match = "VfB Stuttgart vs Atletico Madrid", Sport = "Soccer", Market = "To Score or give an Assist", Selection = "Alex Baena - Yes" };
+            var mkt3 = OddsMatchingLogic.FindBestMarket(mockMarkets, leg3.Market, leg3.Match, leg3.Selection, _marketMapper);
+            Assert.Null(mkt3);
+
+            // Leg 4: Liverpool vs Villarreal | To Give an Assist | Bradley Barcola - Yes
+            var leg4 = new AiVisionLeg { Match = "Liverpool vs Villarreal", Sport = "Soccer", Market = "To Give an Assist", Selection = "Bradley Barcola - Yes" };
+            var mkt4 = OddsMatchingLogic.FindBestMarket(mockMarkets, leg4.Market, leg4.Match, leg4.Selection, _marketMapper);
+            Assert.NotNull(mkt4);
+            Assert.Equal("Over Under Player Assists (incl. overtime)", mkt4.MarketName);
+
+            var ctx4 = new OddsMatchingLogic.OutcomeMatchingContext(leg4, new OddsPapiSearchResult { MatchName = leg4.Match }, mkt4.MarketName);
+            var outcomes4 = new[]
+            {
+                "Over 0.5 (Barcola, Bradley)", "Under 0.5 (Barcola, Bradley)",
+                "Over 1.5 (Barcola, Bradley)", "Under 1.5 (Barcola, Bradley)"
+            };
+            var matched4 = outcomes4.Where(o => OddsMatchingLogic.IsOutcomeMatch(o, o, ctx4)).ToList();
+            Assert.Single(matched4);
+            Assert.Equal("Over 0.5 (Barcola, Bradley)", matched4[0]);
+        }
+
+        [Theory]
+        // Coolbet "Will/Will not" markets (positive & negative)
+        [InlineData("Will/Will not Score", "Donyell Malen - Will Score", "Over Under Player Goals (incl. overtime)", "Malen, Donyell", "Over 0.5 (Malen, Donyell)")]
+        [InlineData("Will/Will not Score", "Donyell Malen - Will Not Score", "Over Under Player Goals (incl. overtime)", "Malen, Donyell", "Under 0.5 (Malen, Donyell)")]
+        [InlineData("Will/Will not get Booked", "Bryan Cristante - Will get Booked", "Player To Be Carded (incl. overtime)", "Cristante, Bryan", "Over 0.5 (Cristante, Bryan)")]
+        [InlineData("Will/Will not get Booked", "Bryan Cristante - Will Not get Booked", "Player To Be Carded (incl. overtime)", "Cristante, Bryan", "Under 0.5 (Cristante, Bryan)")]
+        [InlineData("Will/Will not Score From Header", "Cristian Gabriel Romero - Will Score", "Over Under Player Goals (incl. overtime)", "Romero, Cristian Gabriel", "Over 0.5 (Romero, Cristian Gabriel)")]
+        [InlineData("Will/Will not Score: Lautaro Martínez", "Lautaro Martínez - Will Score", "Over Under Player Goals (incl. overtime)", "Martínez, Lautaro", "Over 0.5 (Martínez, Lautaro)")]
+        [InlineData("Will Score", "Bilal Njie - Will Score", "Over Under Player Goals (incl. overtime)", "Njie, Bilal", "Over 0.5 (Njie, Bilal)")]
+        [InlineData("To Score During 1st Half", "Erling Haaland - Will Score", "Over Under Player Goals (incl. overtime)", "Haaland, Erling", "Over 0.5 (Haaland, Erling)")]
+        // Bet365 / Unibet / Kambi binary player prop phrasing variations
+        [InlineData("Anytime Goalscorer", "Erling Haaland", "Over Under Player Goals (incl. overtime)", "Haaland, Erling", "Over 0.5 (Haaland, Erling)")]
+        [InlineData("Anytime Goalscorer", "Erling Haaland - Anytime Goalscorer", "Over Under Player Goals (incl. overtime)", "Haaland, Erling", "Over 0.5 (Haaland, Erling)")]
+        [InlineData("Anytime Goalscorer", "Erling Haaland - Yes", "Over Under Player Goals (incl. overtime)", "Haaland, Erling", "Over 0.5 (Haaland, Erling)")]
+        [InlineData("Anytime Goalscorer", "Erling Haaland - No", "Over Under Player Goals (incl. overtime)", "Haaland, Erling", "Under 0.5 (Haaland, Erling)")]
+        [InlineData("To Score", "Mikel Oyarzabal - To Score", "Over Under Player Goals (incl. overtime)", "Oyarzabal, Mikel", "Over 0.5 (Oyarzabal, Mikel)")]
+        [InlineData("To Score", "Raphinha - To Score (Power Sub)", "Over Under Player Goals (incl. overtime)", "Raphinha", "Over 0.5 (Raphinha)")]
+        [InlineData("To Score at Any Time", "Cole Palmer to Score (Power Sub)", "Over Under Player Goals (incl. overtime)", "Palmer, Cole", "Over 0.5 (Palmer, Cole)")]
+        [InlineData("To Score at Any Time", "Kylian Mbappe - Anytime (Power Sub)", "Over Under Player Goals (incl. overtime)", "Mbappe, Kylian", "Over 0.5 (Mbappe, Kylian)")]
+        [InlineData("Player Assists", "Bukayo Saka - Assist", "Over Under Player Assists (incl. overtime)", "Saka, Bukayo", "Over 0.5 (Saka, Bukayo)")]
+        [InlineData("Player Assists", "Martin Ødegaard - To Provide An Assist", "Over Under Player Assists (incl. overtime)", "Ødegaard, Martin", "Over 0.5 (Ødegaard, Martin)")]
+        [InlineData("To Give An Assist", "Lionel Messi - To give an assist (Power Sub)", "Over Under Player Assists (incl. overtime)", "Messi, Lionel", "Over 0.5 (Messi, Lionel)")]
+        [InlineData("To Be Carded", "Ozan Kabak - To Be Carded", "Player To Be Carded (incl. overtime)", "Kabak, Ozan", "Over 0.5 (Kabak, Ozan)")]
+        [InlineData("To Receive a Card", "Philip Brittijn - To receive a card", "Player To Be Carded (incl. overtime)", "Brittijn, Philip", "Over 0.5 (Brittijn, Philip)")]
+        // Word numbers, "and more", braces, hat-tricks, multi-line props
+        [InlineData("Player To Score Two Or More Goals", "Orkun Kokcu - To Score Two Or More Goals", "Over Under Player Goals (incl. overtime)", "Kokcu, Orkun", "Over 1.5 (Kokcu, Orkun)")]
+        [InlineData("To Score Two or More Goals", "Lamine Yamal - To Score Two or More Goals (Power Sub)", "Over Under Player Goals (incl. overtime)", "Yamal, Lamine", "Over 1.5 (Yamal, Lamine)")]
+        [InlineData("Player Goals", "Kylian Mbappe - 2 and more", "Over Under Player Goals (incl. overtime)", "Mbappe, Kylian", "Over 1.5 (Mbappe, Kylian)")]
+        [InlineData("Player To Score A Hat Trick", "Erling Haaland - Hat Trick", "Over Under Player Goals (incl. overtime)", "Haaland, Erling", "Over 2.5 (Haaland, Erling)")]
+        // Players with "no", "under", or "will" substrings in their names
+        [InlineData("Anytime Goalscorer", "Connor McDavid - Yes", "Over Under Player Goals (incl. overtime)", "McDavid, Connor", "Over 0.5 (McDavid, Connor)")]
+        [InlineData("Anytime Goalscorer", "Connor McDavid - No", "Over Under Player Goals (incl. overtime)", "McDavid, Connor", "Under 0.5 (McDavid, Connor)")]
+        [InlineData("Anytime Goalscorer", "Cristiano Ronaldo - Yes", "Over Under Player Goals (incl. overtime)", "Ronaldo, Cristiano", "Over 0.5 (Ronaldo, Cristiano)")]
+        [InlineData("Anytime Goalscorer", "Bruno Fernandes - Yes", "Over Under Player Goals (incl. overtime)", "Fernandes, Bruno", "Over 0.5 (Fernandes, Bruno)")]
+        [InlineData("Anytime Goalscorer", "Noni Madueke - Yes", "Over Under Player Goals (incl. overtime)", "Madueke, Noni", "Over 0.5 (Madueke, Noni)")]
+        [InlineData("Anytime Goalscorer", "Antonio Nusa - Yes", "Over Under Player Goals (incl. overtime)", "Nusa, Antonio", "Over 0.5 (Nusa, Antonio)")]
+        [InlineData("Anytime Goalscorer", "Romano Schmid - Yes (Power Sub)", "Over Under Player Goals (incl. overtime)", "Schmid, Romano", "Over 0.5 (Schmid, Romano)")]
+        [InlineData("Will/Will not Score", "Will Smith - Will Score", "Over Under Player Goals (incl. overtime)", "Smith, Will", "Over 0.5 (Smith, Will)")]
+        public void Test_FullDictionarySimulation_PlayerProps_AcrossBookmakerFormats(
+            string marketName,
+            string selection,
+            string expectedOpMarket,
+            string opPlayerName,
+            string expectedOutcome)
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "goals", MarketName = "Over Under Player Goals (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "assists", MarketName = "Over Under Player Assists (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "cards", MarketName = "Player To Be Carded (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "shots", MarketName = "Over Under Player Shots (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "sot", MarketName = "Over Under Player Shots On Goal (incl. overtime)" }
+            };
+
+            string matchName = "Home FC vs Away United";
+            var bestMarket = OddsMatchingLogic.FindBestMarket(mockMarkets, marketName, matchName, selection, _marketMapper);
+            Assert.NotNull(bestMarket);
+            Assert.Equal(expectedOpMarket, bestMarket.MarketName);
+
+            var leg = new AiVisionLeg
+            {
+                Match = matchName,
+                Sport = "Soccer",
+                Market = marketName,
+                Selection = selection
+            };
+            var apiResult = new OddsPapiSearchResult { MatchName = matchName };
+            var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, bestMarket.MarketName);
+
+            var outcomesInOrder = new[]
+            {
+                $"Over 0.5 ({opPlayerName})",
+                $"Under 0.5 ({opPlayerName})",
+                $"Over 1.5 ({opPlayerName})",
+                $"Under 1.5 ({opPlayerName})",
+                $"Over 2.5 ({opPlayerName})",
+                $"Under 2.5 ({opPlayerName})",
+                $"Over 3.5 ({opPlayerName})",
+                $"Under 3.5 ({opPlayerName})",
+                "Over 0.5 (Other, Player)",
+                "Under 0.5 (Other, Player)"
+            };
+
+            var matchedOutcomes = outcomesInOrder
+                .Where(o => OddsMatchingLogic.IsOutcomeMatch(o, o, ctx))
+                .ToList();
+
+            Assert.Single(matchedOutcomes);
+            Assert.Equal(expectedOutcome, matchedOutcomes[0]);
+        }
+
+        [Fact]
+        public void Test_PlayerProp_PartialNameCollision_DoesNotMatchDifferentPlayerSharingOneName()
+        {
+            var apiResult = new OddsPapiSearchResult { MatchName = "Real Sociedad vs Manchester United" };
+
+            // "Bruno Silva" must NOT match "Fernandes, Bruno"
+            var legBruno = new AiVisionLeg { Match = apiResult.MatchName, Market = "Anytime Goalscorer", Selection = "Bruno Silva - Yes" };
+            var ctxBruno = new OddsMatchingLogic.OutcomeMatchingContext(legBruno, apiResult, "Over Under Player Goals (incl. overtime)");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Fernandes, Bruno)", "Over 0.5 (Fernandes, Bruno)", ctxBruno));
+
+            // "Alex Baena" must NOT match "Remiro, Alex"
+            var legAlex = new AiVisionLeg { Match = apiResult.MatchName, Market = "Anytime Goalscorer", Selection = "Alex Baena - Yes" };
+            var ctxAlex = new OddsMatchingLogic.OutcomeMatchingContext(legAlex, apiResult, "Over Under Player Goals (incl. overtime)");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Remiro, Alex)", "Over 0.5 (Remiro, Alex)", ctxAlex));
+
+            // "Adam Fox" must NOT match "Fox, De'Aaron"
+            var legFox = new AiVisionLeg { Match = apiResult.MatchName, Market = "Player Points", Selection = "Adam Fox - Over 0.5" };
+            var ctxFox = new OddsMatchingLogic.OutcomeMatchingContext(legFox, apiResult, "Over Under Player Points (incl. overtime)");
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 0.5 (Fox, De'Aaron)", "Over 0.5 (Fox, De'Aaron)", ctxFox));
+        }
+
+        [Fact]
+        public void Test_MarketMapping_FoulsSufferedAndFirstGoalscorer_DoNotMapToWrongMarket()
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "goals", MarketName = "Over Under Player Goals (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "fouls", MarketName = "Over Under Player Fouls Committed (incl. overtime)" }
+            };
+
+            // "Player Fouls Suffered" / "Total Fouls Won" must NOT map to "Over Under Player Fouls Committed"
+            Assert.Null(OddsMatchingLogic.FindBestMarket(mockMarkets, "Player Fouls Suffered", "Roma vs Lazio", "Paulo Dybala - Over 1.5", _marketMapper));
+            Assert.Null(OddsMatchingLogic.FindBestMarket(mockMarkets, "Kiernan Dewsbury-Hall Total Fouls Won", "Chelsea vs Arsenal", "Over 1.5", _marketMapper));
+
+            // "First Goalscorer" / "Next Goalscorer (Goal 4)" must NOT map to "Over Under Player Goals (incl. overtime)" (Anytime Goalscorer)
+            Assert.Null(OddsMatchingLogic.FindBestMarket(mockMarkets, "First Goalscorer", "Roma vs Lazio", "Paulo Dybala", _marketMapper));
+            Assert.Null(OddsMatchingLogic.FindBestMarket(mockMarkets, "Last Goalscorer", "Roma vs Lazio", "Paulo Dybala", _marketMapper));
+            Assert.Null(OddsMatchingLogic.FindBestMarket(mockMarkets, "Next Goalscorer (Goal 4) - Including Overtime", "Edmonton Oilers vs Calgary Flames", "Evan Bouchard", _marketMapper));
+        }
     }
 }

@@ -358,19 +358,19 @@ namespace BettingApp.Services
                     return false;
                 }
 
-                string lastName = TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[1].Value).ToLowerInvariant().Replace(" ", "");
-                string firstName = TeamAliasMappingService.RemoveDiacritics(parenMatch.Groups[2].Value).ToLowerInvariant().Replace(" ", "");
+                string lastName = TeamAliasMappingService.StripToAlphaNumeric(parenMatch.Groups[1].Value);
+                string firstName = TeamAliasMappingService.StripToAlphaNumeric(parenMatch.Groups[2].Value);
 
-                bool matchLast = ctx.NormSel.Contains(lastName);
-                bool matchFirst = ctx.NormSel.Contains(firstName);
+                bool matchLast = !string.IsNullOrEmpty(lastName) && ctx.NormSel.Contains(lastName);
+                bool matchFirst = !string.IsNullOrEmpty(firstName) && ctx.NormSel.Contains(firstName);
 
                 if (!matchFirst && matchLast)
                 {
-                    matchFirst = CheckPlayerInitialsMatch(firstName, ctx.Leg?.Selection ?? "", lastName);
+                    matchFirst = CheckPlayerInitialsMatch(parenMatch.Groups[2].Value, ctx.Leg?.Selection ?? "", lastName);
                 }
                 else if (!matchLast && matchFirst)
                 {
-                    matchLast = CheckPlayerInitialsMatch(lastName, ctx.Leg?.Selection ?? "", firstName);
+                    matchLast = CheckPlayerInitialsMatch(parenMatch.Groups[1].Value, ctx.Leg?.Selection ?? "", firstName);
                 }
 
                 bool isValidNameMatch = matchLast && matchFirst;
@@ -379,11 +379,11 @@ namespace BettingApp.Services
                 {
                     string matchedName = matchLast ? lastName : firstName;
                     string playerPartOnly = Regex.Replace(
-                        ctx.NormSel.Replace(normOutcomePart, "").Replace("over", "").Replace("under", "").Replace("yes", "").Replace("no", "").Replace("-", ""),
+                        ctx.NormSel.Replace(normOutcomePart, "").Replace("over", "").Replace("under", "").Replace("yes", "").Replace("no", "").Replace("ja", "").Replace("nei", "").Replace("-", ""),
                         @"\d+(\.\d+)?",
                         "");
                     string leftover = playerPartOnly.Replace(matchedName, "");
-                    if (leftover.Length <= 5)
+                    if (leftover.Length == 0)
                     {
                         isValidNameMatch = true;
                     }
@@ -396,10 +396,18 @@ namespace BettingApp.Services
 
                 // Only allow FallbackSel fuzzy matching if the selection itself has a player name (or market has player name not matching team names)
                 if (GetRemainingSelectionTextWithoutTotalKeywords(ctx).Length <= 2 &&
-                    (ctx.NormSel.StartsWith("over") || ctx.NormSel.StartsWith("under")) &&
-                    !ctx.NormMarket.Contains(lastName) && !ctx.NormMarket.Contains(firstName))
+                    (ctx.NormSel.StartsWith("over") || ctx.NormSel.StartsWith("under")))
                 {
-                    return false;
+                    string mktNoTeams = ctx.NormMarket;
+                    if (!string.IsNullOrEmpty(ctx.NormT1)) mktNoTeams = mktNoTeams.Replace(ctx.NormT1.Replace(" ", ""), "");
+                    if (!string.IsNullOrEmpty(ctx.NormT2)) mktNoTeams = mktNoTeams.Replace(ctx.NormT2.Replace(" ", ""), "");
+                    if (!string.IsNullOrEmpty(ctx.TargetOp1)) mktNoTeams = mktNoTeams.Replace(ctx.TargetOp1.Replace(" ", ""), "");
+                    if (!string.IsNullOrEmpty(ctx.TargetOp2)) mktNoTeams = mktNoTeams.Replace(ctx.TargetOp2.Replace(" ", ""), "");
+
+                    if (!mktNoTeams.Contains(lastName) && !mktNoTeams.Contains(firstName))
+                    {
+                        return false;
+                    }
                 }
 
                 return IsFuzzyPlayerMatch(ctx.FallbackSel, displayOName ?? "");
