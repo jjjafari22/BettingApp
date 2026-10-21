@@ -20,6 +20,27 @@ namespace BettingApp.Services
             return "";
         }
 
+        internal static bool IsHalfTimeFullTimeMarket(string? market)
+        {
+            if (string.IsNullOrWhiteSpace(market)) return false;
+            if (Regex.IsMatch(market, @"\bht\s*[/\-]\s*ft\b", RegexOptions.IgnoreCase)) return true;
+            bool hasHalf = Regex.IsMatch(market, @"\b(?:half|halftime|halvtid|pause|ht)\b", RegexOptions.IgnoreCase);
+            bool hasFull = Regex.IsMatch(market, @"\b(?:full|fulltime|fulltid|sluttid|ft)\b", RegexOptions.IgnoreCase);
+            return hasHalf && hasFull;
+        }
+
+        private static string ResolveDoubleChancePartCode(string part, string normT1, string normT2, string targetOp1, string targetOp2)
+        {
+            string p = (part ?? "").Trim();
+            if (string.IsNullOrEmpty(p)) return "";
+            if (_drawTieRegex.IsMatch(p)) return "X";
+            if (Regex.IsMatch(p, @"^[+-]?\d+(?:\.\d+)?$")) return "";
+            int teamNum = TeamAliasMappingService.ResolveTeamSelection(p, normT1, normT2, targetOp1, targetOp2);
+            if (teamNum == 1) return "1";
+            if (teamNum == 2) return "2";
+            return "";
+        }
+
         internal static string StripTwoWayMarketPhrases(string text)
         {
             if (string.IsNullOrEmpty(text)) return "";
@@ -126,57 +147,62 @@ namespace BettingApp.Services
                             }
                         }
 
-                        if ((OpT2.Contains(AiT1) && AiT1.Length > 3) || (AiT1.Contains(OpT2) && OpT2.Length > 3) ||
-                            (OpT1.Contains(AiT2) && AiT2.Length > 3) || (AiT2.Contains(OpT1) && AiT2.Length > 3) ||
-                            TeamAliasMappingService.IsTeamMatch(AiT1, OpT2) ||
-                            TeamAliasMappingService.IsTeamMatch(AiT2, OpT1))
+                        bool ai1MatchesOp1 = !string.IsNullOrEmpty(OpT1) && ((OpT1.Contains(AiT1) && AiT1.Length > 2) || (AiT1.Contains(OpT1) && OpT1.Length > 2) || TeamAliasMappingService.IsTeamMatch(AiT1, OpT1));
+                        bool ai2MatchesOp2 = !string.IsNullOrEmpty(OpT2) && ((OpT2.Contains(AiT2) && AiT2.Length > 2) || (AiT2.Contains(OpT2) && OpT2.Length > 2) || TeamAliasMappingService.IsTeamMatch(AiT2, OpT2));
+                        bool ai1MatchesOp2 = !string.IsNullOrEmpty(OpT2) && ((OpT2.Contains(AiT1) && AiT1.Length > 2) || (AiT1.Contains(OpT2) && OpT2.Length > 2) || TeamAliasMappingService.IsTeamMatch(AiT1, OpT2));
+                        bool ai2MatchesOp1 = !string.IsNullOrEmpty(OpT1) && ((OpT1.Contains(AiT2) && AiT2.Length > 2) || (AiT2.Contains(OpT1) && OpT1.Length > 2) || TeamAliasMappingService.IsTeamMatch(AiT2, OpT1));
+
+                        if ((ai1MatchesOp2 || ai2MatchesOp1) && !ai1MatchesOp1 && !ai2MatchesOp2)
                         {
-                            if (!OpT1.Contains(AiT1) && !AiT1.Contains(OpT1) && !TeamAliasMappingService.IsTeamMatch(AiT1, OpT1))
-                            {
-                                IsSwapped = true;
-                            }
+                            IsSwapped = true;
                         }
 
                         NormT1 = IsSwapped ? AiT2 : AiT1;
                         NormT2 = IsSwapped ? AiT1 : AiT2;
-                        TargetOp1 = IsSwapped ? OpT2 : OpT1;
-                        TargetOp2 = IsSwapped ? OpT1 : OpT2;
+                        TargetOp1 = OpT1;
+                        TargetOp2 = OpT2;
 
-                        // Half-Time / Full-Time target resolution
-                        string cleanNormSel = NormSelRaw.Replace(" ", "");
-                        if (_htftRegex.IsMatch(cleanNormSel))
+                        // Half-Time / Full-Time target resolution (ONLY when the market is actually Half-Time / Full-Time)
+                        bool isHtftMarket = IsHalfTimeFullTimeMarket(leg.Market) || IsHalfTimeFullTimeMarket(opMarketName);
+                        if (isHtftMarket)
                         {
-                            HtftTarget = cleanNormSel.ToUpperInvariant();
-                        }
-                        else
-                        {
-                            string[]? htftSplit = null;
-                            if (NormSelRaw.Contains("/"))
+                            string cleanNormSel = NormSelRaw.Replace(" ", "");
+                            if (_htftRegex.IsMatch(cleanNormSel))
                             {
-                                htftSplit = NormSelRaw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                                HtftTarget = cleanNormSel.ToUpperInvariant();
                             }
-                            else if (NormSelRaw.Contains(" - "))
+                            else
                             {
-                                htftSplit = NormSelRaw.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
-                            }
-                            else if (NormSelRaw.Contains("-") &&
-                                     ((leg.Market != null && (leg.Market.Contains("Half", StringComparison.OrdinalIgnoreCase) || leg.Market.Contains("HT", StringComparison.OrdinalIgnoreCase) || leg.Market.Contains("Pause", StringComparison.OrdinalIgnoreCase) || leg.Market.Contains("Halvtid", StringComparison.OrdinalIgnoreCase))) ||
-                                      (opMarketName != null && opMarketName.Contains("Half", StringComparison.OrdinalIgnoreCase))))
-                            {
-                                htftSplit = NormSelRaw.Split('-', StringSplitOptions.RemoveEmptyEntries);
-                            }
-
-                            if (htftSplit != null && htftSplit.Length == 2)
-                            {
-                                string ht = htftSplit[0].Trim();
-                                string ft = htftSplit[1].Trim();
-                                int htTeam = TeamAliasMappingService.ResolveTeamSelection(ht, NormT1, NormT2, TargetOp1, TargetOp2);
-                                int ftTeam = TeamAliasMappingService.ResolveTeamSelection(ft, NormT1, NormT2, TargetOp1, TargetOp2);
-                                string htCode = ResolveHtftCode(ht, htTeam);
-                                string ftCode = ResolveHtftCode(ft, ftTeam);
-                                if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
+                                string[]? htftSplit = null;
+                                if (NormSelRaw.Contains(" / "))
                                 {
-                                    HtftTarget = $"{htCode}/{ftCode}";
+                                    htftSplit = NormSelRaw.Split(new[] { " / " }, StringSplitOptions.RemoveEmptyEntries);
+                                }
+                                else if (NormSelRaw.Contains("/"))
+                                {
+                                    htftSplit = NormSelRaw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                                }
+                                else if (NormSelRaw.Contains(" - "))
+                                {
+                                    htftSplit = NormSelRaw.Split(new[] { " - " }, StringSplitOptions.RemoveEmptyEntries);
+                                }
+                                else if (NormSelRaw.Contains("-"))
+                                {
+                                    htftSplit = NormSelRaw.Split('-', StringSplitOptions.RemoveEmptyEntries);
+                                }
+
+                                if (htftSplit != null && htftSplit.Length == 2)
+                                {
+                                    string ht = htftSplit[0].Trim();
+                                    string ft = htftSplit[1].Trim();
+                                    int htTeam = TeamAliasMappingService.ResolveTeamSelection(ht, NormT1, NormT2, TargetOp1, TargetOp2);
+                                    int ftTeam = TeamAliasMappingService.ResolveTeamSelection(ft, NormT1, NormT2, TargetOp1, TargetOp2);
+                                    string htCode = ResolveHtftCode(ht, htTeam);
+                                    string ftCode = ResolveHtftCode(ft, ftTeam);
+                                    if (!string.IsNullOrEmpty(htCode) && !string.IsNullOrEmpty(ftCode))
+                                    {
+                                        HtftTarget = $"{htCode}/{ftCode}";
+                                    }
                                 }
                             }
                         }
@@ -184,20 +210,53 @@ namespace BettingApp.Services
                         // 1X2 / Double Chance / Handicap team target resolution
                         if (string.IsNullOrEmpty(HtftTarget))
                         {
-                            int teamResolved = TeamAliasMappingService.ResolveTeamSelection(leg.Selection, NormT1, NormT2, TargetOp1, TargetOp2);
-                            bool mentionsT1 = teamResolved == 1 || TeamAliasMappingService.IsTeamMatch(leg.Selection, NormT1) || (!string.IsNullOrEmpty(TargetOp1) && TeamAliasMappingService.IsTeamMatch(leg.Selection, TargetOp1));
-                            bool mentionsT2 = teamResolved == 2 || TeamAliasMappingService.IsTeamMatch(leg.Selection, NormT2) || (!string.IsNullOrEmpty(TargetOp2) && TeamAliasMappingService.IsTeamMatch(leg.Selection, TargetOp2));
-                            bool hasDraw = Regex.IsMatch(NormSelRaw, @"\b(?:draw|tie|ties|oavgjort|uavgjort|kryss)\b", RegexOptions.IgnoreCase);
+                            string trimmedNormSel = NormSelRaw.Trim();
 
-                            if (mentionsT1 && mentionsT2) AiTarget = "12";
-                            else if (teamResolved == 1 && hasDraw) AiTarget = "1X";
-                            else if (teamResolved == 2 && hasDraw) AiTarget = "X2";
-                            else if (teamResolved == 1) AiTarget = "1";
-                            else if (teamResolved == 2) AiTarget = "2";
-                            else if (hasDraw) AiTarget = "X";
-                            else if (NormSelRaw.Contains("1x")) AiTarget = "1X";
-                            else if (NormSelRaw.Contains("x2") || NormSelRaw.Contains("2x")) AiTarget = "X2";
-                            else if (NormSelRaw.Contains("12")) AiTarget = "12";
+                            // 1. Direct Double Chance code patterns ("1X", "X1", "1/X", "X/1", "X2", "2X", "X/2", "2/X", "12", "1/2")
+                            if (Regex.IsMatch(trimmedNormSel, @"^(?:1\s*[/\-]?\s*x|x\s*[/\-]?\s*1)$", RegexOptions.IgnoreCase))
+                            {
+                                AiTarget = "1X";
+                            }
+                            else if (Regex.IsMatch(trimmedNormSel, @"^(?:2\s*[/\-]?\s*x|x\s*[/\-]?\s*2)$", RegexOptions.IgnoreCase))
+                            {
+                                AiTarget = "X2";
+                            }
+                            else if (Regex.IsMatch(trimmedNormSel, @"^(?:12|21|1\s*/\s*2|2\s*/\s*1)$", RegexOptions.IgnoreCase))
+                            {
+                                AiTarget = "12";
+                            }
+
+                            // 2. Two-part composite Double Chance selections ("Como/Draw", "Draw/Como", "Como or Draw", "Como - Draw", "Como/Manchester United", "Como / X", etc.)
+                            if (string.IsNullOrEmpty(AiTarget))
+                            {
+                                var dcParts = Regex.Split(leg.Selection, @"(?:\s*/\s*|\s+-\s+|\s+(?:or|eller|and)\s+|\s*&\s*|\s*,\s*)", RegexOptions.IgnoreCase)
+                                                   .Where(p => !string.IsNullOrWhiteSpace(p))
+                                                   .ToArray();
+                                if (dcParts.Length == 2)
+                                {
+                                    string c1 = ResolveDoubleChancePartCode(dcParts[0], NormT1, NormT2, TargetOp1, TargetOp2);
+                                    string c2 = ResolveDoubleChancePartCode(dcParts[1], NormT1, NormT2, TargetOp1, TargetOp2);
+                                    if ((c1 == "1" && c2 == "X") || (c1 == "X" && c2 == "1")) AiTarget = "1X";
+                                    else if ((c1 == "2" && c2 == "X") || (c1 == "X" && c2 == "2")) AiTarget = "X2";
+                                    else if ((c1 == "1" && c2 == "2") || (c1 == "2" && c2 == "1")) AiTarget = "12";
+                                }
+                            }
+
+                            // 3. Single-team / Draw / fallback resolution
+                            if (string.IsNullOrEmpty(AiTarget))
+                            {
+                                int teamResolved = TeamAliasMappingService.ResolveTeamSelection(leg.Selection, NormT1, NormT2, TargetOp1, TargetOp2);
+                                bool hasDraw = Regex.IsMatch(NormSelRaw, @"\b(?:draw|tie|ties|oavgjort|uavgjort|kryss|likt)\b|^x$", RegexOptions.IgnoreCase);
+
+                                if (teamResolved == 1 && hasDraw) AiTarget = "1X";
+                                else if (teamResolved == 2 && hasDraw) AiTarget = "X2";
+                                else if (teamResolved == 1) AiTarget = "1";
+                                else if (teamResolved == 2) AiTarget = "2";
+                                else if (hasDraw) AiTarget = "X";
+                                else if (NormSelRaw.Contains("1x") || NormSelRaw.Contains("x1")) AiTarget = "1X";
+                                else if (NormSelRaw.Contains("x2") || NormSelRaw.Contains("2x")) AiTarget = "X2";
+                                else if (NormSelRaw.Contains("12")) AiTarget = "12";
+                            }
                         }
 
                         // Handicap value resolution (from Selection or Market)

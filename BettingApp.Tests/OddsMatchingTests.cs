@@ -1775,5 +1775,125 @@ namespace BettingApp.Tests
             Assert.Null(OddsMatchingLogic.FindBestMarket(mockMarkets, "Last Goalscorer", "Roma vs Lazio", "Paulo Dybala", _marketMapper));
             Assert.Null(OddsMatchingLogic.FindBestMarket(mockMarkets, "Next Goalscorer (Goal 4) - Including Overtime", "Edmonton Oilers vs Calgary Flames", "Evan Bouchard", _marketMapper));
         }
+
+        [Fact]
+        public void Test_Bet1104_ComoVsManchesterUnited_DoubleChance_ComoSlashDraw()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Como 1907 vs Manchester United"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "Como vs Manchester United",
+                Sport = "Soccer",
+                Market = "Double Chance",
+                Selection = "Como/Draw"
+            };
+
+            string display1X = OddsMatchingLogic.GetTranslatedOutcomeName("1X", searchResult.MatchName);
+            Assert.Equal("Como 1907 or Draw", display1X);
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1X", display1X, leg, searchResult, "Double Chance Full Time"));
+
+            string display12 = OddsMatchingLogic.GetTranslatedOutcomeName("12", searchResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("12", display12, leg, searchResult, "Double Chance Full Time"));
+
+            string displayX2 = OddsMatchingLogic.GetTranslatedOutcomeName("X2", searchResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("X2", displayX2, leg, searchResult, "Double Chance Full Time"));
+
+            string display2X = OddsMatchingLogic.GetTranslatedOutcomeName("2X", searchResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2X", display2X, leg, searchResult, "Double Chance Full Time"));
+        }
+
+        [Theory]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "Como/Draw", "1X")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "Draw/Como", "1X")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "Como - Draw", "1X")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "Como or Draw", "1X")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "Como eller Uavgjort", "1X")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "Como/Manchester United", "12")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "Manchester United/Draw", "X2")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "Draw/Manchester United", "X2")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "1/X", "1X")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "X/2", "X2")]
+        [InlineData("Como vs Manchester United", "Como 1907 vs Manchester United", "1/2", "12")]
+        [InlineData("Celta Vigo vs Juventus", "RC Celta de Vigo vs Juventus Turin", "Juventus/Draw", "X2")]
+        [InlineData("Celta Vigo vs Juventus", "RC Celta de Vigo vs Juventus Turin", "Celta Vigo/Juventus", "12")]
+        public void Test_DoubleChance_AllSeparatorFormatsAndTeamNameVariations(
+            string legMatch,
+            string opMatch,
+            string selection,
+            string expectedOpCode)
+        {
+            var searchResult = new OddsPapiSearchResult { MatchName = opMatch };
+            var leg = new AiVisionLeg
+            {
+                Match = legMatch,
+                Market = "Double Chance",
+                Selection = selection
+            };
+
+            foreach (var code in new[] { "1X", "12", "X2" })
+            {
+                string display = OddsMatchingLogic.GetTranslatedOutcomeName(code, opMatch);
+                bool matched = OddsMatchingLogic.IsOutcomeMatch(code, display, leg, searchResult, "Double Chance Full Time");
+                Assert.Equal(code == expectedOpCode, matched);
+            }
+        }
+
+        [Fact]
+        public void Test_HalfTimeFullTime_SlashFormatStillMatchesCorrectly()
+        {
+            var searchResult = new OddsPapiSearchResult
+            {
+                MatchName = "Como 1907 vs Manchester United"
+            };
+
+            var leg = new AiVisionLeg
+            {
+                Match = "Como vs Manchester United",
+                Market = "Half Time / Full Time",
+                Selection = "Como/Draw"
+            };
+
+            string display1X = OddsMatchingLogic.GetTranslatedOutcomeName("1/X", searchResult.MatchName);
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1/X", display1X, leg, searchResult, "Half Time/Full Time"));
+
+            string displayX1 = OddsMatchingLogic.GetTranslatedOutcomeName("X/1", searchResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("X/1", displayX1, leg, searchResult, "Half Time/Full Time"));
+        }
+
+        [Fact]
+        public void Test_TeamSpecificMarketMapping_WithMultiTokenOpTeamNames()
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1", MarketName = "Over Under Team 1" },
+                new OddsPapiMarket { MarketId = "2", MarketName = "Over Under Team 2" },
+                new OddsPapiMarket { MarketId = "3", MarketName = "Corners - Over Under Team 1" },
+                new OddsPapiMarket { MarketId = "4", MarketName = "Corners - Over Under Team 2" }
+            };
+
+            var comoGoals = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "Como Total Goals",
+                "Como vs Manchester United",
+                "Over 1.5",
+                _marketMapper,
+                "Como 1907 vs Manchester United");
+            Assert.NotNull(comoGoals);
+            Assert.Equal("1", comoGoals.MarketId);
+
+            var juveCorners = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "Juventus Total Corners",
+                "Celta Vigo vs Juventus",
+                "Over 4.5",
+                _marketMapper,
+                "RC Celta de Vigo vs Juventus Turin");
+            Assert.NotNull(juveCorners);
+            Assert.Equal("4", juveCorners.MarketId);
+        }
     }
 }

@@ -13,7 +13,8 @@ namespace BettingApp.Services
             string marketCategory,
             string? matchName,
             string? selectionName,
-            MarketMappingService marketMapper)
+            MarketMappingService marketMapper,
+            string? opMatchName = null)
         {
             if (markets == null || !markets.Any() || string.IsNullOrEmpty(marketCategory)) return null;
 
@@ -24,7 +25,7 @@ namespace BettingApp.Services
                 return null;
             }
 
-            var normalizedTargets = marketMapper.NormalizeMarketName(marketCategory, matchName, selectionName);
+            var normalizedTargets = marketMapper.NormalizeMarketName(marketCategory, matchName, selectionName, opMatchName);
 
             static string Simplify(string s)
             {

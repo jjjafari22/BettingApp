@@ -85,7 +85,16 @@ namespace BettingApp.Services
         /// </summary>
         private static bool? TryMatchHalfTimeFullTime(string oName, string displayOName, OutcomeMatchingContext ctx)
         {
-            string opHtftTarget = ResolveOutcomeHtftTarget(oName, displayOName, ctx);
+            bool isHtftMarket = IsHalfTimeFullTimeMarket(ctx.Leg?.Market) || IsHalfTimeFullTimeMarket(ctx.OpMarketName);
+            string cleanOName = (oName ?? "").Replace(" ", "");
+            bool isHtftOutcome = _htftRegex.IsMatch(cleanOName);
+
+            if (!isHtftMarket && !isHtftOutcome)
+            {
+                return null;
+            }
+
+            string opHtftTarget = ResolveOutcomeHtftTarget(oName ?? "", displayOName, ctx);
 
             if (!string.IsNullOrEmpty(ctx.HtftTarget) && !string.IsNullOrEmpty(opHtftTarget))
             {

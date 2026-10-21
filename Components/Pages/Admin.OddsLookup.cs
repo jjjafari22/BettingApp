@@ -254,7 +254,7 @@ public partial class Admin
         // Auto Select Market
         string preSelectCategory = leg.Market ?? "";
         
-        var bestMatch = BettingApp.Services.OddsMatchingLogic.FindBestMarket(apiResult.Markets, preSelectCategory, leg.Match, leg.Selection, MarketMapper);
+        var bestMatch = BettingApp.Services.OddsMatchingLogic.FindBestMarket(apiResult.Markets, preSelectCategory, leg.Match, leg.Selection, MarketMapper, apiResult.MatchName);
 
         bool isCanonicalTranslation = true;
         if (bestMatch != null)
@@ -469,7 +469,7 @@ public partial class Admin
 
             if ((string.IsNullOrEmpty(SelectedPapiMarketId) || !PapiSearchResult.Markets.Any(m => m.MarketId == SelectedPapiMarketId)) && PapiSearchResult.Markets.Any())
             {
-                var best = BettingApp.Services.OddsMatchingLogic.FindBestMarket(PapiSearchResult.Markets, leg.Market ?? "", leg.Match, leg.Selection, MarketMapper);
+                var best = BettingApp.Services.OddsMatchingLogic.FindBestMarket(PapiSearchResult.Markets, leg.Market ?? "", leg.Match, leg.Selection, MarketMapper, PapiSearchResult.MatchName);
                 if (best != null)
                 {
                     SelectedPapiMarketId = best.MarketId;
@@ -582,7 +582,7 @@ public partial class Admin
             }
             else if (!string.IsNullOrEmpty(preSelectCategory))
             {
-                var bestMatch = BettingApp.Services.OddsMatchingLogic.FindBestMarket(result.Markets, preSelectCategory, ActiveLookupLeg?.Match, ActiveLookupLeg?.Selection, MarketMapper);
+                var bestMatch = BettingApp.Services.OddsMatchingLogic.FindBestMarket(result.Markets, preSelectCategory, ActiveLookupLeg?.Match, ActiveLookupLeg?.Selection, MarketMapper, result.MatchName);
                 bool isCanonicalTranslation = true; // We abstract this away
 
                     
