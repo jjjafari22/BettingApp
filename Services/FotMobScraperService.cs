@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace BettingApp.Services
 {
@@ -9,12 +12,19 @@ namespace BettingApp.Services
         private readonly HttpClient _httpClient;
         private readonly TeamAliasMappingService _teamAliasMapper;
         private readonly ILogger<FotMobScraperService> _logger;
+        private readonly IMemoryCache? _cache;
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
 
-        public FotMobScraperService(HttpClient httpClient, TeamAliasMappingService teamAliasMapper, ILogger<FotMobScraperService> logger)
+        public FotMobScraperService(
+            HttpClient httpClient,
+            TeamAliasMappingService teamAliasMapper,
+            ILogger<FotMobScraperService> logger,
+            IMemoryCache? cache = null)
         {
             _httpClient = httpClient;
             _teamAliasMapper = teamAliasMapper;
             _logger = logger;
+            _cache = cache;
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
         }
 
@@ -27,7 +37,230 @@ namespace BettingApp.Services
                 string[] split = matchName.Split(new[] { " vs ", " - ", " v " }, StringSplitOptions.None);
                 string homeTeam = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: false);
                 string awayTeam = split.Length > 1 ? _teamAliasMapper.NormalizeTeamName(split[1].Trim(), removeStopWords: false) : "";
-                
+
+                string dateKey = (betPlacedAt ?? DateTime.UtcNow).ToString("yyyy-MM-dd");
+                string eventIdCacheKey = $"FotMob_EventId_{homeTeam}_{awayTeam}_{dateKey}";
+
+                string? eventId = null;
+                if (_cache != null && _cache.TryGetValue(eventIdCacheKey, out string? cachedEventId))
+                {
+                    if (cachedEventId == "__NOT_FOUND__")
+                    {
+                        return null;
+                    }
+                    eventId = cachedEventId;
+                }
+
+                if (string.IsNullOrEmpty(eventId))
+                {
+                    var idLock = _locks.GetOrAdd(eventIdCacheKey, _ => new SemaphoreSlim(1, 1));
+                    await idLock.WaitAsync();
+                    try
+                    {
+                        if (_cache != null && _cache.TryGetValue(eventIdCacheKey, out cachedEventId))
+                        {
+                            if (cachedEventId == "__NOT_FOUND__")
+                            {
+                                return null;
+                            }
+                            eventId = cachedEventId;
+                        }
+
+                        if (string.IsNullOrEmpty(eventId))
+                        {
+                            eventId = await ResolveFotMobEventIdAsync(matchName, homeTeam, awayTeam, betPlacedAt);
+                            if (_cache != null)
+                            {
+                                if (!string.IsNullOrEmpty(eventId))
+                                {
+                                    _cache.Set(eventIdCacheKey, eventId, TimeSpan.FromHours(6));
+                                }
+                                else
+                                {
+                                    _cache.Set(eventIdCacheKey, "__NOT_FOUND__", TimeSpan.FromMinutes(15));
+                                }
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        idLock.Release();
+                    }
+                }
+
+                if (string.IsNullOrEmpty(eventId))
+                {
+                    _logger.LogInformation($" {betLabel} FotMob: Could not find match '{matchName}'");
+                    return null;
+                }
+
+                string statsCacheKey = $"FotMob_Stats_{eventId}";
+                if (_cache != null && _cache.TryGetValue(statsCacheKey, out string? cachedStatsJson))
+                {
+                    _logger.LogInformation($" {betLabel} FotMob: Using cached stats for Match ID {eventId} ({matchName})");
+                    return cachedStatsJson;
+                }
+
+                var statsLock = _locks.GetOrAdd(statsCacheKey, _ => new SemaphoreSlim(1, 1));
+                await statsLock.WaitAsync();
+                try
+                {
+                    if (_cache != null && _cache.TryGetValue(statsCacheKey, out cachedStatsJson))
+                    {
+                        _logger.LogInformation($" {betLabel} FotMob: Using cached stats for Match ID {eventId} ({matchName})");
+                        return cachedStatsJson;
+                    }
+
+                    _logger.LogInformation($" {betLabel} FotMob: Found Match ID {eventId} for {matchName}");
+
+                    // 2. Fetch Match HTML (Bust CDN cache with a unique timestamp)
+                    string matchHtml = string.Empty;
+                    int maxRetries = 2;
+                    for (int i = 0; i < maxRetries; i++)
+                    {
+                        try
+                        {
+                            matchHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/match/{eventId}?_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}");
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            if (i == maxRetries - 1) throw;
+                            _logger.LogWarning($" {betLabel} FotMob: HTTP request failed ({ex.Message}). Retrying in 2s... (Attempt {i+1}/{maxRetries-1})");
+                            await Task.Delay(2000);
+                        }
+                    }
+                    
+                    // 3. Extract SSR JSON
+                    var match = System.Text.RegularExpressions.Regex.Match(matchHtml, @"<script id=""__NEXT_DATA__"" type=""application/json"">(.*?)</script>");
+                    if (match.Success)
+                    {
+                        try 
+                        {
+                            using var ssrDoc = System.Text.Json.JsonDocument.Parse(match.Groups[1].Value);
+                            var root = ssrDoc.RootElement;
+                            if (root.TryGetProperty("props", out var props) &&
+                                props.TryGetProperty("pageProps", out var pageProps))
+                            {
+                                var trimmedData = new System.Collections.Generic.Dictionary<string, object>();
+                                bool isFinished = false;
+
+                                if (pageProps.TryGetProperty("general", out var general))
+                                {
+                                    var trimmedGeneral = new System.Collections.Generic.Dictionary<string, object>();
+                                    if (general.TryGetProperty("matchTimeUTC", out var mTime)) trimmedGeneral["matchTimeUTC"] = mTime;
+                                    if (general.TryGetProperty("started", out var st)) trimmedGeneral["started"] = st;
+                                    if (general.TryGetProperty("finished", out var fin))
+                                    {
+                                        trimmedGeneral["finished"] = fin;
+                                        if (fin.ValueKind == System.Text.Json.JsonValueKind.True) isFinished = true;
+                                    }
+                                    trimmedData["general"] = trimmedGeneral;
+                                }
+
+                                if (pageProps.TryGetProperty("header", out var header))
+                                {
+                                    var trimmedHeader = new System.Collections.Generic.Dictionary<string, object>();
+                                    if (header.TryGetProperty("status", out var stat))
+                                    {
+                                        var leanStat = new System.Collections.Generic.Dictionary<string, object>();
+                                        if (stat.TryGetProperty("finished", out var fin))
+                                        {
+                                            leanStat["finished"] = fin;
+                                            if (fin.ValueKind == System.Text.Json.JsonValueKind.True) isFinished = true;
+                                        }
+                                        if (stat.TryGetProperty("started", out var st)) leanStat["started"] = st;
+                                        if (stat.TryGetProperty("cancelled", out var cn)) leanStat["cancelled"] = cn;
+                                        if (stat.TryGetProperty("scoreStr", out var sc)) leanStat["scoreStr"] = sc;
+                                        if (stat.TryGetProperty("reason", out var re)) leanStat["reason"] = re;
+                                        trimmedHeader["status"] = leanStat;
+                                    }
+                                    if (header.TryGetProperty("teams", out var teams))
+                                    {
+                                        var leanTeams = new System.Collections.Generic.List<object>();
+                                        foreach (var t in teams.EnumerateArray())
+                                        {
+                                            var tDict = new System.Collections.Generic.Dictionary<string, object>();
+                                            if (t.TryGetProperty("name", out var nm)) tDict["name"] = nm.GetString() ?? "";
+                                            if (t.TryGetProperty("score", out var sc)) tDict["score"] = sc.GetInt32();
+                                            leanTeams.Add(tDict);
+                                        }
+                                        trimmedHeader["teams"] = leanTeams;
+                                    }
+                                    trimmedData["header"] = trimmedHeader;
+                                }
+
+                                if (pageProps.TryGetProperty("content", out var content))
+                                {
+                                    if (content.TryGetProperty("matchFacts", out var matchFacts))
+                                    {
+                                        var trimmedFacts = new System.Collections.Generic.Dictionary<string, object>();
+                                        // Omit bulky infoBox (Stadium GPS coordinates, capacity, surface, referee photos, attendance)
+                                        if (matchFacts.TryGetProperty("events", out var events)) 
+                                        {
+                                            trimmedFacts["events"] = FlattenEvents(events);
+                                        }
+                                        trimmedData["matchFacts"] = trimmedFacts;
+                                    }
+
+                                    if (content.TryGetProperty("stats", out var stats)) 
+                                    {
+                                        trimmedData["stats"] = FlattenMatchStats(stats);
+                                    }
+                                    
+                                    if (content.TryGetProperty("playerStats", out var playerStats)) 
+                                    {
+                                        trimmedData["playerStats"] = FlattenPlayerStats(playerStats);
+                                    }
+
+                                    if (content.TryGetProperty("lineup", out var lineup))
+                                    {
+                                        trimmedData["lineup"] = FlattenLineup(lineup);
+                                    }
+                                }
+
+                                if (trimmedData.TryGetValue("general", out var genObj) && genObj is System.Collections.Generic.Dictionary<string, object> genDict)
+                                {
+                                    if (genDict.TryGetValue("started", out var startedObj) && startedObj is System.Text.Json.JsonElement stElem && stElem.ValueKind == System.Text.Json.JsonValueKind.False)
+                                    {
+                                        trimmedData["WARNING"] = "THIS MATCH HAS NOT STARTED YET! THERE ARE NO STATS. DO NOT SEARCH GOOGLE FOR STATS! MARK AS PENDING.";
+                                    }
+                                }
+
+                                // Strip down the JSON to only the relevant stats to save massive amounts of tokens and prevent 503s!
+                                string serializedStats = System.Text.Json.JsonSerializer.Serialize(trimmedData);
+                                if (_cache != null)
+                                {
+                                    var ttl = isFinished ? TimeSpan.FromMinutes(30) : TimeSpan.FromSeconds(60);
+                                    _cache.Set(statsCacheKey, serializedStats, ttl);
+                                }
+                                return serializedStats;
+                            }
+                        } 
+                        catch { }
+                        
+                        // Fallback to a truncated payload to prevent crashing the AI with 170k+ characters
+                        string rawString = match.Groups[1].Value;
+                        return rawString.Length > 5000 ? rawString.Substring(0, 5000) + "...[TRUNCATED]" : rawString;
+                    }
+
+                    return null;
+                }
+                finally
+                {
+                    statsLock.Release();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error scraping JSON for {matchName}: {ex.Message}");
+                return null;
+            }
+        }
+
+        private async Task<string?> ResolveFotMobEventIdAsync(string matchName, string homeTeam, string awayTeam, DateTime? betPlacedAt)
+        {
+                string[] split = matchName.Split(new[] { " vs ", " - ", " v " }, StringSplitOptions.None);
                 string homeSearchStr = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: true);
                 if (string.IsNullOrEmpty(homeSearchStr)) homeSearchStr = homeTeam; // Fallback if it was ONLY stop words
                 
@@ -260,137 +493,7 @@ namespace BettingApp.Services
                     }
                 }
 
-                if (string.IsNullOrEmpty(eventId))
-                {
-                    _logger.LogInformation($" {betLabel} FotMob: Could not find match '{matchName}'");
-                    return null;
-                }
-
-                _logger.LogInformation($" {betLabel} FotMob: Found Match ID {eventId} for {matchName}");
-
-                // 2. Fetch Match HTML (Bust CDN cache with a unique timestamp)
-                string matchHtml = string.Empty;
-                int maxRetries = 2;
-                for (int i = 0; i < maxRetries; i++)
-                {
-                    try
-                    {
-                        matchHtml = await _httpClient.GetStringAsync($"https://www.fotmob.com/match/{eventId}?_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}");
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        if (i == maxRetries - 1) throw;
-                        _logger.LogWarning($" {betLabel} FotMob: HTTP request failed ({ex.Message}). Retrying in 2s... (Attempt {i+1}/{maxRetries-1})");
-                        await Task.Delay(2000);
-                    }
-                }
-                
-                // 3. Extract SSR JSON
-                var match = System.Text.RegularExpressions.Regex.Match(matchHtml, @"<script id=""__NEXT_DATA__"" type=""application/json"">(.*?)</script>");
-                if (match.Success)
-                {
-                    try 
-                    {
-                        using var ssrDoc = System.Text.Json.JsonDocument.Parse(match.Groups[1].Value);
-                        var root = ssrDoc.RootElement;
-                        if (root.TryGetProperty("props", out var props) &&
-                            props.TryGetProperty("pageProps", out var pageProps))
-                        {
-                            var trimmedData = new System.Collections.Generic.Dictionary<string, object>();
-
-                            if (pageProps.TryGetProperty("general", out var general))
-                            {
-                                var trimmedGeneral = new System.Collections.Generic.Dictionary<string, object>();
-                                if (general.TryGetProperty("matchTimeUTC", out var mTime)) trimmedGeneral["matchTimeUTC"] = mTime;
-                                if (general.TryGetProperty("started", out var st)) trimmedGeneral["started"] = st;
-                                if (general.TryGetProperty("finished", out var fin)) trimmedGeneral["finished"] = fin;
-                                trimmedData["general"] = trimmedGeneral;
-                            }
-
-                            if (pageProps.TryGetProperty("header", out var header))
-                            {
-                                var trimmedHeader = new System.Collections.Generic.Dictionary<string, object>();
-                                if (header.TryGetProperty("status", out var stat))
-                                {
-                                    var leanStat = new System.Collections.Generic.Dictionary<string, object>();
-                                    if (stat.TryGetProperty("finished", out var fin)) leanStat["finished"] = fin;
-                                    if (stat.TryGetProperty("started", out var st)) leanStat["started"] = st;
-                                    if (stat.TryGetProperty("cancelled", out var cn)) leanStat["cancelled"] = cn;
-                                    if (stat.TryGetProperty("scoreStr", out var sc)) leanStat["scoreStr"] = sc;
-                                    if (stat.TryGetProperty("reason", out var re)) leanStat["reason"] = re;
-                                    trimmedHeader["status"] = leanStat;
-                                }
-                                if (header.TryGetProperty("teams", out var teams))
-                                {
-                                    var leanTeams = new System.Collections.Generic.List<object>();
-                                    foreach (var t in teams.EnumerateArray())
-                                    {
-                                        var tDict = new System.Collections.Generic.Dictionary<string, object>();
-                                        if (t.TryGetProperty("name", out var nm)) tDict["name"] = nm.GetString() ?? "";
-                                        if (t.TryGetProperty("score", out var sc)) tDict["score"] = sc.GetInt32();
-                                        leanTeams.Add(tDict);
-                                    }
-                                    trimmedHeader["teams"] = leanTeams;
-                                }
-                                trimmedData["header"] = trimmedHeader;
-                            }
-
-                            if (pageProps.TryGetProperty("content", out var content))
-                            {
-                                if (content.TryGetProperty("matchFacts", out var matchFacts))
-                                {
-                                    var trimmedFacts = new System.Collections.Generic.Dictionary<string, object>();
-                                    // Omit bulky infoBox (Stadium GPS coordinates, capacity, surface, referee photos, attendance)
-                                    if (matchFacts.TryGetProperty("events", out var events)) 
-                                    {
-                                        trimmedFacts["events"] = FlattenEvents(events);
-                                    }
-                                    trimmedData["matchFacts"] = trimmedFacts;
-                                }
-
-                                if (content.TryGetProperty("stats", out var stats)) 
-                                {
-                                    trimmedData["stats"] = FlattenMatchStats(stats);
-                                }
-                                
-                                if (content.TryGetProperty("playerStats", out var playerStats)) 
-                                {
-                                    trimmedData["playerStats"] = FlattenPlayerStats(playerStats);
-                                }
-
-                                if (content.TryGetProperty("lineup", out var lineup))
-                                {
-                                    trimmedData["lineup"] = FlattenLineup(lineup);
-                                }
-                            }
-
-                            if (trimmedData.TryGetValue("general", out var genObj) && genObj is System.Collections.Generic.Dictionary<string, object> genDict)
-                            {
-                                if (genDict.TryGetValue("started", out var startedObj) && startedObj is System.Text.Json.JsonElement stElem && stElem.ValueKind == System.Text.Json.JsonValueKind.False)
-                                {
-                                    trimmedData["WARNING"] = "THIS MATCH HAS NOT STARTED YET! THERE ARE NO STATS. DO NOT SEARCH GOOGLE FOR STATS! MARK AS PENDING.";
-                                }
-                            }
-
-                            // Strip down the JSON to only the relevant stats to save massive amounts of tokens and prevent 503s!
-                            return System.Text.Json.JsonSerializer.Serialize(trimmedData);
-                        }
-                    } 
-                    catch { }
-                    
-                    // Fallback to a truncated payload to prevent crashing the AI with 170k+ characters
-                    string rawString = match.Groups[1].Value;
-                    return rawString.Length > 5000 ? rawString.Substring(0, 5000) + "...[TRUNCATED]" : rawString;
-                }
-
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error scraping JSON for {matchName}: {ex.Message}");
-                return null;
-            }
+                return eventId;
         }
 
         private object FlattenEvents(System.Text.Json.JsonElement eventsObj)

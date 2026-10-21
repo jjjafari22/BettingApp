@@ -27,6 +27,9 @@ namespace BettingApp.Tests
         [InlineData("Olympiacos", "Jagiellonia Bialystok", "Olympiacos", "Jagiellonia Białystok", null, true)] // Polish diacritics
         [InlineData("Al-Qadisiyah", "Al-Ettifaq", "Al Qadsiah", "Al Ettifaq", null, true)] // Saudi aliases
         [InlineData("Al Qadisiya", "Al Ettifaq", "Al Qadsiah", "Al-Ettifaq", null, true)] // Saudi aliases variation
+        [InlineData("Al Taawon Buraidah", "Al Qadisiya", "Al-Taawoun", "Al Qadsiah", null, true)] // Saudi aliases Taawon Buraidah
+        [InlineData("Al Akhdood", "Al Adalh", "Al Akhdoud", "Al-Adalah", null, true)] // Saudi aliases Akhdood / Adalh
+        [InlineData("Al Akhdood", "Al Adalh", "Al-Okhdood", "Al Adalah", null, true)] // Saudi aliases Okhdood / Adalah
         [InlineData("Eidsvold Turn", "Ullensaker/Kisa", "Eidsvold TF", "Ull/Kisa", null, true)] // Norwegian aliases
         [InlineData("SK Brann Women", "HJK Women", "Brann", "HJK", "UEFA Women's Europa Cup", true)] // Brann Women
         [InlineData("Valerenga Women", "Feyenoord Women", "Valerenga", "Feyenoord", "UEFA Women's Europa Cup", true)] // Valerenga Women

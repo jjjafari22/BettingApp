@@ -72,7 +72,22 @@ namespace BettingApp.Services
                     }
 
                     HttpResponseMessage response;
-                    response = await fetchFactory();
+                    try
+                    {
+                        response = await fetchFactory();
+                    }
+                    catch (HttpRequestException httpEx)
+                    {
+                        if (attempt == maxRetries)
+                        {
+                            logger.LogError(httpEx, $"OddsPapi: HTTP request exception for {cacheKey} after {maxRetries} attempts.");
+                            return null;
+                        }
+
+                        logger.LogWarning($"OddsPapi: Transient network error for {cacheKey} ({httpEx.Message}). Retrying... (Attempt {attempt} of {maxRetries - 1})");
+                        await Task.Delay(1000 * attempt, cancellationToken);
+                        continue;
+                    }
 
                     using (response)
                     {
@@ -94,7 +109,20 @@ namespace BettingApp.Services
                             }
                             
                             logger.LogWarning($"OddsPapi: 429 Too Many Requests for {cacheKey}. Retrying... (Attempt {attempt} of {maxRetries - 1})");
-                            await Task.Delay(500, cancellationToken); // Small wait before re-queueing
+                            await _globalThrottle.WaitAsync(cancellationToken);
+                            try
+                            {
+                                var pushback = DateTime.UtcNow.AddMilliseconds(1500 * attempt);
+                                if (pushback > _lastRequestStart)
+                                {
+                                    _lastRequestStart = pushback;
+                                }
+                            }
+                            finally
+                            {
+                                _globalThrottle.Release();
+                            }
+                            await Task.Delay(1500 * attempt, cancellationToken);
                         }
                         else
                         {

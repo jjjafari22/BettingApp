@@ -358,46 +358,77 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 
                     if (result != null && result.Legs != null)
                     {
-                        string? sharedResolvedMatch = null;
+                        // Group contiguous legs that belong to the same Bet Builder (shared odds: subsequent legs have empty Odds).
+                        // A leg with its own explicit Odds (like a second leg on a combo slip) starts a new group so it resolves its own match!
+                        var legGroups = new List<List<AiVisionLeg>>();
+                        List<AiVisionLeg>? currentLegGroup = null;
 
-                        foreach (var leg in result.Legs)
+                        for (int i = 0; i < result.Legs.Count; i++)
                         {
-                            if (leg != null && string.IsNullOrWhiteSpace(leg.Match) && !string.IsNullOrWhiteSpace(leg.Selection))
-                            {
-                                // If this slip has a shared match already resolved from another leg, reuse it!
-                                if (!string.IsNullOrEmpty(sharedResolvedMatch))
-                                {
-                                    leg.Match = sharedResolvedMatch;
-                                    _logger.LogInformation($"{betLabel}Reused resolved match '{sharedResolvedMatch}' for leg '{leg.Selection}'");
-                                    continue;
-                                }
+                            var leg = result.Legs[i];
+                            if (leg == null) continue;
 
-                                if (timeoutToken.IsCancellationRequested)
-                                {
-                                    _logger.LogWarning($"{betLabel}Skipping remaining player match resolution due to Auto-Read timeout.");
-                                    break;
-                                }
+                            bool startNewGroup = currentLegGroup == null
+                                || !string.IsNullOrWhiteSpace(leg.Odds)
+                                || (!string.IsNullOrWhiteSpace(leg.Match)
+                                    && currentLegGroup.Any(l => !string.IsNullOrWhiteSpace(l.Match) && !string.Equals(l.Match.Trim(), leg.Match.Trim(), StringComparison.OrdinalIgnoreCase)));
 
-                                string? resolvedMatch = await _matchResolver.ResolvePlayerMatchAsync(leg.Selection, DateTime.UtcNow, betId, timeoutToken);
-                                if (!string.IsNullOrEmpty(resolvedMatch))
-                                {
-                                    leg.Match = resolvedMatch;
-                                    sharedResolvedMatch = resolvedMatch;
-                                    _logger.LogInformation($"{betLabel}Auto-Resolved missing match to: '{resolvedMatch}' for player '{leg.Selection}'");
-                                }
-                            }
-                            else if (leg != null && !string.IsNullOrWhiteSpace(leg.Match) && string.IsNullOrEmpty(sharedResolvedMatch))
+                            if (startNewGroup)
                             {
-                                sharedResolvedMatch = leg.Match;
+                                currentLegGroup = new List<AiVisionLeg>();
+                                legGroups.Add(currentLegGroup);
                             }
+                            currentLegGroup!.Add(leg);
                         }
 
-                        // Back-propagate sharedResolvedMatch to any earlier legs that were missing a match
-                        if (!string.IsNullOrEmpty(sharedResolvedMatch))
+                        // Resolve missing matches per group in parallel (at most 1 FotMob lookup per group; Bet Builder sub-legs reuse in 0ms!)
+                        var groupResolutionTasks = legGroups.Select(async group =>
+                        {
+                            string? groupMatch = group.FirstOrDefault(l => !string.IsNullOrWhiteSpace(l.Match))?.Match;
+
+                            if (string.IsNullOrWhiteSpace(groupMatch))
+                            {
+                                foreach (var leg in group.Where(l => !string.IsNullOrWhiteSpace(l.Selection)))
+                                {
+                                    if (timeoutToken.IsCancellationRequested)
+                                    {
+                                        _logger.LogWarning($"{betLabel}Skipping remaining player match resolution due to Auto-Read timeout.");
+                                        break;
+                                    }
+
+                                    string? resolved = await _matchResolver.ResolvePlayerMatchAsync(leg.Selection, DateTime.UtcNow, betId, timeoutToken);
+                                    if (!string.IsNullOrEmpty(resolved))
+                                    {
+                                        groupMatch = resolved;
+                                        leg.Match = resolved;
+                                        _logger.LogInformation($"{betLabel}Auto-Resolved missing match to: '{resolved}' for player '{leg.Selection}'");
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(groupMatch))
+                            {
+                                foreach (var leg in group.Where(l => string.IsNullOrWhiteSpace(l.Match)))
+                                {
+                                    leg.Match = groupMatch;
+                                    _logger.LogInformation($"{betLabel}Reused resolved match '{groupMatch}' for leg '{leg.Selection}'");
+                                }
+                            }
+
+                            return groupMatch;
+                        }).ToList();
+
+                        var resolvedGroupMatches = await Task.WhenAll(groupResolutionTasks);
+                        string? fallbackSharedMatch = resolvedGroupMatches.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m));
+
+                        // Final fallback: If any leg still has no match (e.g. a non-player market like 'Over 2.5 Goals' with its own odds), inherit fallbackSharedMatch
+                        if (!string.IsNullOrEmpty(fallbackSharedMatch))
                         {
                             foreach (var leg in result.Legs.Where(l => l != null && string.IsNullOrWhiteSpace(l.Match)))
                             {
-                                leg.Match = sharedResolvedMatch;
+                                leg.Match = fallbackSharedMatch;
+                                _logger.LogInformation($"{betLabel}Reused resolved match '{fallbackSharedMatch}' for leg '{leg.Selection}'");
                             }
                         }
 

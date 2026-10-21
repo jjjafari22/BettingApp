@@ -252,8 +252,8 @@ namespace BettingApp.Services
                 }
 
                 // 6. Carefully prune the summary JSON:
-                // Keep 100% of header, boxscore, and gameInfo.
-                // Drop videos, articles, news, pickcenter, tickets to save space safely.
+                // Keep 100% of scores, linescores, team stats, and player boxscore stats/starter flags,
+                // while stripping bulky logo URLs, athlete headshots/links/GUIDs, featuredAthletes, and NHL's duplicate 'skaters' group.
                 using var sumDoc = JsonDocument.Parse(summaryJson);
                 var prunedSummary = new Dictionary<string, object>
                 {
@@ -268,19 +268,15 @@ namespace BettingApp.Services
 
                 if (sumDoc.RootElement.TryGetProperty("header", out var hdr))
                 {
-                    prunedSummary["header"] = hdr;
+                    prunedSummary["header"] = PruneHeader(hdr);
                 }
                 if (sumDoc.RootElement.TryGetProperty("boxscore", out var box))
                 {
-                    prunedSummary["boxscore"] = box;
+                    prunedSummary["boxscore"] = PruneBoxscore(box);
                 }
                 if (sumDoc.RootElement.TryGetProperty("gameInfo", out var gi))
                 {
-                    prunedSummary["gameInfo"] = gi;
-                }
-                if (sumDoc.RootElement.TryGetProperty("leaders", out var ldr))
-                {
-                    prunedSummary["leaders"] = ldr;
+                    prunedSummary["gameInfo"] = PruneGameInfo(gi);
                 }
 
                 return JsonSerializer.Serialize(prunedSummary);
@@ -290,6 +286,174 @@ namespace BettingApp.Services
                 _logger.LogError(ex, $"{betLabel} ESPN API Error fetching match stats for '{matchName}': {ex.Message}");
                 return null;
             }
+        }
+
+        private static object PruneHeader(JsonElement hdr)
+        {
+            var result = new Dictionary<string, object>();
+            if (hdr.TryGetProperty("id", out var id)) result["id"] = id;
+            if (hdr.TryGetProperty("season", out var season)) result["season"] = season;
+            if (hdr.TryGetProperty("competitions", out var comps) && comps.ValueKind == JsonValueKind.Array)
+            {
+                var compList = new List<object>();
+                foreach (var c in comps.EnumerateArray())
+                {
+                    var cDict = new Dictionary<string, object>();
+                    if (c.TryGetProperty("id", out var cid)) cDict["id"] = cid;
+                    if (c.TryGetProperty("date", out var cdate)) cDict["date"] = cdate;
+                    if (c.TryGetProperty("neutralSite", out var ns)) cDict["neutralSite"] = ns;
+                    if (c.TryGetProperty("status", out var st) && st.TryGetProperty("type", out var stType))
+                    {
+                        cDict["status"] = new Dictionary<string, object> { ["type"] = stType };
+                    }
+                    if (c.TryGetProperty("competitors", out var competitors) && competitors.ValueKind == JsonValueKind.Array)
+                    {
+                        var compTeams = new List<object>();
+                        foreach (var comp in competitors.EnumerateArray())
+                        {
+                            var ct = new Dictionary<string, object>();
+                            if (comp.TryGetProperty("id", out var ctid)) ct["id"] = ctid;
+                            if (comp.TryGetProperty("homeAway", out var ha)) ct["homeAway"] = ha;
+                            if (comp.TryGetProperty("winner", out var w)) ct["winner"] = w;
+                            if (comp.TryGetProperty("score", out var sc)) ct["score"] = sc;
+                            if (comp.TryGetProperty("linescores", out var ls)) ct["linescores"] = ls;
+                            if (comp.TryGetProperty("team", out var t))
+                            {
+                                var tDict = new Dictionary<string, object>();
+                                if (t.TryGetProperty("id", out var tid)) tDict["id"] = tid;
+                                if (t.TryGetProperty("location", out var loc)) tDict["location"] = loc;
+                                if (t.TryGetProperty("name", out var nm)) tDict["name"] = nm;
+                                if (t.TryGetProperty("nickname", out var nn)) tDict["nickname"] = nn;
+                                if (t.TryGetProperty("abbreviation", out var abbr)) tDict["abbreviation"] = abbr;
+                                if (t.TryGetProperty("displayName", out var dn)) tDict["displayName"] = dn;
+                                ct["team"] = tDict;
+                            }
+                            compTeams.Add(ct);
+                        }
+                        cDict["competitors"] = compTeams;
+                    }
+                    compList.Add(cDict);
+                }
+                result["competitions"] = compList;
+            }
+            return result;
+        }
+
+        private static object PruneBoxscore(JsonElement box)
+        {
+            var result = new Dictionary<string, object>();
+
+            if (box.TryGetProperty("teams", out var teams) && teams.ValueKind == JsonValueKind.Array)
+            {
+                var teamList = new List<object>();
+                foreach (var t in teams.EnumerateArray())
+                {
+                    var tEntry = new Dictionary<string, object>();
+                    if (t.TryGetProperty("homeAway", out var ha)) tEntry["homeAway"] = ha;
+                    if (t.TryGetProperty("team", out var teamObj))
+                    {
+                        var cleanTeam = new Dictionary<string, object>();
+                        if (teamObj.TryGetProperty("displayName", out var dn)) cleanTeam["displayName"] = dn;
+                        if (teamObj.TryGetProperty("name", out var nm)) cleanTeam["name"] = nm;
+                        if (teamObj.TryGetProperty("abbreviation", out var ab)) cleanTeam["abbreviation"] = ab;
+                        tEntry["team"] = cleanTeam;
+                    }
+                    if (t.TryGetProperty("statistics", out var stats)) tEntry["statistics"] = stats;
+                    teamList.Add(tEntry);
+                }
+                result["teams"] = teamList;
+            }
+
+            if (box.TryGetProperty("players", out var players) && players.ValueKind == JsonValueKind.Array)
+            {
+                var playerTeams = new List<object>();
+                foreach (var pt in players.EnumerateArray())
+                {
+                    var ptDict = new Dictionary<string, object>();
+                    if (pt.TryGetProperty("team", out var teamObj))
+                    {
+                        var cleanTeam = new Dictionary<string, object>();
+                        if (teamObj.TryGetProperty("displayName", out var dn)) cleanTeam["displayName"] = dn;
+                        if (teamObj.TryGetProperty("name", out var nm)) cleanTeam["name"] = nm;
+                        if (teamObj.TryGetProperty("abbreviation", out var ab)) cleanTeam["abbreviation"] = ab;
+                        ptDict["team"] = cleanTeam;
+                    }
+
+                    if (pt.TryGetProperty("statistics", out var statGroups) && statGroups.ValueKind == JsonValueKind.Array)
+                    {
+                        var groupNames = statGroups.EnumerateArray()
+                            .Select(sg => sg.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "")
+                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                        // In NHL, ESPN includes 'forwards', 'defenses', AND 'skaters' (which duplicates all forwards + defenses).
+                        bool skipDuplicateSkaters = groupNames.Contains("skaters") && (groupNames.Contains("forwards") || groupNames.Contains("defenses"));
+
+                        var cleanGroups = new List<object>();
+                        foreach (var sg in statGroups.EnumerateArray())
+                        {
+                            string gName = sg.TryGetProperty("name", out var gn) ? gn.GetString() ?? "" : "";
+                            if (skipDuplicateSkaters && gName.Equals("skaters", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            var sgDict = new Dictionary<string, object>();
+                            if (!string.IsNullOrEmpty(gName)) sgDict["name"] = gName;
+                            if (sg.TryGetProperty("labels", out var lbls)) sgDict["labels"] = lbls;
+                            if (sg.TryGetProperty("keys", out var keys)) sgDict["keys"] = keys;
+                            if (sg.TryGetProperty("totals", out var tots)) sgDict["totals"] = tots;
+
+                            if (sg.TryGetProperty("athletes", out var aths) && aths.ValueKind == JsonValueKind.Array)
+                            {
+                                var cleanAthletes = new List<object>();
+                                foreach (var a in aths.EnumerateArray())
+                                {
+                                    var aDict = new Dictionary<string, object>();
+                                    if (a.TryGetProperty("athlete", out var athObj))
+                                    {
+                                        var cleanAth = new Dictionary<string, object>();
+                                        if (athObj.TryGetProperty("displayName", out var dn)) cleanAth["displayName"] = dn;
+                                        if (athObj.TryGetProperty("shortName", out var sn)) cleanAth["shortName"] = sn;
+                                        if (athObj.TryGetProperty("jersey", out var j)) cleanAth["jersey"] = j;
+                                        if (athObj.TryGetProperty("position", out var pos))
+                                        {
+                                            if (pos.TryGetProperty("abbreviation", out var posAb)) cleanAth["position"] = posAb;
+                                            else if (pos.TryGetProperty("name", out var posNm)) cleanAth["position"] = posNm;
+                                        }
+                                        if (athObj.TryGetProperty("active", out var act)) cleanAth["active"] = act;
+                                        if (athObj.TryGetProperty("scratched", out var scr)) cleanAth["scratched"] = scr;
+                                        aDict["athlete"] = cleanAth;
+                                    }
+                                    if (a.TryGetProperty("starter", out var st)) aDict["starter"] = st;
+                                    if (a.TryGetProperty("didNotPlay", out var dnp)) aDict["didNotPlay"] = dnp;
+                                    if (a.TryGetProperty("ejected", out var ej) && ej.ValueKind == JsonValueKind.True) aDict["ejected"] = ej;
+                                    if (a.TryGetProperty("reason", out var rsn)) aDict["reason"] = rsn;
+                                    if (a.TryGetProperty("stats", out var stArr)) aDict["stats"] = stArr;
+                                    cleanAthletes.Add(aDict);
+                                }
+                                sgDict["athletes"] = cleanAthletes;
+                            }
+                            cleanGroups.Add(sgDict);
+                        }
+                        ptDict["statistics"] = cleanGroups;
+                    }
+                    playerTeams.Add(ptDict);
+                }
+                result["players"] = playerTeams;
+            }
+
+            return result;
+        }
+
+        private static object PruneGameInfo(JsonElement gi)
+        {
+            var result = new Dictionary<string, object>();
+            if (gi.TryGetProperty("attendance", out var att)) result["attendance"] = att;
+            if (gi.TryGetProperty("venue", out var v) && v.TryGetProperty("fullName", out var fn))
+            {
+                result["venue"] = new Dictionary<string, object> { ["fullName"] = fn };
+            }
+            return result;
         }
 
         private bool IsEventMatch(JsonElement ev, string teamA, string teamB)

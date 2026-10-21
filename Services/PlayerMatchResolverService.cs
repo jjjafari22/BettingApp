@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace BettingApp.Services
@@ -16,11 +18,13 @@ namespace BettingApp.Services
     {
         private readonly HttpClient _httpClient;
         private readonly ILogger<PlayerMatchResolverService> _logger;
+        private readonly IMemoryCache? _cache;
 
-        public PlayerMatchResolverService(HttpClient httpClient, ILogger<PlayerMatchResolverService> logger)
+        public PlayerMatchResolverService(HttpClient httpClient, ILogger<PlayerMatchResolverService> logger, IMemoryCache? cache = null)
         {
             _httpClient = httpClient;
             _logger = logger;
+            _cache = cache;
             if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))
             {
                 _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
@@ -48,7 +52,30 @@ namespace BettingApp.Services
                     return null;
                 }
 
+                DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
+                string normPlayerKey = TeamAliasMappingService.RemoveDiacritics(playerName).ToLowerInvariant();
+                string cacheKey = $"player_match_{normPlayerKey}_{targetDate:yyyyMMdd_HH}";
+
+                if (_cache != null && _cache.TryGetValue(cacheKey, out string? cachedMatch) && !string.IsNullOrEmpty(cachedMatch))
+                {
+                    _logger.LogInformation($"{betLabel}PlayerMatchResolver: Resolved player '{playerName}' from cache to '{cachedMatch}'");
+                    return cachedMatch;
+                }
+
+                string? CacheAndReturn(string? matchResult)
+                {
+                    if (!string.IsNullOrEmpty(matchResult) && _cache != null)
+                    {
+                        _cache.Set(cacheKey, matchResult, TimeSpan.FromMinutes(20));
+                    }
+                    return matchResult;
+                }
+
                 // 2. Query FotMob suggest API to find player ID
+                string? playerId = null;
+                int? playerTeamId = null;
+                double bestScore = -1;
+
                 string searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(playerName)}";
                 var suggestResponse = await _httpClient.GetAsync(searchUrl, cancellationToken);
                 if (!suggestResponse.IsSuccessStatusCode)
@@ -58,27 +85,84 @@ namespace BettingApp.Services
                 }
 
                 string suggestJson = await suggestResponse.Content.ReadAsStringAsync(cancellationToken);
-                using var suggestDoc = JsonDocument.Parse(suggestJson);
+                using (var suggestDoc = JsonDocument.Parse(suggestJson))
+                {
+                    if (suggestDoc.RootElement.TryGetProperty("squadMemberSuggest", out var playerSuggests) && playerSuggests.GetArrayLength() > 0)
+                    {
+                        var options = playerSuggests[0].GetProperty("options");
+                        if (options.GetArrayLength() > 0)
+                        {
+                            var topOpt = options[0];
+                            bestScore = topOpt.TryGetProperty("score", out var scProp) && scProp.ValueKind == JsonValueKind.Number ? scProp.GetDouble() : 0;
+                            if (topOpt.TryGetProperty("payload", out var payload))
+                            {
+                                playerId = payload.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+                                if (payload.TryGetProperty("teamId", out var tidProp) && tidProp.ValueKind == JsonValueKind.Number)
+                                {
+                                    playerTeamId = tidProp.GetInt32();
+                                }
+                            }
+                        }
+                    }
+                }
 
-                if (!suggestDoc.RootElement.TryGetProperty("squadMemberSuggest", out var playerSuggests) || playerSuggests.GetArrayLength() == 0)
+                // 2b. Nickname / Shortened First-Name Disambiguation (e.g. 'Nicolas Paz' on slip vs 'Nico Paz' on FotMob):
+                // FotMob's suggest score is (300000 + popularity). If a full-name query returned no player or an obscure low-popularity player (< 300030),
+                // do a fast (~70ms) surname lookup to see if a much higher-popularity player with the same surname & first-name prefix exists.
+                var nameParts = normPlayerKey.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (nameParts.Length >= 2 && bestScore < 300030)
+                {
+                    string firstToken = nameParts[0];
+                    string lastToken = nameParts[^1];
+                    if (firstToken.Length >= 3 && lastToken.Length >= 3)
+                    {
+                        string firstPrefix = firstToken.Substring(0, 3);
+                        string surnameUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(lastToken)}";
+                        var surnameResp = await _httpClient.GetAsync(surnameUrl, cancellationToken);
+                        if (surnameResp.IsSuccessStatusCode)
+                        {
+                            string surnameJson = await surnameResp.Content.ReadAsStringAsync(cancellationToken);
+                            using var surnameDoc = JsonDocument.Parse(surnameJson);
+                            if (surnameDoc.RootElement.TryGetProperty("squadMemberSuggest", out var sSuggests) && sSuggests.GetArrayLength() > 0)
+                            {
+                                var sOptions = sSuggests[0].GetProperty("options");
+                                foreach (var opt in sOptions.EnumerateArray())
+                                {
+                                    double optScore = opt.TryGetProperty("score", out var sc) && sc.ValueKind == JsonValueKind.Number ? sc.GetDouble() : 0;
+                                    if (optScore <= bestScore) continue;
+
+                                    string rawText = opt.TryGetProperty("text", out var txt) ? txt.GetString() ?? "" : "";
+                                    string displayName = rawText.Split('|')[0].Trim();
+                                    var candParts = TeamAliasMappingService.RemoveDiacritics(displayName).ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                                    if (candParts.Length >= 2)
+                                    {
+                                        string candFirst = candParts[0];
+                                        string candLast = candParts[^1];
+                                        if (candLast == lastToken && candFirst.StartsWith(firstPrefix, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            if (opt.TryGetProperty("payload", out var optPayload))
+                                            {
+                                                string? candId = optPayload.TryGetProperty("id", out var cidProp) ? cidProp.GetString() : null;
+                                                if (!string.IsNullOrEmpty(candId))
+                                                {
+                                                    bestScore = optScore;
+                                                    playerId = candId;
+                                                    playerTeamId = optPayload.TryGetProperty("teamId", out var ctidProp) && ctidProp.ValueKind == JsonValueKind.Number ? ctidProp.GetInt32() : null;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (string.IsNullOrEmpty(playerId))
                 {
                     _logger.LogInformation($"{betLabel}PlayerMatchResolver: No player found for '{playerName}'");
                     return null;
                 }
-
-                var options = playerSuggests[0].GetProperty("options");
-                if (options.GetArrayLength() == 0) return null;
-
-                var payload = options[0].GetProperty("payload");
-                string playerId = payload.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
-                string playerClub = payload.TryGetProperty("teamName", out var tnProp) ? tnProp.GetString() ?? "" : "";
-
-                if (string.IsNullOrEmpty(playerId))
-                {
-                    return null;
-                }
-
-                DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
 
                 // 3. Fetch Player Overview page on FotMob
                 string playerUrl = $"https://www.fotmob.com/players/{playerId}/overview";
@@ -134,7 +218,7 @@ namespace BettingApp.Services
                         if (started && !finished)
                         {
                             _logger.LogInformation($"{betLabel}PlayerMatchResolver: Resolved player '{playerName}' to LIVE nextMatch '{matchName}'");
-                            return matchName;
+                            return CacheAndReturn(matchName);
                         }
 
                         // Priority 2: Upcoming match
@@ -167,7 +251,7 @@ namespace BettingApp.Services
                         if (timeSinceKickoff >= TimeSpan.Zero && timeSinceKickoff <= TimeSpan.FromMinutes(120))
                         {
                             _logger.LogInformation($"{betLabel}PlayerMatchResolver: Resolved player '{playerName}' to ongoing recentMatch '{recentMatchName}'");
-                            return recentMatchName;
+                            return CacheAndReturn(recentMatchName);
                         }
 
                         // Or if the bet was uploaded retrospectively for a match that finished within the last 24 hours
@@ -177,7 +261,7 @@ namespace BettingApp.Services
                             if (upcomingDate > targetDate.AddHours(48))
                             {
                                 _logger.LogInformation($"{betLabel}PlayerMatchResolver: Resolved player '{playerName}' to recently finished match '{recentMatchName}' (finished {timeSinceKickoff.TotalHours:F1}h ago)");
-                                return recentMatchName;
+                                return CacheAndReturn(recentMatchName);
                             }
                         }
                     }
@@ -187,17 +271,17 @@ namespace BettingApp.Services
                 if (!string.IsNullOrEmpty(upcomingMatch))
                 {
                     _logger.LogInformation($"{betLabel}PlayerMatchResolver: Resolved player '{playerName}' to soonest upcoming match '{upcomingMatch}' (kickoff: {upcomingDate:u})");
-                    return upcomingMatch;
+                    return CacheAndReturn(upcomingMatch);
                 }
 
                 // 6. Fallback: If player profile nextMatch was empty, check team fixture calendar
-                if (payload.TryGetProperty("teamId", out var teamIdProp))
+                if (playerTeamId.HasValue)
                 {
-                    string teamId = teamIdProp.GetInt32().ToString();
+                    string teamId = playerTeamId.Value.ToString();
                     string? teamFallbackMatch = await ResolveFromTeamFixturesAsync(teamId, targetDate, betLabel, playerName, cancellationToken);
                     if (!string.IsNullOrEmpty(teamFallbackMatch))
                     {
-                        return teamFallbackMatch;
+                        return CacheAndReturn(teamFallbackMatch);
                     }
                 }
             }

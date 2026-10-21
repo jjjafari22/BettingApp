@@ -48,7 +48,11 @@ namespace BettingApp.Services
                 var dbUser = await context.Users.FindAsync(dbBet.UserId);
                 if (dbUser == null) return (false, "User not found.", false);
 
-                if (dbBet.Status != expectedOriginalStatus)
+                bool isProcessingToPendingTransition =
+                    (expectedOriginalStatus == "Processing" && dbBet.Status == "Pending") ||
+                    (expectedOriginalStatus == "Pending" && dbBet.Status == "Processing");
+
+                if (dbBet.Status != expectedOriginalStatus && !isProcessingToPendingTransition)
                 {
                     var lastAudit = await context.AuditLogs
                         .Where(a => a.Details.Contains($"Bet ID: {betId}"))
@@ -63,7 +67,7 @@ namespace BettingApp.Services
                 bool isUndo = (originalStatus == "Won" || originalStatus == "Lost" || originalStatus == "Void" || originalStatus == "Rejected" || originalStatus == "Cancelled") && newStatus == "Approved";
                 bool wasStaked = originalStatus == "Approved" || originalStatus == "Won" || originalStatus == "Lost";
                 bool willBeStaked = newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost";
-                bool isFirstApproval = originalStatus == "Pending" || originalStatus == "Rejected" || originalStatus == "Cancelled";
+                bool isFirstApproval = originalStatus == "Pending" || originalStatus == "Processing" || originalStatus == "Rejected" || originalStatus == "Cancelled";
 
                 if (!wasStaked && willBeStaked)
                 {
