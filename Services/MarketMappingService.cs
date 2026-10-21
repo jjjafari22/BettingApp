@@ -73,7 +73,7 @@ namespace BettingApp.Services
             { "Player Shots on Goal", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target" },
             { "Player Shots On Goal (incl. overtime)", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)" },
             { "Asian Over/Under", "Over Under Full Time" },
-            { "1. Half: Goals Handicap", "Half Time Handicap" },
+            { "1. Half: Goals Handicap", "Asian Handicap First Half|3-Way Handicap First Half|Half Time Handicap" },
             { "Yellow Cards: Total", "Total Cards" },
             { "Total Goals", "Over Under Full Time" },
             { "Total Goals 2", "Over Under Full Time" },
@@ -259,7 +259,14 @@ namespace BettingApp.Services
 
                     // Goals Team 1/2
                     if ((clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goals", StringComparison.OrdinalIgnoreCase)) &&
-                        !clean.Contains("Player", StringComparison.OrdinalIgnoreCase))
+                        !clean.Contains("Player", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Both", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Result", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("1X2", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("First Goal", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Last Goal", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Next Goal", StringComparison.OrdinalIgnoreCase))
                     {
                         if (IsTeam1Target())
                             return new List<string> { "Over Under Team 1" + halfSuffix };
@@ -268,14 +275,7 @@ namespace BettingApp.Services
                             
                         // Otherwise, generic total goals for the match
                         if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) ||
-                            (!string.IsNullOrEmpty(halfSuffix) && clean.Contains("Goals", StringComparison.OrdinalIgnoreCase) &&
-                             !clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase) &&
-                             !clean.Contains("Both", StringComparison.OrdinalIgnoreCase) &&
-                             !clean.Contains("Result", StringComparison.OrdinalIgnoreCase) &&
-                             !clean.Contains("1X2", StringComparison.OrdinalIgnoreCase) &&
-                             !clean.Contains("First Goal", StringComparison.OrdinalIgnoreCase) &&
-                             !clean.Contains("Last Goal", StringComparison.OrdinalIgnoreCase) &&
-                             !clean.Contains("Next Goal", StringComparison.OrdinalIgnoreCase)))
+                            (!string.IsNullOrEmpty(halfSuffix) && clean.Contains("Goals", StringComparison.OrdinalIgnoreCase)))
                         {
                             if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Over Under" + halfSuffix };
                             if (clean.Contains("incl. overtime", StringComparison.OrdinalIgnoreCase) || clean.Contains("including overtime", StringComparison.OrdinalIgnoreCase))
@@ -329,8 +329,13 @@ namespace BettingApp.Services
                             return new List<string> { "Team 2 to win both halves" };
                     }
 
+                    bool isHandicapOr1X2Stat = clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase) ||
+                                               clean.Contains("1X2", StringComparison.OrdinalIgnoreCase) ||
+                                               clean.Contains("Most ", StringComparison.OrdinalIgnoreCase) ||
+                                               clean.Contains("More ", StringComparison.OrdinalIgnoreCase);
+
                     // Goalkeeper Saves Team 1/2 or Match Total
-                    if (clean.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) || clean.Contains("Saves", StringComparison.OrdinalIgnoreCase))
+                    if (!isHandicapOr1X2Stat && (clean.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) || clean.Contains("Saves", StringComparison.OrdinalIgnoreCase)))
                     {
                         if (!clean.Contains("Player", StringComparison.OrdinalIgnoreCase))
                         {
@@ -345,7 +350,8 @@ namespace BettingApp.Services
                     }
 
                     // Fouls Team 1/2 or Match Total
-                    if ((clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) || clean.Contains("Foul", StringComparison.OrdinalIgnoreCase)) &&
+                    if (!isHandicapOr1X2Stat &&
+                        (clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) || clean.Contains("Foul", StringComparison.OrdinalIgnoreCase)) &&
                         !clean.Contains("Suffered", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("Won", StringComparison.OrdinalIgnoreCase) &&
@@ -364,7 +370,7 @@ namespace BettingApp.Services
                     }
 
                     // Shots / Shots on Target Team 1/2 or Match Total
-                    if (clean.Contains("Shots", StringComparison.OrdinalIgnoreCase) || clean.Contains("Shot", StringComparison.OrdinalIgnoreCase))
+                    if (!isHandicapOr1X2Stat && (clean.Contains("Shots", StringComparison.OrdinalIgnoreCase) || clean.Contains("Shot", StringComparison.OrdinalIgnoreCase)))
                     {
                         if (!clean.Contains("Player", StringComparison.OrdinalIgnoreCase))
                         {
@@ -381,7 +387,7 @@ namespace BettingApp.Services
                     }
 
                     // Tackles Team 1/2 or Match Total
-                    if (clean.Contains("Tackles", StringComparison.OrdinalIgnoreCase) || clean.Contains("Tackle", StringComparison.OrdinalIgnoreCase))
+                    if (!isHandicapOr1X2Stat && (clean.Contains("Tackles", StringComparison.OrdinalIgnoreCase) || clean.Contains("Tackle", StringComparison.OrdinalIgnoreCase)))
                     {
                         if (!clean.Contains("Player", StringComparison.OrdinalIgnoreCase))
                         {
@@ -665,6 +671,33 @@ namespace BettingApp.Services
                 return new List<string> { "2Up - Full Time Result" };
             }
 
+            // Strip off any trailing scores (like "0 - 1") for 3-Way Handicaps
+            if (clean.StartsWith("Handicap (3 Way)", StringComparison.OrdinalIgnoreCase) || 
+                clean.StartsWith("3-Way Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("3 Way Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("3-Way Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Handicap (3 Way)", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Handicap 3 Way", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("European Handicap", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "3-Way Handicap" + halfSuffix };
+                return new List<string> { "3-Way Handicap" };
+            }
+
+            // Strip off any trailing scores (like "-1.0" or "(0-1)" or "0 - 1") for Asian / Goals Handicaps
+            if (clean.Contains("Asian Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Goals Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Goal Handicap", StringComparison.OrdinalIgnoreCase) ||
+                clean.StartsWith("Handicap", StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrEmpty(halfSuffix) && clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!string.IsNullOrEmpty(halfSuffix))
+                {
+                    return new List<string> { "Asian Handicap" + halfSuffix, "Asian Handicap -" + halfSuffix, "3-Way Handicap" + halfSuffix };
+                }
+                return new List<string> { "Asian Handicap", "3-Way Handicap" };
+            }
+
             if (clean.StartsWith("1st Half Goals", StringComparison.OrdinalIgnoreCase) || 
                 clean.StartsWith("First Half Goals", StringComparison.OrdinalIgnoreCase) ||
                 clean.StartsWith("Half Time Goals", StringComparison.OrdinalIgnoreCase))
@@ -676,24 +709,6 @@ namespace BettingApp.Services
                 clean.StartsWith("Second Half Goals", StringComparison.OrdinalIgnoreCase))
             {
                 return new List<string> { "Over Under Second Half" };
-            }
-
-            // Strip off any trailing scores (like "0 - 1") for 3-Way Handicaps
-            if (clean.StartsWith("Handicap (3 Way)", StringComparison.OrdinalIgnoreCase) || 
-                clean.StartsWith("3-Way Handicap", StringComparison.OrdinalIgnoreCase) ||
-                clean.Contains("3 Way Handicap", StringComparison.OrdinalIgnoreCase) ||
-                clean.Contains("Handicap 3 Way", StringComparison.OrdinalIgnoreCase))
-            {
-                return new List<string> { "3-Way Handicap" };
-            }
-
-            // Strip off any trailing scores (like "-1.0" or "(0-1)") for Asian Handicaps
-            if (clean.StartsWith("Asian Handicap", StringComparison.OrdinalIgnoreCase) ||
-                clean.StartsWith("Goals Handicap", StringComparison.OrdinalIgnoreCase) ||
-                clean.StartsWith("Handicap", StringComparison.OrdinalIgnoreCase))
-            {
-                if (halfSuffix == " First Half") return new List<string> { "Asian Handicap First Half", "Asian Handicap - First Half" };
-                return new List<string> { "Asian Handicap", "3-Way Handicap" };
             }
 
             // Route Asian Total variants to Over Under

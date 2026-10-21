@@ -1960,5 +1960,58 @@ namespace BettingApp.Tests
                 normOp.Contains(normBetslip, StringComparison.OrdinalIgnoreCase),
                 $"Expected normalized '{normBetslip}' and '{normOp}' to match");
         }
+
+        [Fact]
+        public void Test_Bet1107_1stHalfGoalsHandicap_MatchesAsianHandicapFirstHalfAndOutcome()
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "ou_t1_1h", MarketName = "Over Under Team 1 First Half" },
+                new OddsPapiMarket { MarketId = "ou_1h", MarketName = "Over Under First Half" },
+                new OddsPapiMarket { MarketId = "ah_ft", MarketName = "Asian Handicap" },
+                new OddsPapiMarket
+                {
+                    MarketId = "ah_1h",
+                    MarketName = "Asian Handicap First Half",
+                    OutcomeNames = new Dictionary<string, string>
+                    {
+                        ["1"] = "1 (-0.5)",
+                        ["2"] = "1 (-1.0)",
+                        ["3"] = "2 (-0.5)",
+                        ["4"] = "2 (-1.0)"
+                    }
+                },
+                new OddsPapiMarket { MarketId = "3w_1h", MarketName = "3-Way Handicap First Half" }
+            };
+
+            var bestMarket = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                "1st Half Goals Handicap 0 - 1",
+                "Aston Villa vs Viking",
+                "Aston Villa -1.0",
+                _marketMapper,
+                "Aston Villa vs Viking FK");
+
+            Assert.NotNull(bestMarket);
+            Assert.Equal("Asian Handicap First Half", bestMarket.MarketName);
+
+            var searchResult = new OddsPapiSearchResult { MatchName = "Aston Villa vs Viking FK" };
+            var leg = new AiVisionLeg
+            {
+                Match = "Aston Villa vs Viking",
+                Sport = "Soccer",
+                Market = "1st Half Goals Handicap 0 - 1",
+                Selection = "Aston Villa -1.0"
+            };
+
+            string displayMatch = OddsMatchingLogic.GetTranslatedOutcomeName("1 (-1.0)", searchResult.MatchName);
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1 (-1.0)", displayMatch, leg, searchResult, bestMarket.MarketName));
+
+            string displayWrongLine = OddsMatchingLogic.GetTranslatedOutcomeName("1 (-0.5)", searchResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("1 (-0.5)", displayWrongLine, leg, searchResult, bestMarket.MarketName));
+
+            string displayWrongTeam = OddsMatchingLogic.GetTranslatedOutcomeName("2 (-1.0)", searchResult.MatchName);
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2 (-1.0)", displayWrongTeam, leg, searchResult, bestMarket.MarketName));
+        }
     }
 }
