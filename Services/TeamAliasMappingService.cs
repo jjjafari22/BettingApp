@@ -56,37 +56,177 @@ namespace BettingApp.Services
             { "al draih", "al diriyah" },
             { "al-draih", "al diriyah" },
             { "draih", "diriyah" },
-            { "al fateh", "al fateh fc" },
-            { "al-fateh", "al fateh fc" },
-            { "al nassr", "al nassr fc" },
-            { "al-nassr", "al nassr fc" },
-            { "al taawoun", "al-taawoun" },
-            { "al tawoun", "al-taawoun" },
-            { "al taawon buraidah", "al-taawoun" },
-            { "al-taawon buraidah", "al-taawoun" },
-            { "al taawoun buraidah", "al-taawoun" },
-            { "al-taawoun buraidah", "al-taawoun" },
-            { "al taawon", "al-taawoun" },
-            { "al-taawon", "al-taawoun" },
+            { "diriya", "diriyah" },
+            { "al fateh al hasa", "al fateh" },
+            { "al fateh al ahsa", "al fateh" },
+            { "al fateh", "al fateh" },
+            { "al-fateh", "al fateh" },
+            { "al fath", "al fateh" },
+            { "al nassr riyadh", "al nassr" },
+            { "al nasr riyadh", "al nassr" },
+            { "al nassr", "al nassr" },
+            { "al-nassr", "al nassr" },
+            { "al hilal riyadh", "al hilal" },
+            { "al shabab riyadh", "al shabab" },
+            { "al ahli jeddah", "al ahli" },
+            { "al ahly jeddah", "al ahli" },
+            { "al ahli saudi", "al ahli" },
+            { "al ittihad jeddah", "al ittihad" },
+            { "al ettihad jeddah", "al ittihad" },
+            { "al ettihad", "al ittihad" },
+            { "al-ettihad", "al ittihad" },
+            { "ettihad", "ittihad" },
+            { "al wahda mecca", "al wehda" },
+            { "al-wahda mecca", "al wehda" },
+            { "al wehda mecca", "al wehda" },
+            { "al-wehda mecca", "al wehda" },
+            { "al wahda makkah", "al wehda" },
+            { "al-wahda makkah", "al wehda" },
+            { "al wehda makkah", "al wehda" },
+            { "al-wehda makkah", "al wehda" },
+            { "wahda mecca", "wehda" },
+            { "wehda mecca", "wehda" },
+            { "wahda makkah", "wehda" },
+            { "wehda makkah", "wehda" },
+            { "al wahda", "al wehda" },
+            { "al-wahda", "al wehda" },
+            { "wahda", "wehda" },
+            { "al taawoun", "al taawoun" },
+            { "al tawoun", "al taawoun" },
+            { "al taawon buraidah", "al taawoun" },
+            { "al-taawon buraidah", "al taawoun" },
+            { "al taawoun buraidah", "al taawoun" },
+            { "al-taawoun buraidah", "al taawoun" },
+            { "al tawoun buraidah", "al taawoun" },
+            { "al taawon", "al taawoun" },
+            { "al-taawon", "al taawoun" },
             { "taawon", "taawoun" },
-            { "al adalh", "al-adalah" },
-            { "al-adalh", "al-adalah" },
+            { "tawoun", "taawoun" },
+            { "tawon", "taawoun" },
+            { "al raed buraidah", "al raed" },
+            { "al-raed buraidah", "al raed" },
+            { "al adalah al hasa", "al adalah" },
+            { "al adalah al ahsa", "al adalah" },
+            { "al adalh", "al adalah" },
+            { "al-adalh", "al adalah" },
+            { "al adala", "al adalah" },
+            { "al-adala", "al adalah" },
             { "adalh", "adalah" },
-            { "al okhdood", "al akhdoud" },
-            { "al-okhdood", "al akhdoud" },
-            { "okhdood", "akhdoud" },
-            { "al akhdood", "al akhdoud" },
-            { "al-akhdood", "al akhdoud" },
-            { "akhdood", "akhdoud" },
-            { "al ettifaq", "al-ettifaq" },
-            { "al-ettifaq", "al-ettifaq" },
+            { "adala", "adalah" },
+            { "al okhdood najran", "al okhdood" },
+            { "al akhdoud najran", "al okhdood" },
+            { "al okhdood", "al okhdood" },
+            { "al-okhdood", "al okhdood" },
+            { "al akhdoud", "al okhdood" },
+            { "al-akhdoud", "al okhdood" },
+            { "al akhdood", "al okhdood" },
+            { "al-akhdood", "al okhdood" },
+            { "akhdoud", "okhdood" },
+            { "akhdood", "okhdood" },
+            { "ukhdood", "okhdood" },
+            { "al ettifaq dammam", "al ittifaq" },
+            { "al ittifaq dammam", "al ittifaq" },
+            { "al ettifaq", "al ittifaq" },
+            { "al-ettifaq", "al ittifaq" },
+            { "ettifaq", "ittifaq" },
+            { "al qadsiah khobar", "al qadsiah" },
+            { "al qadisiyah khobar", "al qadsiah" },
             { "al qadisiyah", "al qadsiah" },
             { "al-qadisiyah", "al qadsiah" },
             { "al qadisiya", "al qadsiah" },
+            { "al-qadisiya", "al qadsiah" },
             { "qadisiyah", "qadsiah" },
             { "qadisiya", "qadsiah" },
+            { "qadsia", "qadsiah" },
             { "al ittihad", "al ittihad" },
             { "al-ittihad", "al ittihad" },
+            { "al fayha al majmaah", "al fayha" },
+            { "al feiha", "al fayha" },
+            { "al-feiha", "al fayha" },
+            { "al faiha", "al fayha" },
+            { "al-faiha", "al fayha" },
+            { "feiha", "fayha" },
+            { "faiha", "fayha" },
+            { "al khaleej saihat", "al khaleej" },
+            { "al khalij", "al khaleej" },
+            { "al-khalij", "al khaleej" },
+            { "khalij", "khaleej" },
+            { "al kholood ar rass", "al kholood" },
+            { "al khulood", "al kholood" },
+            { "al-khulood", "al kholood" },
+            { "khulood", "kholood" },
+            { "khlood", "kholood" },
+            { "al hazem ar rass", "al hazm" },
+            { "al hazm ar rass", "al hazm" },
+            { "al hazem", "al hazm" },
+            { "al-hazem", "al hazm" },
+            { "hazem", "hazm" },
+            { "al orobah sakaka", "al orobah" },
+            { "al urubah", "al orobah" },
+            { "al-urubah", "al orobah" },
+            { "al orouba", "al orobah" },
+            { "al-orouba", "al orobah" },
+            { "al orubah", "al orobah" },
+            { "al-orubah", "al orobah" },
+            { "urubah", "orobah" },
+            { "orouba", "orobah" },
+            { "orubah", "orobah" },
+            { "al bukayriyah", "al bukiryah" },
+            { "al-bukayriyah", "al bukiryah" },
+            { "bukayriyah", "bukiryah" },
+            { "bakiryah", "bukiryah" },
+            { "bukiriyah", "bukiryah" },
+            { "al tai hail", "al tai" },
+            { "al taee hail", "al tai" },
+            { "al taee", "al tai" },
+            { "al-taee", "al tai" },
+            { "taee", "tai" },
+            { "al jabalain hail", "al jabalain" },
+            { "al jabalayn", "al jabalain" },
+            { "al-jabalayn", "al jabalain" },
+            { "jabalayn", "jabalain" },
+            { "al najma unaizah", "al najma" },
+            { "al najmah", "al najma" },
+            { "al-najmah", "al najma" },
+            { "najmah", "najma" },
+            { "al arabi unaizah", "al arabi" },
+            { "al faisaly harmah", "al faisaly" },
+            { "al faisali", "al faisaly" },
+            { "al-faisali", "al faisaly" },
+            { "faisali", "faisaly" },
+            { "al batin hafar al batin", "al batin" },
+            { "al baten", "al batin" },
+            { "al-baten", "al batin" },
+            { "baten", "batin" },
+            { "al shoulla", "al shoulla" },
+            { "al shoalah", "al shoulla" },
+            { "al-shoalah", "al shoulla" },
+            { "shoalah", "shoulla" },
+            { "shoullah", "shoulla" },
+            { "al rawdah", "al rawdhah" },
+            { "al-rawdah", "al rawdhah" },
+            { "rawdah", "rawdhah" },
+            { "al qaisoma", "al qaisumah" },
+            { "al-qaisoma", "al qaisumah" },
+            { "qaisoma", "qaisumah" },
+            { "qaisoomah", "qaisumah" },
+            { "al zulfy", "al zulfi" },
+            { "al-zulfy", "al zulfi" },
+            { "zulfy", "zulfi" },
+            { "al nujoom", "al nojoom" },
+            { "al-nujoom", "al nojoom" },
+            { "nujoom", "nojoom" },
+            { "al intisar", "al entesar" },
+            { "al-intisar", "al entesar" },
+            { "intisar", "entesar" },
+            { "al hottain", "hetten" },
+            { "al-hottain", "hetten" },
+            { "hottain", "hetten" },
+            { "ohod medina", "ohod" },
+            { "al ohod", "ohod" },
+            { "al-ohod", "ohod" },
+            { "uhud", "ohod" },
+            { "wej taif", "wej" },
             { "eidsvold turn", "eidsvold tf" },
             { "ullensaker/kisa", "ull/kisa" },
             { "ullensaker kisa", "ull/kisa" },
@@ -160,6 +300,8 @@ namespace BettingApp.Services
         {
             if (string.IsNullOrWhiteSpace(name)) return "";
             string cleaned = RemoveDiacritics(name).ToLowerInvariant();
+            // Strip parenthesized 2-3 letter country disambiguators used by OddsPapi, e.g. "(SA)", "(EGY)", "(JOR)", while preserving "(w)"
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\([a-z]{2,3}\)", " ");
             // Replace hyphens, dashes, slashes, underscores, colons with spaces
             cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"[\-_/\\:]+", " ");
             cleaned = ApplyTeamAliases(cleaned);
@@ -176,6 +318,44 @@ namespace BettingApp.Services
             if (string.IsNullOrWhiteSpace(name)) return "";
             string cleaned = NormalizeForComparison(name);
             return cleaned.Replace(" ", "");
+        }
+
+        public static bool HasArabicArticle(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            return System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(al|el)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        public static string GetArabicTransliterationSkeleton(string? token)
+        {
+            if (string.IsNullOrWhiteSpace(token)) return "";
+            string s = RemoveDiacritics(token).ToLowerInvariant().Trim();
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"[^a-z0-9]", "");
+            if (s.Length <= 3) return s;
+
+            s = s.Replace("kh", "k")
+                 .Replace("gh", "g")
+                 .Replace("dh", "d")
+                 .Replace("th", "t")
+                 .Replace("ph", "f");
+
+            if (s.Length > 4 && s.EndsWith("h"))
+            {
+                s = s.Substring(0, s.Length - 1);
+            }
+
+            var sb = new System.Text.StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (i == 0 || s[i] != s[i - 1])
+                {
+                    sb.Append(s[i]);
+                }
+            }
+            s = sb.ToString();
+
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"[aeiouy]+", "a");
+            return s;
         }
 
         private static bool IsPureLineOutcome(string s)
@@ -213,7 +393,7 @@ namespace BettingApp.Services
             var genericWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "fc", "fk", "cf", "cd", "sc", "if", "bk", "club", "ac", "sk", "as", "afc",
-                "sfc", "cfc", "rfc", "bfc", "lfc", "ufc", "scu", "ssc", "hnk", "gnk", "krc", "bsc", "tsg", "fsv", "rcd", "sv", "tsv", "vfb", "vfl"
+                "sfc", "cfc", "rfc", "bfc", "lfc", "ufc", "scu", "ssc", "csc", "hnk", "gnk", "krc", "bsc", "tsg", "fsv", "rcd", "sv", "tsv", "vfb", "vfl", "saudi"
             };
             var tokensA = normA.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length >= 3 && !genericWords.Contains(t) && !t.All(char.IsDigit)).ToList();
             var tokensB = normB.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length >= 3 && !genericWords.Contains(t) && !t.All(char.IsDigit)).ToList();
@@ -223,6 +403,17 @@ namespace BettingApp.Services
                 var shorter = tokensA.Count <= tokensB.Count ? tokensA : tokensB;
                 var longer = tokensA.Count <= tokensB.Count ? tokensB : tokensA;
                 if (shorter.All(s => longer.Contains(s))) return true;
+
+                // Arabic transliteration skeleton check when either team has "Al"/"El"
+                if (HasArabicArticle(teamA) || HasArabicArticle(teamB))
+                {
+                    var skelA = tokensA.Where(t => t.Length >= 4).Select(GetArabicTransliterationSkeleton).Where(s => s.Length >= 3).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var skelB = tokensB.Where(t => t.Length >= 4).Select(GetArabicTransliterationSkeleton).Where(s => s.Length >= 3).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    if (skelA.Any() && skelB.Any() && skelA.Overlaps(skelB))
+                    {
+                        return true;
+                    }
+                }
             }
 
             return false;
@@ -311,8 +502,11 @@ namespace BettingApp.Services
 
             private static readonly HashSet<string> _stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
             { 
-                "fc", "fk", "united", "city", "cf", "cd", "bk", "sc", "ec", "if", "club"
+                "fc", "fk", "united", "city", "cf", "cd", "bk", "sc", "ec", "if", "club",
+                "sfc", "ssc", "csc", "afc", "saudi"
             };
+
+            public static bool IsStopWord(string word) => _stopWords.Contains(word);
 
             private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _normalizationCache = new();
             
@@ -327,6 +521,10 @@ namespace BettingApp.Services
                 }
                 
                 string result = RemoveDiacritics(name).ToLowerInvariant();
+                // Strip parenthesized 2-3 letter country codes like "(SA)", "(EGY)", "(JOR)" while preserving "(w)"
+                result = System.Text.RegularExpressions.Regex.Replace(result, @"\([a-z]{2,3}\)", " ");
+                result = result.Replace("-", " ");
+                result = System.Text.RegularExpressions.Regex.Replace(result, @"\s+", " ").Trim();
                            
                 result = ApplyTeamAliases(result);
     

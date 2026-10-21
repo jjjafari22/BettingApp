@@ -314,18 +314,10 @@ public class OddsApiService
                 awayTeam = awayTeam.Substring(0, dateMatch.Index).Trim();
             }
 
-            var homeTokens = homeTeam.Split(new[] { ' ', '-', '.' }, StringSplitOptions.RemoveEmptyEntries)
-                                     .Where(w => w.Length >= 3 && !w.Equals("the", StringComparison.OrdinalIgnoreCase)).ToList();
-            var awayTokens = awayTeam.Split(new[] { ' ', '-', '.' }, StringSplitOptions.RemoveEmptyEntries)
-                                     .Where(w => w.Length >= 3 && !w.Equals("the", StringComparison.OrdinalIgnoreCase)).ToList();
-
-            if (!homeTokens.Any()) homeTokens.Add(homeTeam);
-            if (!awayTokens.Any() && !string.IsNullOrEmpty(awayTeam)) awayTokens.Add(awayTeam);
-
             string normHomeTeam = NormalizeTeamName(homeTeam);
             string normAwayTeam = string.IsNullOrEmpty(awayTeam) ? "" : NormalizeTeamName(awayTeam);
-            var normHomeTokens = homeTokens.Select(t => NormalizeTeamName(t)).ToList();
-            var normAwayTokens = awayTokens.Select(t => NormalizeTeamName(t)).ToList();
+            var normHomeTokens = ExtractSignificantTokens(normHomeTeam);
+            var normAwayTokens = string.IsNullOrEmpty(normAwayTeam) ? new List<string>() : ExtractSignificantTokens(normAwayTeam);
 
             var bestMatches = new List<(BettingApp.Models.OddsPapiFixtureDto fixture, int score)>();
 
@@ -354,13 +346,13 @@ public class OddsApiService
                     {
                         bool p1IsAway = IsNameMatch(normP1, normAwayTeam, true) || normAwayTokens.Any(t => IsNameMatch(normP1, t, true));
                         string normOtherTeam = p1IsAway ? normP2 : normP1;
-                        if (ComputeLevenshteinDistance(normOtherTeam, normHomeTeam) > 3) continue;
+                        if (!IsSecondaryTeamFuzzyMatch(normOtherTeam, normHomeTeam, normHomeTokens)) continue;
                     }
                     else if (!awayMatch && homeMatch)
                     {
                         bool p1IsHome = IsNameMatch(normP1, normHomeTeam, true) || normHomeTokens.Any(t => IsNameMatch(normP1, t, true));
                         string normOtherTeam = p1IsHome ? normP2 : normP1;
-                        if (ComputeLevenshteinDistance(normOtherTeam, normAwayTeam) > 3) continue;
+                        if (!IsSecondaryTeamFuzzyMatch(normOtherTeam, normAwayTeam, normAwayTokens)) continue;
                     }
                     else
                     {
@@ -691,6 +683,64 @@ public class OddsApiService
     private string NormalizeTeamName(string name)
     {
         return _teamAliasMappingService.NormalizeTeamName(name, removeStopWords: true);
+    }
+
+    private static List<string> ExtractSignificantTokens(string normTeam)
+    {
+        if (string.IsNullOrWhiteSpace(normTeam)) return new List<string>();
+        var tokens = normTeam.Split(new[] { ' ', '-', '.' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length >= 3 &&
+                        !w.Equals("the", StringComparison.OrdinalIgnoreCase) &&
+                        !TeamAliasMappingService.IsStopWord(w))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (!tokens.Any()) tokens.Add(normTeam);
+        return tokens;
+    }
+
+    private static string StripArabicArticle(string normTeam)
+    {
+        if (string.IsNullOrWhiteSpace(normTeam)) return "";
+        return System.Text.RegularExpressions.Regex.Replace(normTeam, @"\b(al|el)\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Replace("  ", " ").Trim();
+    }
+
+    private bool IsSecondaryTeamFuzzyMatch(string normOtherTeam, string normQueryTeam, List<string> queryTokens)
+    {
+        if (string.IsNullOrWhiteSpace(normOtherTeam) || string.IsNullOrWhiteSpace(normQueryTeam)) return false;
+
+        if (ComputeLevenshteinDistance(normOtherTeam, normQueryTeam) <= 3) return true;
+
+        string strippedOther = StripArabicArticle(normOtherTeam);
+        string strippedQuery = StripArabicArticle(normQueryTeam);
+        if (!string.IsNullOrEmpty(strippedOther) && !string.IsNullOrEmpty(strippedQuery) &&
+            ComputeLevenshteinDistance(strippedOther, strippedQuery) <= 3)
+        {
+            return true;
+        }
+
+        bool isArabicContext = TeamAliasMappingService.HasArabicArticle(normOtherTeam) || TeamAliasMappingService.HasArabicArticle(normQueryTeam);
+        var otherTokens = ExtractSignificantTokens(normOtherTeam);
+        foreach (var ot in otherTokens.Where(t => t.Length >= 4))
+        {
+            foreach (var qt in queryTokens.Where(t => t.Length >= 4))
+            {
+                int maxDist = Math.Min(ot.Length, qt.Length) >= 6 ? 2 : 1;
+                if (ComputeLevenshteinDistance(ot, qt) <= maxDist) return true;
+
+                if (isArabicContext)
+                {
+                    string skelO = TeamAliasMappingService.GetArabicTransliterationSkeleton(ot);
+                    string skelQ = TeamAliasMappingService.GetArabicTransliterationSkeleton(qt);
+                    if (skelO.Length >= 3 && skelO.Equals(skelQ, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
     
     private int ComputeLevenshteinDistance(string s, string t)

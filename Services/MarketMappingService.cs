@@ -267,7 +267,15 @@ namespace BettingApp.Services
                             return new List<string> { "Over Under Team 2" + halfSuffix };
                             
                         // Otherwise, generic total goals for the match
-                        if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase))
+                        if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) ||
+                            (!string.IsNullOrEmpty(halfSuffix) && clean.Contains("Goals", StringComparison.OrdinalIgnoreCase) &&
+                             !clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase) &&
+                             !clean.Contains("Both", StringComparison.OrdinalIgnoreCase) &&
+                             !clean.Contains("Result", StringComparison.OrdinalIgnoreCase) &&
+                             !clean.Contains("1X2", StringComparison.OrdinalIgnoreCase) &&
+                             !clean.Contains("First Goal", StringComparison.OrdinalIgnoreCase) &&
+                             !clean.Contains("Last Goal", StringComparison.OrdinalIgnoreCase) &&
+                             !clean.Contains("Next Goal", StringComparison.OrdinalIgnoreCase)))
                         {
                             if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Over Under" + halfSuffix };
                             if (clean.Contains("incl. overtime", StringComparison.OrdinalIgnoreCase) || clean.Contains("including overtime", StringComparison.OrdinalIgnoreCase))
@@ -278,10 +286,15 @@ namespace BettingApp.Services
                         }
                     }
 
-                    // Cards Team 1/2
+                    // Cards Team 1/2 or Match Total
                     if ((clean.Contains("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Bookings", StringComparison.OrdinalIgnoreCase)) &&
-                        !clean.Contains("Player", StringComparison.OrdinalIgnoreCase))
+                        !IsPlayerCardMarket(clean, selectionName))
                     {
+                        if (clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return new List<string> { "Bookings - Handicap" + halfSuffix };
+                        }
+
                         if (clean.Contains("Most Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Cards 1X2", StringComparison.OrdinalIgnoreCase) || clean.Contains("More Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Most Bookings", StringComparison.OrdinalIgnoreCase))
                         {
                             if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Bookings - 1X2" + halfSuffix };
@@ -292,6 +305,10 @@ namespace BettingApp.Services
                             return new List<string> { $"Bookings - Over/Under [{team1}]" + halfSuffix, "Bookings - Over Under Team 1" + halfSuffix, $"Bookings - Over Under [{team1}]" + halfSuffix };
                         if (IsTeam2Target())
                             return new List<string> { $"Bookings - Over/Under [{team2}]" + halfSuffix, "Bookings - Over Under Team 2" + halfSuffix, $"Bookings - Over Under [{team2}]" + halfSuffix };
+
+                        if (!string.IsNullOrEmpty(halfSuffix))
+                            return new List<string> { "Bookings - Over Under" + halfSuffix, "Bookings - Over/Under" + halfSuffix };
+                        return new List<string> { "Bookings - Over Under Full Time", "Bookings - Over/Under Full Time", "Total Cards" };
                     }
 
                     // To Win At Least One Half
@@ -480,10 +497,17 @@ namespace BettingApp.Services
                 return new List<string> { "Bookings - 1X2" };
             }
 
-            if (clean.StartsWith("Total Cards", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Cards Over/Under", StringComparison.OrdinalIgnoreCase) || clean.Contains("Number of Cards", StringComparison.OrdinalIgnoreCase))
+            if ((clean.StartsWith("Total Cards", StringComparison.OrdinalIgnoreCase) ||
+                 clean.StartsWith("Cards Over/Under", StringComparison.OrdinalIgnoreCase) ||
+                 clean.Contains("Number of Cards", StringComparison.OrdinalIgnoreCase) ||
+                 (!string.IsNullOrEmpty(halfSuffix) && (clean.Contains("Cards", StringComparison.OrdinalIgnoreCase) || clean.Contains("Bookings", StringComparison.OrdinalIgnoreCase)))) &&
+                !IsPlayerCardMarket(clean, selectionName))
             {
-                if (halfSuffix == " First Half") return new List<string> { "Bookings - Over Under First Half" };
-                return new List<string> { "Bookings - Over Under Full Time" };
+                if (clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase))
+                    return new List<string> { "Bookings - Handicap" + halfSuffix };
+                if (!string.IsNullOrEmpty(halfSuffix))
+                    return new List<string> { "Bookings - Over Under" + halfSuffix, "Bookings - Over/Under" + halfSuffix };
+                return new List<string> { "Bookings - Over Under Full Time", "Bookings - Over/Under Full Time", "Total Cards" };
             }
 
             if (!IsCombinationMarket(clean, matchName) && 
@@ -648,6 +672,12 @@ namespace BettingApp.Services
                 return new List<string> { "Over Under First Half" };
             }
 
+            if (clean.StartsWith("2nd Half Goals", StringComparison.OrdinalIgnoreCase) || 
+                clean.StartsWith("Second Half Goals", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { "Over Under Second Half" };
+            }
+
             // Strip off any trailing scores (like "0 - 1") for 3-Way Handicaps
             if (clean.StartsWith("Handicap (3 Way)", StringComparison.OrdinalIgnoreCase) || 
                 clean.StartsWith("3-Way Handicap", StringComparison.OrdinalIgnoreCase) ||
@@ -715,11 +745,34 @@ namespace BettingApp.Services
             return false;
         }
 
+        private static bool IsPlayerCardMarket(string marketName, string? selectionName)
+        {
+            if (string.IsNullOrWhiteSpace(marketName)) return false;
+            if (marketName.Contains("Player", StringComparison.OrdinalIgnoreCase) ||
+                marketName.Contains("Player's", StringComparison.OrdinalIgnoreCase) ||
+                marketName.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) ||
+                marketName.Contains("To Be Carded", StringComparison.OrdinalIgnoreCase) ||
+                marketName.Contains("To Receive a Card", StringComparison.OrdinalIgnoreCase) ||
+                marketName.Contains("To Get a Card", StringComparison.OrdinalIgnoreCase) ||
+                marketName.Contains("Shown a Card", StringComparison.OrdinalIgnoreCase) ||
+                marketName.Contains("get Booked", StringComparison.OrdinalIgnoreCase) ||
+                marketName.Contains("Score", StringComparison.OrdinalIgnoreCase) ||
+                marketName.Contains("Goal", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (!string.IsNullOrWhiteSpace(selectionName) && HasPlayerName(selectionName))
+            {
+                return true;
+            }
+            return false;
+        }
+
         private static bool HasPlayerName(string? text)
         {
             if (string.IsNullOrWhiteSpace(text)) return false;
             if (text.Contains("Player", StringComparison.OrdinalIgnoreCase) || text.Contains("Player's", StringComparison.OrdinalIgnoreCase)) return true;
-            string stripped = System.Text.RegularExpressions.Regex.Replace(text, @"\b(over|under|yes|no|total|team|home|away|goalkeeper|goal|keeper|saves|save|fouls|foul|shots|shot|target|tackles|tackle|points|point|cards|card|to|be|or|record|score|at|least)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            string stripped = System.Text.RegularExpressions.Regex.Replace(text, @"\b(over|under|yes|no|total|team|home|away|goalkeeper|goal|keeper|saves|save|fouls|foul|shots|shot|target|tackles|tackle|points|point|cards|card|bookings|booking|corners|corner|offsides|offside|assists|assist|committed|1st|2nd|3rd|first|second|half|halves|full|time|regular|match|in|of|number|handicap|most|more|odd|even|to|be|or|record|score|at|least)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             stripped = System.Text.RegularExpressions.Regex.Replace(stripped, @"[0-9\.\+\-:\(\)\/]", "").Trim();
             return stripped.Length >= 3;
         }

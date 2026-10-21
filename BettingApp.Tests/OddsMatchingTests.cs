@@ -1895,5 +1895,70 @@ namespace BettingApp.Tests
             Assert.NotNull(juveCorners);
             Assert.Equal("4", juveCorners.MarketId);
         }
+
+        [Theory]
+        [InlineData("2nd Half Cards 1.5", "Bookings - Over Under Second Half")]
+        [InlineData("2nd Half Total Cards", "Bookings - Over Under Second Half")]
+        [InlineData("Second Half Cards", "Bookings - Over Under Second Half")]
+        [InlineData("1st Half Cards 1.5", "Bookings - Over Under First Half")]
+        [InlineData("1st Half Total Cards", "Bookings - Over Under First Half")]
+        [InlineData("Total Cards 3.5", "Bookings - Over Under Full Time")]
+        [InlineData("2nd Half Goals 1.5", "Over Under Second Half")]
+        [InlineData("1st Half Goals 1.5", "Over Under First Half")]
+        public void Test_Bet1105_HalfCardsAndGoalsMarkets_MatchExpectedOddsPapiMarket(string legMarket, string expectedOpMarket)
+        {
+            var mockMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "b_ft", MarketName = "Bookings - Over Under Full Time" },
+                new OddsPapiMarket { MarketId = "b_1h", MarketName = "Bookings - Over Under First Half" },
+                new OddsPapiMarket { MarketId = "b_2h", MarketName = "Bookings - Over Under Second Half" },
+                new OddsPapiMarket { MarketId = "g_ft", MarketName = "Over Under Full Time" },
+                new OddsPapiMarket { MarketId = "g_1h", MarketName = "Over Under First Half" },
+                new OddsPapiMarket { MarketId = "g_2h", MarketName = "Over Under Second Half" },
+                new OddsPapiMarket { MarketId = "p_card", MarketName = "Player To Be Carded (incl. overtime)" }
+            };
+
+            var best = OddsMatchingLogic.FindBestMarket(
+                mockMarkets,
+                legMarket,
+                "Como vs Manchester United",
+                "Over 1.5",
+                _marketMapper,
+                "Como 1907 vs Manchester United");
+
+            Assert.NotNull(best);
+            Assert.Equal(expectedOpMarket, best.MarketName);
+        }
+
+        [Theory]
+        [InlineData("Al-Anwar Club", "AL Anwar")]
+        [InlineData("Al-Wahda Mecca", "Al-Wehda FC")]
+        [InlineData("Al-Wehda Makkah", "Al-Wehda FC")]
+        [InlineData("Al-Ettifaq Dammam", "Al-Ittifaq FC")]
+        [InlineData("Al-Ettifaq", "Al-Ittifaq FC")]
+        [InlineData("Al-Taawon Buraidah", "Al-Taawoun FC")]
+        [InlineData("Al-Okhdood Najran", "Al-Okhdood Club")]
+        [InlineData("Al-Akhdoud", "Al-Okhdood Club")]
+        [InlineData("Al-Hazem Ar Rass", "Al-Hazm")]
+        [InlineData("Al-Bukayriyah", "Al Bukiryah")]
+        [InlineData("Al-Urubah", "Al-Orobah")]
+        [InlineData("Al-Feiha", "Al-Fayha FC")]
+        [InlineData("Al-Ahli Jeddah", "Al Ahli Saudi FC")]
+        [InlineData("Al-Shabab Riyadh", "Al-Shabab FC (SA)")]
+        [InlineData("Al-Hilal Riyadh", "Al Hilal SFC")]
+        [InlineData("Al-Qadisiyah Khobar", "Al Qadsiah")]
+        [InlineData("Al-Draih", "Diriyah Club")]
+        public void Test_Bet1106_SaudiTeamMatching_HandlesTransliterationsAndCityQualifiers(string betslipTeam, string oddsPapiTeam)
+        {
+            var aliasService = new TeamAliasMappingService();
+            Assert.True(TeamAliasMappingService.IsTeamMatch(betslipTeam, oddsPapiTeam), $"Expected '{betslipTeam}' to match '{oddsPapiTeam}'");
+
+            string normBetslip = aliasService.NormalizeTeamName(betslipTeam, removeStopWords: true);
+            string normOp = aliasService.NormalizeTeamName(oddsPapiTeam, removeStopWords: true);
+            Assert.True(
+                normBetslip.Contains(normOp, StringComparison.OrdinalIgnoreCase) ||
+                normOp.Contains(normBetslip, StringComparison.OrdinalIgnoreCase),
+                $"Expected normalized '{normBetslip}' and '{normOp}' to match");
+        }
     }
 }
