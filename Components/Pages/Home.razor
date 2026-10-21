@@ -754,14 +754,14 @@ else
                     var semaphore = new SemaphoreSlim(3);
                     var tasks = betIdsToProcess.Select(async id =>
                     {
-                        using var deadlineCts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(115));
+                        using var queueCts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(180));
                         bool acquiredSemaphore = false;
                         try {
                             try {
-                                await semaphore.WaitAsync(deadlineCts.Token);
+                                await semaphore.WaitAsync(queueCts.Token);
                                 acquiredSemaphore = true;
                             } catch (OperationCanceledException) {
-                                Logger.LogWarning($"[Bet #{id}] [Auto-Read] Timed out waiting for concurrency slot (> 115s). Moving directly to Pending.");
+                                Logger.LogWarning($"[Bet #{id}] [Auto-Read] Timed out waiting for concurrency slot (> 180s). Moving directly to Pending.");
                             }
 
                             BettingApp.Services.AiVisionService.ProcessingAutoReadBetIds.TryAdd(id, true);
@@ -779,13 +779,14 @@ else
                                     BettingApp.Services.AiVisionExtractionResult? result = null;
                                     string? error = null;
 
-                                    if (acquiredSemaphore && !deadlineCts.IsCancellationRequested)
+                                    if (acquiredSemaphore)
                                     {
+                                        using var deadlineCts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(240));
                                         (result, error) = await aiVision.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl, id, deadlineCts.Token);
                                     }
                                     else
                                     {
-                                        error = "AI Auto-Read timed out (> 115s). Please use 'AI Auto-Read' to retry or review manually.";
+                                        error = "AI Auto-Read timed out waiting in upload queue (> 180s). Please use 'AI Auto-Read' to retry or review manually.";
                                     }
                                     
                                     if (error != null)

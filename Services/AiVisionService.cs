@@ -103,6 +103,16 @@ namespace BettingApp.Services
         private static Google.Apis.Auth.OAuth2.GoogleCredential? _cachedCredential;
         private static readonly object _credentialLock = new object();
 
+        // Circuit breaker state: [Gemini-Dev-API] is Primary; if it hits 3 consecutive 429/timeouts, fail over primary to [Vertex-AI] for 60 minutes
+        private static int _consecutiveDevApiFailures = 0;
+        private static long _useVertexFallbackUntilTicks = 0;
+        private const int CircuitBreakerThreshold = 3;
+        private static readonly TimeSpan CircuitBreakerDuration = TimeSpan.FromMinutes(60);
+
+        private bool IsUsingDevApiPrimary =>
+            !string.IsNullOrWhiteSpace(_apiKey) &&
+            DateTime.UtcNow.Ticks >= System.Threading.Interlocked.Read(ref _useVertexFallbackUntilTicks);
+
         private async Task<string> GetVertexAccessTokenAsync()
         {
             if (_cachedCredential == null)
@@ -151,7 +161,7 @@ namespace BettingApp.Services
         {
             _httpClient = httpClient;
             _config = config;
-            _apiKey = config["GeminiApiKey"];
+            _apiKey = config["GeminiApiKey"] ?? Environment.GetEnvironmentVariable("GeminiApiKey") ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
             _fotMob = fotMob;
             _espn = espn;
             _matchResolver = matchResolver;
@@ -244,7 +254,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                     },
                     generationConfig = new
                     {
-                        maxOutputTokens = 8192,
+                        maxOutputTokens = 16384,
                         responseMimeType = "application/json",
                         responseSchema = new
                         {
@@ -289,20 +299,21 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 
                 var apiUrl = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
-                _logger.LogInformation($"{betLabel}Calling Gemini (Model: {resolvedModel})...");
+                string initialProviderTag = IsUsingDevApiPrimary ? "[Gemini-Dev-API] " : "[Vertex-AI] ";
+                _logger.LogInformation($"{betLabel}{initialProviderTag}Calling Gemini (Model: {resolvedModel})...");
 
-                var (response, elapsedMs) = await SendWithRetryAsync(apiUrl, jsonPayload, betLabel, token, timeoutSeconds: 110, callerToken: timeoutToken);
+                var (response, elapsedMs, usedProviderTag) = await SendWithRetryAsync(apiUrl, resolvedModel, jsonPayload, betLabel, token, timeoutSeconds: 90, callerToken: timeoutToken);
                 string responseString = await response.Content.ReadAsStringAsync(timeoutToken);
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    LogAiUsage(responseString, betLabel, elapsedMs, response.StatusCode.ToString());
+                    LogAiUsage(responseString, $"{betLabel}{usedProviderTag}", elapsedMs, response.StatusCode.ToString());
                 }
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogError($"{betLabel}AI ERROR: {response.StatusCode} - {responseString}");
-                    return (null, $"Gemini API Error: {response?.StatusCode}\nResolved Model: {resolvedModel}\nDetails: {responseString}");
+                    _logger.LogError($"{betLabel}{usedProviderTag}AI ERROR: {response.StatusCode} - {responseString}");
+                    return (null, $"Gemini API Error ({usedProviderTag.Trim()}): {response?.StatusCode}\nResolved Model: {resolvedModel}\nDetails: {responseString}");
                 }
 
                 // 4. Parse the response
@@ -628,7 +639,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
 
                 payload["generationConfig"] = new Dictionary<string, object>
                 {
-                    ["maxOutputTokens"] = 8192,
+                    ["maxOutputTokens"] = 16384,
                     ["responseMimeType"] = "application/json",
                     ["responseSchema"] = JsonSerializer.Deserialize<object>(schemaJson, options)!,
                     ["thinkingConfig"] = new Dictionary<string, object>
@@ -645,25 +656,26 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
 
                 var url = $"https://aiplatform.googleapis.com/v1/projects/castle-gemini/locations/global/publishers/google/models/{resolvedModel}:generateContent";
                 
+                string initialProviderTag = IsUsingDevApiPrimary ? "[Gemini-Dev-API] " : "[Vertex-AI] ";
                 if (anyLegNeedsGoogleSearch)
                 {
-                    _logger.LogInformation($"{betLabel}🔍 Calling Gemini with Google Search Grounding ENABLED (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
+                    _logger.LogInformation($"{betLabel}{initialProviderTag}🔍 Calling Gemini with Google Search Grounding ENABLED (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
                 }
                 else
                 {
-                    _logger.LogInformation($"{betLabel}🛡️ Calling Gemini with Google Search Grounding DISABLED - $0 Search Cost (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
+                    _logger.LogInformation($"{betLabel}{initialProviderTag}🛡️ Calling Gemini with Google Search Grounding DISABLED - $0 Search Cost (Model: {resolvedModel}, Thinking: {effectiveThinkingLevel})...");
                 }
                 
-                var (response, elapsedMs) = await SendWithRetryAsync(url, jsonPayload, betLabel, token, timeoutSeconds: 300);
+                var (response, elapsedMs, usedProviderTag) = await SendWithRetryAsync(url, resolvedModel, jsonPayload, betLabel, token, timeoutSeconds: 300);
                 if (!response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync();
-                    return $"Error checking outcome: {response.StatusCode} - {responseContent}";
+                    return $"Error checking outcome ({usedProviderTag.Trim()}): {response.StatusCode} - {responseContent}";
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
                 
-                LogAiUsage(json, betLabel, elapsedMs, response.StatusCode.ToString());
+                LogAiUsage(json, $"{betLabel}{usedProviderTag}", elapsedMs, response.StatusCode.ToString());
 
                 using var doc = JsonDocument.Parse(json);
                 var text = ExtractGeminiText(doc);
@@ -901,19 +913,61 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
             return null;
         }
 
-        private async Task<(HttpResponseMessage Response, long ElapsedMs)> SendWithRetryAsync(string url, string jsonPayload, string logLabel = "", string token = "", int timeoutSeconds = 180, System.Threading.CancellationToken callerToken = default)
+        private void RecordGatewayFailure(bool usedDevApi, string logLabel, int attemptIndex, string reason)
+        {
+            if (usedDevApi)
+            {
+                int failures = System.Threading.Interlocked.Increment(ref _consecutiveDevApiFailures);
+                if (failures >= CircuitBreakerThreshold)
+                {
+                    var untilUtc = DateTime.UtcNow.Add(CircuitBreakerDuration);
+                    long prevTicks = System.Threading.Interlocked.Exchange(ref _useVertexFallbackUntilTicks, untilUtc.Ticks);
+                    if (prevTicks < DateTime.UtcNow.Ticks)
+                    {
+                        _logger.LogWarning($"{logLabel}⚠️ [AI Circuit Breaker] [Gemini-Dev-API] hit {failures} consecutive 429/timeouts ({reason}). Switching primary to [Vertex-AI] for {CircuitBreakerDuration.TotalMinutes:0} minutes (until {untilUtc:HH:mm:ss} UTC).");
+                    }
+                }
+            }
+            else if (attemptIndex >= 1 && !string.IsNullOrWhiteSpace(_apiKey))
+            {
+                if (System.Threading.Interlocked.Exchange(ref _useVertexFallbackUntilTicks, 0) > DateTime.UtcNow.Ticks)
+                {
+                    System.Threading.Interlocked.Exchange(ref _consecutiveDevApiFailures, 0);
+                    _logger.LogWarning($"{logLabel}⚠️ [AI Circuit Breaker] [Vertex-AI] fallback also failed ({reason}). Resetting primary back to [Gemini-Dev-API].");
+                }
+            }
+        }
+
+        private async Task<(HttpResponseMessage Response, long ElapsedMs, string ProviderTag)> SendWithRetryAsync(string vertexUrl, string resolvedModel, string jsonPayload, string logLabel = "", string token = "", int timeoutSeconds = 180, System.Threading.CancellationToken callerToken = default)
         {
             int maxRetries = 3;
+            bool hasDevApiKey = !string.IsNullOrWhiteSpace(_apiKey);
+            string devApiUrl = hasDevApiKey
+                ? $"https://generativelanguage.googleapis.com/v1beta/models/{resolvedModel}:generateContent?key={_apiKey}"
+                : vertexUrl;
+            bool startWithDevApi = IsUsingDevApiPrimary;
+            bool forceFallbackAfterTimeout = false;
+
+            bool UseDevApiForAttempt(int attempt) =>
+                hasDevApiKey && (startWithDevApi
+                    ? (!forceFallbackAfterTimeout && attempt < maxRetries - 1)
+                    : (forceFallbackAfterTimeout || attempt == maxRetries - 1));
+
             for (int i = 0; i < maxRetries; i++)
             {
+                bool useDevApi = UseDevApiForAttempt(i);
+                string currentUrl = useDevApi ? devApiUrl : vertexUrl;
+                string providerTag = useDevApi ? "[Gemini-Dev-API] " : "[Vertex-AI] ";
+
                 var attemptSw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     using var cts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(callerToken);
                     cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-                    var request = new HttpRequestMessage(HttpMethod.Post, url);
+                    var request = new HttpRequestMessage(HttpMethod.Post, currentUrl);
                     request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-                    if (!string.IsNullOrEmpty(token))
+                    request.Headers.ConnectionClose = true;
+                    if (!useDevApi && !string.IsNullOrEmpty(token))
                     {
                         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
                     }
@@ -923,43 +977,64 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                     
                     if (response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable || response.StatusCode == (System.Net.HttpStatusCode)429)
                     {
+                        RecordGatewayFailure(useDevApi, logLabel, i, response.StatusCode.ToString());
                         if (i < maxRetries - 1 && !callerToken.IsCancellationRequested)
                         {
-                            int delaySec = 3 * (i + 1);
-                            _logger.LogWarning($"{logLabel}Gemini API returned {response.StatusCode} in {attemptSw.ElapsedMilliseconds}ms. Retrying in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
+                            int delaySec = 2 * (i + 1);
+                            string nextProvider = UseDevApiForAttempt(i + 1) ? "[Gemini-Dev-API]" : "[Vertex-AI]";
+                            _logger.LogWarning($"{logLabel}{providerTag}Gemini API returned {response.StatusCode} in {attemptSw.ElapsedMilliseconds}ms. Retrying via {nextProvider} (fresh connection) in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
+                            response.Dispose();
                             await Task.Delay(delaySec * 1000, callerToken);
                             continue;
                         }
                     }
                     
-                    if (!response.IsSuccessStatusCode)
+                    if (response.IsSuccessStatusCode)
                     {
-                        _logger.LogWarning($"{logLabel}Gemini API responded with status {response.StatusCode} in {attemptSw.ElapsedMilliseconds}ms");
+                        if (useDevApi)
+                        {
+                            System.Threading.Interlocked.Exchange(ref _consecutiveDevApiFailures, 0);
+                            if (System.Threading.Interlocked.Exchange(ref _useVertexFallbackUntilTicks, 0) > DateTime.UtcNow.Ticks)
+                            {
+                                _logger.LogInformation($"{logLabel}✅ [AI Circuit Breaker] [Gemini-Dev-API] recovered. Restored [Gemini-Dev-API] as primary.");
+                            }
+                        }
                     }
-                    return (response, attemptSw.ElapsedMilliseconds);
+                    else
+                    {
+                        _logger.LogWarning($"{logLabel}{providerTag}Gemini API responded with status {response.StatusCode} in {attemptSw.ElapsedMilliseconds}ms");
+                    }
+                    return (response, attemptSw.ElapsedMilliseconds, providerTag);
                 }
                 catch (OperationCanceledException)
                 {
                     attemptSw.Stop();
                     if (callerToken.IsCancellationRequested)
                     {
-                        _logger.LogWarning($"{logLabel}Gemini API request reached overall deadline after {attemptSw.ElapsedMilliseconds}ms. Aborting retries.");
+                        _logger.LogWarning($"{logLabel}{providerTag}Gemini API request reached overall deadline after {attemptSw.ElapsedMilliseconds}ms. Aborting retries.");
                         throw new TimeoutException($"Gemini API timed out after {attemptSw.ElapsedMilliseconds / 1000}s.");
+                    }
+                    RecordGatewayFailure(useDevApi, logLabel, i, "Timeout");
+                    if (i == 0)
+                    {
+                        forceFallbackAfterTimeout = true;
                     }
                     if (i < maxRetries - 1)
                     {
                         int delaySec = 2 * (i + 1);
-                        _logger.LogWarning($"{logLabel}Gemini API request timed out after {attemptSw.ElapsedMilliseconds}ms (> {timeoutSeconds}s). Retrying in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
+                        string nextProvider = UseDevApiForAttempt(i + 1) ? "[Gemini-Dev-API]" : "[Vertex-AI]";
+                        _logger.LogWarning($"{logLabel}{providerTag}Gemini API request timed out after {attemptSw.ElapsedMilliseconds}ms (> {timeoutSeconds}s). Retrying via {nextProvider} in {delaySec}s... (Attempt {i+1}/{maxRetries-1})");
                         await Task.Delay(delaySec * 1000, callerToken);
                         continue;
                     }
-                    _logger.LogError($"{logLabel}Gemini API request timed out after {maxRetries} attempts of {timeoutSeconds}s each.");
+                    _logger.LogError($"{logLabel}{providerTag}Gemini API request timed out after {maxRetries} attempts of {timeoutSeconds}s each.");
                     throw new TimeoutException($"Gemini API timed out after {maxRetries} attempts of {timeoutSeconds}s.");
                 }
                 catch (Exception ex) when (i < maxRetries - 1 && !callerToken.IsCancellationRequested)
                 {
                     attemptSw.Stop();
-                    _logger.LogWarning($"{logLabel}Gemini API call failed ({ex.Message}). Retrying in 3s... (Attempt {i+1}/{maxRetries-1})");
+                    string nextProvider = UseDevApiForAttempt(i + 1) ? "[Gemini-Dev-API]" : "[Vertex-AI]";
+                    _logger.LogWarning($"{logLabel}{providerTag}Gemini API call failed ({ex.Message}). Retrying via {nextProvider} in 3s... (Attempt {i+1}/{maxRetries-1})");
                     await Task.Delay(3000, callerToken);
                     continue;
                 }

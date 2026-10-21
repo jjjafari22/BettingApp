@@ -55,7 +55,34 @@ builder.Services.AddHttpClient<Bet365ScraperService>().ConfigurePrimaryHttpMessa
 builder.Services.AddHttpClient<AiVisionService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(360); // 6 minutes for LLM processing
-}).ConfigurePrimaryHttpMessageHandler(compressedHandler);
+}).ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler
+{
+    AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate | System.Net.DecompressionMethods.Brotli,
+    ConnectCallback = async (ctx, ct) =>
+    {
+        var allIps = await System.Net.Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host, ct);
+        var ipv4Ips = allIps.Where(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).ToArray();
+        var candidateIps = ipv4Ips.Length > 0 ? ipv4Ips : allIps;
+        var chosenIp = candidateIps.Length > 1
+            ? candidateIps[Random.Shared.Next(candidateIps.Length)]
+            : candidateIps[0];
+
+        var socket = new System.Net.Sockets.Socket(chosenIp.AddressFamily, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp)
+        {
+            NoDelay = true
+        };
+        try
+        {
+            await socket.ConnectAsync(new System.Net.IPEndPoint(chosenIp, ctx.DnsEndPoint.Port), ct);
+            return new System.Net.Sockets.NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<FotMobScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<EspnApiService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
