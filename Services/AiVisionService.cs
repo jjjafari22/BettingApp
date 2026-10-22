@@ -595,7 +595,8 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                         else
                         {
                             // 2. US Sports (American Football, Ice Hockey, Basketball, Baseball) & Tennis -> ESPN
-                            rawJson = await _espn.GetMatchStatsJsonAsync(matchName, legSport, betPlacedAt, matchStartTime, betId);
+                            DateTime? legStartTime = group.FirstOrDefault(l => l.StartTime > DateTime.MinValue)?.StartTime ?? matchStartTime;
+                            rawJson = await _espn.GetMatchStatsJsonAsync(matchName, legSport, betPlacedAt, legStartTime, betId);
                             providerLabel = "ESPN";
                         }
 

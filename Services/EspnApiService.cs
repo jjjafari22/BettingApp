@@ -110,10 +110,11 @@ namespace BettingApp.Services
                 string teamB = split[1].Trim();
 
                 // 2. Determine target dates to inspect. 
+                // ESPN scoreboards are indexed by US Eastern Time (UTC-4/UTC-5), where US evening games (00:00Z-05:00Z) belong to the US calendar date.
                 // If betStartsAt is known, the date is already pinned down (check that date +/- 1 day).
                 // If betStartsAt is unknown (e.g. new bet), inspect today and up to +5 days ahead to discover start times (matching OddsPapi's 5-day future window).
                 var targetTime = betStartsAt ?? betPlacedAt ?? DateTime.UtcNow;
-                var baseDate = targetTime.Date;
+                var baseDate = targetTime.AddHours(-5).Date;
                 var datesToCheck = new List<string>();
 
                 if (betStartsAt.HasValue)
@@ -456,7 +457,7 @@ namespace BettingApp.Services
             return result;
         }
 
-        private bool IsEventMatch(JsonElement ev, string teamA, string teamB)
+        public bool IsEventMatch(JsonElement ev, string teamA, string teamB)
         {
             if (!ev.TryGetProperty("competitions", out var comps) || comps.GetArrayLength() == 0) return false;
             var comp = comps[0];
@@ -465,53 +466,114 @@ namespace BettingApp.Services
             string normA = NormalizeTeam(teamA);
             string normB = NormalizeTeam(teamB);
 
-            bool matchedA = false;
-            bool matchedB = false;
+            var compArray = competitors.EnumerateArray().ToArray();
+            if (compArray.Length < 2) return false;
 
-            foreach (var c in competitors.EnumerateArray())
+            return (MatchesCompetitor(normA, compArray[0]) && MatchesCompetitor(normB, compArray[1])) ||
+                   (MatchesCompetitor(normA, compArray[1]) && MatchesCompetitor(normB, compArray[0]));
+        }
+
+        private bool MatchesCompetitor(string searchTeam, JsonElement c)
+        {
+            if (string.IsNullOrEmpty(searchTeam) || !c.TryGetProperty("team", out var t)) return false;
+
+            string displayName = NormalizeTeam(t.TryGetProperty("displayName", out var dn) ? dn.GetString() : "");
+            string name = NormalizeTeam(t.TryGetProperty("name", out var n) ? n.GetString() : "");
+            string location = NormalizeTeam(t.TryGetProperty("location", out var loc) ? loc.GetString() : "");
+            string shortName = NormalizeTeam(t.TryGetProperty("shortDisplayName", out var sdn) ? sdn.GetString() : "");
+            string abbrev = NormalizeTeam(t.TryGetProperty("abbreviation", out var abb) ? abb.GetString() : "");
+
+            // Only match abbreviation if the search query itself is that exact abbreviation (e.g. "BKN", "LAL")
+            if (!string.IsNullOrEmpty(abbrev) && searchTeam.Equals(abbrev, StringComparison.OrdinalIgnoreCase))
             {
-                if (!c.TryGetProperty("team", out var t)) continue;
+                return true;
+            }
 
-                string displayName = NormalizeTeam(t.TryGetProperty("displayName", out var dn) ? dn.GetString() : "");
-                string name = NormalizeTeam(t.TryGetProperty("name", out var n) ? n.GetString() : "");
-                string location = NormalizeTeam(t.TryGetProperty("location", out var loc) ? loc.GetString() : "");
-                string shortName = NormalizeTeam(t.TryGetProperty("shortDisplayName", out var sdn) ? sdn.GetString() : "");
-                string abbrev = NormalizeTeam(t.TryGetProperty("abbreviation", out var abb) ? abb.GetString() : "");
+            // Primary check against team-identifying names (displayName, mascot name, shortDisplayName)
+            if (MatchesAny(searchTeam, displayName, name, shortName))
+            {
+                return true;
+            }
 
-                if (MatchesAny(normA, displayName, name, location, shortName, abbrev))
+            // Secondary check against location (e.g. if betslip only says "Utah" or "Utah Hockey Club" when ESPN says "Utah Mammoth"),
+            // excluding multi-team cities (New York, Los Angeles, LA, Chicago) unless the search query is solely the city name
+            if (!string.IsNullOrEmpty(location))
+            {
+                bool isMultiTeamCity = location is "new york" or "los angeles" or "la" or "chicago";
+                if (!isMultiTeamCity && MatchesAny(searchTeam, location))
                 {
-                    matchedA = true;
+                    return true;
                 }
-                else if (MatchesAny(normB, displayName, name, location, shortName, abbrev))
+                if (isMultiTeamCity && searchTeam.Equals(location, StringComparison.OrdinalIgnoreCase))
                 {
-                    matchedB = true;
+                    return true;
                 }
             }
 
-            return matchedA && matchedB;
+            return false;
         }
 
         private bool MatchesAny(string searchTeam, params string[] candidateNames)
         {
             if (string.IsNullOrEmpty(searchTeam)) return false;
 
+            var searchWords = SplitWords(searchTeam);
+            if (searchWords.Length == 0) return false;
+
             foreach (var cand in candidateNames)
             {
                 if (string.IsNullOrEmpty(cand)) continue;
 
                 if (cand.Equals(searchTeam, StringComparison.OrdinalIgnoreCase)) return true;
-                if (cand.Contains(searchTeam, StringComparison.OrdinalIgnoreCase) || searchTeam.Contains(cand, StringComparison.OrdinalIgnoreCase)) return true;
 
-                // Also check individual significant words (e.g. "Hurricanes", "Capitals", "Wings", "Ducks")
-                var searchWords = searchTeam.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 4);
+                var candWords = SplitWords(cand);
+                if (candWords.Length == 0) continue;
+
+                // Whole-word subset match in either direction (so "Nets" matches "Brooklyn Nets", but never "Charlotte Hornets"!)
+                if (ContainsAllWords(candWords, searchWords) || ContainsAllWords(searchWords, candWords))
+                {
+                    return true;
+                }
+
+                // Also check individual significant words (e.g. "Hurricanes", "Capitals", "Wings", "Ducks") as whole words
                 foreach (var sw in searchWords)
                 {
-                    if (cand.Contains(sw, StringComparison.OrdinalIgnoreCase)) return true;
+                    if (sw.Length >= 4 && !IsSharedOrGenericWord(sw))
+                    {
+                        if (candWords.Any(cw => cw.Equals(sw, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            return true;
+                        }
+                    }
                 }
             }
 
             return false;
         }
+
+        private static string[] SplitWords(string text)
+        {
+            return text.Split(new[] { ' ', '-', '.', '/', '\'' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private static bool ContainsAllWords(string[] haystackWords, string[] needleWords)
+        {
+            if (needleWords.Length == 0 || haystackWords.Length == 0) return false;
+            foreach (var nw in needleWords)
+            {
+                if (!haystackWords.Any(hw => hw.Equals(nw, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool IsSharedOrGenericWord(string word) => word.ToLowerInvariant() switch
+        {
+            "york" or "angeles" or "chicago" or "city" or "state" or "united" or "club" or "team" or "hockey" or "football" or "basketball" or "baseball" or "saint" or "golden" or "blue" or "white" => true,
+            _ => false
+        };
 
         private string NormalizeTeam(string? text)
         {
@@ -798,28 +860,22 @@ namespace BettingApp.Services
         {
             if (!comp.TryGetProperty("competitors", out var competitors) || competitors.GetArrayLength() < 2) return false;
 
-            bool matchedA = false;
-            bool matchedB = false;
+            var compArray = competitors.EnumerateArray().ToArray();
+            if (compArray.Length < 2) return false;
 
-            foreach (var c in competitors.EnumerateArray())
-            {
-                if (!c.TryGetProperty("athlete", out var a)) continue;
+            return (MatchesTennisCompetitor(playerA, compArray[0]) && MatchesTennisCompetitor(playerB, compArray[1])) ||
+                   (MatchesTennisCompetitor(playerA, compArray[1]) && MatchesTennisCompetitor(playerB, compArray[0]));
+        }
 
-                string displayName = NormalizeTeam(a.TryGetProperty("displayName", out var dn) ? dn.GetString() : "");
-                string fullName = NormalizeTeam(a.TryGetProperty("fullName", out var fn) ? fn.GetString() : "");
-                string shortName = NormalizeTeam(a.TryGetProperty("shortName", out var sn) ? sn.GetString() : "");
+        private bool MatchesTennisCompetitor(string player, JsonElement c)
+        {
+            if (!c.TryGetProperty("athlete", out var a)) return false;
 
-                if (MatchesAny(playerA, displayName, fullName, shortName))
-                {
-                    matchedA = true;
-                }
-                else if (MatchesAny(playerB, displayName, fullName, shortName))
-                {
-                    matchedB = true;
-                }
-            }
+            string displayName = NormalizeTeam(a.TryGetProperty("displayName", out var dn) ? dn.GetString() : "");
+            string fullName = NormalizeTeam(a.TryGetProperty("fullName", out var fn) ? fn.GetString() : "");
+            string shortName = NormalizeTeam(a.TryGetProperty("shortName", out var sn) ? sn.GetString() : "");
 
-            return matchedA && matchedB;
+            return MatchesAny(player, displayName, fullName, shortName);
         }
     }
 }
