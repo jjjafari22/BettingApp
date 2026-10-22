@@ -65,17 +65,17 @@ public partial class Admin
         await LoadCompletedBets();
     }
 
-    private async Task OnApprovedSearchChanged()
+    private void OnApprovedSearchChanged()
     {
         approvedPage = 1;
-        await LoadApprovedBets();
+        ApplyApprovedFilterAndSort();
     }
 
-    private async Task ClearApprovedSearch()
+    private void ClearApprovedSearch()
     {
         approvedSearchTerm = "";
         approvedPage = 1;
-        await LoadApprovedBets();
+        ApplyApprovedFilterAndSort();
     }
 
     private string GetStatusBadgeClass(string status)
@@ -151,54 +151,15 @@ public partial class Admin
         try
         {
             using var context = DbFactory.CreateDbContext();
-            var query = context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).Where(b => b.Status == "Approved");
-
-            if (!string.IsNullOrWhiteSpace(approvedSearchTerm))
-            {
-                var searchStr = approvedSearchTerm.Trim().ToLower();
-                if (int.TryParse(searchStr, out int searchId))
-                {
-                    query = query.Where(b => b.Id == searchId);
-                }
-                else
-                {
-                    var matchingUserIds = await context.Users
-                        .Where(u => (u.DiscordUsername != null && u.DiscordUsername.ToLower().Contains(searchStr)) 
-                                 || (u.FirstName != null && u.FirstName.ToLower().Contains(searchStr))
-                                 || (u.LastName != null && u.LastName.ToLower().Contains(searchStr)))
-                        .Select(u => u.Id)
-                        .ToListAsync();
-                    query = query.Where(b => matchingUserIds.Contains(b.UserId));
-                }
-            }
-
-            totalApprovedBets = await query.CountAsync();
-            
-            if (approvedSortColumn == "NextCheckTime")
-            {
-                if (approvedSortDesc)
-                {
-                    query = query.OrderByDescending(b => b.NextCheckTime.HasValue).ThenByDescending(b => b.NextCheckTime);
-                }
-                else
-                {
-                    query = query.OrderBy(b => b.NextCheckTime.HasValue).ThenBy(b => b.NextCheckTime);
-                }
-            }
-            else
-            {
-                if (approvedSortDesc)
-                    query = query.OrderByDescending(b => b.UpdatedAt);
-                else
-                    query = query.OrderBy(b => b.UpdatedAt);
-            }
-
-            approvedBets = await query
-                .Skip((approvedPage - 1) * pageSize)
-                .Take(pageSize)
+            allApprovedBets = await context.Bets
+                .Include(b => b.AiEvaluation)
+                .Include(b => b.Legs)
+                .ThenInclude(l => l.BookmakerOdds)
+                .Where(b => b.Status == "Approved")
                 .ToListAsync();
-            hasMoreApprovedBets = totalApprovedBets > (approvedPage * pageSize);
-            await PopulateUserLookup(approvedBets.Select(b => b.UserId));
+
+            await PopulateUserLookup(allApprovedBets.Select(b => b.UserId));
+            ApplyApprovedFilterAndSort();
         }
         catch (Exception ex)
         {
@@ -206,16 +167,143 @@ public partial class Admin
             Console.WriteLine($"[Admin.razor] LoadApprovedBets Error: {ex.Message}");
         }
     }
+
+    private string GetApprovedDiscordName(Bet bet)
+    {
+        return userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName)
+            ? u.DiscordName
+            : (bet.UserName ?? "");
+    }
+
+    private string GetApprovedLastName(Bet bet)
+    {
+        return userLookup.TryGetValue(bet.UserId, out var u) ? (u.LastName ?? "") : "";
+    }
+
+    private int GetAiOutcomeSortRank(Bet bet)
+    {
+        if (IsCheckingOutcome(bet.Id)) return 0;
+        var outcomeResult = bet.AiOutcomeResult;
+        if (string.IsNullOrEmpty(outcomeResult)) return 8;
+        if (outcomeResult == "Admin Override") return 5;
+
+        BettingApp.Services.AiOutcomeResultData? parsed = null;
+        if (_outcomeCache.TryGetValue(bet.Id, out var cached) && cached.Json == outcomeResult)
+        {
+            parsed = cached.Result;
+        }
+        else
+        {
+            try
+            {
+                parsed = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
+                    outcomeResult,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch { }
+            _outcomeCache[bet.Id] = (outcomeResult, parsed);
+        }
+
+        var lowerStatus = parsed?.OverallStatus?.ToLowerInvariant() ?? "";
+        if (string.IsNullOrEmpty(lowerStatus)) return 8;
+        if (lowerStatus.Contains("won")) return 1;
+        if (lowerStatus.Contains("lost")) return 2;
+        if (lowerStatus.Contains("void")) return 3;
+        if (lowerStatus.Contains("unknown")) return 4;
+        if (lowerStatus.Contains("in progress")) return 6;
+        if (lowerStatus.Contains("not started") || lowerStatus.Contains("pending")) return 7;
+        return 8;
+    }
+
+    private void ApplyApprovedFilterAndSort()
+    {
+        IEnumerable<Bet> filtered = allApprovedBets;
+
+        if (!string.IsNullOrWhiteSpace(approvedSearchTerm))
+        {
+            var searchStr = approvedSearchTerm.Trim();
+            if (int.TryParse(searchStr, out int searchId))
+            {
+                filtered = filtered.Where(b => b.Id == searchId || MatchesApprovedUserSearch(b, searchStr));
+            }
+            else
+            {
+                filtered = filtered.Where(b => MatchesApprovedUserSearch(b, searchStr));
+            }
+        }
+
+        var filteredList = filtered.ToList();
+        totalApprovedBets = filteredList.Count;
+
+        int maxPage = Math.Max(1, (int)Math.Ceiling((double)totalApprovedBets / pageSize));
+        if (approvedPage > maxPage) approvedPage = maxPage;
+
+        IOrderedEnumerable<Bet> sorted = approvedSortColumn switch
+        {
+            "AiOutcome" => approvedSortDesc
+                ? filteredList.OrderBy(b => GetAiOutcomeSortRank(b) == 8 ? 1 : 0).ThenByDescending(GetAiOutcomeSortRank)
+                : filteredList.OrderBy(GetAiOutcomeSortRank),
+            "NextCheckTime" => approvedSortDesc
+                ? filteredList.OrderByDescending(b => b.NextCheckTime.HasValue).ThenByDescending(b => b.NextCheckTime)
+                : filteredList.OrderBy(b => b.NextCheckTime.HasValue).ThenBy(b => b.NextCheckTime),
+            "Id" => approvedSortDesc
+                ? filteredList.OrderByDescending(b => b.Id)
+                : filteredList.OrderBy(b => b.Id),
+            "DiscordUsername" => approvedSortDesc
+                ? filteredList.OrderByDescending(GetApprovedDiscordName, StringComparer.OrdinalIgnoreCase)
+                : filteredList.OrderBy(GetApprovedDiscordName, StringComparer.OrdinalIgnoreCase),
+            "LastName" => approvedSortDesc
+                ? filteredList.OrderBy(b => string.IsNullOrWhiteSpace(GetApprovedLastName(b)) ? 1 : 0).ThenByDescending(GetApprovedLastName, StringComparer.OrdinalIgnoreCase)
+                : filteredList.OrderBy(b => string.IsNullOrWhiteSpace(GetApprovedLastName(b)) ? 1 : 0).ThenBy(GetApprovedLastName, StringComparer.OrdinalIgnoreCase),
+            "AmountNOK" => approvedSortDesc
+                ? filteredList.OrderByDescending(b => b.AmountNOK ?? 0)
+                : filteredList.OrderBy(b => b.AmountNOK ?? 0),
+            "Odds" => approvedSortDesc
+                ? filteredList.OrderByDescending(b => b.Odds)
+                : filteredList.OrderBy(b => b.Odds),
+            "PotentialPayout" => approvedSortDesc
+                ? filteredList.OrderByDescending(b => b.PotentialPayout)
+                : filteredList.OrderBy(b => b.PotentialPayout),
+            "NetLiability" => approvedSortDesc
+                ? filteredList.OrderByDescending(b => b.NetLiability)
+                : filteredList.OrderBy(b => b.NetLiability),
+            _ => approvedSortDesc
+                ? filteredList.OrderByDescending(b => b.UpdatedAt)
+                : filteredList.OrderBy(b => b.UpdatedAt)
+        };
+
+        approvedBets = sorted
+            .ThenByDescending(b => b.Id)
+            .Skip((approvedPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        hasMoreApprovedBets = totalApprovedBets > (approvedPage * pageSize);
+    }
+
+    private bool MatchesApprovedUserSearch(Bet bet, string searchStr)
+    {
+        if (!string.IsNullOrEmpty(bet.UserName) && bet.UserName.Contains(searchStr, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (userLookup.TryGetValue(bet.UserId, out var u))
+        {
+            if (!string.IsNullOrEmpty(u.DiscordName) && u.DiscordName.Contains(searchStr, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (!string.IsNullOrEmpty(u.LastName) && u.LastName.Contains(searchStr, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        if (userFirstNames.TryGetValue(bet.UserId, out var firstName) && !string.IsNullOrEmpty(firstName) && firstName.Contains(searchStr, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
     
     private async Task NextPendingPage() { pendingPage++; await LoadPendingBets(); }
     private async Task PrevPendingPage() { if (pendingPage > 1) { pendingPage--; await LoadPendingBets(); } }
     
-    private async Task NextApprovedPage() { approvedPage++; await LoadApprovedBets(); }
-    private async Task PrevApprovedPage() { if (approvedPage > 1) { approvedPage--; await LoadApprovedBets(); } }
-    
-    private bool isSortingApproved = false;
+    private Task NextApprovedPage() { approvedPage++; ApplyApprovedFilterAndSort(); return Task.CompletedTask; }
+    private Task PrevApprovedPage() { if (approvedPage > 1) { approvedPage--; ApplyApprovedFilterAndSort(); } return Task.CompletedTask; }
 
-    private async Task SortApproved(string column)
+    private void SortApproved(string column)
     {
         if (approvedSortColumn == column)
         {
@@ -227,15 +315,7 @@ public partial class Admin
             approvedSortDesc = false; // default to ascending on new column
         }
         approvedPage = 1;
-
-        isSortingApproved = true;
-        StateHasChanged();
-        await Task.Delay(1); // yield to render loading state
-
-        await LoadApprovedBets();
-        
-        isSortingApproved = false;
-        StateHasChanged();
+        ApplyApprovedFilterAndSort();
     }
 
 

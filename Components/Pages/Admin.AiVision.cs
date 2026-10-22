@@ -159,6 +159,7 @@ public partial class Admin
                             }
                             var listM = pendingBets.FirstOrDefault(b => b.Id == capturingBetId) 
                                      ?? approvedBets.FirstOrDefault(b => b.Id == capturingBetId) 
+                                     ?? allApprovedBets.FirstOrDefault(b => b.Id == capturingBetId) 
                                      ?? completedBets.FirstOrDefault(b => b.Id == capturingBetId);
                             if (listM != null) listM.AiVisionError = error;
                             currentBet.AiVisionError = error;
@@ -349,6 +350,7 @@ public partial class Admin
                             // In-memory sync: update list model so the table row displays the fresh badges immediately
                             var listModel = pendingBets.FirstOrDefault(b => b.Id == capturingBetId) 
                                          ?? approvedBets.FirstOrDefault(b => b.Id == capturingBetId) 
+                                         ?? allApprovedBets.FirstOrDefault(b => b.Id == capturingBetId) 
                                          ?? completedBets.FirstOrDefault(b => b.Id == capturingBetId);
                             if (listModel != null)
                             {
@@ -436,6 +438,7 @@ public partial class Admin
                         }
                         var listModel = pendingBets.FirstOrDefault(b => b.Id == capturingBetId) 
                                      ?? approvedBets.FirstOrDefault(b => b.Id == capturingBetId) 
+                                     ?? allApprovedBets.FirstOrDefault(b => b.Id == capturingBetId) 
                                      ?? completedBets.FirstOrDefault(b => b.Id == capturingBetId);
                         if (listModel != null) listModel.AiVisionError = errText;
                         if (currentOriginal != null && currentOriginal.Id == capturingBetId) currentOriginal.AiVisionError = errText;
@@ -495,7 +498,7 @@ public partial class Admin
             var (result, error) = await AiVision.ExtractBetSlipDataAsync(capturingScreenshot, capturingBetId);
             
             bool isModalOpenForThisBet = reviewingBetModel != null && reviewingBetModel.Id == capturingBetId;
-            var listModel = pendingBets.FirstOrDefault(b => b.Id == capturingBetId) ?? approvedBets.FirstOrDefault(b => b.Id == capturingBetId) ?? completedBets.FirstOrDefault(b => b.Id == capturingBetId);
+            var listModel = pendingBets.FirstOrDefault(b => b.Id == capturingBetId) ?? approvedBets.FirstOrDefault(b => b.Id == capturingBetId) ?? allApprovedBets.FirstOrDefault(b => b.Id == capturingBetId) ?? completedBets.FirstOrDefault(b => b.Id == capturingBetId);
             
             if (error != null)
             {

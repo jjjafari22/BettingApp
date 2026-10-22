@@ -985,26 +985,48 @@ else
                    <tr>
     
                         <th style="width: 150px;">Action</th>
-                        <th style="width: 110px;">AI Outcome</th>
+                        <th style="width: 110px; cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("AiOutcome"))">
+                            AI Outcome
+                            @if (approvedSortColumn == "AiOutcome") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
                         <th style="width: 130px; cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("NextCheckTime"))">
                             Auto-Tracking 
-                            @if (isSortingApproved && approvedSortColumn == "NextCheckTime") { <span class="spinner-border spinner-border-sm ms-1"></span> }
-                            else if (approvedSortColumn == "NextCheckTime") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                            @if (approvedSortColumn == "NextCheckTime") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
                         </th>
-                        <th>ID</th>
+                        <th style="cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("Id"))">
+                            ID
+                            @if (approvedSortColumn == "Id") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
                         <th class="text-nowrap" style="cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("UpdatedAt"))">
                             Last Updated
-                            @if (isSortingApproved && approvedSortColumn == "UpdatedAt") { <span class="spinner-border spinner-border-sm ms-1"></span> }
-                            else if (approvedSortColumn == "UpdatedAt") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                            @if (approvedSortColumn == "UpdatedAt") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
                         </th>
   
-                        <th>Discord Username</th>
-                        <th>Last Name</th>
-                        <th>Bet Amount</th>
-                        <th>Odds</th>
+                        <th style="cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("DiscordUsername"))">
+                            Discord Username
+                            @if (approvedSortColumn == "DiscordUsername") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
+                        <th style="cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("LastName"))">
+                            Last Name
+                            @if (approvedSortColumn == "LastName") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
+                        <th style="cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("AmountNOK"))">
+                            Bet Amount
+                            @if (approvedSortColumn == "AmountNOK") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
+                        <th style="cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("Odds"))">
+                            Odds
+                            @if (approvedSortColumn == "Odds") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
    
-                        <th>Potential Payout</th>
-                        <th>Net Liability</th>
+                        <th style="cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("PotentialPayout"))">
+                            Potential Payout
+                            @if (approvedSortColumn == "PotentialPayout") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
+                        <th style="cursor: pointer; user-select: none;" @onclick="@(() => SortApproved("NetLiability"))">
+                            Net Liability
+                            @if (approvedSortColumn == "NetLiability") { <i class="bi @(approvedSortDesc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+                        </th>
                     </tr>
                  </thead>
                  <tbody>

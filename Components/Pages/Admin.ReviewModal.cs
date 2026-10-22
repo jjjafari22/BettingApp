@@ -619,6 +619,7 @@ public partial class Admin
             successMessage = $"Bet #{bet.Id} updated.";
             
             var listModel = approvedBets.FirstOrDefault(b => b.Id == bet.Id) 
+                         ?? allApprovedBets.FirstOrDefault(b => b.Id == bet.Id)
                          ?? completedBets.FirstOrDefault(b => b.Id == bet.Id) 
                          ?? pendingBets.FirstOrDefault(b => b.Id == bet.Id);
             if (listModel != null)
@@ -639,6 +640,7 @@ public partial class Admin
                 reviewingBetModel.Odds = bet.Odds;
                 reviewingBetModel.Status = newStatus;
             }
+            ApplyApprovedFilterAndSort();
             StateHasChanged();
             return;
         }
@@ -650,7 +652,10 @@ public partial class Admin
         if (reviewContext == "Pending" && newStatus != "Pending" && newStatus != "Processing")
             pendingBets.RemoveAll(b => b.Id == bet.Id);
         else if (reviewContext == "Approved" && newStatus != "Approved")
-            approvedBets.RemoveAll(b => b.Id == bet.Id);
+        {
+            allApprovedBets.RemoveAll(b => b.Id == bet.Id);
+            ApplyApprovedFilterAndSort();
+        }
         else if (reviewContext == "Completed" && (newStatus == "Pending" || newStatus == "Approved" || newStatus == "Processing"))
             completedBets.RemoveAll(b => b.Id == bet.Id);
 

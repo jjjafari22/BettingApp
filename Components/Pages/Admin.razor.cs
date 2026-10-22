@@ -26,10 +26,12 @@ public partial class Admin
     private bool isSavingBet = false;
 
     private List<Bet> pendingBets = new();
+    private List<Bet> allApprovedBets = new();
     private List<Bet> approvedBets = new();
     private List<Bet> completedBets = new();
     private List<(ulong Id, string Name, string CategoryName)> discordChannels = new();
     private Dictionary<string, (string DiscordName, string LastName, string DiscordUserId)> userLookup = new();
+    private Dictionary<string, string> userFirstNames = new();
     private Dictionary<string, string> userDiscordLinks = new();
     private Dictionary<int, (string Json, BettingApp.Services.AiVisionExtractionResult? Result)> _visionCache = new();
     private Dictionary<int, (string Json, BettingApp.Services.AiOutcomeResultData? Result)> _outcomeCache = new();
@@ -106,10 +108,11 @@ public partial class Admin
             if (missingIds.Any())
             {
                 using var context = DbFactory.CreateDbContext();
-                var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.LastName, u.DiscordUserId }).ToListAsync();
+                var users = await context.Users.Where(u => missingIds.Contains(u.Id)).Select(u => new { u.Id, u.DiscordUsername, u.FirstName, u.LastName, u.DiscordUserId }).ToListAsync();
                 foreach(var u in users) {
                     string discordName = u.DiscordUsername ?? "";
                     userLookup[u.Id] = (discordName, u.LastName ?? "", u.DiscordUserId ?? "");
+                    userFirstNames[u.Id] = u.FirstName ?? "";
                     
                     var expectedChannel = $"{discordName.Trim().ToLower().Replace(" ", "-")}-admins";
                     var matchedChannel = discordChannels?.FirstOrDefault(c => string.Equals(c.Name, expectedChannel, StringComparison.OrdinalIgnoreCase));
@@ -147,7 +150,7 @@ public partial class Admin
             if (ReviewBetId.HasValue)
             {
                 var targetBet = pendingBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
-                if (targetBet == null) targetBet = approvedBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
+                if (targetBet == null) targetBet = approvedBets.FirstOrDefault(b => b.Id == ReviewBetId.Value) ?? allApprovedBets.FirstOrDefault(b => b.Id == ReviewBetId.Value);
 
                 if (targetBet != null) StartReview(targetBet);
                 else 
@@ -256,6 +259,7 @@ public partial class Admin
                             {
                                 var matchingBet = pendingBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
                                                ?? approvedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
+                                               ?? allApprovedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
                                                ?? completedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id);
                                 if (matchingBet != null)
                                 {
