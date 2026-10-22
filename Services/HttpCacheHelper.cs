@@ -55,26 +55,30 @@ namespace BettingApp.Services
                 for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    HttpResponseMessage response;
                     await _globalThrottle.WaitAsync(cancellationToken);
                     try 
                     {
                         var elapsed = DateTime.UtcNow - _lastRequestStart;
+                        bool isColdConnection = elapsed.TotalSeconds > 60;
                         if (elapsed.TotalMilliseconds < 1100)
                         {
-                            await Task.Delay(1100 - (int)elapsed.TotalMilliseconds, cancellationToken);
+                            int waitMs = (int)Math.Ceiling(1100 - elapsed.TotalMilliseconds);
+                            if (waitMs > 0)
+                            {
+                                await Task.Delay(waitMs, cancellationToken);
+                            }
                         }
                         
-                        _lastRequestStart = DateTime.UtcNow;
-                    }
-                    finally
-                    {
-                        _globalThrottle.Release();
-                    }
-
-                    HttpResponseMessage response;
-                    try
-                    {
+                        var reqStart = DateTime.UtcNow;
+                        _lastRequestStart = reqStart;
                         response = await fetchFactory();
+
+                        var reqDurationMs = (DateTime.UtcNow - reqStart).TotalMilliseconds;
+                        if (isColdConnection && reqDurationMs < 1100)
+                        {
+                            _lastRequestStart = reqStart.AddMilliseconds(Math.Min(reqDurationMs * 0.5, 400));
+                        }
                     }
                     catch (HttpRequestException httpEx)
                     {
@@ -87,6 +91,10 @@ namespace BettingApp.Services
                         logger.LogWarning($"OddsPapi: Transient network error for {cacheKey} ({httpEx.Message}). Retrying... (Attempt {attempt} of {maxRetries - 1})");
                         await Task.Delay(1000 * attempt, cancellationToken);
                         continue;
+                    }
+                    finally
+                    {
+                        _globalThrottle.Release();
                     }
 
                     using (response)

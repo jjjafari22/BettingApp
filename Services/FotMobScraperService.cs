@@ -149,6 +149,7 @@ namespace BettingApp.Services
                                 {
                                     var trimmedGeneral = new System.Collections.Generic.Dictionary<string, object>();
                                     if (general.TryGetProperty("matchTimeUTC", out var mTime)) trimmedGeneral["matchTimeUTC"] = mTime;
+                                    if (general.TryGetProperty("matchTimeUTCDate", out var mTimeDate)) trimmedGeneral["matchTimeUTCDate"] = mTimeDate;
                                     if (general.TryGetProperty("started", out var st)) trimmedGeneral["started"] = st;
                                     if (general.TryGetProperty("finished", out var fin))
                                     {
@@ -284,7 +285,24 @@ namespace BettingApp.Services
                         currentBestScore = res.score;
                     }
 
-                    // Fallback: If we didn't find a perfect straight match, try searching the most significant word (longest word).
+                    // Fallback 1a: If the full raw name had stop words (e.g. "Al-Anwar Club" -> "al anwar"), search the stop-word-stripped team name first (critical for "Al ..." teams where single-word search fails on FotMob).
+                    string rawNormalizedHome = _teamAliasMapper.NormalizeTeamName(homeTeam, removeStopWords: false);
+                    if (currentBestScore < 200 && !string.Equals(homeSearchStr, rawNormalizedHome, StringComparison.OrdinalIgnoreCase) && homeSearchStr.Length >= 3)
+                    {
+                        string strippedQuery = Uri.EscapeDataString(homeSearchStr);
+                        searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={strippedQuery}";
+                        string strippedJson = await _httpClient.GetStringAsync(searchUrl);
+
+                        using var strippedDoc = System.Text.Json.JsonDocument.Parse(strippedJson);
+                        var strippedRes = ExtractEventIdWithScore(strippedDoc, homeTeam, awayTeam, betPlacedAt);
+                        if (strippedRes.score > currentBestScore || (strippedRes.score == currentBestScore && strippedRes.score > 0 && string.IsNullOrEmpty(eventId)))
+                        {
+                            eventId = strippedRes.id;
+                            currentBestScore = strippedRes.score;
+                        }
+                    }
+
+                    // Fallback 1b: If we still didn't find a perfect straight match, try searching the most significant word (longest word).
                     if (currentBestScore < 200)
                     {
                         string longestWord = homeSearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? homeSearchStr.Split(' ')[0];
@@ -321,8 +339,38 @@ namespace BettingApp.Services
                         string awaySearchStr = _teamAliasMapper.NormalizeTeamName(cleanAwayTeam, removeStopWords: true);
                         if (string.IsNullOrEmpty(awaySearchStr)) awaySearchStr = cleanAwayTeam;
 
+                        // Try full stop-word-stripped away name first (e.g. "al wehda" where single-word "wehda" only returns players on FotMob)
+                        if (awaySearchStr.Contains(' ') && awaySearchStr.Length >= 3)
+                        {
+                            string awayFullQuery = Uri.EscapeDataString(awaySearchStr);
+                            searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={awayFullQuery}";
+                            string awayFullJson = await _httpClient.GetStringAsync(searchUrl);
+
+                            using var awayFullDoc = System.Text.Json.JsonDocument.Parse(awayFullJson);
+                            var awayFullRes = ExtractEventIdWithScore(awayFullDoc, homeTeam, awayTeam, betPlacedAt);
+                            if (awayFullRes.score > currentBestScore || (awayFullRes.score == currentBestScore && awayFullRes.score > 0 && string.IsNullOrEmpty(eventId)))
+                            {
+                                eventId = awayFullRes.id;
+                                currentBestScore = awayFullRes.score;
+                            }
+                        }
+
                         string longestAway = awaySearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? awaySearchStr.Split(' ')[0];
-                        if (longestAway.Length >= 3)
+                        if (string.IsNullOrEmpty(eventId) && longestAway.Length >= 3 && longestAway != awaySearchStr)
+                        {
+                            string fallbackQuery = Uri.EscapeDataString(longestAway);
+                            searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
+                            string fallbackJson = await _httpClient.GetStringAsync(searchUrl);
+                            
+                            using var fallbackDoc = System.Text.Json.JsonDocument.Parse(fallbackJson);
+                            var fallbackRes = ExtractEventIdWithScore(fallbackDoc, homeTeam, awayTeam, betPlacedAt);
+                            if (fallbackRes.score > currentBestScore || (fallbackRes.score == currentBestScore && fallbackRes.score > 0 && string.IsNullOrEmpty(eventId)))
+                            {
+                                eventId = fallbackRes.id;
+                                currentBestScore = fallbackRes.score;
+                            }
+                        }
+                        else if (string.IsNullOrEmpty(eventId) && longestAway.Length >= 3 && !awaySearchStr.Contains(' '))
                         {
                             string fallbackQuery = Uri.EscapeDataString(longestAway);
                             searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
@@ -842,24 +890,52 @@ namespace BettingApp.Services
             if (fixtureName.Contains(token)) return true;
             if (token.Contains(fixtureName)) return true;
             
+            var fixtureTokens = fixtureName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
             // Check if any word in fixtureName shares the first 4 chars with token
             if (token.Length >= 4)
             {
                 string prefix = token.Substring(0, 4);
-                var fixtureTokens = fixtureName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 foreach (var ft in fixtureTokens)
                 {
                     if (ft.Length >= 4 && ft.StartsWith(prefix)) return true;
                 }
             }
+
+            // Check Arabic/phonetic consonant skeleton for transliterated names (e.g. "wahda" vs "wehda", "tai" vs "taee", "batin" vs "baten")
+            if (token.Length >= 3)
+            {
+                string skelA = TeamAliasMappingService.GetArabicTransliterationSkeleton(token);
+                if (skelA.Length >= 3)
+                {
+                    foreach (var ft in fixtureTokens)
+                    {
+                        if (ft.Length >= 3)
+                        {
+                            string skelB = TeamAliasMappingService.GetArabicTransliterationSkeleton(ft);
+                            if (skelA == skelB) return true;
+                        }
+                    }
+                }
+            }
+
             return false;
         }
+
+        private static readonly System.Collections.Generic.HashSet<string> _genericPrefixesAndQualifiers = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "fc", "fk", "bk", "if", "il", "ik", "ff", "gf", "cd", "cf", "al", "el", "la", "de",
+            "club", "sc", "sfc",
+            // Saudi / Gulf regional & city qualifiers appended by bookmakers/OddsPapi but omitted by FotMob
+            "mecca", "makkah", "riyadh", "jeddah", "dammam", "buraidah", "khobar", "najran",
+            "hafr", "harmah", "ahsa", "hasa", "saihat", "kharj", "unaizah", "rass",
+            "tabuk", "jawf", "majmaah", "hofuf"
+        };
 
         public static bool IsGenericPrefix(string word)
         {
             if (string.IsNullOrEmpty(word)) return true;
-            string w = word.ToLowerInvariant();
-            return w == "fc" || w == "fk" || w == "bk" || w == "if" || w == "il" || w == "ik" || w == "ff" || w == "gf" || w == "cd" || w == "cf" || w == "al" || w == "el" || w == "la" || w == "de";
+            return _genericPrefixesAndQualifiers.Contains(word);
         }
     }
 }

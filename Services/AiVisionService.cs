@@ -572,6 +572,8 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                 };
 
                 bool anyLegNeedsGoogleSearch = false;
+                bool allLegsConfirmedUnstarted = extractionResult?.Legs != null && extractionResult.Legs.Count > 0;
+                var unstartedMatchInfo = new Dictionary<string, (string Provider, DateTime StartTimeUtc)>(StringComparer.OrdinalIgnoreCase);
 
                 if (extractionResult?.Legs != null)
                 {
@@ -603,17 +605,55 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                             {
                                 { "text", $"=== {providerLabel.ToUpperInvariant()} RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n=========================" }
                             });
+
+                            if (allLegsConfirmedUnstarted && TryExtractUnstartedMatchStartTime(rawJson, providerLabel, out DateTime parsedStartUtc))
+                            {
+                                unstartedMatchInfo[matchName] = (providerLabel, parsedStartUtc);
+                            }
+                            else
+                            {
+                                allLegsConfirmedUnstarted = false;
+                            }
                         }
                         else
                         {
                             _logger.LogInformation($"{betLabel}⚠️ {providerLabel} data not found for '{matchName}' -> Falling back to Google Search.");
                             // Neither provider found data for this match -> Leg requires Google Search fallback
                             anyLegNeedsGoogleSearch = true;
+                            allLegsConfirmedUnstarted = false;
                         }
                         
                         // Add a small delay to avoid rate limits on slips with multiple matches
                         await Task.Delay(1000);
                     }
+                }
+
+                // Short-circuit: If every leg on the slip is confirmed by FotMob/ESPN to not have started yet and has a valid UTC start time,
+                // return the scheduled start times immediately without calling Gemini ($0 AI cost, 0ms AI latency).
+                if (allLegsConfirmedUnstarted && !anyLegNeedsGoogleSearch && extractionResult?.Legs != null && unstartedMatchInfo.Count > 0)
+                {
+                    var shortCircuitResult = new AiOutcomeResultData
+                    {
+                        OverallStatus = "MATCH NOT STARTED",
+                        FullAnalysis = "API Status: Match has not started yet.",
+                        Legs = extractionResult.Legs.Select(l =>
+                        {
+                            string mName = l.Match ?? "";
+                            var info = unstartedMatchInfo.TryGetValue(mName, out var found) ? found : unstartedMatchInfo.Values.First();
+                            string isoStr = info.StartTimeUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+                            return new AiOutcomeLegResult
+                            {
+                                Match = mName,
+                                Outcome = "Pending",
+                                VerificationSource = info.Provider == "FotMob" ? "FotMob_Verified" : "ESPN_Verified",
+                                MatchStartTimeIso = isoStr,
+                                Stats = $"Verified via {info.Provider}: Match scheduled for {info.StartTimeUtc:yyyy-MM-dd HH:mm} UTC (Not started yet)."
+                            };
+                        }).ToList()
+                    };
+
+                    _logger.LogInformation($"{betLabel}⚡ All legs confirmed unstarted via FotMob/ESPN -> Skipping Gemini AI call ($0 AI cost). Status: MATCH NOT STARTED");
+                    return JsonSerializer.Serialize(shortCircuitResult);
                 }
 
                 // Insert the system instructions directly into the user prompt to bypass the Extended Thinking bug
@@ -1071,6 +1111,81 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                 }
             }
             throw new Exception("Max retries exceeded.");
+        }
+
+        public static bool TryExtractUnstartedMatchStartTime(string rawJson, string providerLabel, out DateTime utcStartTime)
+        {
+            utcStartTime = DateTime.MinValue;
+            if (string.IsNullOrWhiteSpace(rawJson)) return false;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(rawJson);
+                var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Object) return false;
+
+                if (string.Equals(providerLabel, "FotMob", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!root.TryGetProperty("general", out var general) || general.ValueKind != JsonValueKind.Object)
+                        return false;
+
+                    bool isNotStarted = general.TryGetProperty("started", out var stProp) && stProp.ValueKind == JsonValueKind.False;
+                    bool isFinished = general.TryGetProperty("finished", out var finProp) && finProp.ValueKind == JsonValueKind.True;
+                    if (!isNotStarted || isFinished) return false;
+
+                    string? timeStr = null;
+                    if (general.TryGetProperty("matchTimeUTCDate", out var mtdProp) && mtdProp.ValueKind == JsonValueKind.String)
+                    {
+                        timeStr = mtdProp.GetString();
+                    }
+                    else if (general.TryGetProperty("matchTimeUTC", out var mtProp) && mtProp.ValueKind == JsonValueKind.String)
+                    {
+                        timeStr = mtProp.GetString();
+                        if (!string.IsNullOrEmpty(timeStr))
+                        {
+                            // e.g. "Mon, Oct 26, 2026, 15:00 UTC" -> "Oct 26, 2026 15:00Z"
+                            int commaIdx = timeStr.IndexOf(',');
+                            if (commaIdx >= 0 && commaIdx < 5) timeStr = timeStr.Substring(commaIdx + 1).Trim();
+                            timeStr = timeStr.Replace(", ", " ").Replace(" UTC", "Z");
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(timeStr) &&
+                        DateTime.TryParse(timeStr, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out utcStartTime))
+                    {
+                        return utcStartTime > DateTime.UtcNow.AddMinutes(-5);
+                    }
+                    return false;
+                }
+                else if (string.Equals(providerLabel, "ESPN", StringComparison.OrdinalIgnoreCase))
+                {
+                    bool isFinished = root.TryGetProperty("isFinished", out var finProp) && finProp.ValueKind == JsonValueKind.True;
+                    if (isFinished) return false;
+
+                    string status = root.TryGetProperty("status", out var stProp) && stProp.ValueKind == JsonValueKind.String
+                        ? (stProp.GetString() ?? "")
+                        : "";
+                    if (!string.Equals(status, "Scheduled", StringComparison.OrdinalIgnoreCase))
+                        return false;
+
+                    if (root.TryGetProperty("startTimeIso", out var isoProp) && isoProp.ValueKind == JsonValueKind.String)
+                    {
+                        string? isoStr = isoProp.GetString();
+                        if (!string.IsNullOrEmpty(isoStr) &&
+                            DateTime.TryParse(isoStr, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out utcStartTime))
+                        {
+                            return utcStartTime > DateTime.UtcNow.AddMinutes(-5);
+                        }
+                    }
+                    return false;
+                }
+            }
+            catch
+            {
+                // If API format ever changes, gracefully return false so ConfirmOutcomeAsync falls back to Gemini AI
+            }
+
+            return false;
         }
 
     }

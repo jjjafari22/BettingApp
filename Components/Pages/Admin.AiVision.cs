@@ -61,6 +61,18 @@ public partial class Admin
             
             reviewingBetModel.AiVisionResultJson = currentAiVisionResultJson;
             if (originalBetModel != null) originalBetModel.AiVisionResultJson = currentAiVisionResultJson;
+
+            if (AiVisionResult.Legs != null && reviewingBetModel.Legs != null && AiVisionResult.Legs.Count == reviewingBetModel.Legs.Count)
+            {
+                var orderedUiLegs = reviewingBetModel.Legs.OrderBy(l => l.Id).ToList();
+                for (int i = 0; i < AiVisionResult.Legs.Count; i++)
+                {
+                    if (AiVisionResult.Legs[i].StartTime > DateTime.MinValue)
+                    {
+                        orderedUiLegs[i].StartTime = AiVisionResult.Legs[i].StartTime;
+                    }
+                }
+            }
         }
 
         _ = Task.Run(async () => 

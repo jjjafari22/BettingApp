@@ -30,6 +30,9 @@ namespace BettingApp.Tests
         [InlineData("Al Taawon Buraidah", "Al Qadisiya", "Al-Taawoun", "Al Qadsiah", null, true)] // Saudi aliases Taawon Buraidah
         [InlineData("Al Akhdood", "Al Adalh", "Al Akhdoud", "Al-Adalah", null, true)] // Saudi aliases Akhdood / Adalh
         [InlineData("Al Akhdood", "Al Adalh", "Al-Okhdood", "Al Adalah", null, true)] // Saudi aliases Okhdood / Adalah
+        [InlineData("Al-Anwar Club", "Al-Wahda Mecca", "Al Anwar", "Al-Wehda", "Saudi First Division", true)] // Saudi aliases Al-Anwar Club vs Al-Wahda Mecca
+        [InlineData("Al-Wahda Club", "Al-Tai", "Al-Wehda Mecca", "Al Taee", "Saudi First Division", true)] // Saudi aliases with different suffixes + Arabic skeleton
+        [InlineData("Al-Jabalain", "Al-Zulfi", "Al Jabalayn", "Al Zulfe", "Saudi First Division", true)] // Arabic transliteration skeleton
         [InlineData("Eidsvold Turn", "Ullensaker/Kisa", "Eidsvold TF", "Ull/Kisa", null, true)] // Norwegian aliases
         [InlineData("SK Brann Women", "HJK Women", "Brann", "HJK", "UEFA Women's Europa Cup", true)] // Brann Women
         [InlineData("Valerenga Women", "Feyenoord Women", "Valerenga", "Feyenoord", "UEFA Women's Europa Cup", true)] // Valerenga Women
@@ -46,6 +49,32 @@ namespace BettingApp.Tests
             var service = new BettingApp.Services.FotMobScraperService(new System.Net.Http.HttpClient(), mapper, logger);
             bool result = service.AreTeamsMatching(qHome, qAway, oHome, oAway, optLeague);
             Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void Test_TryExtractUnstartedMatchStartTime_FotMobAndEspn()
+        {
+            var futureUtc = DateTime.UtcNow.AddHours(5);
+            string isoStr = futureUtc.ToString("yyyy-MM-ddTHH:mm:ss.000Z", System.Globalization.CultureInfo.InvariantCulture);
+
+            string fotMobUnstartedJson = $@"{{""general"":{{""matchTimeUTCDate"":""{isoStr}"",""started"":false,""finished"":false}}}}";
+            Assert.True(AiVisionService.TryExtractUnstartedMatchStartTime(fotMobUnstartedJson, "FotMob", out var parsedFotMob));
+            Assert.Equal(futureUtc.Year, parsedFotMob.Year);
+            Assert.Equal(futureUtc.Hour, parsedFotMob.Hour);
+
+            string fotMobLiveJson = $@"{{""general"":{{""matchTimeUTCDate"":""{isoStr}"",""started"":true,""finished"":false}}}}";
+            Assert.False(AiVisionService.TryExtractUnstartedMatchStartTime(fotMobLiveJson, "FotMob", out _));
+
+            string espnScheduledJson = $@"{{""provider"":""ESPN"",""startTimeIso"":""{isoStr}"",""status"":""Scheduled"",""isFinished"":false}}";
+            Assert.True(AiVisionService.TryExtractUnstartedMatchStartTime(espnScheduledJson, "ESPN", out var parsedEspn));
+            Assert.Equal(futureUtc.Hour, parsedEspn.Hour);
+
+            string espnLiveJson = $@"{{""provider"":""ESPN"",""startTimeIso"":""{isoStr}"",""status"":""In Progress"",""isFinished"":false}}";
+            Assert.False(AiVisionService.TryExtractUnstartedMatchStartTime(espnLiveJson, "ESPN", out _));
+
+            // Graceful fallback if API structure changes
+            Assert.False(AiVisionService.TryExtractUnstartedMatchStartTime("{\"unexpected\":123}", "FotMob", out _));
+            Assert.False(AiVisionService.TryExtractUnstartedMatchStartTime("{\"unexpected\":123}", "ESPN", out _));
         }
     }
 }

@@ -266,6 +266,42 @@ namespace BettingApp.Services
                                 }
                             }
                         }
+
+                        // Sync discovered start times into AiVisionResultJson so the Admin UI leg list also displays them
+                        if (parsedData.Legs != null && !string.IsNullOrEmpty(dbBet.AiEvaluation.AiVisionResultJson))
+                        {
+                            try
+                            {
+                                var currentAiVision = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(
+                                    dbBet.AiEvaluation.AiVisionResultJson,
+                                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                if (currentAiVision?.Legs != null)
+                                {
+                                    bool aiVisionUpdated = false;
+                                    foreach (var parsedLeg in parsedData.Legs)
+                                    {
+                                        if (!string.IsNullOrEmpty(parsedLeg.Match) &&
+                                            !string.IsNullOrEmpty(parsedLeg.MatchStartTimeIso) &&
+                                            DateTime.TryParse(parsedLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime parsedUtc))
+                                        {
+                                            foreach (var vLeg in currentAiVision.Legs.Where(l => !string.IsNullOrEmpty(l.Match) && string.Equals(l.Match, parsedLeg.Match, StringComparison.OrdinalIgnoreCase)))
+                                            {
+                                                if (vLeg.StartTime == null || vLeg.StartTime == DateTime.MinValue)
+                                                {
+                                                    vLeg.StartTime = parsedUtc;
+                                                    aiVisionUpdated = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (aiVisionUpdated)
+                                    {
+                                        dbBet.AiEvaluation.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(currentAiVision);
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
                         // --------------------------
 
                         if (isFinished)
