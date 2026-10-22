@@ -614,9 +614,9 @@ public partial class Admin
             return;
         }
 
-        if (originalStatus == newStatus)
+        if (originalStatus == newStatus || (reviewContext == "Completed" && isCompletedStatus(newStatus)))
         {
-            successMessage = $"Bet #{bet.Id} updated.";
+            successMessage = isStatusChanged ? $"Bet #{bet.Id} updated to {newStatus}." : $"Bet #{bet.Id} updated.";
             
             var listModel = approvedBets.FirstOrDefault(b => b.Id == bet.Id) 
                          ?? allApprovedBets.FirstOrDefault(b => b.Id == bet.Id)
@@ -640,6 +640,7 @@ public partial class Admin
                 reviewingBetModel.Odds = bet.Odds;
                 reviewingBetModel.Status = newStatus;
             }
+            _ = LoadReviewUserStatsAsync(bet.UserId);
             ApplyApprovedFilterAndSort();
             StateHasChanged();
             return;
