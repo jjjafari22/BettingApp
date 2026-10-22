@@ -38,6 +38,15 @@ public partial class AdminTransactions : IDisposable
         return utcDate.AddMinutes(-TimezoneOffset);
     }
 
+    private static string FormatFullName(string? firstName, string? lastName)
+    {
+        var first = firstName?.Trim() ?? "";
+        var last = lastName?.Trim() ?? "";
+        if (string.IsNullOrEmpty(first)) return last;
+        if (string.IsNullOrEmpty(last)) return first;
+        return $"{first} {last}";
+    }
+
     private async Task PopulateUserLookup(IEnumerable<string> userIds)
     {
         var missingIds = userIds.Except(userLookup.Keys).Distinct().ToList();
@@ -78,8 +87,8 @@ public partial class AdminTransactions : IDisposable
                 return;
             }
 
+            currentViewDate = DateTime.UtcNow.AddMinutes(-TimezoneOffset).Date;
             await LoadTransactions(context);
-            await GoToCurrent();
             UiNotifier.OnAdminNotification += HandleAdminNotification;
         }
         catch (Exception ex)

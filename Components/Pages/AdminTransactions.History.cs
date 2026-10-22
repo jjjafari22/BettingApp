@@ -106,8 +106,8 @@ public partial class AdminTransactions
         totalTransactions = await query.CountAsync();
         hasMoreTransactions = totalTransactions > (currentPage * PageSize);
 
-        cashCows = await context.CashCows.ToListAsync();
-        ccLastUpdated.Clear();
+        cashCows = await context.CashCows.AsNoTracking().ToListAsync();
+        var nextLastUpdated = new Dictionary<string, DateTime?>();
         if (cashCows.Any())
         {
             var cowIds = cashCows.Select(c => c.Id).ToList();
@@ -134,9 +134,12 @@ public partial class AdminTransactions
                 else if (date1 != null) maxDate = date1;
                 else if (date2 != null) maxDate = date2;
 
-                ccLastUpdated[cow.Id] = maxDate;
+                nextLastUpdated[cow.Id] = maxDate;
             }
         }
+        ccLastUpdated = nextLastUpdated;
+
+        await UpdateCashCowPeriodNetCore(context);
 
         pendingWithdrawals = await context.Transactions
             .Where(t => t.Type == "Withdrawal" && t.Status == "Pending")
@@ -144,7 +147,13 @@ public partial class AdminTransactions
             .AsNoTracking()
             .ToListAsync();
 
-        var userIds = allTransactions.Select(t => t.UserId).Concat(pendingWithdrawals.Select(t => t.UserId)).Distinct().ToList();
+        var userIds = allTransactions.Select(t => t.UserId)
+            .Concat(allTransactions.Select(t => t.SenderId ?? ""))
+            .Concat(allTransactions.Select(t => t.ReceiverId ?? ""))
+            .Concat(pendingWithdrawals.Select(t => t.UserId))
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Distinct()
+            .ToList();
         await PopulateUserLookup(userIds);
 
         if (pendingWithdrawals.Any())
@@ -156,6 +165,12 @@ public partial class AdminTransactions
             {
                 currentBalances[b.Id] = b.Balance;
             }
+        }
+
+        if (viewingCow != null)
+        {
+            var updatedCow = cashCows.FirstOrDefault(c => c.Id == viewingCow.Id) ?? viewingCow;
+            await LoadCowTransactions(updatedCow);
         }
     }
 

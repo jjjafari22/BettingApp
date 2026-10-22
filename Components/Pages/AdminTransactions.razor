@@ -221,7 +221,7 @@ else
                         {
                             <select class="form-select" @bind="addTransSenderId">
                                 <option value="">-- Select Cash Cow (Scroll for more) --</option>
-                                @foreach (var cow in cashCows) { <option value="@cow.Id">@cow.FirstName @cow.LastName</option> }
+                                @foreach (var cow in cashCows) { <option @key="cow.Id" value="@cow.Id">@FormatFullName(cow.FirstName, cow.LastName)</option> }
                             </select>
                             @if (!string.IsNullOrEmpty(addTransSenderId)) {
                                 var cc = cashCows.FirstOrDefault(c => c.Id == addTransSenderId);
@@ -278,7 +278,7 @@ else
                         {
                             <select class="form-select" @bind="addTransReceiverId" @bind:after="AutoFillPaymentDetails">
                                 <option value="">-- Select Cash Cow (Scroll for more) --</option>
-                                @foreach (var cow in cashCows) { <option value="@cow.Id">@cow.FirstName @cow.LastName</option> }
+                                @foreach (var cow in cashCows) { <option @key="cow.Id" value="@cow.Id">@FormatFullName(cow.FirstName, cow.LastName)</option> }
                             </select>
                             @if (!string.IsNullOrEmpty(addTransReceiverId)) {
                                 var cc = cashCows.FirstOrDefault(c => c.Id == addTransReceiverId);
@@ -478,7 +478,7 @@ else
                     <td><span class="text-muted small">#@t.Id</span></td>
                     <td>
                         @if (!string.IsNullOrEmpty(t.SenderId) && userLookup.TryGetValue(t.SenderId, out var su)) {
-                            <strong>@su.DiscordName</strong> <small class="text-muted">(@su.FirstName @su.LastName)</small>
+                            <strong>@su.DiscordName</strong> <small class="text-muted">(@FormatFullName(su.FirstName, su.LastName))</small>
                         } else {
                             <strong>@t.SenderName</strong>
                         }
@@ -486,7 +486,7 @@ else
                     </td>
                     <td>
                         @if (!string.IsNullOrEmpty(t.ReceiverId) && userLookup.TryGetValue(t.ReceiverId, out var ru)) {
-                            <strong>@ru.DiscordName</strong> <small class="text-muted">(@ru.FirstName @ru.LastName)</small>
+                            <strong>@ru.DiscordName</strong> <small class="text-muted">(@FormatFullName(ru.FirstName, ru.LastName))</small>
                         } else {
                             <strong>@t.ReceiverName</strong>
                         }
@@ -605,7 +605,7 @@ else
                         <div class="col-md-3 d-flex align-items-end justify-content-end gap-2">
                             @if (editingCowId != null)
                             {
-                                <button class="btn btn-secondary w-100" @onclick="() => { editingCowId = null; newCow = new(); }">Cancel</button>
+                                <button class="btn btn-secondary w-100" @onclick="CancelEditCashCow">Cancel</button>
                             }
                             <button class="btn btn-primary w-100 fw-bold" @onclick="SaveCashCow">@(editingCowId == null ? "Add" : "Save Changes")</button>
                         </div>
@@ -674,11 +674,11 @@ else
                             <tbody>
                                 @if (!cashCows.Any())
                                 {
-                                    <tr><td colspan="5" class="text-center text-muted p-3">No Cash Cows configured.</td></tr>
+                                    <tr><td colspan="6" class="text-center text-muted p-3">No Cash Cows configured.</td></tr>
                                 }
                                 @foreach (var cow in GetSortedCashCows())
                                 {
-                                    <tr>
+                                    <tr @key="cow.Id">
                                         <td>
                                             @{
                                                 var lastUpd = ccLastUpdated.TryGetValue(cow.Id, out var dt) ? dt : null;
@@ -689,7 +689,7 @@ else
                                                 }
                                             }
                                         </td>
-                                        <td><strong>@cow.FirstName @cow.LastName</strong></td>
+                                        <td translate="no" class="notranslate"><strong>@FormatFullName(cow.FirstName, cow.LastName)</strong></td>
                                         <td>
                                             @if(!string.IsNullOrEmpty(cow.Vipps)) { <span class="badge bg-primary">Vipps: @cow.Vipps</span> }
                                             @if(!string.IsNullOrEmpty(cow.Revolut)) { <span class="badge bg-dark">Rev: @cow.Revolut</span> }
@@ -730,7 +730,7 @@ else
             {
                 <div class="card shadow-sm border-0 mt-4 border-info">
                     <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
-                        <strong>Ledger: @viewingCow.FirstName @viewingCow.LastName</strong>
+                        <strong translate="no" class="notranslate">Ledger: @FormatFullName(viewingCow.FirstName, viewingCow.LastName)</strong>
                         <button class="btn-close" @onclick="() => viewingCow = null"></button>
                     </div>
                     <div class="card-body p-0">
@@ -754,7 +754,7 @@ else
                                     @foreach (var t in viewingCowTransactions)
                                     {
                                         var isIncoming = t.ReceiverId == viewingCow.Id;
-                                        <tr>
+                                        <tr @key="t.Id">
                                             <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
                                             <td><span class="badge bg-secondary">@t.Type</span></td>
                                             <td><small class="text-muted">@t.Platform</small></td>
@@ -766,7 +766,10 @@ else
                                                     string nameDisplay = t.SenderName ?? "";
                                                     if (userLookup.TryGetValue(t.SenderId ?? "", out var u))
                                                     {
-                                                        nameDisplay = string.IsNullOrEmpty(u.DiscordName) ? $"{u.FirstName} {u.LastName}".Trim() : $"{u.DiscordName} ({u.FirstName} {u.LastName})".Trim();
+                                                        var fullName = FormatFullName(u.FirstName, u.LastName);
+                                                        nameDisplay = string.IsNullOrEmpty(u.DiscordName)
+                                                            ? fullName
+                                                            : (string.IsNullOrEmpty(fullName) ? u.DiscordName : $"{u.DiscordName} ({fullName})");
                                                     }
                                                     <span class="text-success"><i class="bi bi-arrow-down-left"></i> From @nameDisplay</span> 
                                                 }
@@ -774,7 +777,10 @@ else
                                                     string nameDisplay = t.ReceiverName ?? "";
                                                     if (userLookup.TryGetValue(t.ReceiverId ?? "", out var u))
                                                     {
-                                                        nameDisplay = string.IsNullOrEmpty(u.DiscordName) ? $"{u.FirstName} {u.LastName}".Trim() : $"{u.DiscordName} ({u.FirstName} {u.LastName})".Trim();
+                                                        var fullName = FormatFullName(u.FirstName, u.LastName);
+                                                        nameDisplay = string.IsNullOrEmpty(u.DiscordName)
+                                                            ? fullName
+                                                            : (string.IsNullOrEmpty(fullName) ? u.DiscordName : $"{u.DiscordName} ({fullName})");
                                                     }
                                                     <span class="text-danger"><i class="bi bi-arrow-up-right"></i> To @nameDisplay</span> 
                                                 }

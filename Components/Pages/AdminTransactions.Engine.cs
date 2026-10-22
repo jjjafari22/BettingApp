@@ -191,7 +191,9 @@ public partial class AdminTransactions
                 return;
             }
             if (newTrans.Type != "Free Bet" && addTransSenderType == "User" && string.IsNullOrEmpty(addTransSenderId)) { errorMessage = "Select Sender User"; return; }
+            if (newTrans.Type != "Free Bet" && addTransSenderType == "CashCow" && string.IsNullOrEmpty(addTransSenderId)) { errorMessage = "Select Sender Cash Cow"; return; }
             if (addTransReceiverType == "User" && string.IsNullOrEmpty(addTransReceiverId)) { errorMessage = "Select Receiver User"; return; }
+            if (newTrans.Type != "Free Bet" && addTransReceiverType == "CashCow" && string.IsNullOrEmpty(addTransReceiverId)) { errorMessage = "Select Receiver Cash Cow"; return; }
 
             if (newTrans.Type != "Free Bet" && addTransSenderType == addTransReceiverType && addTransSenderId == addTransReceiverId)
             {
@@ -233,14 +235,40 @@ public partial class AdminTransactions
             // 1. Resolve Sender
             ApplicationUser? senderUser = null;
             CashCow? senderCC = null;
-            if (addTransSenderType == "User") senderUser = await context.Users.FindAsync(addTransSenderId);
-            else if (addTransSenderType == "CashCow") senderCC = await context.CashCows.FindAsync(addTransSenderId);
+            if (newTrans.Type != "Free Bet")
+            {
+                if (addTransSenderType == "User")
+                {
+                    senderUser = await context.Users.FindAsync(addTransSenderId);
+                    if (senderUser == null) { errorMessage = "Selected Sender User not found."; return; }
+                }
+                else if (addTransSenderType == "CashCow")
+                {
+                    senderCC = await context.CashCows.FindAsync(addTransSenderId);
+                    if (senderCC == null) { errorMessage = "Selected Sender Cash Cow not found."; return; }
+                }
+            }
 
             // 2. Resolve Receiver
             ApplicationUser? receiverUser = null;
             CashCow? receiverCC = null;
-            if (addTransReceiverType == "User") receiverUser = await context.Users.FindAsync(addTransReceiverId);
-            else if (addTransReceiverType == "CashCow") receiverCC = await context.CashCows.FindAsync(addTransReceiverId);
+            if (addTransReceiverType == "User")
+            {
+                receiverUser = await context.Users.FindAsync(addTransReceiverId);
+                if (receiverUser == null) { errorMessage = "Selected Receiver User not found."; return; }
+            }
+            else if (addTransReceiverType == "CashCow")
+            {
+                receiverCC = await context.CashCows.FindAsync(addTransReceiverId);
+                if (receiverCC == null) { errorMessage = "Selected Receiver Cash Cow not found."; return; }
+            }
+
+            string resolvedSenderName = senderUser != null
+                ? FormatFullName(senderUser.FirstName, senderUser.LastName)
+                : (senderCC != null ? FormatFullName(senderCC.FirstName, senderCC.LastName) : "Unknown");
+            string resolvedReceiverName = receiverUser != null
+                ? FormatFullName(receiverUser.FirstName, receiverUser.LastName)
+                : (receiverCC != null ? FormatFullName(receiverCC.FirstName, receiverCC.LastName) : "Unknown");
 
             newTrans.AmountNOK = (int)amount;
             newTrans.Date = DateTime.UtcNow;
@@ -249,11 +277,11 @@ public partial class AdminTransactions
 
             newTrans.SenderType = addTransSenderType;
             newTrans.SenderId = addTransSenderId;
-            newTrans.SenderName = senderUser != null ? senderUser.FirstName + " " + senderUser.LastName : (senderCC != null ? senderCC.FirstName + " " + senderCC.LastName : "Unknown");
+            newTrans.SenderName = resolvedSenderName;
 
             newTrans.ReceiverType = addTransReceiverType;
             newTrans.ReceiverId = addTransReceiverId;
-            newTrans.ReceiverName = receiverUser != null ? receiverUser.FirstName + " " + receiverUser.LastName : (receiverCC != null ? receiverCC.FirstName + " " + receiverCC.LastName : "Unknown");
+            newTrans.ReceiverName = resolvedReceiverName;
 
             // Helper to create a base transaction row with optional Note stamped
             Transaction CreateBaseTx() => new Transaction
@@ -267,10 +295,10 @@ public partial class AdminTransactions
                 Note = string.IsNullOrWhiteSpace(newTrans.Note) ? null : newTrans.Note.Trim(),
                 SenderType = addTransSenderType,
                 SenderId = addTransSenderId,
-                SenderName = senderUser != null ? $"{senderUser.FirstName} {senderUser.LastName}" : (senderCC != null ? $"{senderCC.FirstName} {senderCC.LastName}" : "Unknown"),
+                SenderName = resolvedSenderName,
                 ReceiverType = addTransReceiverType,
                 ReceiverId = addTransReceiverId,
-                ReceiverName = receiverUser != null ? $"{receiverUser.FirstName} {receiverUser.LastName}" : (receiverCC != null ? $"{receiverCC.FirstName} {receiverCC.LastName}" : "Unknown")
+                ReceiverName = resolvedReceiverName
             };
 
             var transactionsToAdd = new List<Transaction>();
