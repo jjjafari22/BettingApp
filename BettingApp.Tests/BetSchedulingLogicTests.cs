@@ -197,5 +197,49 @@ namespace BettingApp.Tests
             // Must evaluate Leg 1's expected finish time (1 hour from now), not Leg 2!
             Assert.Equal(leg1ExpectedFinish, nextCheck.Value);
         }
+
+        [Fact]
+        public void DetermineAutoSettleStatus_ParlayWithOneVoidAndIndependentVerifiedLoss_ReturnsLost()
+        {
+            // Mirrors Bet #9172: 1 Void leg (Draw No Bet push) + 2 Lost legs + 1 Won leg on different matches
+            var legs = new List<AiOutcomeLegResult>
+            {
+                new AiOutcomeLegResult { Match = "Besiktas vs Crystal Palace", Outcome = "Void", VerificationSource = "FotMob_Verified" },
+                new AiOutcomeLegResult { Match = "1899 Hoffenheim vs Lyon", Outcome = "Lost", VerificationSource = "FotMob_Verified" },
+                new AiOutcomeLegResult { Match = "Bournemouth vs AC Milan", Outcome = "Lost", VerificationSource = "FotMob_Verified" },
+                new AiOutcomeLegResult { Match = "Lillestrom vs Real Sociedad", Outcome = "Won", VerificationSource = "FotMob_Verified" }
+            };
+
+            var status = BetSchedulingLogic.DetermineAutoSettleStatus("LOST", legs);
+            Assert.Equal("Lost", status);
+        }
+
+        [Fact]
+        public void DetermineAutoSettleStatus_SameMatchWithVoidAndLost_ReturnsNull()
+        {
+            // Bet Builder on a single match where one leg is Void and another is Lost -> requires manual review
+            var legs = new List<AiOutcomeLegResult>
+            {
+                new AiOutcomeLegResult { Match = "Besiktas vs Crystal Palace", Outcome = "Void", VerificationSource = "FotMob_Verified" },
+                new AiOutcomeLegResult { Match = "Besiktas vs Crystal Palace", Outcome = "Lost", VerificationSource = "FotMob_Verified" }
+            };
+
+            var status = BetSchedulingLogic.DetermineAutoSettleStatus("LOST", legs);
+            Assert.Null(status);
+        }
+
+        [Fact]
+        public void DetermineAutoSettleStatus_WinningParlayWithOneVoid_ReturnsNull()
+        {
+            // Winning parlay with a Void leg requires manual odds recalculation
+            var legs = new List<AiOutcomeLegResult>
+            {
+                new AiOutcomeLegResult { Match = "Alexander Bublik vs Fabian Marozsan", Outcome = "Void", VerificationSource = "ESPN_Verified" },
+                new AiOutcomeLegResult { Match = "Raphael Collignon vs Jiri Lehecka", Outcome = "Won", VerificationSource = "ESPN_Verified" }
+            };
+
+            var status = BetSchedulingLogic.DetermineAutoSettleStatus("WON", legs);
+            Assert.Null(status);
+        }
     }
 }

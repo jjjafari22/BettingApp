@@ -84,7 +84,6 @@ namespace BettingApp.Services
             if (legs == null || legs.Count == 0) return null;
 
             bool hasAnyVoid = legs.Any(l => string.Equals(l.Outcome, "Void", StringComparison.OrdinalIgnoreCase));
-            if (hasAnyVoid) return null;
 
             string status = overallStatus?.ToUpper() ?? "";
 
@@ -92,12 +91,21 @@ namespace BettingApp.Services
 
             if (status.Contains("WON"))
             {
+                if (hasAnyVoid) return null;
                 if (legs.All(l => IsVerified(l.VerificationSource)))
                     return "Won";
             }
             else if (status.Contains("LOST"))
             {
-                if (legs.Any(l => string.Equals(l.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) && IsVerified(l.VerificationSource)))
+                bool hasDefinitiveVerifiedLoss = legs.Any(l =>
+                    string.Equals(l.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) &&
+                    IsVerified(l.VerificationSource) &&
+                    !legs.Where(other => string.Equals(other.Match?.Trim(), l.Match?.Trim(), StringComparison.OrdinalIgnoreCase))
+                         .Any(other => string.Equals(other.Outcome, "Void", StringComparison.OrdinalIgnoreCase) ||
+                                       string.Equals(other.Outcome, "Pending", StringComparison.OrdinalIgnoreCase) ||
+                                       string.Equals(other.Outcome, "Unknown", StringComparison.OrdinalIgnoreCase)));
+
+                if (hasDefinitiveVerifiedLoss)
                     return "Lost";
             }
 

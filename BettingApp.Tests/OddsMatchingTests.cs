@@ -2013,5 +2013,17 @@ namespace BettingApp.Tests
             string displayWrongTeam = OddsMatchingLogic.GetTranslatedOutcomeName("2 (-1.0)", searchResult.MatchName);
             Assert.False(OddsMatchingLogic.IsOutcomeMatch("2 (-1.0)", displayWrongTeam, leg, searchResult, bestMarket.MarketName));
         }
+
+        [Theory]
+        [InlineData("Soccer", 10)]
+        [InlineData("Ice Hockey", 15)]
+        [InlineData("American Football", -1)]
+        [InlineData("NFL", -1)]
+        [InlineData("Basketball", -1)]
+        [InlineData("Tennis", -1)]
+        public void ResolveSportId_MapsSportsCorrectly(string sport, int expectedSportId)
+        {
+            Assert.Equal(expectedSportId, OddsApiService.ResolveSportId(sport));
+        }
     }
 }

@@ -27,6 +27,8 @@ public class OddsApiService
     public static int ResolveSportId(string? sport)
     {
         if (string.IsNullOrWhiteSpace(sport)) return 10; // Default Soccer
+        if (sport.Contains("American Football", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("NFL", StringComparison.OrdinalIgnoreCase)) return -1;
         if (sport.Contains("Hockey", StringComparison.OrdinalIgnoreCase)) return 15;
         if (sport.Contains("Soccer", StringComparison.OrdinalIgnoreCase) || 
             sport.Contains("Football", StringComparison.OrdinalIgnoreCase) || 

@@ -344,7 +344,8 @@ else
                                                             @groupKey
                                                             @if (!string.IsNullOrEmpty(firstItem.Leg.Sport)) {
                                                                 var sportLower = firstItem.Leg.Sport.ToLower();
-                                                                var emoji = sportLower.Contains("soccer") || sportLower.Contains("football") ? "⚽" :
+                                                                var emoji = sportLower.Contains("american football") || sportLower.Contains("nfl") ? "🏈" :
+                                                                            sportLower.Contains("soccer") || sportLower.Contains("football") ? "⚽" :
                                                                             sportLower.Contains("hockey") ? "🏒" :
                                                                             sportLower.Contains("tennis") ? "🎾" :
                                                                             sportLower.Contains("basketball") ? "🏀" :
