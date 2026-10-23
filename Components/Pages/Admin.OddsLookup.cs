@@ -696,7 +696,10 @@ public partial class Admin
             if (string.IsNullOrEmpty(SelectedPapiMarketId))
             {
                 // Try to find a standard market
-                var ftMatch = result.Markets.FirstOrDefault(m => m.MarketName.Contains("1x2", StringComparison.OrdinalIgnoreCase) || m.MarketName.Contains("Full Time", StringComparison.OrdinalIgnoreCase));
+                var ftMatch = result.Markets.FirstOrDefault(m =>
+                    m.MarketName.Contains("1x2", StringComparison.OrdinalIgnoreCase) ||
+                    m.MarketName.Contains("Full Time", StringComparison.OrdinalIgnoreCase) ||
+                    m.MarketName.Equals("Winner", StringComparison.OrdinalIgnoreCase));
                 if (ftMatch != null)
                 {
                     SelectedPapiMarketId = ftMatch.MarketId;

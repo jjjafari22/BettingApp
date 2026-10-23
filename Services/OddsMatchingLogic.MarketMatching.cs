@@ -32,11 +32,23 @@ namespace BettingApp.Services
                 var clean = TeamAliasMappingService.RemoveDiacritics(s).ToLowerInvariant()
                              .Replace("players", "player")
                              .Replace("player's", "player")
+                             .Replace("participants", "participant")
+                             .Replace("participant's", "participant")
                              .Replace("shots", "shot")
                              .Replace("cards", "card")
                              .Replace("goals", "goal")
                              .Replace("corners", "corner")
-                             .Replace("halves", "half");
+                             .Replace("halves", "half")
+                             .Replace("sets", "set")
+                             .Replace("games", "game")
+                             .Replace("aces", "ace")
+                             .Replace("faults", "fault")
+                             .Replace("breaks", "break")
+                             .Replace("tie-breaks", "tiebreak")
+                             .Replace("tie-break", "tiebreak")
+                             .Replace("tiebreaks", "tiebreak")
+                             .Replace("tie breaks", "tiebreak")
+                             .Replace("tie break", "tiebreak");
                 return new string(clean.Where(char.IsLetterOrDigit).ToArray());
             }
 
@@ -51,10 +63,12 @@ namespace BettingApp.Services
 
             if (bestMatch == null)
             {
-                var statKeywords = new[] { "corner", "booking", "card", "foul", "save", "goalkeeper", "shot", "tackle", "offside" };
+                var statKeywords = new[] { "corner", "booking", "card", "foul", "save", "goalkeeper", "shot", "tackle", "offside", "ace", "fault", "tiebreak" };
 
                 foreach (var target in simplifiedTargets)
                 {
+                    if (target == "winner" || target == "correctscore") continue;
+
                     var targetStats = statKeywords.Where(kw => target.Contains(kw)).ToList();
 
                     var potentialMatches = markets.Where(m =>

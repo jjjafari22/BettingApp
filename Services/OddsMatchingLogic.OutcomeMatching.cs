@@ -31,6 +31,13 @@ namespace BettingApp.Services
                 return htftResult.Value;
             }
 
+            // Strategy 1B: Exact Count ("Exact Sets") and Correct Score / Set Betting ("2:0", "0:2", "6:4")
+            bool? exactOrScoreResult = TryMatchExactCountOrScore(oName, displayOName, ctx);
+            if (exactOrScoreResult.HasValue)
+            {
+                return exactOrScoreResult.Value;
+            }
+
             // Strategy 2: 1X2, Double Chance, & Handicap ("1", "X", "2", "1X", "2 (-0.5)", "1 (0-2.0)")
             bool? hcOr1X2Result = TryMatchHandicapOr1X2(oName, displayOName, ctx);
             if (hcOr1X2Result.HasValue)
@@ -184,11 +191,106 @@ namespace BettingApp.Services
         }
 
         /// <summary>
+        /// Strategy 1B: Evaluates Exact Count markets (e.g. "Exact Sets" with outcomes "2", "3", "4", "5")
+        /// and Correct Score / Set Betting markets (outcomes "2:0", "0:2", "2:1", "6:4", etc.).
+        /// </summary>
+        private static bool? TryMatchExactCountOrScore(string oName, string displayOName, OutcomeMatchingContext ctx)
+        {
+            string trimmedOName = (oName ?? "").Trim();
+
+            // 1. Exact Count markets (e.g. "Exact Sets", "Exact Aces", "Exact Double Faults", "Exact Goals")
+            if (!string.IsNullOrEmpty(ctx.OpMarketName) &&
+                ctx.OpMarketName.StartsWith("Exact ", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Regex.IsMatch(trimmedOName, @"^\d+\+?$"))
+                {
+                    if (ctx.NormSelRaw.Contains("over") || ctx.NormSelRaw.Contains("under") ||
+                        Regex.IsMatch(ctx.NormSelRaw, @"\b\d+\.\d+\b"))
+                    {
+                        return false;
+                    }
+
+                    string selText = ctx.NormSelRaw
+                        .Replace("two", "2")
+                        .Replace("three", "3")
+                        .Replace("four", "4")
+                        .Replace("five", "5");
+
+                    var mInt = Regex.Match(selText, @"\b(\d+\+?)\b");
+                    if (mInt.Success)
+                    {
+                        return string.Equals(mInt.Groups[1].Value, trimmedOName, StringComparison.OrdinalIgnoreCase);
+                    }
+                    return false;
+                }
+            }
+
+            // 2. Correct Score / Set Betting outcomes ("2:0", "2:1", "0:2", "1:2", "6:4")
+            var opScoreMatch = Regex.Match(trimmedOName, @"^(\d+):(\d+)$");
+            if (opScoreMatch.Success &&
+                int.TryParse(opScoreMatch.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int opP1) &&
+                int.TryParse(opScoreMatch.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int opP2))
+            {
+                if (ctx.HasSelHc || ctx.NormSelRaw.Contains("over") || ctx.NormSelRaw.Contains("under"))
+                {
+                    return false;
+                }
+
+                var selScoreMatch = Regex.Match(ctx.NormSelRaw, @"(?<![.\d])(\d+)\s*[-:]\s*(\d+)(?![.\d])");
+                if (!selScoreMatch.Success ||
+                    !int.TryParse(selScoreMatch.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int s1) ||
+                    !int.TryParse(selScoreMatch.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int s2))
+                {
+                    return false;
+                }
+
+                // Check if the selection also names a specific team/player (e.g. "Jiri Lehecka 2-0" or "Arsenal 2-1")
+                string selWithoutScore = (ctx.Leg?.Selection ?? "");
+                selWithoutScore = Regex.Replace(selWithoutScore, @"(?<![.\d])\d+\s*[-:]\s*\d+(?![.\d])", " ").Trim();
+                int namedTeam = !string.IsNullOrWhiteSpace(selWithoutScore)
+                    ? TeamAliasMappingService.ResolveTeamSelection(selWithoutScore, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2)
+                    : 0;
+
+                int expectedOpP1;
+                int expectedOpP2;
+
+                if (namedTeam == 1)
+                {
+                    // Named team is OddsPapi Participant 1 -> they are the winner of the stated scoreline
+                    expectedOpP1 = Math.Max(s1, s2);
+                    expectedOpP2 = Math.Min(s1, s2);
+                }
+                else if (namedTeam == 2)
+                {
+                    // Named team is OddsPapi Participant 2 -> they are the winner of the stated scoreline
+                    expectedOpP1 = Math.Min(s1, s2);
+                    expectedOpP2 = Math.Max(s1, s2);
+                }
+                else
+                {
+                    // Pure scoreline ("0-2", "1-2", "2:0"): order follows the match string (inverted if fixture participants are swapped)
+                    expectedOpP1 = ctx.IsSwapped ? s2 : s1;
+                    expectedOpP2 = ctx.IsSwapped ? s1 : s2;
+                }
+
+                return opP1 == expectedOpP1 && opP2 == expectedOpP2;
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Strategy 2: Evaluates 1X2, Double Chance ("1X", "X2", "12"), and Handicap ("1 (-0.5)", "2 (-0.5)", "1 (0-2.0)") outcomes.
         /// Never falls through to loose substring matching when a handicap value or team code differs.
         /// </summary>
         private static bool? TryMatchHandicapOr1X2(string oName, string displayOName, OutcomeMatchingContext ctx)
         {
+            if (!string.IsNullOrEmpty(ctx.OpMarketName) &&
+                ctx.OpMarketName.StartsWith("Exact ", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
             var basicHcMatch = _basicHcMatchRegex.Match(oName ?? "");
             if (basicHcMatch.Success)
             {
@@ -304,21 +406,38 @@ namespace BettingApp.Services
                 return false;
             }
 
-            if (!ctx.TargetLine.HasValue) return false;
+            double? effectiveTargetLine = ctx.TargetLine;
+            if (!effectiveTargetLine.HasValue &&
+                (ctx.NormOpMarket.Contains("tiebreak") || ctx.NormMarket.Contains("tiebreak")) &&
+                (ctx.NormSel == "yes" || ctx.NormSel == "no" || ctx.NormSel == "ja" || ctx.NormSel == "nei"))
+            {
+                effectiveTargetLine = 0.5;
+            }
 
-            // Team alignment check for Team 1 / Team 2 markets
+            if (!effectiveTargetLine.HasValue) return false;
+
+            // Team/Participant alignment check for Team 1 / Team 2 and Participant 1 / Participant 2 markets
             string combinedLeg = $"{(ctx.Leg?.Market ?? "")} {(ctx.Leg?.Selection ?? "")}";
             int legTeam = TeamAliasMappingService.ResolveTeamSelection(combinedLeg, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2);
             string normOp = ctx.NormOpMarket ?? "";
-            if (legTeam == 1 && normOp.Contains("team2")) return false;
-            if (legTeam == 2 && normOp.Contains("team1")) return false;
+            if (legTeam == 1 && (normOp.Contains("team2") || normOp.Contains("participant2"))) return false;
+            if (legTeam == 2 && (normOp.Contains("team1") || normOp.Contains("participant1"))) return false;
+            if (legTeam == 0 && (normOp.Contains("participant1") || normOp.Contains("participant2"))) return false;
+            if (legTeam != 0 &&
+                !normOp.Contains("participant1") && !normOp.Contains("participant2") &&
+                !normOp.Contains("team1") && !normOp.Contains("team2") &&
+                (normOp == "totalgamesoverunder" || normOp == "totalaces" || normOp == "totaldoublefaults" ||
+                 normOp == "totalbreaks" || normOp == "totalbreakpoints" || normOp == "totalservicegames"))
+            {
+                return false;
+            }
 
             bool opIsUnder = opMatch.Groups[1].Value.Equals("under", StringComparison.OrdinalIgnoreCase);
             if (opIsUnder != ctx.WantsUnder) return false;
 
             if (double.TryParse(opMatch.Groups[2].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out double opLine))
             {
-                return Math.Abs(opLine - ctx.TargetLine.Value) < 0.001;
+                return Math.Abs(opLine - effectiveTargetLine.Value) < 0.001;
             }
 
             return false;
@@ -329,7 +448,7 @@ namespace BettingApp.Services
             string selRemaining = ctx.NormSelRaw ?? "";
             selRemaining = Regex.Replace(
                 selRemaining,
-                @"\b(?:over|under|o\/u|goals?|mål|mal|scoringer|points?|poeng|pts|cards?|kort|corners?|hjørnespark|hjornespark|shots?|skudd|saves?|redninger|tackles?|taklinger|fouls?|frispark|runs?|games?|sets?|innings?|frames?|power\s*sub|super\s*sub|total|totalt|antall|full\s*time|ft|regular\s*time|incl|overtime|penalties|ot|at\s+least|or\s+more)\b",
+                @"\b(?:over|under|o\/u|yes|no|ja|nei|goals?|mål|mal|scoringer|points?|poeng|pts|cards?|kort|corners?|hjørnespark|hjornespark|shots?|skudd|saves?|redninger|tackles?|taklinger|fouls?|frispark|runs?|games?|sets?|aces?|double\s+faults?|faults?|breaks?|service|tie\s*breaks?|tiebreaks?|innings?|frames?|power\s*sub|super\s*sub|total|totalt|antall|full\s*time|ft|regular\s*time|incl|overtime|penalties|ot|at\s+least|or\s+more|1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth|match|player\s*[12]|participant\s*[12]|won|number|of|in)\b",
                 " ",
                 RegexOptions.IgnoreCase);
             selRemaining = Regex.Replace(selRemaining, @"\d+(?:\.\d+)?", " ");
@@ -342,6 +461,22 @@ namespace BettingApp.Services
             {
                 selRemaining = Regex.Replace(selRemaining, $@"\b{Regex.Escape(ctx.NormT2)}\b", " ", RegexOptions.IgnoreCase);
             }
+            if (!string.IsNullOrEmpty(ctx.TargetOp1))
+            {
+                selRemaining = Regex.Replace(selRemaining, $@"\b{Regex.Escape(ctx.TargetOp1)}\b", " ", RegexOptions.IgnoreCase);
+            }
+            if (!string.IsNullOrEmpty(ctx.TargetOp2))
+            {
+                selRemaining = Regex.Replace(selRemaining, $@"\b{Regex.Escape(ctx.TargetOp2)}\b", " ", RegexOptions.IgnoreCase);
+            }
+
+            string candidateWords = Regex.Replace(selRemaining, @"\s+", " ").Trim();
+            if (!string.IsNullOrEmpty(candidateWords) &&
+                TeamAliasMappingService.ResolveTeamSelection(candidateWords, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2) != 0)
+            {
+                return "";
+            }
+
             return Regex.Replace(selRemaining, @"\s+", "").Trim();
         }
 
@@ -479,7 +614,8 @@ namespace BettingApp.Services
             if (!isLineSel && !hasAnyHandicap && (!ctx.WantsUnder || outcomeHasNegative) &&
                 !ctx.NumSelSuccess && !_numSuffixRegex.IsMatch(normOName) &&
                 !string.IsNullOrEmpty(normOName) && !string.IsNullOrEmpty(ctx.NormSel) &&
-                TeamAliasMappingService.IsTeamMatch(normOName, ctx.NormSel))
+                (TeamAliasMappingService.IsTeamMatch(normOName, ctx.NormSel) ||
+                 TeamAliasMappingService.IsTeamMatch(displayONameSafe, ctx.RawSel)))
             {
                 return true;
             }

@@ -29,6 +29,10 @@ public class OddsApiService
         if (string.IsNullOrWhiteSpace(sport)) return 10; // Default Soccer
         if (sport.Contains("American Football", StringComparison.OrdinalIgnoreCase) ||
             sport.Contains("NFL", StringComparison.OrdinalIgnoreCase)) return -1;
+        if (sport.Contains("Table Tennis", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("Bordtennis", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("Ping Pong", StringComparison.OrdinalIgnoreCase)) return -1;
+        if (sport.Contains("Tennis", StringComparison.OrdinalIgnoreCase)) return 12;
         if (sport.Contains("Hockey", StringComparison.OrdinalIgnoreCase)) return 15;
         if (sport.Contains("Soccer", StringComparison.OrdinalIgnoreCase) || 
             sport.Contains("Football", StringComparison.OrdinalIgnoreCase) || 
@@ -79,7 +83,9 @@ public class OddsApiService
                         
                 dto.NormP1 = NormalizeTeamName(dto.Participant1Name);
                 dto.NormP2 = NormalizeTeamName(dto.Participant2Name);
-                dto.HasModifier = HasSpecialModifier(dto.Participant1Name) || HasSpecialModifier(dto.Participant2Name) || HasSpecialModifier(dto.TournamentName) || dto.Participant1Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || dto.Participant2Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase);
+                dto.HasModifier = sportId == 12
+                    ? HasTennisSpecialModifier(dto.Participant1Name, dto.Participant2Name, dto.TournamentName)
+                    : (HasSpecialModifier(dto.Participant1Name) || HasSpecialModifier(dto.Participant2Name) || HasSpecialModifier(dto.TournamentName) || dto.Participant1Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || dto.Participant2Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase));
 
                 if (f.TryGetProperty("startTime", out var st) && DateTime.TryParse(st.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var dt))
                 {
@@ -238,11 +244,11 @@ public class OddsApiService
 
     public async Task WarmupCacheAsync(int? specificSportId = null)
     {
-        var sportsToWarm = specificSportId.HasValue ? new[] { specificSportId.Value } : new[] { 10, 15 };
+        var sportsToWarm = specificSportId.HasValue ? new[] { specificSportId.Value } : new[] { 10, 15, 12 };
         
         foreach (var sportId in sportsToWarm)
         {
-            string sportLabel = sportId == 15 ? "Ice Hockey" : "Soccer";
+            string sportLabel = sportId == 15 ? "Ice Hockey" : (sportId == 12 ? "Tennis" : "Soccer");
             _logger.LogInformation($"OddsPapi: Background worker warming up cache for {sportLabel} (sportId={sportId}) Fixtures (6h) and Markets (24h)...");
             try
             {
@@ -326,10 +332,22 @@ public class OddsApiService
             foreach (var f in parsedFixtures)
             {
                 // Skip Youth/Women's/SRL matches if they weren't explicitly requested
-                bool qHasMod = HasSpecialModifier(homeTeam) || HasSpecialModifier(awayTeam);
+                bool qHasMod = sportId == 12
+                    ? HasTennisSpecialModifier(homeTeam, awayTeam, "")
+                    : (HasSpecialModifier(homeTeam) || HasSpecialModifier(awayTeam));
                 if (!qHasMod && f.HasModifier)
                 {
                     continue;
+                }
+
+                if (sportId == 12)
+                {
+                    bool queryIsDoubles = homeTeam.Contains('/') || awayTeam.Contains('/');
+                    bool fixtureIsDoubles = f.Participant1Name.Contains('/') || f.Participant2Name.Contains('/');
+                    if (queryIsDoubles != fixtureIsDoubles)
+                    {
+                        continue;
+                    }
                 }
                 
                 string normP1 = f.NormP1;
@@ -362,14 +380,45 @@ public class OddsApiService
                     }
                 }
 
+                if (sportId == 12 && !string.IsNullOrEmpty(normAwayTeam))
+                {
+                    bool homeMatchesP1 = TeamAliasMappingService.IsTeamMatch(homeTeam, f.Participant1Name) || normHomeTokens.Any(t => IsNameMatch(normP1, t, true));
+                    bool homeMatchesP2 = TeamAliasMappingService.IsTeamMatch(homeTeam, f.Participant2Name) || normHomeTokens.Any(t => IsNameMatch(normP2, t, true));
+                    bool awayMatchesP1 = TeamAliasMappingService.IsTeamMatch(awayTeam, f.Participant1Name) || normAwayTokens.Any(t => IsNameMatch(normP1, t, true));
+                    bool awayMatchesP2 = TeamAliasMappingService.IsTeamMatch(awayTeam, f.Participant2Name) || normAwayTokens.Any(t => IsNameMatch(normP2, t, true));
+
+                    bool alignedNormal = (homeMatchesP1 && (awayMatchesP2 || IsSecondaryTeamFuzzyMatch(normP2, normAwayTeam, normAwayTokens))) ||
+                                         (awayMatchesP2 && IsSecondaryTeamFuzzyMatch(normP1, normHomeTeam, normHomeTokens));
+                    bool alignedSwapped = (homeMatchesP2 && (awayMatchesP1 || IsSecondaryTeamFuzzyMatch(normP1, normAwayTeam, normAwayTokens))) ||
+                                          (awayMatchesP1 && IsSecondaryTeamFuzzyMatch(normP2, normHomeTeam, normHomeTokens));
+
+                    if (!alignedNormal && !alignedSwapped) continue;
+                }
+
                 int score = 0;
                 
-                if (IsNameMatch(normP1, normHomeTeam, true) || IsNameMatch(normP2, normHomeTeam, true)) score += 50;
-                if (!string.IsNullOrEmpty(normAwayTeam) && (IsNameMatch(normP1, normAwayTeam, true) || IsNameMatch(normP2, normAwayTeam, true))) score += 50;
+                if (IsNameMatch(normP1, normHomeTeam, true) || IsNameMatch(normP2, normHomeTeam, true) ||
+                    (sportId == 12 && (TeamAliasMappingService.IsTeamMatch(homeTeam, f.Participant1Name) || TeamAliasMappingService.IsTeamMatch(homeTeam, f.Participant2Name))))
+                {
+                    score += 50;
+                }
+                if (!string.IsNullOrEmpty(normAwayTeam) && (IsNameMatch(normP1, normAwayTeam, true) || IsNameMatch(normP2, normAwayTeam, true) ||
+                    (sportId == 12 && (TeamAliasMappingService.IsTeamMatch(awayTeam, f.Participant1Name) || TeamAliasMappingService.IsTeamMatch(awayTeam, f.Participant2Name)))))
+                {
+                    score += 50;
+                }
                 
                 // Huge bonus for exact match to differentiate "Team" from "Team 2"
-                if (IsExactMatch(normP1, normHomeTeam, true) || IsExactMatch(normP2, normHomeTeam, true)) score += 100;
-                if (!string.IsNullOrEmpty(normAwayTeam) && (IsExactMatch(normP1, normAwayTeam, true) || IsExactMatch(normP2, normAwayTeam, true))) score += 100;
+                if (IsExactMatch(normP1, normHomeTeam, true) || IsExactMatch(normP2, normHomeTeam, true) ||
+                    (sportId == 12 && (TeamAliasMappingService.IsTeamMatch(homeTeam, f.Participant1Name) || TeamAliasMappingService.IsTeamMatch(homeTeam, f.Participant2Name))))
+                {
+                    score += 100;
+                }
+                if (!string.IsNullOrEmpty(normAwayTeam) && (IsExactMatch(normP1, normAwayTeam, true) || IsExactMatch(normP2, normAwayTeam, true) ||
+                    (sportId == 12 && (TeamAliasMappingService.IsTeamMatch(awayTeam, f.Participant1Name) || TeamAliasMappingService.IsTeamMatch(awayTeam, f.Participant2Name)))))
+                {
+                    score += 100;
+                }
 
                 foreach (var token in normHomeTokens.Concat(normAwayTokens))
                 {
@@ -666,6 +715,19 @@ public class OddsApiService
                text.Contains(" srl");
     }
 
+    private static bool HasTennisSpecialModifier(string p1, string p2, string tournament)
+    {
+        // In Tennis, participants are individual players and WTA/ITF tournaments have "Women" in the tournament name,
+        // so "Women" must NOT be treated as a filter modifier. Only filter out Simulated Reality League (SRL) / Virtual matches.
+        return HasSrlModifier(p1) || HasSrlModifier(p2) || HasSrlModifier(tournament);
+    }
+
+    private static bool HasSrlModifier(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return false;
+        return System.Text.RegularExpressions.Regex.IsMatch(input, @"\b(?:srl|virtual|esports|cyber)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+
     private bool IsNameMatch(string source, string target, bool isNormalized = false)
     {
         if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(target)) return false;
@@ -696,12 +758,19 @@ public class OddsApiService
     private static List<string> ExtractSignificantTokens(string normTeam)
     {
         if (string.IsNullOrWhiteSpace(normTeam)) return new List<string>();
-        var tokens = normTeam.Split(new[] { ' ', '-', '.' }, StringSplitOptions.RemoveEmptyEntries)
+        var tokens = normTeam.Split(new[] { ' ', '-', '.', ',', '/' }, StringSplitOptions.RemoveEmptyEntries)
             .Where(w => w.Length >= 3 &&
                         !w.Equals("the", StringComparison.OrdinalIgnoreCase) &&
                         !TeamAliasMappingService.IsStopWord(w))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+        if (!tokens.Any())
+        {
+            tokens = normTeam.Split(new[] { ' ', '-', '.', ',', '/' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => w.Length >= 2 && !TeamAliasMappingService.IsStopWord(w))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
         if (!tokens.Any()) tokens.Add(normTeam);
         return tokens;
     }

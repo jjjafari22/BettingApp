@@ -2017,13 +2017,350 @@ namespace BettingApp.Tests
         [Theory]
         [InlineData("Soccer", 10)]
         [InlineData("Ice Hockey", 15)]
+        [InlineData("Tennis", 12)]
+        [InlineData("Table Tennis", -1)]
+        [InlineData("Bordtennis", -1)]
         [InlineData("American Football", -1)]
         [InlineData("NFL", -1)]
         [InlineData("Basketball", -1)]
-        [InlineData("Tennis", -1)]
         public void ResolveSportId_MapsSportsCorrectly(string sport, int expectedSportId)
         {
             Assert.Equal(expectedSportId, OddsApiService.ResolveSportId(sport));
+        }
+
+        [Theory]
+        [InlineData("Cobolli, Flavio", "Flavio Cobolli", true)]
+        [InlineData("Fils, Arthur", "Arthur Fils", true)]
+        [InlineData("Struff, Jan-Lennard", "Jan-Lennard Struff", true)]
+        [InlineData("Auger-Aliassime, Felix", "F. Auger-Aliassime", true)]
+        [InlineData("Medvedev, D", "Daniil Medvedev", true)]
+        [InlineData("Wawrinka, Stanislas", "Stan Wawrinka", true)]
+        [InlineData("de Minaur, Alex", "Alex De Minaur", true)]
+        [InlineData("Li, Ann", "Ann Li", true)]
+        [InlineData("Li, A", "Ann Li", true)]
+        [InlineData("Li, Ann", "Lin Zhu", false)]
+        [InlineData("Cerundolo, Francisco", "Francisco Cerundolo", true)]
+        [InlineData("Cerundolo, F", "Francisco Cerundolo", true)]
+        [InlineData("Cerundolo, Juan Manuel", "Francisco Cerundolo", false)]
+        [InlineData("Cerundolo, J", "Francisco Cerundolo", false)]
+        [InlineData("Fruhvirtova, Linda", "Brenda Fruhvirtova", false)]
+        [InlineData("Collignon R / Goffin D", "R. Collignon/D. Goffin", true)]
+        [InlineData("Krawietz K / Puetz T", "K. Krawietz/T. Puetz", true)]
+        [InlineData("Collignon R / Goffin D", "K. Krawietz/T. Puetz", false)]
+        public void Tennis_PlayerAndDoublesNameMatching_WorksCorrectly(string opParticipant, string betslipName, bool expected)
+        {
+            Assert.Equal(expected, TeamAliasMappingService.IsTeamMatch(opParticipant, betslipName));
+            Assert.Equal(expected, TeamAliasMappingService.IsTeamMatch(betslipName, opParticipant));
+        }
+
+        [Fact]
+        public void Tennis_MatchWinner_And_SwappedParticipants_MatchCorrectly()
+        {
+            var tennisMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1201", MarketName = "Winner" },
+                new OddsPapiMarket { MarketId = "1202", MarketName = "First Set Winner" },
+                new OddsPapiMarket { MarketId = "1203", MarketName = "Set Handicap" },
+                new OddsPapiMarket { MarketId = "1204", MarketName = "Game Handicap" },
+                new OddsPapiMarket { MarketId = "1205", MarketName = "Total Games Over Under" }
+            };
+
+            foreach (var rawMkt in new[] { "Match Odds", "Match Winner", "Match Result", "Moneyline", "To Win", "To Win Match", "Head to Head" })
+            {
+                var best = OddsMatchingLogic.FindBestMarket(
+                    tennisMarkets,
+                    rawMkt,
+                    "Carlos Alcaraz vs Arthur Fils",
+                    "Arthur Fils",
+                    _marketMapper,
+                    "Fils, Arthur vs Alcaraz, Carlos");
+
+                Assert.NotNull(best);
+                Assert.Equal("Winner", best.MarketName);
+            }
+
+            // Swapped fixture order: AI has "Carlos Alcaraz vs Arthur Fils", OddsPapi has "Fils, Arthur vs Alcaraz, Carlos"
+            var searchResult = new OddsPapiSearchResult { MatchName = "Fils, Arthur vs Alcaraz, Carlos" };
+            var leg = new AiVisionLeg
+            {
+                Sport = "Tennis",
+                Match = "Carlos Alcaraz vs Arthur Fils",
+                Market = "Match Odds",
+                Selection = "Arthur Fils"
+            };
+
+            string disp1 = OddsMatchingLogic.GetTranslatedOutcomeName("1", searchResult.MatchName);
+            string disp2 = OddsMatchingLogic.GetTranslatedOutcomeName("2", searchResult.MatchName);
+
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1", disp1, leg, searchResult, "Winner"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2", disp2, leg, searchResult, "Winner"));
+        }
+
+        [Fact]
+        public void Tennis_WinnerTarget_DoesNotSubstringMatchSetWinnerOrHockeyOvertimeWinner()
+        {
+            // 1. If a Tennis fixture only has "First Set Winner" and "Game Winner" (no match "Winner"),
+            // a "Match Winner" bet must NOT match "First Set Winner" or "Game Winner".
+            var partialTennisMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1202", MarketName = "First Set Winner" },
+                new OddsPapiMarket { MarketId = "1299", MarketName = "Game Winner" }
+            };
+
+            var badMatch = OddsMatchingLogic.FindBestMarket(
+                partialTennisMarkets,
+                "Match Odds",
+                "Carlos Alcaraz vs Arthur Fils",
+                "Carlos Alcaraz",
+                _marketMapper);
+            Assert.Null(badMatch);
+
+            // 2. In Ice Hockey, "Match Odds" (Regular Time 3-way) must NOT match "Winner (incl. overtime and penalties)"
+            var hockeyMarketsWithoutRegTime = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1501", MarketName = "Winner (incl. overtime and penalties)" }
+            };
+
+            var badHockeyMatch = OddsMatchingLogic.FindBestMarket(
+                hockeyMarketsWithoutRegTime,
+                "Match Odds",
+                "Toronto Maple Leafs vs Montreal Canadiens",
+                "Toronto Maple Leafs",
+                _marketMapper);
+            Assert.Null(badHockeyMatch);
+        }
+
+        [Fact]
+        public void Tennis_SetWinner_And_SpecificGameWinnerGuard_WorkCorrectly()
+        {
+            var tennisMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1201", MarketName = "Winner" },
+                new OddsPapiMarket { MarketId = "1202", MarketName = "First Set Winner" },
+                new OddsPapiMarket { MarketId = "1203", MarketName = "Second Set Winner" },
+                new OddsPapiMarket { MarketId = "1204", MarketName = "Total Games First Set" }
+            };
+
+            var m1 = OddsMatchingLogic.FindBestMarket(tennisMarkets, "1st Set Winner", "Sonay Kartal vs Madison Keys", "Madison Keys", _marketMapper);
+            Assert.NotNull(m1);
+            Assert.Equal("First Set Winner", m1.MarketName);
+
+            var m2 = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Set 2 Winner", "Frances Tiafoe vs Flavio Cobolli", "Flavio Cobolli", _marketMapper);
+            Assert.NotNull(m2);
+            Assert.Equal("Second Set Winner", m2.MarketName);
+
+            // Specific point-by-point game in a set ("1st Set - 4th Game Winner", "2nd Set - 4th Game Winner")
+            // must NOT falsely resolve to "First Set Winner" or "Second Set Winner"
+            var mGame1 = OddsMatchingLogic.FindBestMarket(tennisMarkets, "1st Set - 4th Game Winner", "Sonay Kartal vs Madison Keys", "Madison Keys", _marketMapper);
+            Assert.Null(mGame1);
+
+            var mGame2 = OddsMatchingLogic.FindBestMarket(tennisMarkets, "2nd Set - 4th Game Winner", "Frances Tiafoe vs Flavio Cobolli", "Flavio Cobolli", _marketMapper);
+            Assert.Null(mGame2);
+        }
+
+        [Fact]
+        public void Tennis_SetHandicap_And_GameHandicap_MatchCorrectly()
+        {
+            var tennisMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1201", MarketName = "Winner" },
+                new OddsPapiMarket { MarketId = "1203", MarketName = "Set Handicap" },
+                new OddsPapiMarket { MarketId = "1204", MarketName = "Game Handicap" },
+                new OddsPapiMarket { MarketId = "1205", MarketName = "Game Handicap First Set" }
+            };
+
+            var setHcMkt = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Set Handicap", "Karen Khachanov vs Jenson Brooksby", "Karen Khachanov -1.5", _marketMapper, "Khachanov, Karen vs Brooksby, Jenson");
+            Assert.NotNull(setHcMkt);
+            Assert.Equal("Set Handicap", setHcMkt.MarketName);
+
+            var gameHcMkt = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Game Handicap", "Karen Khachanov vs Jenson Brooksby", "Jenson Brooksby +3.5", _marketMapper, "Khachanov, Karen vs Brooksby, Jenson");
+            Assert.NotNull(gameHcMkt);
+            Assert.Equal("Game Handicap", gameHcMkt.MarketName);
+
+            var set1GameHcMkt = OddsMatchingLogic.FindBestMarket(tennisMarkets, "1st Set Game Handicap", "Karen Khachanov vs Jenson Brooksby", "Karen Khachanov -1.5", _marketMapper, "Khachanov, Karen vs Brooksby, Jenson");
+            Assert.NotNull(set1GameHcMkt);
+            Assert.Equal("Game Handicap First Set", set1GameHcMkt.MarketName);
+
+            var searchResult = new OddsPapiSearchResult { MatchName = "Khachanov, Karen vs Brooksby, Jenson" };
+
+            // Participant 1 -1.5 Sets -> in OddsPapi hc=-1.5: "1 (-1.5)" is P1 -1.5, "2 (-1.5)" is P2 +1.5
+            var legP1Minus = new AiVisionLeg
+            {
+                Sport = "Tennis",
+                Match = "Karen Khachanov vs Jenson Brooksby",
+                Market = "Set Handicap",
+                Selection = "Karen Khachanov -1.5 Sets"
+            };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1 (-1.5)", OddsMatchingLogic.GetTranslatedOutcomeName("1 (-1.5)", searchResult.MatchName), legP1Minus, searchResult, "Set Handicap"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("1 (1.5)", OddsMatchingLogic.GetTranslatedOutcomeName("1 (1.5)", searchResult.MatchName), legP1Minus, searchResult, "Set Handicap"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2 (-1.5)", OddsMatchingLogic.GetTranslatedOutcomeName("2 (-1.5)", searchResult.MatchName), legP1Minus, searchResult, "Set Handicap"));
+
+            // Participant 2 +3.5 Games -> in OddsPapi hc=-3.5: "2 (-3.5)" is P2 +3.5
+            var legP2Plus = new AiVisionLeg
+            {
+                Sport = "Tennis",
+                Match = "Karen Khachanov vs Jenson Brooksby",
+                Market = "Game Handicap",
+                Selection = "Jenson Brooksby +3.5 Games"
+            };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("2 (-3.5)", OddsMatchingLogic.GetTranslatedOutcomeName("2 (-3.5)", searchResult.MatchName), legP2Plus, searchResult, "Game Handicap"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2 (3.5)", OddsMatchingLogic.GetTranslatedOutcomeName("2 (3.5)", searchResult.MatchName), legP2Plus, searchResult, "Game Handicap"));
+        }
+
+        [Fact]
+        public void Tennis_TotalGames_MatchSetAndParticipant_MatchCorrectly()
+        {
+            var tennisMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1210", MarketName = "Total Games Over Under" },
+                new OddsPapiMarket { MarketId = "1211", MarketName = "Total Games First Set" },
+                new OddsPapiMarket { MarketId = "1212", MarketName = "Participant 1 Total Games" },
+                new OddsPapiMarket { MarketId = "1213", MarketName = "Participant 2 Total Games" }
+            };
+
+            var searchResult = new OddsPapiSearchResult { MatchName = "Cobolli, Flavio vs Tiafoe, Frances" };
+
+            // 1. Match Total Games
+            var mTotal = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Total Games", "Flavio Cobolli vs Frances Tiafoe", "Over 22.5", _marketMapper, searchResult.MatchName);
+            Assert.NotNull(mTotal);
+            Assert.Equal("Total Games Over Under", mTotal.MarketName);
+
+            var legTotal = new AiVisionLeg { Sport = "Tennis", Match = "Flavio Cobolli vs Frances Tiafoe", Market = "Total Games", Selection = "Over 22.5 Games" };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 22.5", "Over 22.5", legTotal, searchResult, "Total Games Over Under"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Under 22.5", "Under 22.5", legTotal, searchResult, "Total Games Over Under"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 22.5", "Over 22.5", legTotal, searchResult, "Participant 1 Total Games"));
+
+            // 2. First Set Total Games
+            var mSet1 = OddsMatchingLogic.FindBestMarket(tennisMarkets, "1st Set Total Games", "Flavio Cobolli vs Frances Tiafoe", "Over 9.5", _marketMapper, searchResult.MatchName);
+            Assert.NotNull(mSet1);
+            Assert.Equal("Total Games First Set", mSet1.MarketName);
+
+            // 3. Participant 2 Total Games (Frances Tiafoe)
+            var mP2 = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Player Total Games", "Flavio Cobolli vs Frances Tiafoe", "Frances Tiafoe - Over 12.5", _marketMapper, searchResult.MatchName);
+            Assert.NotNull(mP2);
+            Assert.Equal("Participant 2 Total Games", mP2.MarketName);
+
+            var legP2 = new AiVisionLeg { Sport = "Tennis", Match = "Flavio Cobolli vs Frances Tiafoe", Market = "Player Total Games", Selection = "Frances Tiafoe - Over 12.5" };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 12.5", "Over 12.5", legP2, searchResult, "Participant 2 Total Games"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 12.5", "Over 12.5", legP2, searchResult, "Participant 1 Total Games"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 12.5", "Over 12.5", legP2, searchResult, "Total Games Over Under"));
+        }
+
+        [Fact]
+        public void Tennis_TotalSets_And_ExactSets_MatchCorrectly()
+        {
+            var tennisMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1220", MarketName = "Total Sets Over Under" },
+                new OddsPapiMarket { MarketId = "1221", MarketName = "Exact Sets" }
+            };
+
+            var searchResult = new OddsPapiSearchResult { MatchName = "Alcaraz, Carlos vs Medvedev, Daniil" };
+
+            // 1. Over 2.5 Sets -> Total Sets Over Under
+            var mOverUnder = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Total Sets", "Carlos Alcaraz vs Daniil Medvedev", "Over 2.5", _marketMapper, searchResult.MatchName);
+            Assert.NotNull(mOverUnder);
+            Assert.Equal("Total Sets Over Under", mOverUnder.MarketName);
+
+            var legOu = new AiVisionLeg { Sport = "Tennis", Match = "Carlos Alcaraz vs Daniil Medvedev", Market = "Total Sets", Selection = "Over 2.5 Sets" };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 2.5", "Over 2.5", legOu, searchResult, "Total Sets Over Under"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2", OddsMatchingLogic.GetTranslatedOutcomeName("2", searchResult.MatchName), legOu, searchResult, "Exact Sets"));
+
+            // 2. "2 Sets" / "3 Sets" -> Exact Sets (and outcome "2" must NOT be mistaken for Participant 2!)
+            var mExact = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Total Sets", "Carlos Alcaraz vs Daniil Medvedev", "2 Sets", _marketMapper, searchResult.MatchName);
+            Assert.NotNull(mExact);
+            Assert.Equal("Exact Sets", mExact.MarketName);
+
+            var legExact2 = new AiVisionLeg { Sport = "Tennis", Match = "Carlos Alcaraz vs Daniil Medvedev", Market = "Total Sets", Selection = "2 Sets" };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("2", OddsMatchingLogic.GetTranslatedOutcomeName("2", searchResult.MatchName), legExact2, searchResult, "Exact Sets"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("3", OddsMatchingLogic.GetTranslatedOutcomeName("3", searchResult.MatchName), legExact2, searchResult, "Exact Sets"));
+        }
+
+        [Fact]
+        public void Tennis_SetBetting_CorrectScore_MatchesPureAndPlayerNamedScores()
+        {
+            var tennisMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1230", MarketName = "Correct Score" },
+                new OddsPapiMarket { MarketId = "1231", MarketName = "Correct Score First Set" }
+            };
+
+            var mSetBetting = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Set Betting", "Learner Tien vs Jiri Lehecka", "Jiri Lehecka 2-0", _marketMapper, "Tien, Learner vs Lehecka, Jiri");
+            Assert.NotNull(mSetBetting);
+            Assert.Equal("Correct Score", mSetBetting.MarketName);
+
+            var searchResult = new OddsPapiSearchResult { MatchName = "Tien, Learner vs Lehecka, Jiri" };
+
+            // 1. Player-named Set Betting: "Jiri Lehecka 2-0" where Jiri Lehecka is Participant 2 -> matches "0:2"
+            var legNamedP2 = new AiVisionLeg
+            {
+                Sport = "Tennis",
+                Match = "Learner Tien vs Jiri Lehecka",
+                Market = "Set Betting",
+                Selection = "Jiri Lehecka 2-0"
+            };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("0:2", "0:2", legNamedP2, searchResult, "Correct Score"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2:0", "2:0", legNamedP2, searchResult, "Correct Score"));
+
+            // 2. Pure scoreline: "1-2" -> matches "1:2" when not swapped, and "2:1" when fixture participants are swapped
+            var legPureScore = new AiVisionLeg
+            {
+                Sport = "Tennis",
+                Match = "Learner Tien vs Jiri Lehecka",
+                Market = "Correct Score",
+                Selection = "1-2"
+            };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1:2", "1:2", legPureScore, searchResult, "Correct Score"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2:1", "2:1", legPureScore, searchResult, "Correct Score"));
+
+            var swappedSearchResult = new OddsPapiSearchResult { MatchName = "Lehecka, Jiri vs Tien, Learner" };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("2:1", "2:1", legPureScore, swappedSearchResult, "Correct Score"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("1:2", "1:2", legPureScore, swappedSearchResult, "Correct Score"));
+        }
+
+        [Fact]
+        public void Tennis_TieBreak_Aces_DoubleFaults_And_ToWinASet_MatchCorrectly()
+        {
+            var tennisMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "1240", MarketName = "Total Tie Breaks" },
+                new OddsPapiMarket { MarketId = "1241", MarketName = "Tie Break First Set" },
+                new OddsPapiMarket { MarketId = "1242", MarketName = "Total Aces" },
+                new OddsPapiMarket { MarketId = "1243", MarketName = "Participant 1 Total Aces" },
+                new OddsPapiMarket { MarketId = "1244", MarketName = "Participant 2 Total Double Faults" },
+                new OddsPapiMarket { MarketId = "1245", MarketName = "Participant 1 To Win a Set" },
+                new OddsPapiMarket { MarketId = "1246", MarketName = "Both Participants To Win a Set" }
+            };
+
+            var searchResult = new OddsPapiSearchResult { MatchName = "Cobolli, Flavio vs Tiafoe, Frances" };
+
+            // Tie Break Yes/No -> Over 0.5 / Under 0.5
+            var mTb = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Tie Break in Match", "Flavio Cobolli vs Frances Tiafoe", "Yes", _marketMapper, searchResult.MatchName);
+            Assert.NotNull(mTb);
+            Assert.Equal("Total Tie Breaks", mTb.MarketName);
+
+            var legTbYes = new AiVisionLeg { Sport = "Tennis", Match = "Flavio Cobolli vs Frances Tiafoe", Market = "Tie Break in Match", Selection = "Yes" };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 0.5", "Over 0.5", legTbYes, searchResult, "Total Tie Breaks"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Under 0.5", "Under 0.5", legTbYes, searchResult, "Total Tie Breaks"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 1.5", "Over 1.5", legTbYes, searchResult, "Total Tie Breaks"));
+
+            // Participant 1 Total Aces
+            var mP1Aces = OddsMatchingLogic.FindBestMarket(tennisMarkets, "Player Aces", "Flavio Cobolli vs Frances Tiafoe", "Flavio Cobolli Over 6.5", _marketMapper, searchResult.MatchName);
+            Assert.NotNull(mP1Aces);
+            Assert.Equal("Participant 1 Total Aces", mP1Aces.MarketName);
+
+            var legP1Aces = new AiVisionLeg { Sport = "Tennis", Match = "Flavio Cobolli vs Frances Tiafoe", Market = "Player Aces", Selection = "Flavio Cobolli Over 6.5" };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 6.5", "Over 6.5", legP1Aces, searchResult, "Participant 1 Total Aces"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 6.5", "Over 6.5", legP1Aces, searchResult, "Total Aces"));
+
+            // Participant 1 To Win a Set
+            var mWinSet = OddsMatchingLogic.FindBestMarket(tennisMarkets, "To Win a Set", "Flavio Cobolli vs Frances Tiafoe", "Flavio Cobolli - Yes", _marketMapper, searchResult.MatchName);
+            Assert.NotNull(mWinSet);
+            Assert.Equal("Participant 1 To Win a Set", mWinSet.MarketName);
+
+            // Doubles pair with '&' is not falsely flagged as Combination Market
+            Assert.False(MarketMappingService.IsCombinationMarket("Match Winner", "R. Collignon/D. Goffin vs K. Krawietz/T. Puetz"));
+            Assert.False(MarketMappingService.IsCombinationMarket("R. Collignon & D. Goffin", "R. Collignon/D. Goffin vs K. Krawietz/T. Puetz"));
         }
     }
 }

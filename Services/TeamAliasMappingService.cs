@@ -395,10 +395,15 @@ namespace BettingApp.Services
                 "fc", "fk", "cf", "cd", "sc", "if", "bk", "club", "ac", "sk", "as", "afc",
                 "sfc", "cfc", "rfc", "bfc", "lfc", "ufc", "scu", "ssc", "csc", "hnk", "gnk", "krc", "bsc", "tsg", "fsv", "rcd", "sv", "tsv", "vfb", "vfl", "saudi"
             };
-            var tokensA = normA.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length >= 3 && !genericWords.Contains(t) && !t.All(char.IsDigit)).ToList();
-            var tokensB = normB.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => t.Length >= 3 && !genericWords.Contains(t) && !t.All(char.IsDigit)).ToList();
+            var allWordsA = normA.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var allWordsB = normB.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            bool hasSingleLetterInitial = allWordsA.Any(t => t.Length == 1 && char.IsLetter(t[0])) ||
+                                          allWordsB.Any(t => t.Length == 1 && char.IsLetter(t[0]));
 
-            if (tokensA.Any() && tokensB.Any())
+            var tokensA = allWordsA.Where(t => t.Length >= 3 && !genericWords.Contains(t) && !t.All(char.IsDigit)).ToList();
+            var tokensB = allWordsB.Where(t => t.Length >= 3 && !genericWords.Contains(t) && !t.All(char.IsDigit)).ToList();
+
+            if (!hasSingleLetterInitial && tokensA.Any() && tokensB.Any())
             {
                 var shorter = tokensA.Count <= tokensB.Count ? tokensA : tokensB;
                 var longer = tokensA.Count <= tokensB.Count ? tokensB : tokensA;
@@ -416,7 +421,87 @@ namespace BettingApp.Services
                 }
             }
 
+            // Person / Doubles / Initials / Short-surname token match (e.g. "Fils, Arthur" <-> "Arthur Fils", "Medvedev, D" <-> "Daniil Medvedev", "Ann Li" <-> "Li, A", "Stan Wawrinka" <-> "Wawrinka, Stanislas")
+            if (ArePersonOrTeamTokensMatched(normA, normB, genericWords))
+            {
+                return true;
+            }
+
             return false;
+        }
+
+        private static bool ArePersonOrTeamTokensMatched(string normA, string normB, HashSet<string>? genericWords = null)
+        {
+            var wordsA = normA.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                              .Where(t => (genericWords == null || !genericWords.Contains(t)) && !t.All(char.IsDigit))
+                              .ToList();
+            var wordsB = normB.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                              .Where(t => (genericWords == null || !genericWords.Contains(t)) && !t.All(char.IsDigit))
+                              .ToList();
+
+            if (wordsA.Count < 2 || wordsB.Count < 2) return false;
+
+            var shorter = wordsA.Count <= wordsB.Count ? wordsA : wordsB;
+            var longer = wordsA.Count <= wordsB.Count ? wordsB : wordsA;
+
+            var remaining = longer.ToList();
+            var unmatched = new List<string>();
+            int exactMatchesLen2Plus = 0;
+
+            // Pass 1: Exact token matches first
+            foreach (var token in shorter)
+            {
+                int idx = remaining.FindIndex(r => r.Equals(token, StringComparison.OrdinalIgnoreCase));
+                if (idx >= 0)
+                {
+                    if (token.Length >= 2) exactMatchesLen2Plus++;
+                    remaining.RemoveAt(idx);
+                }
+                else
+                {
+                    unmatched.Add(token);
+                }
+            }
+
+            if (exactMatchesLen2Plus == 0) return false;
+            if (unmatched.Count == 0) return true;
+
+            // Pass 2: Initials (e.g. "D" <-> "Daniil", "A" <-> "Ann") and shortened first names (e.g. "Stan" <-> "Stanislas")
+            foreach (var token in unmatched.ToList())
+            {
+                if (token.Length == 1)
+                {
+                    int initIdx = remaining.FindIndex(r => r.StartsWith(token, StringComparison.OrdinalIgnoreCase));
+                    if (initIdx >= 0)
+                    {
+                        unmatched.Remove(token);
+                        remaining.RemoveAt(initIdx);
+                    }
+                }
+                else if (token.Length >= 2)
+                {
+                    int initInRemIdx = remaining.FindIndex(r => r.Length == 1 && token.StartsWith(r, StringComparison.OrdinalIgnoreCase));
+                    if (initInRemIdx >= 0)
+                    {
+                        unmatched.Remove(token);
+                        remaining.RemoveAt(initInRemIdx);
+                        continue;
+                    }
+
+                    if (token.Length >= 3)
+                    {
+                        int prefixIdx = remaining.FindIndex(r => r.Length >= 3 &&
+                            (r.StartsWith(token, StringComparison.OrdinalIgnoreCase) || token.StartsWith(r, StringComparison.OrdinalIgnoreCase)));
+                        if (prefixIdx >= 0)
+                        {
+                            unmatched.Remove(token);
+                            remaining.RemoveAt(prefixIdx);
+                        }
+                    }
+                }
+            }
+
+            return unmatched.Count == 0;
         }
 
         public static int ResolveTeamSelection(string? selectionText, string? team1Name, string? team2Name, string? opTeam1 = null, string? opTeam2 = null)
@@ -427,15 +512,26 @@ namespace BettingApp.Services
             string normSel = NormalizeForComparison(sel);
 
             // Direct outcome codes
-            if (sel == "1" || normSel == "1" || normSel.Equals("home", StringComparison.OrdinalIgnoreCase) || normSel.Equals("hjemme", StringComparison.OrdinalIgnoreCase) || normSel.Equals("hemmalag", StringComparison.OrdinalIgnoreCase) || normSel.Equals("team 1", StringComparison.OrdinalIgnoreCase)) return 1;
-            if (sel == "2" || normSel == "2" || normSel.Equals("away", StringComparison.OrdinalIgnoreCase) || normSel.Equals("borte", StringComparison.OrdinalIgnoreCase) || normSel.Equals("bortalag", StringComparison.OrdinalIgnoreCase) || normSel.Equals("team 2", StringComparison.OrdinalIgnoreCase)) return 2;
+            if (sel == "1" || normSel == "1" || normSel.Equals("home", StringComparison.OrdinalIgnoreCase) || normSel.Equals("hjemme", StringComparison.OrdinalIgnoreCase) || normSel.Equals("hemmalag", StringComparison.OrdinalIgnoreCase) || normSel.Equals("team 1", StringComparison.OrdinalIgnoreCase) || normSel.Equals("player 1", StringComparison.OrdinalIgnoreCase) || normSel.Equals("participant 1", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (sel == "2" || normSel == "2" || normSel.Equals("away", StringComparison.OrdinalIgnoreCase) || normSel.Equals("borte", StringComparison.OrdinalIgnoreCase) || normSel.Equals("bortalag", StringComparison.OrdinalIgnoreCase) || normSel.Equals("team 2", StringComparison.OrdinalIgnoreCase) || normSel.Equals("player 2", StringComparison.OrdinalIgnoreCase) || normSel.Equals("participant 2", StringComparison.OrdinalIgnoreCase)) return 2;
             if (sel.Equals("x", StringComparison.OrdinalIgnoreCase) || normSel.Equals("draw", StringComparison.OrdinalIgnoreCase) || normSel.Equals("tie", StringComparison.OrdinalIgnoreCase) || normSel.Equals("uavgjort", StringComparison.OrdinalIgnoreCase) || normSel.Equals("oavgjort", StringComparison.OrdinalIgnoreCase) || normSel.Equals("kryss", StringComparison.OrdinalIgnoreCase) || normSel.Equals("likt", StringComparison.OrdinalIgnoreCase)) return 0;
+
+            if (System.Text.RegularExpressions.Regex.IsMatch(normSel, @"\b(?:team|player|participant)\s*1\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) &&
+                !System.Text.RegularExpressions.Regex.IsMatch(normSel, @"\b(?:team|player|participant)\s*2\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                return 1;
+            }
+            if (System.Text.RegularExpressions.Regex.IsMatch(normSel, @"\b(?:team|player|participant)\s*2\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase) &&
+                !System.Text.RegularExpressions.Regex.IsMatch(normSel, @"\b(?:team|player|participant)\s*1\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                return 2;
+            }
 
             // Strip line numbers, handicaps, prop conditions to isolate team candidate
             // e.g. "PSG (+1.5)" -> "PSG", "PSG Over 1.5 Goals" -> "PSG", "Manchester City -1" -> "Manchester City"
             string candidate = System.Text.RegularExpressions.Regex.Replace(sel, @"\([+-]?\d+(?:\.\d+)?\)", " ").Trim();
             candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"[+-]?\d+(?:\.\d+)?", " ").Trim();
-            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\b(over|under|o\/u|total|goals?|corners?|cards?|bookings?|points?|shots?|on|target|saves?|goalkeeper|goal\s*keeper|fouls?|committed|tackles?|offsides?|1st|2nd|first|second|half|halves|either|both|at|least|one|team|most|more|to|win|starts?|including|incl|overtime|ot|penalties|penalty|shootouts?|so|and|&|or|eller|draw|tie|ties|oavgjort|uavgjort|kryss|likt|full|time|regular)\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\b(over|under|o\/u|total|goals?|corners?|cards?|bookings?|points?|shots?|on|target|saves?|goalkeeper|goal\s*keeper|fouls?|committed|tackles?|offsides?|aces?|double\s+faults?|faults?|games?|sets?|breaks?|service|tie\s*breaks?|tiebreaks?|won|number|of|1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth|half|halves|either|both|at|least|one|team|player|participant|most|more|to|win|starts?|including|incl|overtime|ot|penalties|penalty|shootouts?|so|and|&|or|eller|draw|tie|ties|oavgjort|uavgjort|kryss|likt|full|time|regular)\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
             candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"[^\w\s]", " ").Trim();
             candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\s+", " ").Trim();
             if (string.IsNullOrWhiteSpace(candidate)) return 0;
@@ -461,6 +557,13 @@ namespace BettingApp.Services
                 if (normCand == n2) return 2;
                 if (n1.Contains(normCand) && !n2.Contains(normCand)) return 1;
                 if (n2.Contains(normCand) && !n1.Contains(normCand)) return 2;
+
+                bool strict1 = (!string.IsNullOrEmpty(team1Name) && ArePersonOrTeamTokensMatched(normCand, NormalizeForComparison(team1Name))) ||
+                               (!string.IsNullOrEmpty(opTeam1) && ArePersonOrTeamTokensMatched(normCand, NormalizeForComparison(opTeam1)));
+                bool strict2 = (!string.IsNullOrEmpty(team2Name) && ArePersonOrTeamTokensMatched(normCand, NormalizeForComparison(team2Name))) ||
+                               (!string.IsNullOrEmpty(opTeam2) && ArePersonOrTeamTokensMatched(normCand, NormalizeForComparison(opTeam2)));
+                if (strict1 && !strict2) return 1;
+                if (strict2 && !strict1) return 2;
             }
 
             if (!match1 && !match2)
@@ -523,7 +626,7 @@ namespace BettingApp.Services
                 string result = RemoveDiacritics(name).ToLowerInvariant();
                 // Strip parenthesized 2-3 letter country codes like "(SA)", "(EGY)", "(JOR)" while preserving "(w)"
                 result = System.Text.RegularExpressions.Regex.Replace(result, @"\([a-z]{2,3}\)", " ");
-                result = result.Replace("-", " ");
+                result = result.Replace("-", " ").Replace(",", " ");
                 result = System.Text.RegularExpressions.Regex.Replace(result, @"\s+", " ").Trim();
                            
                 result = ApplyTeamAliases(result);

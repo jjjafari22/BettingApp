@@ -267,7 +267,12 @@ namespace BettingApp.Services
                         }
                         else
                         {
-                            var aiHcMatch = _hcSuffixRegex.Match(NormSelRaw.Replace(" ", "").Replace("(", "").Replace(")", ""));
+                            string normSelForHc = Regex.Replace(
+                                NormSelRaw.Replace(" ", "").Replace("(", "").Replace(")", ""),
+                                @"(?:sets?|games?|goals?|points?)$",
+                                "",
+                                RegexOptions.IgnoreCase);
+                            var aiHcMatch = _hcSuffixRegex.Match(normSelForHc);
                             if (aiHcMatch.Success && double.TryParse(aiHcMatch.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out double parsedAiHc))
                             {
                                 AiHc = parsedAiHc;
@@ -365,7 +370,7 @@ namespace BettingApp.Services
                 string fullLegText = $"{normLineMkt} {normLineSel}";
                 HasHigherLineReq = Regex.IsMatch(
                     fullLegText,
-                    @"(?:\bat\s+least\s+([2-9]|\d{2,})\b|\b([2-9]|\d{2,})\s*(?:\+(?!\d)|or\s+more\b|\s*(?:points?|goals?|assists?|shots?|saves?|cards?|tackles?|fouls?)\b)|\bover\s*(?:0\.[6-9]|[1-9]|\d{2,}|[1-9]\.\d+)\b)",
+                    @"(?:\bat\s+least\s+([2-9]|\d{2,})\b|\b([2-9]|\d{2,})\s*(?:\+(?!\d)|or\s+more\b|\s*(?:points?|goals?|assists?|shots?|saves?|cards?|tackles?|fouls?|games?|sets?|aces?|faults?|breaks?)\b)|\bover\s*(?:0\.[6-9]|[1-9]|\d{2,}|[1-9]\.\d+)\b)",
                     RegexOptions.IgnoreCase);
 
                 // Target Line: prefer Selection line over Market line
@@ -396,7 +401,7 @@ namespace BettingApp.Services
                 {
                     var fallbackLineMatch = Regex.Match(
                         $"{normLineSel} {normLineMkt}",
-                        @"(?:\b(?:total\s+goals?|total|goals?|mål|mal|o\/u|line)\s*(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:goals?|mål|mal)\b|(?<![+-])\b(\d+\.\d+)\b)",
+                        @"(?:\b(?:total\s+(?:goals?|games?|sets?|aces?|double\s+faults?|breaks?)|total|goals?|games?|sets?|aces?|faults?|breaks?|mål|mal|o\/u|line)\s*(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:goals?|games?|sets?|aces?|faults?|breaks?|mål|mal)\b|(?<![+-])\b(\d+\.\d+)\b)",
                         RegexOptions.IgnoreCase);
 
                     if (fallbackLineMatch.Success)
