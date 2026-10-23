@@ -440,7 +440,9 @@ public partial class Admin
                             }
 
                             // --- UPDATE NEXT CHECK TIME ---
-                            dbBet.NextCheckTime = BettingApp.Services.BetSchedulingLogic.CalculateNextCheckTime(dbBet);
+                            dbBet.NextCheckTime = (dbBet.Status == "Won" || dbBet.Status == "Lost" || dbBet.Status == "Void")
+                                ? BettingApp.Services.BetSchedulingLogic.CalculateFollowUpCheckTimeForSettledBet(dbBet)
+                                : BettingApp.Services.BetSchedulingLogic.CalculateNextCheckTime(dbBet);
                             
                             await context.SaveChangesAsync();
                             

@@ -241,5 +241,110 @@ namespace BettingApp.Tests
             var status = BetSchedulingLogic.DetermineAutoSettleStatus("WON", legs);
             Assert.Null(status);
         }
+
+        [Fact]
+        public void PostSettlement_AllLegsAlreadyGraded_ReturnsNull()
+        {
+            var bet = new Bet
+            {
+                Status = "Lost",
+                Legs = new List<BetLeg>
+                {
+                    new BetLeg { Outcome = "Lost", StartTime = DateTime.UtcNow.AddHours(-3), Sport = "Soccer" },
+                    new BetLeg { Outcome = "Won", StartTime = DateTime.UtcNow.AddHours(-3), Sport = "Soccer" }
+                }
+            };
+
+            Assert.Null(BetSchedulingLogic.CalculatePostSettlementCheckTime(bet, isAutoSettled: true));
+            Assert.Null(BetSchedulingLogic.CalculatePostSettlementCheckTime(bet, isAutoSettled: false));
+        }
+
+        [Fact]
+        public void PostSettlement_EarlyLostParlay_SchedulesOnceAfterLatestPendingLegWithTwoHourBuffer()
+        {
+            var leg1Start = DateTime.UtcNow.AddHours(-3);
+            var leg2SoccerStart = DateTime.UtcNow.AddHours(6);
+            var leg3SoccerStart = DateTime.UtcNow.AddDays(1);
+            var leg4BasketballStart = DateTime.UtcNow.AddDays(2);
+
+            // Basketball = 3h sport delay + 2h post-settlement buffer = +5h after kickoff
+            var expectedSweepTime = leg4BasketballStart.AddHours(5);
+
+            var bet = new Bet
+            {
+                Status = "Lost",
+                Legs = new List<BetLeg>
+                {
+                    new BetLeg { Match = "Leg 1", Outcome = "Lost", StartTime = leg1Start, Sport = "Soccer" },
+                    new BetLeg { Match = "Leg 2", Outcome = "Pending", StartTime = leg2SoccerStart, Sport = "Soccer" },
+                    new BetLeg { Match = "Leg 3", Outcome = "Pending", StartTime = leg3SoccerStart, Sport = "Soccer" },
+                    new BetLeg { Match = "Leg 4", Outcome = "Pending", StartTime = leg4BasketballStart, Sport = "Basketball" }
+                }
+            };
+
+            var nextCheck = BetSchedulingLogic.CalculatePostSettlementCheckTime(bet, isAutoSettled: true);
+            Assert.NotNull(nextCheck);
+            Assert.Equal(expectedSweepTime, nextCheck.Value);
+        }
+
+        [Fact]
+        public void PostSettlement_ManualSettleBeforeAiGradesFinishedMatch_Schedules60MinCheck()
+        {
+            var bet = new Bet
+            {
+                Status = "Won",
+                Legs = new List<BetLeg>
+                {
+                    new BetLeg { Match = "Leg 1", Outcome = "Pending", StartTime = DateTime.UtcNow.AddHours(-3), Sport = "Soccer" }
+                }
+            };
+
+            var before = DateTime.UtcNow.AddMinutes(60);
+            var nextCheck = BetSchedulingLogic.CalculatePostSettlementCheckTime(bet, isAutoSettled: false);
+            var after = DateTime.UtcNow.AddMinutes(60);
+
+            Assert.NotNull(nextCheck);
+            Assert.True(nextCheck.Value >= before.AddSeconds(-1) && nextCheck.Value <= after.AddSeconds(1));
+        }
+
+        [Fact]
+        public void PostSettlement_AutoSettledWithUnknownPendingStartTime_Schedules24HourFallback()
+        {
+            var bet = new Bet
+            {
+                Status = "Lost",
+                Legs = new List<BetLeg>
+                {
+                    new BetLeg { Match = "Leg 1", Outcome = "Lost", StartTime = DateTime.UtcNow.AddHours(-3), Sport = "Soccer" },
+                    new BetLeg { Match = "Leg 2", Outcome = "Pending", StartTime = null, Sport = "Soccer" }
+                }
+            };
+
+            var before = DateTime.UtcNow.AddHours(24);
+            var nextCheck = BetSchedulingLogic.CalculatePostSettlementCheckTime(bet, isAutoSettled: true);
+            var after = DateTime.UtcNow.AddHours(24);
+
+            Assert.NotNull(nextCheck);
+            Assert.True(nextCheck.Value >= before.AddSeconds(-1) && nextCheck.Value <= after.AddSeconds(1));
+        }
+
+        [Fact]
+        public void FollowUpCheckForSettledBet_WhenCheckRunsAtScheduledTime_EvenIfLegStaysPending_ReturnsNull_NoInfiniteLoop()
+        {
+            // Match started 4 hours and 1 minute ago (Soccer: 2h delay + 2h buffer = 4h, so scheduled time has arrived)
+            var bet = new Bet
+            {
+                Status = "Lost",
+                Legs = new List<BetLeg>
+                {
+                    new BetLeg { Match = "Leg 1", Outcome = "Lost", StartTime = DateTime.UtcNow.AddDays(-1), Sport = "Soccer" },
+                    new BetLeg { Match = "Leg 2", Outcome = "Pending", StartTime = DateTime.UtcNow.AddHours(-4).AddMinutes(-1), Sport = "Soccer" }
+                }
+            };
+
+            // Must return null so the settled bet NEVER loops even if Leg 2 could not be graded
+            var followUp = BetSchedulingLogic.CalculateFollowUpCheckTimeForSettledBet(bet);
+            Assert.Null(followUp);
+        }
     }
 }

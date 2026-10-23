@@ -68,9 +68,9 @@ namespace BettingApp.Services
             using var context = dbFactory.CreateDbContext();
 
             // Active bets (Approved) are always checked if due.
-            // Completed bets (Won/Lost/Void) are only checked if they were updated in the last 3 days. 
-            // This prevents the system from hammering the API with ancient, dormant bets.
-            var cutoffForCompleted = DateTime.UtcNow.AddDays(-3);
+            // Completed bets (Won/Lost/Void) are only checked if they were updated in the last 7 days. 
+            // This prevents the system from hammering the API with ancient, dormant bets while covering multi-day slips.
+            var cutoffForCompleted = DateTime.UtcNow.AddDays(-7);
             
             var dueBets = await context.Bets
                 .Where(b => b.NextCheckTime.HasValue && b.NextCheckTime.Value <= DateTime.UtcNow)
@@ -118,7 +118,12 @@ namespace BettingApp.Services
 
                 if (string.IsNullOrEmpty(dbBet.AiEvaluation.AiVisionResultJson))
                 {
-                    if (string.IsNullOrEmpty(dbBet.ScreenshotUrl)) return;
+                    if (string.IsNullOrEmpty(dbBet.ScreenshotUrl))
+                    {
+                        dbBet.NextCheckTime = null;
+                        await taskContext.SaveChangesAsync(ct);
+                        return;
+                    }
                     
                     var (extractionResult, error) = await _aiVisionService.ExtractBetSlipDataAsync(dbBet.ScreenshotUrl, dbBet.Id);
                     if (error != null)
@@ -134,8 +139,8 @@ namespace BettingApp.Services
                         }
 
                         dbBet.AiEvaluation.AiVisionError = error;
-                        // Use the standard check outcome scheduling interval if extraction fails
-                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
+                        // Use the standard check outcome scheduling interval if extraction fails on an active bet; stop for settled bets
+                        dbBet.NextCheckTime = dbBet.Status == "Approved" ? DateTime.UtcNow.AddMinutes(60) : null;
                         await taskContext.SaveChangesAsync(ct);
                         return;
                     }
@@ -214,8 +219,16 @@ namespace BettingApp.Services
                         {
                             dbBet.AiEvaluation.AiOutcomeResult = result;
                         }
-                        dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(15);
-                        _logger.LogWarning($"[Bet #{dbBet.Id}] [Outcome Check] Outcome check did not return valid JSON. Scheduling next check in 15 minutes.");
+                        if (dbBet.Status == "Approved")
+                        {
+                            dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(15);
+                            _logger.LogWarning($"[Bet #{dbBet.Id}] [Outcome Check] Outcome check did not return valid JSON. Scheduling next check in 15 minutes.");
+                        }
+                        else
+                        {
+                            dbBet.NextCheckTime = null;
+                            _logger.LogWarning($"[Bet #{dbBet.Id}] [Outcome Check] Post-settlement outcome check did not return valid JSON. Clearing NextCheckTime.");
+                        }
                     }
                     else
                     {
@@ -304,46 +317,48 @@ namespace BettingApp.Services
                         }
                         // --------------------------
 
-                        if (isFinished)
+                        if (dbBet.Status != "Approved")
+                        {
+                            // Already settled (Won/Lost/Void): only schedule another check if a remaining Pending leg has a future finish time (+2h buffer)
+                            dbBet.NextCheckTime = BettingApp.Services.BetSchedulingLogic.CalculateFollowUpCheckTimeForSettledBet(dbBet);
+                        }
+                        else if (isFinished)
                         {
                             dbBet.NextCheckTime = null;
 
                             // --- GATEKEEPER AUTO-SETTLEMENT LOGIC ---
-                            if (dbBet.Status == "Approved")
+                            string? targetStatus = BetSchedulingLogic.DetermineAutoSettleStatus(parsedData.OverallStatus, parsedData.Legs);
+                            
+                            if (targetStatus != null)
                             {
-                                string? targetStatus = BetSchedulingLogic.DetermineAutoSettleStatus(parsedData.OverallStatus, parsedData.Legs);
-                                
-                                if (targetStatus != null)
+                                // Keep a 15-minute retry window in case ProcessBetAsync fails; ProcessBetAsync sets NextCheckTime via CalculatePostSettlementCheckTime on success
+                                dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(15);
+
+                                // Save the extracted legs and outcome string first
+                                await taskContext.SaveChangesAsync(ct);
+
+                                var betProcessor = scope.ServiceProvider.GetRequiredService<BettingApp.Services.BetProcessingService>();
+                                var processResult = await betProcessor.ProcessBetAsync(
+                                    betId: dbBet.Id,
+                                    newStatus: targetStatus,
+                                    adminName: "SYSTEM_AUTO",
+                                    expectedOriginalStatus: "Approved",
+                                    newAmount: (decimal)(dbBet.AmountNOK ?? 0),
+                                    newOdds: dbBet.Odds,
+                                    isAutoSettled: true
+                                );
+
+                                if (processResult.Success)
                                 {
-                                    // Keep a 15-minute retry window in case ProcessBetAsync fails; ProcessBetAsync clears NextCheckTime to null on success
-                                    dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(15);
-
-                                    // Save the extracted legs and outcome string first
-                                    await taskContext.SaveChangesAsync(ct);
-
-                                    var betProcessor = scope.ServiceProvider.GetRequiredService<BettingApp.Services.BetProcessingService>();
-                                    var processResult = await betProcessor.ProcessBetAsync(
-                                        betId: dbBet.Id,
-                                        newStatus: targetStatus,
-                                        adminName: "SYSTEM_AUTO",
-                                        expectedOriginalStatus: "Approved",
-                                        newAmount: (decimal)(dbBet.AmountNOK ?? 0),
-                                        newOdds: dbBet.Odds,
-                                        isAutoSettled: true
-                                    );
-
-                                    if (processResult.Success)
-                                    {
-                                        _logger.LogInformation($"Auto-settled Bet {dbBet.Id} to {targetStatus}");
-                                    }
-                                    else
-                                    {
-                                        _logger.LogWarning($"Failed to auto-settle Bet {dbBet.Id}: {processResult.ErrorMessage}");
-                                    }
-
-                                    anyUpdates = true;
-                                    return; // We already saved and processed, skip the final SaveChangesAsync below
+                                    _logger.LogInformation($"Auto-settled Bet {dbBet.Id} to {targetStatus}");
                                 }
+                                else
+                                {
+                                    _logger.LogWarning($"Failed to auto-settle Bet {dbBet.Id}: {processResult.ErrorMessage}");
+                                }
+
+                                anyUpdates = true;
+                                return; // We already saved and processed, skip the final SaveChangesAsync below
                             }
                             // ----------------------------------------
                         }
@@ -355,8 +370,8 @@ namespace BettingApp.Services
                 }
                 catch 
                 {
-                    // If AI fails to return valid JSON, try again in 15 mins
-                    dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(15);
+                    // If AI fails to return valid JSON on an active bet, try again in 15 mins; never loop on settled bets
+                    dbBet.NextCheckTime = dbBet.Status == "Approved" ? DateTime.UtcNow.AddMinutes(15) : null;
                 }
 
                 await taskContext.SaveChangesAsync(ct);

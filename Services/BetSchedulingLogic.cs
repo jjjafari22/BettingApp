@@ -6,9 +6,21 @@ namespace BettingApp.Services
 {
     public static class BetSchedulingLogic
     {
+        private const int PostSettlementBufferHours = 2;
+
+        public static int GetSportDelayHours(string? sport)
+        {
+            if (string.IsNullOrEmpty(sport)) return 2;
+            if (sport.Contains("Hockey", StringComparison.OrdinalIgnoreCase)) return 3;
+            if (sport.Contains("American Football", StringComparison.OrdinalIgnoreCase) || sport.Contains("Football", StringComparison.OrdinalIgnoreCase)) return 4;
+            if (sport.Contains("Baseball", StringComparison.OrdinalIgnoreCase)) return 3;
+            if (sport.Contains("Basketball", StringComparison.OrdinalIgnoreCase)) return 3;
+            return 2;
+        }
+
         public static DateTime? CalculateNextCheckTime(Bet dbBet)
         {
-            // 1. If the bet is already fully settled, stop checking
+            // 1. If the bet is already settled/terminal, active polling does not apply
             var finishedStatuses = new[] { "Won", "Lost", "Void", "Completed", "Cancelled", "Rejected" };
             if (finishedStatuses.Contains(dbBet.Status, StringComparer.OrdinalIgnoreCase))
             {
@@ -55,13 +67,7 @@ namespace BettingApp.Services
 
             // 5. Determine the expected finish time
             var nextLeg = pendingLegs.OrderBy(l => l.StartTime ?? DateTime.MaxValue).FirstOrDefault();
-            string sport = nextLeg?.Sport ?? "Soccer";
-            
-            int delayHours = 2;
-            if (sport.Contains("Hockey", StringComparison.OrdinalIgnoreCase)) delayHours = 3;
-            else if (sport.Contains("American Football", StringComparison.OrdinalIgnoreCase) || sport.Contains("Football", StringComparison.OrdinalIgnoreCase)) delayHours = 4;
-            else if (sport.Contains("Baseball", StringComparison.OrdinalIgnoreCase)) delayHours = 3;
-            else if (sport.Contains("Basketball", StringComparison.OrdinalIgnoreCase)) delayHours = 3;
+            int delayHours = GetSportDelayHours(nextLeg?.Sport);
 
             var expectedFinishTime = earliestStart.Value.AddHours(delayHours);
 
@@ -77,6 +83,130 @@ namespace BettingApp.Services
                 // Check every 15 minutes.
                 return DateTime.UtcNow.AddMinutes(15);
             }
+        }
+
+        /// <summary>
+        /// Calculates the one-time post-settlement check time when a bet transitions to Won, Lost, or Void.
+        /// Ensures any remaining Pending legs (e.g. Legs 2-4 on an early-lost parlay) are graded in a single batch
+        /// after the latest pending leg finishes (+ 2h buffer), while returning null if all legs are already graded.
+        /// </summary>
+        public static DateTime? CalculatePostSettlementCheckTime(Bet dbBet, bool isAutoSettled)
+        {
+            if (dbBet.AiEvaluation != null && dbBet.AiEvaluation.AiOutcomeResult == "Admin Override")
+            {
+                return null;
+            }
+
+            var pendingLegs = dbBet.Legs?
+                .Where(l => string.Equals(l.Outcome, "Pending", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (dbBet.Legs != null && dbBet.Legs.Count > 0)
+            {
+                // All legs are already graded (Won, Lost, or Void) -> no post-settlement check needed!
+                if (pendingLegs == null || !pendingLegs.Any())
+                {
+                    return null;
+                }
+
+                var legsWithStart = pendingLegs.Where(l => l.StartTime.HasValue && l.StartTime.Value > DateTime.MinValue).ToList();
+                if (legsWithStart.Any())
+                {
+                    DateTime latestFinishWithBuffer = legsWithStart
+                        .Max(l => l.StartTime!.Value.AddHours(GetSportDelayHours(l.Sport) + PostSettlementBufferHours));
+
+                    if (latestFinishWithBuffer > DateTime.UtcNow.AddMinutes(60))
+                    {
+                        return latestFinishWithBuffer;
+                    }
+
+                    if (!isAutoSettled)
+                    {
+                        // Admin manually settled a bet whose matches recently finished -> run the 1-hour verification check
+                        return DateTime.UtcNow.AddMinutes(60);
+                    }
+
+                    // Auto-settled, and all known start times + buffer are already in the past.
+                    // Only schedule a 24h fallback if there is another pending leg with no known StartTime.
+                    return pendingLegs.Any(l => !l.StartTime.HasValue || l.StartTime.Value == DateTime.MinValue)
+                        ? DateTime.UtcNow.AddHours(24)
+                        : null;
+                }
+
+                // None of the pending legs have a StartTime yet
+                if (dbBet.MatchStartTime.HasValue && dbBet.MatchStartTime.Value > DateTime.MinValue)
+                {
+                    DateTime fallbackFinish = dbBet.MatchStartTime.Value.AddHours(2 + PostSettlementBufferHours);
+                    if (fallbackFinish > DateTime.UtcNow.AddMinutes(60))
+                    {
+                        return fallbackFinish;
+                    }
+                }
+
+                // If auto-settled and remaining pending legs had no StartTime found, check once in 24h.
+                // If manually settled by admin before AI ran, check in 60 minutes.
+                return isAutoSettled ? DateTime.UtcNow.AddHours(24) : DateTime.UtcNow.AddMinutes(60);
+            }
+
+            // Legacy / empty-legs fallback when an admin manually settles before AI has run
+            if (!isAutoSettled && !IsAiOutcomeFinished(dbBet.AiEvaluation?.AiOutcomeResult))
+            {
+                return DateTime.UtcNow.AddMinutes(60);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Called after ConfirmOutcomeAsync completes on a bet that is ALREADY settled (Won, Lost, or Void).
+        /// Returns a future check time ONLY if a remaining Pending leg has a known future finish time (+2h buffer)
+        /// more than 30 minutes from now; otherwise returns null so settled bets never loop.
+        /// </summary>
+        public static DateTime? CalculateFollowUpCheckTimeForSettledBet(Bet dbBet)
+        {
+            if (dbBet.AiEvaluation != null && dbBet.AiEvaluation.AiOutcomeResult == "Admin Override")
+            {
+                return null;
+            }
+
+            var pendingLegsWithStart = dbBet.Legs?
+                .Where(l => string.Equals(l.Outcome, "Pending", StringComparison.OrdinalIgnoreCase) &&
+                            l.StartTime.HasValue && l.StartTime.Value > DateTime.MinValue)
+                .ToList();
+
+            if (pendingLegsWithStart == null || !pendingLegsWithStart.Any())
+            {
+                return null;
+            }
+
+            DateTime latestFinishWithBuffer = pendingLegsWithStart
+                .Max(l => l.StartTime!.Value.AddHours(GetSportDelayHours(l.Sport) + PostSettlementBufferHours));
+
+            if (latestFinishWithBuffer > DateTime.UtcNow.AddMinutes(30))
+            {
+                return latestFinishWithBuffer;
+            }
+
+            return null;
+        }
+
+        private static bool IsAiOutcomeFinished(string? aiOutcomeResult)
+        {
+            if (string.IsNullOrEmpty(aiOutcomeResult)) return false;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(aiOutcomeResult);
+                if (doc.RootElement.TryGetProperty("overallStatus", out var prop))
+                {
+                    var s = prop.GetString()?.Trim().ToUpperInvariant() ?? "";
+                    return s == "MATCH FINISHED - WON" || s == "MATCH WON" || s == "WON" ||
+                           s == "MATCH FINISHED - LOST" || s == "MATCH LOST" || s == "LOST" ||
+                           s == "MATCH FINISHED - VOID" || s == "MATCH VOID" || s == "VOID" ||
+                           s == "UNKNOWN";
+                }
+            }
+            catch { }
+            return false;
         }
 
         public static string? DetermineAutoSettleStatus(string? overallStatus, System.Collections.Generic.List<BettingApp.Services.AiOutcomeLegResult>? legs)

@@ -212,31 +212,11 @@ namespace BettingApp.Services
                 {
                     if (newStatus == "Won" || newStatus == "Lost" || newStatus == "Void")
                     {
-                        bool isAiFinished = false;
-                        if (dbBet.AiEvaluation != null && !string.IsNullOrEmpty(dbBet.AiEvaluation.AiOutcomeResult))
-                        {
-                            try {
-                                var doc = System.Text.Json.JsonDocument.Parse(dbBet.AiEvaluation.AiOutcomeResult);
-                                if (doc.RootElement.TryGetProperty("overallStatus", out var prop))
-                                {
-                                    var s = prop.GetString()?.ToUpperInvariant() ?? "";
-                                    if (s == "WON" || s == "LOST" || s == "VOID" || s == "UNKNOWN")
-                                    {
-                                        isAiFinished = true;
-                                    }
-                                }
-                            } catch { }
-                        }
-                        
-                        if (isAiFinished || (dbBet.AiEvaluation != null && dbBet.AiEvaluation.AiOutcomeResult == "Admin Override"))
-                        {
-                            dbBet.NextCheckTime = null;
-                        }
-                        else
-                        {
-                            // Schedule AI Check for 60 minutes later
-                            dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(60);
-                        }
+                        dbBet.NextCheckTime = BettingApp.Services.BetSchedulingLogic.CalculatePostSettlementCheckTime(dbBet, isAutoSettled);
+                    }
+                    else
+                    {
+                        dbBet.NextCheckTime = null;
                     }
                 }
 
