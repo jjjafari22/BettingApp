@@ -194,12 +194,12 @@ namespace BettingApp.Services
                 string mimeType = imageUrl.ToLower().EndsWith(".png") ? "image/png" : "image/jpeg";
 
                 // 2. Build the Gemini JSON Payload
-                var systemInstruction = @"You are a high-precision sports betting OCR and data extraction bot.
+                var systemInstruction = $@"You are a high-precision sports betting OCR and data extraction bot (Current Year: {DateTime.UtcNow.Year}).
 Analyze this betting slip screenshot carefully. Your highest directive is absolute literal accuracy: READ EXACTLY WHAT IS PRINTED AND NEVER ASSUME.
 
 # CORE OCR DIRECTIVES
 1. NEVER ASSUME OR INFER: Do NOT assume that multiple legs in a combo or Bet Builder share the same market! Read each leg independently from scratch.
-2. LITERAL OCR BEFORE TRANSLATION: Read the exact words printed under each player or selection before translating. Never invent or add modifiers (such as 'on target') that are not explicitly written on the slip.
+2. LITERAL OCR BEFORE TRANSLATION: Read the exact words printed under each player or selection before translating. Never invent or add modifiers (such as 'on target') that are not explicitly written on the slip. Never replace a printed player name with a different player from your training-cutoff roster memory ({DateTime.UtcNow.Year} rosters include new rookies, draftees, and transfers).
 
 # MARKET TRANSLATION & RULES
 - Player Shots vs Shots on Target:
