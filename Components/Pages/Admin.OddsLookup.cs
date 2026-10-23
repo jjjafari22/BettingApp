@@ -610,16 +610,6 @@ public partial class Admin
                 }
                 
                 SaveAiVisionResultToDatabase();
-                
-                // Instantly resort the pending bets list in memory so it reflects correctly on the UI
-                if (pendingBets != null && pendingBets.Any(b => b.Id == reviewingBetModel.Id))
-                {
-                    pendingBets = pendingBets
-                        .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
-                        .ThenBy(b => b.MatchStartTime)
-                        .ThenByDescending(b => b.CreatedAt)
-                        .ToList();
-                }
             }
 
             if (result.Markets.Count == 0)

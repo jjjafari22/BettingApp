@@ -307,6 +307,7 @@ public partial class Admin
         
         reviewingBetModel = null; 
         originalBetModel = null;
+        SortPendingBetsInPlace();
         errorMessage = null; 
         successMessage = null; 
         showAiExtractionDetails = false;
@@ -654,6 +655,7 @@ public partial class Admin
             if (currentReviewIndex >= currentReviewList.Count) 
             {
                 reviewingBetModel = null;
+                SortPendingBetsInPlace();
                 showAiExtractionDetails = false;
                 showSavedBookmakerOdds = false;
                 successMessage = $"Finished processing. Queue empty.";
@@ -668,6 +670,7 @@ public partial class Admin
         else
         {
             reviewingBetModel = null;
+            SortPendingBetsInPlace();
             showAiExtractionDetails = false;
             showSavedBookmakerOdds = false;
             successMessage = null; 

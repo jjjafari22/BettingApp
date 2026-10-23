@@ -107,6 +107,16 @@ public partial class Admin
     }
 
 
+    private void SortPendingBetsInPlace()
+    {
+        if (pendingBets == null || pendingBets.Count <= 1) return;
+        pendingBets = pendingBets
+            .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
+            .ThenBy(b => b.MatchStartTime)
+            .ThenByDescending(b => b.CreatedAt)
+            .ToList();
+    }
+
     private async Task LoadPendingBets()
     {
         try
@@ -115,14 +125,40 @@ public partial class Admin
             var twoMinsAgo = DateTime.UtcNow.AddMinutes(-2);
             var allPendingBets = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).Where(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo)).ToListAsync();
             totalPendingBets = allPendingBets.Count;
-            
-            pendingBets = allPendingBets
-                .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
-                .ThenBy(b => b.MatchStartTime)
-                .ThenByDescending(b => b.CreatedAt)
-                .Skip((pendingPage - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
+
+            var existingOrder = (reviewingBetModel != null && reviewContext == "Pending" && pendingBets.Count > 0)
+                ? pendingBets.Select((b, idx) => (b.Id, idx)).ToDictionary(x => x.Id, x => x.idx)
+                : null;
+
+            if (existingOrder != null)
+            {
+                pendingBets = allPendingBets
+                    .OrderBy(b => existingOrder.TryGetValue(b.Id, out _) ? 0 : 1)
+                    .ThenBy(b => existingOrder.TryGetValue(b.Id, out int idx) ? idx : int.MaxValue)
+                    .ThenBy(b => b.MatchStartTime.HasValue ? 1 : 0)
+                    .ThenBy(b => b.MatchStartTime)
+                    .ThenByDescending(b => b.CreatedAt)
+                    .Skip((pendingPage - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+            }
+            else
+            {
+                pendingBets = allPendingBets
+                    .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
+                    .ThenBy(b => b.MatchStartTime)
+                    .ThenByDescending(b => b.CreatedAt)
+                    .Skip((pendingPage - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+            }
+
+            if (reviewingBetModel != null && reviewContext == "Pending")
+            {
+                currentReviewList = pendingBets;
+                var newIdx = pendingBets.FindIndex(b => b.Id == reviewingBetModel.Id);
+                if (newIdx >= 0) currentReviewIndex = newIdx;
+            }
                 
             hasMorePendingBets = totalPendingBets > (pendingPage * pageSize);
             await PopulateUserLookup(pendingBets.Select(b => b.UserId));

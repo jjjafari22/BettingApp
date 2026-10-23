@@ -116,20 +116,17 @@ public partial class Admin
                 }
             }
 
-            if (matchStartTime.HasValue && pendingBets != null && pendingBets.Any(b => b.Id == bId))
+            if (pendingBets != null && pendingBets.Any(b => b.Id == bId))
             {
                 var pendingItem = pendingBets.FirstOrDefault(b => b.Id == bId);
-                if (pendingItem != null) pendingItem.MatchStartTime = matchStartTime;
-                pendingBets = pendingBets
-                    .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
-                    .ThenBy(b => b.MatchStartTime)
-                    .ThenByDescending(b => b.CreatedAt)
-                    .ToList();
-                if (reviewContext == "Pending")
+                if (pendingItem != null)
                 {
-                    currentReviewList = pendingBets;
-                    var newIdx = pendingBets.FindIndex(b => b.Id == bId);
-                    if (newIdx >= 0) currentReviewIndex = newIdx;
+                    if (matchStartTime.HasValue) pendingItem.MatchStartTime = matchStartTime;
+                    pendingItem.AiVisionResultJson = currentAiVisionResultJson;
+                }
+                if (matchStartTime.HasValue && (reviewingBetModel == null || reviewContext != "Pending"))
+                {
+                    SortPendingBetsInPlace();
                 }
             }
         }
