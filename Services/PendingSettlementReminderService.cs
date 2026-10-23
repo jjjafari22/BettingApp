@@ -41,8 +41,8 @@ namespace BettingApp.Services
                     _logger.LogError(ex, "Error in PendingSettlementReminderService loop");
                 }
 
-                // Wait 15 minutes before the next check
-                await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
+                // Wait 30 minutes before the next check
+                await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken);
             }
         }
 
