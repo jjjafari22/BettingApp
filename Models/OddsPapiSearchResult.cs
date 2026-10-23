@@ -18,6 +18,9 @@ public class OddsData
     public string? BetslipUrl { get; set; }
     public bool IsSuspended { get; set; }
     public double? Limit { get; set; }
+    public string? MarketId { get; set; }
+    public string? OutcomeId { get; set; }
+    public string? PlayerId { get; set; }
 }
 
 public class OddsPapiSearchResult

@@ -47,6 +47,15 @@ public partial class Admin
         
         var bId = reviewingBetModel.Id;
         var currentAiVisionResultJson = AiVisionResult != null ? System.Text.Json.JsonSerializer.Serialize(AiVisionResult) : null;
+        var legStartTimes = AiVisionResult?.Legs?.Select(l => l.StartTime).ToList();
+        var oddsSnapshot = LegOddsCache
+            .Where(kvp => !kvp.Value.IsLoading)
+            .ToDictionary(k => k.Key, v => v.Value);
+        if (oddsSnapshot.Count > 0)
+        {
+            _oddsSavedForCurrentCache = true;
+        }
+
         DateTime? matchStartTime = null;
         
         if (AiVisionResult != null)
@@ -71,18 +80,71 @@ public partial class Admin
                     {
                         orderedUiLegs[i].StartTime = AiVisionResult.Legs[i].StartTime;
                     }
+                    if (oddsSnapshot.TryGetValue(i, out var legResult))
+                    {
+                        if (!string.IsNullOrEmpty(legResult.SearchResult?.FixtureId))
+                        {
+                            orderedUiLegs[i].FixtureId = legResult.SearchResult.FixtureId;
+                        }
+                        if (legResult.MatchedBookieOdds.Count > 0)
+                        {
+                            orderedUiLegs[i].BookmakerOdds.Clear();
+                            foreach (var kvp in legResult.MatchedBookieOdds)
+                            {
+                                if (kvp.Value.Price > 0)
+                                {
+                                    string? bookieUrl = kvp.Value.BetslipUrl;
+                                    if (string.IsNullOrEmpty(bookieUrl) && legResult.SearchResult?.BookmakerUrls != null)
+                                    {
+                                        legResult.SearchResult.BookmakerUrls.TryGetValue(kvp.Key, out bookieUrl);
+                                    }
+                                    orderedUiLegs[i].BookmakerOdds.Add(new BetLegBookmakerOdds
+                                    {
+                                        BookmakerName = kvp.Key,
+                                        OddsValue = (decimal)kvp.Value.Price,
+                                        Limit = (decimal?)kvp.Value.Limit,
+                                        LookedUpAt = legResult.LookedUpAt,
+                                        BookmakerUrl = bookieUrl,
+                                        MarketId = kvp.Value.MarketId,
+                                        OutcomeId = kvp.Value.OutcomeId,
+                                        PlayerId = kvp.Value.PlayerId
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (matchStartTime.HasValue && pendingBets != null && pendingBets.Any(b => b.Id == bId))
+            {
+                var pendingItem = pendingBets.FirstOrDefault(b => b.Id == bId);
+                if (pendingItem != null) pendingItem.MatchStartTime = matchStartTime;
+                pendingBets = pendingBets
+                    .OrderBy(b => b.MatchStartTime.HasValue ? 1 : 0)
+                    .ThenBy(b => b.MatchStartTime)
+                    .ThenByDescending(b => b.CreatedAt)
+                    .ToList();
+                if (reviewContext == "Pending")
+                {
+                    currentReviewList = pendingBets;
+                    var newIdx = pendingBets.FindIndex(b => b.Id == bId);
+                    if (newIdx >= 0) currentReviewIndex = newIdx;
                 }
             }
         }
 
         _ = Task.Run(async () => 
         {
+            var betLock = _betOddsSaveLocks.GetOrAdd(bId, _ => new System.Threading.SemaphoreSlim(1, 1));
+            await betLock.WaitAsync();
             try
             {
                 using var context = DbFactory.CreateDbContext();
                 var dbBet = await context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == bId);
                 if (dbBet != null)
                 {
+                    bool startTimeChanged = matchStartTime.HasValue && dbBet.MatchStartTime != matchStartTime;
                     if (currentAiVisionResultJson != null)
                     {
                         if (matchStartTime.HasValue) dbBet.MatchStartTime = matchStartTime;
@@ -93,23 +155,64 @@ public partial class Admin
                         }
                         dbBet.AiVisionResultJson = currentAiVisionResultJson;
                         
-                        // IMPORTANT: Sync the StartTime to the physical BetLegs so BetProcessingService sees it
-                        if (AiVisionResult?.Legs != null && dbBet.Legs != null && AiVisionResult.Legs.Count == dbBet.Legs.Count)
+                        // IMPORTANT: Sync the StartTime, FixtureId, and BookmakerOdds to the physical BetLegs
+                        if (legStartTimes != null && dbBet.Legs != null && legStartTimes.Count == dbBet.Legs.Count)
                         {
                             var orderedDbLegs = dbBet.Legs.OrderBy(l => l.Id).ToList();
-                            for (int i = 0; i < AiVisionResult.Legs.Count; i++)
+                            for (int i = 0; i < orderedDbLegs.Count; i++)
                             {
-                                if (AiVisionResult.Legs[i].StartTime > DateTime.MinValue)
+                                if (legStartTimes[i] > DateTime.MinValue)
                                 {
-                                    orderedDbLegs[i].StartTime = AiVisionResult.Legs[i].StartTime;
+                                    orderedDbLegs[i].StartTime = legStartTimes[i];
+                                }
+                                if (oddsSnapshot.TryGetValue(i, out var legResult))
+                                {
+                                    if (!string.IsNullOrEmpty(legResult.SearchResult?.FixtureId))
+                                    {
+                                        orderedDbLegs[i].FixtureId = legResult.SearchResult.FixtureId;
+                                    }
+                                    if (legResult.MatchedBookieOdds.Count > 0)
+                                    {
+                                        orderedDbLegs[i].BookmakerOdds.Clear();
+                                        foreach (var kvp in legResult.MatchedBookieOdds)
+                                        {
+                                            if (kvp.Value.Price > 0)
+                                            {
+                                                string? bookieUrl = kvp.Value.BetslipUrl;
+                                                if (string.IsNullOrEmpty(bookieUrl) && legResult.SearchResult?.BookmakerUrls != null)
+                                                {
+                                                    legResult.SearchResult.BookmakerUrls.TryGetValue(kvp.Key, out bookieUrl);
+                                                }
+                                                orderedDbLegs[i].BookmakerOdds.Add(new BetLegBookmakerOdds
+                                                {
+                                                    BookmakerName = kvp.Key,
+                                                    OddsValue = (decimal)kvp.Value.Price,
+                                                    Limit = (decimal?)kvp.Value.Limit,
+                                                    LookedUpAt = legResult.LookedUpAt,
+                                                    BookmakerUrl = bookieUrl,
+                                                    MarketId = kvp.Value.MarketId,
+                                                    OutcomeId = kvp.Value.OutcomeId,
+                                                    PlayerId = kvp.Value.PlayerId
+                                                });
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                     await context.SaveChangesAsync();
+                    if (startTimeChanged)
+                    {
+                        UiNotifier.NotifyAdmin("PendingUpdate");
+                    }
                 }
             }
             catch { /* Best effort */ }
+            finally
+            {
+                betLock.Release();
+            }
         });
     }
 

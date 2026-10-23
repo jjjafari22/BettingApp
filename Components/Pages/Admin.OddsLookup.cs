@@ -35,6 +35,8 @@ public partial class Admin
 
     // --- Odds Lookup & Deep Link State ---
     private Dictionary<int, LegOddsResult> LegOddsCache = new();
+    private bool _oddsSavedForCurrentCache = false;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, System.Threading.SemaphoreSlim> _betOddsSaveLocks = new();
     private HashSet<int> ExpandedBetIds = new();
     private bool IsCheckingAllOdds = false;
     private int CheckedLegsCount = 0;
@@ -67,10 +69,12 @@ public partial class Admin
     {
         if (reviewingBetModel == null) return;
         LegOddsCache.Clear();
-        for (int i = 0; i < reviewingBetModel.Legs.Count; i++)
+        var orderedLegs = reviewingBetModel.Legs.OrderBy(l => l.Id).ToList();
+        for (int i = 0; i < orderedLegs.Count; i++)
         {
-            var leg = reviewingBetModel.Legs[i];
+            var leg = orderedLegs[i];
             var matched = new Dictionary<string, BettingApp.Models.OddsData>();
+            var bookmakerUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             
             if (leg.BookmakerOdds.Any())
             {
@@ -79,14 +83,28 @@ public partial class Admin
                     matched[bo.BookmakerName] = new BettingApp.Models.OddsData 
                     { 
                         Price = (double)bo.OddsValue,
-                        Limit = (double?)bo.Limit
+                        Limit = (double?)bo.Limit,
+                        BetslipUrl = bo.BookmakerUrl,
+                        MarketId = bo.MarketId,
+                        OutcomeId = bo.OutcomeId,
+                        PlayerId = bo.PlayerId
                     };
+                    if (!string.IsNullOrEmpty(bo.BookmakerUrl))
+                    {
+                        bookmakerUrls[bo.BookmakerName] = bo.BookmakerUrl;
+                    }
                 }
             }
             
             LegOddsCache[i] = new LegOddsResult 
             { 
                 IsLoading = false,
+                SearchResult = new BettingApp.Models.OddsPapiSearchResult
+                {
+                    FixtureId = leg.FixtureId ?? "",
+                    MatchName = leg.Match,
+                    BookmakerUrls = bookmakerUrls
+                },
                 MatchedBookieOdds = matched,
                 WarningMessage = leg.BookmakerOdds.Any() ? "Showing historical odds snapshot from time of approval." : "No historical odds saved for this leg.",
                 LookedUpAt = leg.BookmakerOdds.FirstOrDefault()?.LookedUpAt
@@ -129,6 +147,7 @@ public partial class Admin
         IsCheckingAllOdds = true;
         CheckedLegsCount = 0;
         LegOddsCache.Clear();
+        _oddsSavedForCurrentCache = false;
         
         for (int i = 0; i < legs.Count; i++)
         {

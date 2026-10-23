@@ -121,6 +121,7 @@ namespace BettingApp.Data
         public string Odds { get; set; } = string.Empty;
         
         public DateTime? StartTime { get; set; }
+        public string? FixtureId { get; set; }
         
         public string Outcome { get; set; } = "Pending";
         public string VerificationSource { get; set; } = "Unknown";
@@ -143,6 +144,11 @@ namespace BettingApp.Data
         
         // The exact time the odds were retrieved from the API
         public DateTime? LookedUpAt { get; set; }
+
+        public string? BookmakerUrl { get; set; }
+        public string? MarketId { get; set; }
+        public string? OutcomeId { get; set; }
+        public string? PlayerId { get; set; }
     }
 
     public class Transaction

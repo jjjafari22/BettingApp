@@ -236,9 +236,15 @@ public partial class Admin
             try { await reviewModalRef.FocusAsync(); } catch { } }
     }
 
+    private bool _pendingOnlyRefresh = true;
+
     private void HandleAdminNotification(string? message)
     {
-        if (!string.IsNullOrEmpty(message) && message != "Update") successMessage = message;
+        if (!string.IsNullOrEmpty(message) && message != "Update" && message != "PendingUpdate") successMessage = message;
+        if (message != "PendingUpdate")
+        {
+            _pendingOnlyRefresh = false;
+        }
         
         if (adminDebounceTimer == null)
         {
@@ -246,6 +252,8 @@ public partial class Admin
             adminDebounceTimer.AutoReset = false;
             adminDebounceTimer.Elapsed += async (s, e) => 
             {
+                bool onlyPending = _pendingOnlyRefresh;
+                _pendingOnlyRefresh = true;
                 try
                 {
                     if (_isDisposed) return;
@@ -253,10 +261,23 @@ public partial class Admin
                     {
                         try
                         {
-                            await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
+                            if (onlyPending)
+                            {
+                                await LoadPendingBets();
+                            }
+                            else
+                            {
+                                await Task.WhenAll(LoadPendingBets(), LoadApprovedBets(), LoadCompletedBets());
+                            }
                             
                             if (reviewingBetModel != null)
                             {
+                                if (reviewContext == "Pending")
+                                {
+                                    currentReviewList = pendingBets;
+                                    var newIdx = pendingBets.FindIndex(b => b.Id == reviewingBetModel.Id);
+                                    if (newIdx >= 0) currentReviewIndex = newIdx;
+                                }
                                 var matchingBet = pendingBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
                                                ?? approvedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
                                                ?? allApprovedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)

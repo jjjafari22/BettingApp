@@ -208,6 +208,7 @@ public partial class Admin
         ParsedAiOutcome = null;
         CancelCheckingAllOdds();
         LegOddsCache.Clear();
+        _oddsSavedForCurrentCache = false;
         IsCheckingAllOdds = false;
         CheckedLegsCount = 0;
         
@@ -504,41 +505,11 @@ public partial class Admin
         }
 
 
-        if (newStatus == "Approved" && LegOddsCache.Count > 0)
+        if (newStatus == "Approved" && !_oddsSavedForCurrentCache && LegOddsCache.Any(kvp => !kvp.Value.IsLoading))
         {
-            try
-            {
-                using var oddsContext = DbFactory.CreateDbContext();
-                var dbBetToUpdate = await oddsContext.Bets.Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).FirstOrDefaultAsync(b => b.Id == bet.Id);
-                if (dbBetToUpdate != null)
-                {
-                    for (int i = 0; i < dbBetToUpdate.Legs.Count; i++)
-                    {
-                        if (LegOddsCache.TryGetValue(i, out var legResult) && legResult.MatchedBookieOdds.Count > 0)
-                        {
-                            dbBetToUpdate.Legs[i].BookmakerOdds.Clear();
-                            foreach (var kvp in legResult.MatchedBookieOdds)
-                            {
-                                if (kvp.Value.Price > 0)
-                                {
-                                    dbBetToUpdate.Legs[i].BookmakerOdds.Add(new BetLegBookmakerOdds 
-                                    {
-                                        BookmakerName = kvp.Key,
-                                        OddsValue = (decimal)kvp.Value.Price,
-                                        Limit = (decimal?)kvp.Value.Limit,
-                                        LookedUpAt = legResult.LookedUpAt
-                                    });
-                                }
-                            }
-                        }
-                    }
-                    await oddsContext.SaveChangesAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Admin.razor] Failed to save Bookmaker Odds: {ex.Message}");
-            }
+            // If CheckAllOdds was cancelled mid-way when the admin clicked Approve,
+            // fire-and-forget save whatever legs had already completed without delaying Approve!
+            SaveAiVisionResultToDatabase();
         }
         
         var result = await BetProcessor.ProcessBetAsync(

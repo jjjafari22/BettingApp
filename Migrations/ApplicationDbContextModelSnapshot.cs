@@ -290,6 +290,9 @@ namespace BettingApp.Migrations
                     b.Property<int>("BetId")
                         .HasColumnType("int");
 
+                    b.Property<string>("FixtureId")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Market")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -347,6 +350,9 @@ namespace BettingApp.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("BookmakerUrl")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal?>("Limit")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -354,9 +360,18 @@ namespace BettingApp.Migrations
                     b.Property<DateTime?>("LookedUpAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("MarketId")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("OddsValue")
                         .HasPrecision(18, 3)
                         .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("OutcomeId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PlayerId")
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 

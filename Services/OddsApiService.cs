@@ -534,7 +534,13 @@ public class OddsApiService
                                         {
                                             if (playerProp.Value.TryGetProperty("price", out var price))
                                             {
-                                                var oddsData = new BettingApp.Models.OddsData { Price = price.GetDouble() };
+                                                var oddsData = new BettingApp.Models.OddsData
+                                                {
+                                                    Price = price.GetDouble(),
+                                                    MarketId = mId,
+                                                    OutcomeId = oId,
+                                                    PlayerId = playerProp.Name
+                                                };
 
                                                 if (result.BookmakerUrls.TryGetValue(bmName, out var fixtureUrl))
                                                 {
