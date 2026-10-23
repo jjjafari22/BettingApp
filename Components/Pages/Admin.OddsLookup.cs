@@ -59,8 +59,11 @@ public partial class Admin
     private string bet365PwaPackageName = "";
     private string coolbetPwaPackageName = "";
 
+    private bool showSavedBookmakerOdds = false;
+
     private async Task HideSavedOddsFromCache()
     {
+        showSavedBookmakerOdds = false;
         LegOddsCache.Clear();
         try { await reviewModalRef.FocusAsync(); } catch { }
     }
@@ -68,50 +71,75 @@ public partial class Admin
     private async Task LoadSavedOddsIntoCache()
     {
         if (reviewingBetModel == null) return;
+        showSavedBookmakerOdds = true;
+        PopulateSavedOddsIntoCache();
+        try { await reviewModalRef.FocusAsync(); } catch { }
+    }
+
+    private void PopulateSavedOddsIntoCache()
+    {
+        if (reviewingBetModel == null) return;
         LegOddsCache.Clear();
-        var orderedLegs = reviewingBetModel.Legs.OrderBy(l => l.Id).ToList();
-        for (int i = 0; i < orderedLegs.Count; i++)
+        var orderedLegs = (reviewingBetModel.Legs ?? Enumerable.Empty<BetLeg>()).OrderBy(l => l.Id).ToList();
+        if (orderedLegs.Count > 0)
         {
-            var leg = orderedLegs[i];
-            var matched = new Dictionary<string, BettingApp.Models.OddsData>();
-            var bookmakerUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            
-            if (leg.BookmakerOdds.Any())
+            for (int i = 0; i < orderedLegs.Count; i++)
             {
-                foreach (var bo in leg.BookmakerOdds)
+                var leg = orderedLegs[i];
+                var matched = new Dictionary<string, BettingApp.Models.OddsData>();
+                var bookmakerUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                
+                if (leg.BookmakerOdds != null && leg.BookmakerOdds.Any())
                 {
-                    matched[bo.BookmakerName] = new BettingApp.Models.OddsData 
-                    { 
-                        Price = (double)bo.OddsValue,
-                        Limit = (double?)bo.Limit,
-                        BetslipUrl = bo.BookmakerUrl,
-                        MarketId = bo.MarketId,
-                        OutcomeId = bo.OutcomeId,
-                        PlayerId = bo.PlayerId
-                    };
-                    if (!string.IsNullOrEmpty(bo.BookmakerUrl))
+                    foreach (var bo in leg.BookmakerOdds)
                     {
-                        bookmakerUrls[bo.BookmakerName] = bo.BookmakerUrl;
+                        matched[bo.BookmakerName] = new BettingApp.Models.OddsData 
+                        { 
+                            Price = (double)bo.OddsValue,
+                            Limit = (double?)bo.Limit,
+                            BetslipUrl = bo.BookmakerUrl,
+                            MarketId = bo.MarketId,
+                            OutcomeId = bo.OutcomeId,
+                            PlayerId = bo.PlayerId
+                        };
+                        if (!string.IsNullOrEmpty(bo.BookmakerUrl))
+                        {
+                            bookmakerUrls[bo.BookmakerName] = bo.BookmakerUrl;
+                        }
                     }
                 }
+                
+                LegOddsCache[i] = new LegOddsResult 
+                { 
+                    IsLoading = false,
+                    SearchResult = new BettingApp.Models.OddsPapiSearchResult
+                    {
+                        FixtureId = leg.FixtureId ?? "",
+                        MatchName = leg.Match,
+                        BookmakerUrls = bookmakerUrls
+                    },
+                    MatchedBookieOdds = matched,
+                    WarningMessage = (leg.BookmakerOdds != null && leg.BookmakerOdds.Any()) ? "Showing historical odds snapshot from time of approval." : "No historical odds saved for this leg.",
+                    LookedUpAt = leg.BookmakerOdds?.FirstOrDefault()?.LookedUpAt
+                };
             }
-            
-            LegOddsCache[i] = new LegOddsResult 
-            { 
-                IsLoading = false,
-                SearchResult = new BettingApp.Models.OddsPapiSearchResult
-                {
-                    FixtureId = leg.FixtureId ?? "",
-                    MatchName = leg.Match,
-                    BookmakerUrls = bookmakerUrls
-                },
-                MatchedBookieOdds = matched,
-                WarningMessage = leg.BookmakerOdds.Any() ? "Showing historical odds snapshot from time of approval." : "No historical odds saved for this leg.",
-                LookedUpAt = leg.BookmakerOdds.FirstOrDefault()?.LookedUpAt
-            };
         }
-        
-        try { await reviewModalRef.FocusAsync(); } catch { }
+        else if (AiVisionResult?.Legs != null)
+        {
+            for (int i = 0; i < AiVisionResult.Legs.Count; i++)
+            {
+                var vLeg = AiVisionResult.Legs[i];
+                LegOddsCache[i] = new LegOddsResult
+                {
+                    IsLoading = false,
+                    SearchResult = new BettingApp.Models.OddsPapiSearchResult
+                    {
+                        MatchName = vLeg.Match ?? ""
+                    },
+                    WarningMessage = "No historical odds saved for this leg."
+                };
+            }
+        }
     }
 
     private void ToggleBetRow(int betId)

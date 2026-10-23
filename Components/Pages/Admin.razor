@@ -289,7 +289,7 @@ else
                                             }
                                             else
                                             {
-                                                if (LegOddsCache.Count == 0)
+                                                if (!showSavedBookmakerOdds)
                                                 {
                                                     <button class="btn btn-outline-primary btn-sm mb-2 w-100 fw-bold shadow-sm" @onclick="LoadSavedOddsIntoCache">
                                                         <i class="bi bi-eye me-1"></i> Show Bookmaker Odds

@@ -144,8 +144,14 @@ public partial class Admin
     }
 
 
-    private void StartReview(Bet bet)
+    private void StartReview(Bet bet, bool keepExpansionState = false)
     {
+        if (!keepExpansionState)
+        {
+            showAiExtractionDetails = false;
+            showSavedBookmakerOdds = false;
+        }
+
         if (pendingBets.Any(b => b.Id == bet.Id))
         {
             currentReviewList = pendingBets;
@@ -244,6 +250,11 @@ public partial class Admin
             } catch (Exception ex) { AiVisionError = "Failed to parse AI Vision data: " + ex.Message; }
         }
 
+        if (showSavedBookmakerOdds && reviewingBetModel.Status != "Pending" && reviewingBetModel.Status != "Processing")
+        {
+            PopulateSavedOddsIntoCache();
+        }
+
         if (_outcomeCache.TryGetValue(bet.Id, out var cachedOutcome) && !string.IsNullOrEmpty(cachedOutcome.Json))
         {
             reviewingBetModel.AiOutcomeResult = cachedOutcome.Json;
@@ -298,6 +309,8 @@ public partial class Admin
         originalBetModel = null;
         errorMessage = null; 
         successMessage = null; 
+        showAiExtractionDetails = false;
+        showSavedBookmakerOdds = false;
         LegOddsCache.Clear();
         IsCheckingAllOdds = false;
         CheckedLegsCount = 0; 
@@ -379,7 +392,7 @@ public partial class Admin
             ShowOddsLookup = false;
             
             var nextBet = currentReviewList[newIndex];
-            StartReview(nextBet);
+            StartReview(nextBet, keepExpansionState: true);
         }
         try { await reviewModalRef.FocusAsync(); } catch { }
     }
@@ -641,18 +654,22 @@ public partial class Admin
             if (currentReviewIndex >= currentReviewList.Count) 
             {
                 reviewingBetModel = null;
+                showAiExtractionDetails = false;
+                showSavedBookmakerOdds = false;
                 successMessage = $"Finished processing. Queue empty.";
             }
             else
             {
                 var actualNextBet = currentReviewList[currentReviewIndex];
-                StartReview(actualNextBet);
+                StartReview(actualNextBet, keepExpansionState: true);
                 successMessage = null;
             }
         }
         else
         {
             reviewingBetModel = null;
+            showAiExtractionDetails = false;
+            showSavedBookmakerOdds = false;
             successMessage = null; 
             successMessage = $"Bet #{bet.Id} processed. Queue empty.";
         }
