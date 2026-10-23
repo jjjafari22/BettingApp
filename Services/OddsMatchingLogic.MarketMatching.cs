@@ -89,6 +89,13 @@ namespace BettingApp.Services
                             if (statKeywords.Any(kw => simM.Contains(kw))) return false;
                         }
 
+                        if (target.Contains("foul") || simM.Contains("foul"))
+                        {
+                            bool targetIsFoulsWon = target.Contains("foul") && (target.Contains("won") || target.Contains("drawn") || target.Contains("suffered") || target.Contains("fouled"));
+                            bool simIsFoulsWon = simM.Contains("foul") && (simM.Contains("won") || simM.Contains("drawn") || simM.Contains("suffered") || simM.Contains("fouled"));
+                            if (targetIsFoulsWon != simIsFoulsWon) return false;
+                        }
+
                         return simM.Contains(target) || (target.Contains(simM) && Math.Abs(target.Length - simM.Length) <= 4);
                     }).ToList();
 

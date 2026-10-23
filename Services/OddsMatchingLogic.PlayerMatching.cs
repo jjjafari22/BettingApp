@@ -240,7 +240,7 @@ namespace BettingApp.Services
                 "over", "under", "yes", "no", "ja", "nei", "not",
                 "player", "players", "shots", "shot", "target", "score", "scorer", "scoring",
                 "anytime", "goalscorer", "goal", "goals", "mal",
-                "fouls", "foul", "committed", "suffered", "won", "drawn",
+                "fouls", "foul", "committed", "suffered", "won", "drawn", "fouled", "win",
                 "assists", "assist", "give", "provide",
                 "cards", "card", "booked", "carded", "booking", "bookings", "shown", "receive", "yellow", "red",
                 "points", "point", "pts", "ppp",

@@ -10,15 +10,26 @@ public class OddsApiService
     private readonly IMemoryCache _cache;
     private readonly TeamAliasMappingService _teamAliasMappingService;
     private readonly ILogger<OddsApiService> _logger;
+    private readonly EmailSender? _emailSender;
+    private readonly MarketMappingService? _marketMapper;
     private static readonly SemaphoreSlim _apiRateLimiter = new SemaphoreSlim(10, 10);
 
-    public OddsApiService(HttpClient httpClient, IConfiguration config, IMemoryCache cache, TeamAliasMappingService teamAliasMappingService, ILogger<OddsApiService> logger)
+    public OddsApiService(
+        HttpClient httpClient,
+        IConfiguration config,
+        IMemoryCache cache,
+        TeamAliasMappingService teamAliasMappingService,
+        ILogger<OddsApiService> logger,
+        EmailSender? emailSender = null,
+        MarketMappingService? marketMapper = null)
     {
         _httpClient = httpClient;
         _apiKey = config["OddsApi:ApiKey"] ?? "";
         _cache = cache;
         _teamAliasMappingService = teamAliasMappingService;
         _logger = logger;
+        _emailSender = emailSender;
+        _marketMapper = marketMapper;
     }
 
 
@@ -115,6 +126,7 @@ public class OddsApiService
                 
             var newRawMarketIdToBaseName = new Dictionary<string, string>();
             var newBaseMarketDict = new Dictionary<string, BettingApp.Models.OddsPapiMarket>();
+            var rawCatalogMarketNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 
             if (!string.IsNullOrEmpty(mJson) && mJson != "[]")
             {
@@ -125,6 +137,10 @@ public class OddsApiService
                     {
                         var mId = m.GetProperty("marketId").ToString();
                         var baseName = m.TryGetProperty("marketName", out var mn) ? mn.GetString() ?? "Unknown" : "Unknown";
+                        if (!string.IsNullOrWhiteSpace(baseName) && !baseName.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                        {
+                            rawCatalogMarketNames.Add(baseName.Trim());
+                        }
                             
                         string handicapSuffix = "";
                         if (m.TryGetProperty("handicap", out var hc))
@@ -152,6 +168,7 @@ public class OddsApiService
                         bool isPlayerTacklesMerge = false;
                         bool isPlayerPointsMerge = false;
                         bool isPlayerShotsMerge = false;
+                        bool isPlayerFoulsMerge = false;
 
                         if (baseName.Equals("Player Shots On Goal (incl. overtime)", StringComparison.OrdinalIgnoreCase) ||
                             baseName.Equals("Player Shots on Goal", StringComparison.OrdinalIgnoreCase))
@@ -159,9 +176,39 @@ public class OddsApiService
                             baseName = "Over Under Player Shots On Goal (incl. overtime)";
                             isPlayerShotsMerge = true;
                         }
-                        else if (baseName.Equals("Player Fouls Committed (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        else if (baseName.Equals("Player Fouls Committed (incl. overtime)", StringComparison.OrdinalIgnoreCase) ||
+                                 baseName.Equals("Player To Commit A Foul (incl. overtime)", StringComparison.OrdinalIgnoreCase))
                         {
                             baseName = "Over Under Player Fouls Committed (incl. overtime)";
+                            isPlayerFoulsMerge = true;
+                        }
+                        else if (baseName.Equals("Player Fouls Won (incl. overtime)", StringComparison.OrdinalIgnoreCase) ||
+                                 baseName.Equals("Player To Win A Foul (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Fouls Won (incl. overtime)";
+                            isPlayerFoulsMerge = true;
+                        }
+                        else if (baseName.Equals("Player Fouls Drawn (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Fouls Drawn (incl. overtime)";
+                            isPlayerFoulsMerge = true;
+                        }
+                        else if (baseName.Equals("Player Fouls Suffered (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Fouls Suffered (incl. overtime)";
+                            isPlayerFoulsMerge = true;
+                        }
+                        else if (baseName.Equals("Player To Be Fouled (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player To Be Fouled (incl. overtime)";
+                            isPlayerFoulsMerge = true;
+                        }
+                        else if (baseName.Equals("Player Goals or Assists (incl. overtime)", StringComparison.OrdinalIgnoreCase) ||
+                                 baseName.Equals("Player Goal or Assist (incl. overtime)", StringComparison.OrdinalIgnoreCase) ||
+                                 baseName.Equals("Player Goal or Assist", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Goals or Assists (incl. overtime)";
+                            isPlayerGoalsMerge = true;
                         }
                         else if (baseName.Equals("Player Shots (incl. overtime)", StringComparison.OrdinalIgnoreCase))
                         {
@@ -213,7 +260,7 @@ public class OddsApiService
                                 }
 
                                 string outcomeHandicapSuffix = handicapSuffix;
-                                if ((isPlayerGoalsMerge || isPlayerAssistsMerge || isPlayerTacklesMerge || isPlayerPointsMerge || isPlayerShotsMerge) && string.IsNullOrEmpty(outcomeHandicapSuffix))
+                                if ((isPlayerGoalsMerge || isPlayerAssistsMerge || isPlayerTacklesMerge || isPlayerPointsMerge || isPlayerShotsMerge || isPlayerFoulsMerge) && string.IsNullOrEmpty(outcomeHandicapSuffix))
                                 {
                                     if (oName == "1" || oName.Equals("Yes", StringComparison.OrdinalIgnoreCase))
                                     {
@@ -235,11 +282,69 @@ public class OddsApiService
                     }
                 }
             }
+
+            if (rawCatalogMarketNames.Count > 0)
+            {
+                await NotifyIfNewMarketsDetectedAsync(sportId, rawCatalogMarketNames);
+            }
                 
             cachedMarkets = (newRawMarketIdToBaseName, newBaseMarketDict);
             _cache.Set(parsedCacheKey, cachedMarkets, TimeSpan.FromHours(24));
         }
         return cachedMarkets;
+    }
+
+    private async Task NotifyIfNewMarketsDetectedAsync(int sportId, IEnumerable<string> rawCatalogMarketNames)
+    {
+        try
+        {
+            var newMarkets = OddsPapiMarketCatalogTracker.DetectAndRecordNewMarkets(sportId, rawCatalogMarketNames);
+            if (newMarkets.Count == 0) return;
+
+            string sportLabel = sportId == 15 ? "Ice Hockey" : (sportId == 12 ? "Tennis" : (sportId == 10 ? "Soccer" : $"Sport {sportId}"));
+            var mapper = _marketMapper ?? new MarketMappingService();
+
+            var evaluatedMarkets = newMarkets
+                .Select(m => (MarketName: m, IsPreWired: IsMarketPreWired(m, mapper)))
+                .ToList();
+
+            _logger.LogInformation($"OddsPapi: Detected {newMarkets.Count} new market(s) for {sportLabel}: {string.Join(", ", newMarkets)}");
+
+            if (_emailSender != null)
+            {
+                string subject = $"🆕 OddsPapi Added {newMarkets.Count} New Market(s) for {sportLabel}";
+                string html = EmailTemplates.BuildNewOddsPapiMarketsTemplate(sportLabel, sportId, evaluatedMarkets);
+                await _emailSender.SendAdminNotificationEmailAsync(subject, html);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"OddsPapi: Failed to process new market notification for sportId={sportId}.");
+        }
+    }
+
+    private static bool IsMarketPreWired(string oddsPapiMarketName, MarketMappingService mapper)
+    {
+        var probeMarkets = new List<BettingApp.Models.OddsPapiMarket>
+        {
+            new BettingApp.Models.OddsPapiMarket { MarketId = "probe", MarketName = oddsPapiMarketName }
+        };
+
+        // Check whether common canonical betslip market names or the market's own name resolves to this OddsPapi market
+        var sampleProbes = new[]
+        {
+            oddsPapiMarketName,
+            "Player Fouls Won",
+            "To Score or Assist",
+            "Player to Score or be Booked",
+            "Player Shots on Target",
+            "Player Tackles",
+            "Player Assists",
+            "Anytime Goalscorer"
+        };
+
+        return sampleProbes.Any(probe =>
+            OddsMatchingLogic.FindBestMarket(probeMarkets, probe, "Team A vs Team B", "Player Name - Over 0.5", mapper) != null);
     }
 
     public async Task WarmupCacheAsync(int? specificSportId = null)

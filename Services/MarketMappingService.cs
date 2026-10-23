@@ -89,6 +89,13 @@ namespace BettingApp.Services
             { "Player Shots on Target", "Over Under Player Shots On Goal (incl. overtime)|Player Shots On Goal (incl. overtime)|Player's shot on target|Player Shots on Target|Player Shots on Target (incl. overtime)" },
             { "Player Shots", "Over Under Player Shots (incl. overtime)|Player Shots (incl. overtime)|Player Shots" },
             { "Player Fouls Committed", "Over Under Player Fouls Committed (incl. overtime)|Player Fouls Committed (incl. overtime)|Player Fouls Committed" },
+            { "Player Fouls Won", "Over Under Player Fouls Won (incl. overtime)|Player Fouls Won (incl. overtime)|Player Fouls Won|Over Under Player Fouls Drawn (incl. overtime)|Player Fouls Drawn (incl. overtime)|Player Fouls Drawn|Over Under Player Fouls Suffered (incl. overtime)|Player Fouls Suffered (incl. overtime)|Player Fouls Suffered|Over Under Player To Be Fouled (incl. overtime)|Player To Be Fouled (incl. overtime)|Player To Be Fouled|Fouls Won|Fouls Drawn|Fouls Suffered" },
+            { "Player Fouls Drawn", "Over Under Player Fouls Won (incl. overtime)|Player Fouls Won (incl. overtime)|Player Fouls Won|Over Under Player Fouls Drawn (incl. overtime)|Player Fouls Drawn (incl. overtime)|Player Fouls Drawn|Over Under Player Fouls Suffered (incl. overtime)|Player Fouls Suffered (incl. overtime)|Player Fouls Suffered|Over Under Player To Be Fouled (incl. overtime)|Player To Be Fouled (incl. overtime)|Player To Be Fouled|Fouls Won|Fouls Drawn|Fouls Suffered" },
+            { "Player Fouls Suffered", "Over Under Player Fouls Won (incl. overtime)|Player Fouls Won (incl. overtime)|Player Fouls Won|Over Under Player Fouls Drawn (incl. overtime)|Player Fouls Drawn (incl. overtime)|Player Fouls Drawn|Over Under Player Fouls Suffered (incl. overtime)|Player Fouls Suffered (incl. overtime)|Player Fouls Suffered|Over Under Player To Be Fouled (incl. overtime)|Player To Be Fouled (incl. overtime)|Player To Be Fouled|Fouls Won|Fouls Drawn|Fouls Suffered" },
+            { "Player To Be Fouled", "Over Under Player Fouls Won (incl. overtime)|Player Fouls Won (incl. overtime)|Player Fouls Won|Over Under Player Fouls Drawn (incl. overtime)|Player Fouls Drawn (incl. overtime)|Player Fouls Drawn|Over Under Player Fouls Suffered (incl. overtime)|Player Fouls Suffered (incl. overtime)|Player Fouls Suffered|Over Under Player To Be Fouled (incl. overtime)|Player To Be Fouled (incl. overtime)|Player To Be Fouled|Fouls Won|Fouls Drawn|Fouls Suffered" },
+            { "Fouls Won", "Over Under Player Fouls Won (incl. overtime)|Player Fouls Won (incl. overtime)|Player Fouls Won|Over Under Player Fouls Drawn (incl. overtime)|Player Fouls Drawn (incl. overtime)|Player Fouls Drawn|Over Under Player Fouls Suffered (incl. overtime)|Player Fouls Suffered (incl. overtime)|Player Fouls Suffered|Over Under Player To Be Fouled (incl. overtime)|Player To Be Fouled (incl. overtime)|Player To Be Fouled|Fouls Won|Fouls Drawn|Fouls Suffered" },
+            { "Fouls Drawn", "Over Under Player Fouls Won (incl. overtime)|Player Fouls Won (incl. overtime)|Player Fouls Won|Over Under Player Fouls Drawn (incl. overtime)|Player Fouls Drawn (incl. overtime)|Player Fouls Drawn|Over Under Player Fouls Suffered (incl. overtime)|Player Fouls Suffered (incl. overtime)|Player Fouls Suffered|Over Under Player To Be Fouled (incl. overtime)|Player To Be Fouled (incl. overtime)|Player To Be Fouled|Fouls Won|Fouls Drawn|Fouls Suffered" },
+            { "Fouls Suffered", "Over Under Player Fouls Won (incl. overtime)|Player Fouls Won (incl. overtime)|Player Fouls Won|Over Under Player Fouls Drawn (incl. overtime)|Player Fouls Drawn (incl. overtime)|Player Fouls Drawn|Over Under Player Fouls Suffered (incl. overtime)|Player Fouls Suffered (incl. overtime)|Player Fouls Suffered|Over Under Player To Be Fouled (incl. overtime)|Player To Be Fouled (incl. overtime)|Player To Be Fouled|Fouls Won|Fouls Drawn|Fouls Suffered" },
             { "Full Time", "Full Time Result|Regular Time Result|Winner" },
             { "Match Odds", "Regular Time Result|Full Time Result|Winner" },
             { "Match Winner", "Regular Time Result|Winner (incl. overtime and penalties)|Full Time Result|Winner" },
@@ -720,11 +727,12 @@ namespace BettingApp.Services
                 return new List<string> { "Both Teams To Score" };
             }
 
-            if (clean.StartsWith("Total Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) ||
-                clean.StartsWith("Total Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) ||
-                clean.StartsWith("Total Fouls", StringComparison.OrdinalIgnoreCase) ||
-                clean.StartsWith("Total Shots", StringComparison.OrdinalIgnoreCase) ||
-                clean.StartsWith("Total Tackles", StringComparison.OrdinalIgnoreCase))
+            if ((clean.StartsWith("Total Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) ||
+                 clean.StartsWith("Total Goal Keeper Saves", StringComparison.OrdinalIgnoreCase) ||
+                 clean.StartsWith("Total Fouls", StringComparison.OrdinalIgnoreCase) ||
+                 clean.StartsWith("Total Shots", StringComparison.OrdinalIgnoreCase) ||
+                 clean.StartsWith("Total Tackles", StringComparison.OrdinalIgnoreCase)) &&
+                !HasPlayerName(selectionName))
             {
                 return new List<string> { clean };
             }
@@ -820,6 +828,41 @@ namespace BettingApp.Services
                 }
                 return new List<string> { clean };
             }
+            bool isFoulsWonOrDrawn = ((clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) || clean.Contains("Foul", StringComparison.OrdinalIgnoreCase)) &&
+                                      (clean.Contains("Suffered", StringComparison.OrdinalIgnoreCase) ||
+                                       clean.Contains("Won", StringComparison.OrdinalIgnoreCase) ||
+                                       clean.Contains("Drawn", StringComparison.OrdinalIgnoreCase) ||
+                                       System.Text.RegularExpressions.Regex.IsMatch(clean, @"\bwin\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))) ||
+                                     clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase);
+
+            if (!isTeamOrTotalStat && isFoulsWonOrDrawn)
+            {
+                if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName) ||
+                    clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<string>
+                    {
+                        "Over Under Player Fouls Won (incl. overtime)",
+                        "Player Fouls Won (incl. overtime)",
+                        "Player To Win A Foul (incl. overtime)",
+                        "Player Fouls Won",
+                        "Over Under Player Fouls Drawn (incl. overtime)",
+                        "Player Fouls Drawn (incl. overtime)",
+                        "Player Fouls Drawn",
+                        "Over Under Player Fouls Suffered (incl. overtime)",
+                        "Player Fouls Suffered (incl. overtime)",
+                        "Player Fouls Suffered",
+                        "Over Under Player To Be Fouled (incl. overtime)",
+                        "Player To Be Fouled (incl. overtime)",
+                        "Player To Be Fouled",
+                        "Fouls Won",
+                        "Fouls Drawn",
+                        "Fouls Suffered"
+                    };
+                }
+                return new List<string> { clean };
+            }
+
             if (!isTeamOrTotalStat && clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) &&
                 !clean.Contains("Suffered", StringComparison.OrdinalIgnoreCase) &&
                 !clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase) &&
@@ -1084,7 +1127,7 @@ namespace BettingApp.Services
         {
             if (string.IsNullOrWhiteSpace(text)) return false;
             if (text.Contains("Player", StringComparison.OrdinalIgnoreCase) || text.Contains("Player's", StringComparison.OrdinalIgnoreCase)) return true;
-            string stripped = System.Text.RegularExpressions.Regex.Replace(text, @"\b(over|under|yes|no|total|team|home|away|goalkeeper|goal|keeper|saves|save|fouls|foul|shots|shot|target|tackles|tackle|points|point|cards|card|bookings|booking|corners|corner|offsides|offside|assists|assist|committed|aces|ace|double|faults|fault|games|game|sets|set|breaks|break|service|tiebreaks|tiebreak|tie|1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth|half|halves|full|time|regular|match|in|of|number|handicap|most|more|odd|even|to|be|or|record|score|at|least)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            string stripped = System.Text.RegularExpressions.Regex.Replace(text, @"\b(over|under|yes|no|total|team|home|away|goalkeeper|goal|keeper|saves|save|fouls|foul|fouled|won|drawn|suffered|win|shots|shot|target|tackles|tackle|points|point|cards|card|bookings|booking|corners|corner|offsides|offside|assists|assist|committed|aces|ace|double|faults|fault|games|game|sets|set|breaks|break|service|tiebreaks|tiebreak|tie|1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth|half|halves|full|time|regular|match|in|of|number|handicap|most|more|odd|even|to|be|or|record|score|at|least)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             stripped = System.Text.RegularExpressions.Regex.Replace(stripped, @"[0-9\.\+\-:\(\)\/]", "").Trim();
             return stripped.Length >= 3;
         }

@@ -40,6 +40,13 @@ public class EmailSender : IEmailSender<ApplicationUser>
         await SendEmailAsync(email, subject, message);
     }
 
+    public async Task SendAdminNotificationEmailAsync(string subject, string htmlMessage)
+    {
+        string senderEmail = _configuration["EmailSettings:SenderEmail"] ?? "";
+        if (string.IsNullOrWhiteSpace(senderEmail)) return;
+        await SendEmailAsync(senderEmail, subject, htmlMessage);
+    }
+
     // CHANGED: Made this method public so it can be called from AdminUsers.razor
     public async Task SendEmailAsync(string toEmail, string subject, string message)
     {

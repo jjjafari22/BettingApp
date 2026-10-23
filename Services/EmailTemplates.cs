@@ -55,4 +55,59 @@ public static class EmailTemplates
     </body>
     </html>
     """;
+
+    public static string BuildNewOddsPapiMarketsTemplate(string sportLabel, int sportId, IReadOnlyCollection<(string MarketName, bool IsPreWired)> newMarkets)
+    {
+        var rowsSb = new System.Text.StringBuilder();
+        foreach (var (marketName, isPreWired) in newMarkets)
+        {
+            string encodedName = System.Net.WebUtility.HtmlEncode(marketName);
+            string badge = isPreWired
+                ? "<span style=\"background-color: #d4edda; color: #155724; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;\">✅ Pre-Wired &amp; Ready</span>"
+                : "<span style=\"background-color: #fff3cd; color: #856404; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;\">🆕 Check Mapping</span>";
+
+            rowsSb.AppendLine($"<li style=\"margin-bottom: 10px;\"><strong>{encodedName}</strong> &nbsp;{badge}</li>");
+        }
+
+        string safeSport = System.Net.WebUtility.HtmlEncode(sportLabel);
+
+        return $$"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>New OddsPapi Markets Detected</title>
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fa; margin: 0; padding: 0; }
+                .email-wrapper { width: 100%; background-color: #f4f7fa; padding: 40px 20px; box-sizing: border-box; }
+                .email-content { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); overflow: hidden; }
+                .header { background-color: #2c3e50; padding: 28px 20px; text-align: center; color: #ffffff; }
+                .header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+                .body-content { padding: 30px 35px; color: #333333; line-height: 1.6; font-size: 15px; }
+                .footer { text-align: center; padding: 20px; font-size: 13px; color: #888888; border-top: 1px solid #eeeeee; background-color: #fafafa; }
+            </style>
+        </head>
+        <body>
+            <div class="email-wrapper">
+                <div class="email-content">
+                    <div class="header">
+                        <h1>🆕 New OddsPapi Markets ({{safeSport}})</h1>
+                    </div>
+                    <div class="body-content">
+                        <p>OddsPapi just added <strong>{{newMarkets.Count}}</strong> new market(s) to their <strong>{{safeSport}}</strong> (<code>sportId={{sportId}}</code>) catalog:</p>
+                        <ul style="padding-left: 20px; margin: 20px 0;">
+                            {{rowsSb}}
+                        </ul>
+                        <p style="margin-top: 25px; font-size: 14px; color: #666;">Markets marked <strong>Pre-Wired &amp; Ready</strong> are already mapped in <code>MarketMappingService</code> and will match betslips automatically.</p>
+                    </div>
+                    <div class="footer">
+                        &copy; 2026 The Castle of Happiness &mdash; Automated OddsPapi Monitor
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """;
+    }
 }

@@ -171,6 +171,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddDefaultTokenProviders()
     .AddErrorDescriber<CustomIdentityErrorDescriber>();
 
+builder.Services.AddTransient<EmailSender>();
 builder.Services.AddTransient<IEmailSender<ApplicationUser>, EmailSender>();
 
 var app = builder.Build();

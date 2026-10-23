@@ -2362,5 +2362,80 @@ namespace BettingApp.Tests
             Assert.False(MarketMappingService.IsCombinationMarket("Match Winner", "R. Collignon/D. Goffin vs K. Krawietz/T. Puetz"));
             Assert.False(MarketMappingService.IsCombinationMarket("R. Collignon & D. Goffin", "R. Collignon/D. Goffin vs K. Krawietz/T. Puetz"));
         }
+
+        [Fact]
+        public void FoulsWon_PreWired_MatchesWhenAvailable_And_NeverMatchesFoulsCommitted()
+        {
+            // 1. Today (only Fouls Committed exists): Fouls Won / Suffered / Drawn / Fouled must return null
+            var marketsWithoutFoulsWon = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "104", MarketName = "Over Under Player Fouls Committed (incl. overtime)" }
+            };
+
+            Assert.Null(OddsMatchingLogic.FindBestMarket(marketsWithoutFoulsWon, "Player Fouls Won", "Chelsea vs Arsenal", "Kiernan Dewsbury-Hall - Over 1.5", _marketMapper));
+            Assert.Null(OddsMatchingLogic.FindBestMarket(marketsWithoutFoulsWon, "Kiernan Dewsbury-Hall Total Fouls Won", "Chelsea vs Arsenal", "Over 1.5", _marketMapper));
+            Assert.Null(OddsMatchingLogic.FindBestMarket(marketsWithoutFoulsWon, "Player To Be Fouled", "Chelsea vs Arsenal", "Bukayo Saka - Over 1.5", _marketMapper));
+
+            // 2. Day 1 when OddsPapi adds "Over Under Player Fouls Won (incl. overtime)": matches automatically!
+            var marketsWithFoulsWon = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "104", MarketName = "Over Under Player Fouls Committed (incl. overtime)" },
+                new OddsPapiMarket { MarketId = "105", MarketName = "Over Under Player Fouls Won (incl. overtime)" }
+            };
+
+            var m1 = OddsMatchingLogic.FindBestMarket(marketsWithFoulsWon, "Player Fouls Won", "Chelsea vs Arsenal", "Kiernan Dewsbury-Hall - Over 1.5", _marketMapper);
+            Assert.NotNull(m1);
+            Assert.Equal("Over Under Player Fouls Won (incl. overtime)", m1.MarketName);
+
+            var m2 = OddsMatchingLogic.FindBestMarket(marketsWithFoulsWon, "Kiernan Dewsbury-Hall Total Fouls Won", "Chelsea vs Arsenal", "Over 1.5", _marketMapper);
+            Assert.NotNull(m2);
+            Assert.Equal("Over Under Player Fouls Won (incl. overtime)", m2.MarketName);
+
+            var mCommitted = OddsMatchingLogic.FindBestMarket(marketsWithFoulsWon, "Player Fouls Committed", "Chelsea vs Arsenal", "Moises Caicedo - Over 1.5", _marketMapper);
+            Assert.NotNull(mCommitted);
+            Assert.Equal("Over Under Player Fouls Committed (incl. overtime)", mCommitted.MarketName);
+
+            var searchResult = new OddsPapiSearchResult { MatchName = "Chelsea vs Arsenal" };
+            var leg = new AiVisionLeg
+            {
+                Sport = "Soccer",
+                Match = "Chelsea vs Arsenal",
+                Market = "Kiernan Dewsbury-Hall Total Fouls Won",
+                Selection = "Over 1.5"
+            };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 1.5 (Dewsbury-Hall, Kiernan)", "Over 1.5 (Dewsbury-Hall, Kiernan)", leg, searchResult, m2.MarketName));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Under 1.5 (Dewsbury-Hall, Kiernan)", "Under 1.5 (Dewsbury-Hall, Kiernan)", leg, searchResult, m2.MarketName));
+        }
+
+        [Fact]
+        public void OddsPapiMarketCatalogTracker_DetectsOnlyNewMarkets_And_PersistsOnce()
+        {
+            string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"oddspapi_catalog_test_{Guid.NewGuid():N}.json");
+            try
+            {
+                // 1. Existing baseline markets do not trigger any alert
+                var existing = new[] { "Full Time Result", "Over Under Player Fouls Committed (incl. overtime)" };
+                var detected1 = OddsPapiMarketCatalogTracker.DetectAndRecordNewMarkets(10, existing, tempFile);
+                Assert.Empty(detected1);
+
+                // 2. Brand new market triggers alert on first detection
+                var withNew = new[] { "Full Time Result", "Over Under Player Fouls Won (incl. overtime)", "Player Fouls Won (incl. overtime)" };
+                var detected2 = OddsPapiMarketCatalogTracker.DetectAndRecordNewMarkets(10, withNew, tempFile);
+                Assert.Equal(2, detected2.Count);
+                Assert.Contains("Over Under Player Fouls Won (incl. overtime)", detected2);
+                Assert.Contains("Player Fouls Won (incl. overtime)", detected2);
+
+                // 3. Subsequent checks with the same markets do NOT re-trigger
+                var detected3 = OddsPapiMarketCatalogTracker.DetectAndRecordNewMarkets(10, withNew, tempFile);
+                Assert.Empty(detected3);
+            }
+            finally
+            {
+                if (System.IO.File.Exists(tempFile))
+                {
+                    System.IO.File.Delete(tempFile);
+                }
+            }
+        }
     }
 }
