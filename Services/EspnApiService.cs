@@ -253,7 +253,7 @@ namespace BettingApp.Services
                 }
 
                 // 6. Carefully prune the summary JSON:
-                // Keep 100% of scores, linescores, team stats, and player boxscore stats/starter flags,
+                // Keep 100% of scores, linescores, team stats, and player boxscore stats/DNP flags,
                 // while stripping bulky logo URLs, athlete headshots/links/GUIDs, featuredAthletes, and NHL's duplicate 'skaters' group.
                 using var sumDoc = JsonDocument.Parse(summaryJson);
                 var prunedSummary = new Dictionary<string, object>
@@ -425,10 +425,12 @@ namespace BettingApp.Services
                                         if (athObj.TryGetProperty("scratched", out var scr)) cleanAth["scratched"] = scr;
                                         aDict["athlete"] = cleanAth;
                                     }
-                                    if (a.TryGetProperty("starter", out var st)) aDict["starter"] = st;
-                                    if (a.TryGetProperty("didNotPlay", out var dnp)) aDict["didNotPlay"] = dnp;
+                                    if (a.TryGetProperty("didNotPlay", out var dnp) && dnp.ValueKind == JsonValueKind.True)
+                                    {
+                                        aDict["didNotPlay"] = dnp;
+                                        if (a.TryGetProperty("reason", out var rsn)) aDict["reason"] = rsn;
+                                    }
                                     if (a.TryGetProperty("ejected", out var ej) && ej.ValueKind == JsonValueKind.True) aDict["ejected"] = ej;
-                                    if (a.TryGetProperty("reason", out var rsn)) aDict["reason"] = rsn;
                                     if (a.TryGetProperty("stats", out var stArr)) aDict["stats"] = stArr;
                                     cleanAthletes.Add(aDict);
                                 }

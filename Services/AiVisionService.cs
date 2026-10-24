@@ -545,9 +545,9 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
 - TEAMS: Verify the exact Home vs Away order.
 
 # 4. PLAYER PROPS & VOIDS
-- RULE 1: If a player plays 0 minutes (not in squad, left on bench), outcome is ALWAYS 'Void' (even for live/Power Sub).
-- RULE 2: If `isLive: false`, the player MUST START. If they are subbed on later, it is 'Void'.
-- RULE 3: If `isLive: true`, the starter rule does not apply; if they play at all, the bet stands.
+- RULE 1: If a player plays 0 minutes / does not play (`didNotPlay: true`, not in squad, left on bench), outcome is ALWAYS 'Void' (even for live/Power Sub).
+- RULE 2 (SOCCER ONLY): For `sport: 'Soccer'` with `isLive: false`, the player MUST START. If they are subbed on later, it is 'Void'.
+- RULE 3 (LIVE BETS & NON-SOCCER SPORTS): If `isLive: true`, OR for non-Soccer sports (Basketball, Ice Hockey, American Football, etc.), the starter rule does NOT apply; if the player plays/participates in the match at all (even off the bench), the bet stands.
 - POWER SUB: If selection contains '(Power Sub)' (or market/selection mentions 'Epic Sub' / 'Super Sub' / 'Power Sub') and the named player STARTED, stats of their substitute are ADDED to theirs. Find this in the 'Substitution' events array ('swap'). If the named player didn't start, Power Sub is ignored (evaluate via rules above).
 
 # 5. MARKETS & LINES
