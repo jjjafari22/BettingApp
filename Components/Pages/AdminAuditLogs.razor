@@ -106,6 +106,7 @@ else
                             <option value="Bet Void">Bet Void</option>
                             <option value="Bet Updated">Bet Updated</option>
                             <option value="Bet Undone">Bet Undone</option>
+                            <option value="Auto-Approved Bet">Auto-Approved Bet</option>
                             <option value="Auto-Settled Bet">Auto-Settled Bet</option>
                         </optgroup>
                         <optgroup label="Transactions">
@@ -130,6 +131,7 @@ else
                         <optgroup label="Limits & System">
                             <option value="Changed Credit Limit">Changed Credit Limit</option>
                             <option value="Changed Max Liability">Changed Max Liability</option>
+                            <option value="Toggle Auto-Approval">Toggle Auto-Approval</option>
                             <option value="Changed System Settings">Changed System Settings</option>
                             <option value="Created Referral">Created Referral</option>
                             <option value="Deleted Referral">Deleted Referral</option>
@@ -649,7 +651,7 @@ else
             {
                 if (actionFilter == "group:bets")
                 {
-                    query = query.Where(l => l.Action.StartsWith("Bet ") || l.Action == "Auto-Settled Bet");
+                    query = query.Where(l => l.Action.StartsWith("Bet ") || l.Action == "Auto-Settled Bet" || l.Action == "Auto-Approved Bet");
                 }
                 else if (actionFilter == "group:transactions")
                 {
@@ -681,6 +683,7 @@ else
                                    || actionFilter == "group:bets" 
                                    || actionFilter.StartsWith("Bet ") 
                                    || actionFilter == "Auto-Settled Bet"
+                                   || actionFilter == "Auto-Approved Bet"
                                    || (int.TryParse(term, out int idVal) && idVal > 1000);
 
                 bool isTxIntent = rawTerm.Contains("tx", StringComparison.OrdinalIgnoreCase)

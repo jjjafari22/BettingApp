@@ -19,6 +19,7 @@
 @inject IServiceProvider ServiceProvider
 @inject ILogger<Admin> Logger
 @inject BettingApp.Services.BetProcessingService BetProcessor
+@inject BettingApp.Services.AutoApprovalService AutoApproval
 @attribute [Authorize]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IAsyncDisposable
@@ -78,7 +79,7 @@ else
                  
                         <h5 class="modal-title fs-6 me-2 flex-grow-1" style="line-height: 1.4;">
                             <span class="badge @GetStatusBadgeClass(reviewingBetModel.Status) me-2 align-middle">@reviewingBetModel.Status</span>
-                            @GetLivePlacedBadge(reviewingBetModel, "me-2 align-middle")
+                            @GetLivePlacedBadge(reviewingBetModel, "me-2 align-middle", isModalHeader: true)
                             <span class="align-middle">Bet #@reviewingBetModel.Id</span> 
                             <span class="text-muted ms-sm-2 fw-normal d-flex d-sm-inline-flex align-items-center flex-wrap mt-1 mt-sm-0" style="font-size: 0.9rem; word-break: break-all; gap: 0.35rem;">
                                 @{
@@ -261,6 +262,14 @@ else
                                                         }
                                                     } else if (reviewingBetModel.Status == "Processing") {
                                                         <span class="badge bg-info text-dark ms-1">Processing...</span>
+                                                    } else {
+                                                        <span class="text-muted">-</span>
+                                                    }
+                                                </div>
+                                                <div>
+                                                    <strong>Auto-Approve:</strong>
+                                                    @if (!string.IsNullOrEmpty(reviewingBetModel.AutoApproveReason)) {
+                                                        <span>@reviewingBetModel.AutoApproveReason</span>
                                                     } else {
                                                         <span class="text-muted">-</span>
                                                     }
@@ -1218,12 +1227,30 @@ else
 }
 
 @code {
-    private RenderFragment GetLivePlacedBadge(Bet bet, string cssClass = "ms-2") => __builder =>
+    private RenderFragment GetLivePlacedBadge(Bet bet, string cssClass = "ms-2", bool isModalHeader = false) => __builder =>
     {
         if (bet.IsLive)
         {
             <span class="badge bg-danger shadow-sm @cssClass" title="This bet was placed while the match was live/in-play.">
                 <i class="bi bi-broadcast me-1"></i> Live Bet
+            </span>
+        }
+
+        if (bet.Status == "Pending" && bet.AutoApproveAt.HasValue)
+        {
+            var remainingSec = Math.Max(0, (int)Math.Ceiling((bet.AutoApproveAt.Value - DateTime.UtcNow).TotalSeconds));
+            <span class="badge bg-info text-dark shadow-sm @cssClass d-inline-flex align-items-center" title="Eligible for Auto-Approval. Will re-verify odds and balance at 0s.">
+                <i class="bi bi-robot me-1"></i> Auto-Approve @(remainingSec > 0 ? $"{remainingSec}s" : "...")
+                @if (isModalHeader)
+                {
+                    <button type="button" class="btn-close ms-2" style="font-size: 0.55rem;" title="Stop Auto-Approval countdown" @onclick="() => CancelAutoApprovalCountdownAsync(bet.Id)" @onclick:stopPropagation="true"></button>
+                }
+            </span>
+        }
+        else if (bet.IsAutoApproved)
+        {
+            <span class="badge bg-success shadow-sm @cssClass" title="This bet was automatically approved by the system.">
+                <i class="bi bi-robot me-1"></i> Auto-Approved
             </span>
         }
         

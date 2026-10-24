@@ -95,6 +95,8 @@ builder.Services.AddHostedService<SettlementBackgroundService>();
 builder.Services.AddHostedService<PendingBetsNotificationService>();
 builder.Services.AddHostedService<BetMonitoringService>();
 builder.Services.AddHostedService<PendingSettlementReminderService>();
+builder.Services.AddSingleton<AutoApprovalService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<AutoApprovalService>());
 
 if (!builder.Environment.IsDevelopment())
 {

@@ -36,6 +36,7 @@ public class ApplicationUser : IdentityUser
     public string? ReferredBy { get; set; }
     public bool IsReferralDiscarded { get; set; }
     public bool IsManuallyVerified { get; set; }
+    public bool AllowAutoApproval { get; set; } = true;
     
     [ConcurrencyCheck]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

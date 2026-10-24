@@ -34,7 +34,8 @@ namespace BettingApp.Services
             decimal newAmount,
             decimal newOdds,
             string? customAuditDetails = null,
-            bool isAutoSettled = false)
+            bool isAutoSettled = false,
+            bool isAutoApproved = false)
         {
             const int maxConcurrencyAttempts = 3;
 
@@ -69,6 +70,33 @@ namespace BettingApp.Services
                 bool willBeStaked = newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost";
                 bool isFirstApproval = originalStatus == "Pending" || originalStatus == "Processing" || originalStatus == "Rejected" || originalStatus == "Cancelled";
 
+                decimal dbAmount = (decimal)(dbBet.AmountNOK ?? 0);
+
+                if (newStatus != "Rejected" && newStatus != "Cancelled")
+                {
+                    if (newAmount <= 0) return (false, "Invalid amount", true);
+                    if (newOdds <= 1m) return (false, "Invalid odds", true);
+                    if (Math.Round(newOdds, 2) != newOdds) return (false, "Odds max 2 decimals", true);
+
+                    bool isNewOrModified = (!wasStaked && willBeStaked) || (newAmount != dbAmount || newOdds != dbBet.Odds);
+                    if (isNewOrModified)
+                    {
+                        var settings = await context.Settings.AsNoTracking().OrderBy(s => s.Id).FirstOrDefaultAsync();
+                        if (settings != null && newAmount < settings.MinBetAmount)
+                        {
+                            return (false, $"Amount below limit ({settings.MinBetAmount:N0})", true);
+                        }
+
+                        decimal netLiability = Math.Floor(newAmount * (newOdds - 1m));
+                        decimal userLimit = dbUser.MaxNetLiability;
+                        if (netLiability > userLimit)
+                        {
+                            decimal maxBetAmount = Math.Floor(userLimit / (newOdds - 1m));
+                            return (false, $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {newOdds} odds is {maxBetAmount:N0} kr.", true);
+                        }
+                    }
+                }
+
                 if (!wasStaked && willBeStaked)
                 {
                     var currentBal = dbUser.Balance;
@@ -81,8 +109,6 @@ namespace BettingApp.Services
                         return (false, $"Insufficient funds. Available: {(currentBal + freeBetBal + creditLimit):N0} kr. Required: {newAmount:N0} kr.", true);
                     }
                 }
-
-                decimal dbAmount = (decimal)(dbBet.AmountNOK ?? 0);
 
                 if (wasStaked && willBeStaked && newAmount > dbAmount)
                 {
@@ -123,10 +149,17 @@ namespace BettingApp.Services
                 dbBet.Status = newStatus;
                 dbBet.AmountNOK = (int?)newAmount;
                 dbBet.Odds = newOdds;
+                dbBet.AutoApproveAt = null;
 
                 if (isAutoSettled)
                 {
                     dbBet.IsAutoSettled = true;
+                }
+
+                if (isAutoApproved)
+                {
+                    dbBet.IsAutoApproved = true;
+                    dbBet.AutoApproveReason = "✅ Approved automatically";
                 }
 
                 if (isFirstApproval)
@@ -164,10 +197,12 @@ namespace BettingApp.Services
 
                 dbBet.UpdatedAt = DateTime.UtcNow;
 
-                string effectiveAdminName = isAutoSettled ? "SYSTEM_AUTO" : adminName;
+                string effectiveAdminName = (isAutoSettled || isAutoApproved) ? "SYSTEM_AUTO" : adminName;
                 string? effectiveAuditDetails = isAutoSettled
                     ? $"Bet ID: {betId} was auto-settled to {newStatus} based on FotMob verification."
-                    : customAuditDetails;
+                    : (isAutoApproved
+                        ? $"Bet ID: {betId} was auto-approved. Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Odds: {dbBet.Odds:N2}, Payout: {dbBet.PotentialPayout:N0}"
+                        : customAuditDetails);
 
                 string details = effectiveAuditDetails ?? $"Bet ID: {betId}, Status: {newStatus}, Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Payout: {dbBet.PotentialPayout:N0}";
                 
@@ -175,7 +210,9 @@ namespace BettingApp.Services
                     ? "Bet Undone (Reverted to Approved)" 
                     : (isAutoSettled 
                         ? "Auto-Settled Bet" 
-                        : (originalStatus == "Approved" && newStatus == "Approved" ? "Bet Updated" : $"Bet {newStatus}"));
+                        : (isAutoApproved
+                            ? "Auto-Approved Bet"
+                            : (originalStatus == "Approved" && newStatus == "Approved" ? "Bet Updated" : $"Bet {newStatus}")));
 
                 context.AuditLogs.Add(new AuditLog
                 {

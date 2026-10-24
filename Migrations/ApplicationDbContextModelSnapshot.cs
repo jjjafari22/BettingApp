@@ -30,6 +30,9 @@ namespace BettingApp.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
 
+                    b.Property<bool>("AllowAutoApproval")
+                        .HasColumnType("bit");
+
                     b.Property<decimal>("Balance")
                         .HasPrecision(18)
                         .HasColumnType("decimal(18,0)");
@@ -188,6 +191,12 @@ namespace BettingApp.Migrations
                     b.Property<DateTime?>("ArrivedPendingAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("AutoApproveAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AutoApproveReason")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Bookmaker")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -198,6 +207,9 @@ namespace BettingApp.Migrations
                     b.Property<decimal>("FreeBetAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsAutoApproved")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsAutoSettled")
                         .HasColumnType("bit");
@@ -571,6 +583,28 @@ namespace BettingApp.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AutoApprovalDelaySeconds")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("AutoApprovalMaxNetLiabilityNOK")
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
+
+                    b.Property<decimal>("AutoApprovalMaxOverPinnaclePercent")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("AutoApprovalMaxStakeNOK")
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
+
+                    b.Property<decimal>("AutoApprovalMinPinnacleLimitEUR")
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
+
+                    b.Property<bool>("IsAutoApprovalEnabled")
+                        .HasColumnType("bit");
 
                     b.Property<decimal>("MinBetAmount")
                         .HasPrecision(18)

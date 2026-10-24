@@ -208,12 +208,19 @@ public partial class Admin
             {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
                 
-                uiRefreshTimer = new System.Timers.Timer(15000); // 15 seconds
+                int tickCount = 0;
+                uiRefreshTimer = new System.Timers.Timer(1000); // 1 second for live auto-approval countdowns
                 uiRefreshTimer.Elapsed += (s, e) =>
                 {
                     try
                     {
-                        if (!_isDisposed) _ = InvokeAsync(StateHasChanged);
+                        tickCount++;
+                        bool hasActiveCountdown = (reviewingBetModel?.Status == "Pending" && reviewingBetModel?.AutoApproveAt != null) ||
+                                                  (pendingBets != null && pendingBets.Any(b => b.Status == "Pending" && b.AutoApproveAt != null));
+                        if (!_isDisposed && (hasActiveCountdown || tickCount % 15 == 0))
+                        {
+                            _ = InvokeAsync(StateHasChanged);
+                        }
                     }
                     catch { }
                 };
@@ -288,7 +295,11 @@ public partial class Admin
                                         matchingBet.Status != reviewingBetModel.Status ||
                                         matchingBet.NextCheckTime != reviewingBetModel.NextCheckTime ||
                                         matchingBet.ArrivedPendingAt != reviewingBetModel.ArrivedPendingAt ||
-                                        matchingBet.AiVisionResultJson != reviewingBetModel.AiVisionResultJson)
+                                        matchingBet.AiVisionResultJson != reviewingBetModel.AiVisionResultJson ||
+                                        matchingBet.AutoApproveAt != reviewingBetModel.AutoApproveAt ||
+                                        matchingBet.IsAutoApproved != reviewingBetModel.IsAutoApproved ||
+                                        matchingBet.IsLive != reviewingBetModel.IsLive ||
+                                        matchingBet.AutoApproveReason != reviewingBetModel.AutoApproveReason)
                                     {
                                         reviewingBetModel.AiOutcomeResult = matchingBet.AiOutcomeResult;
                                         reviewingBetModel.Status = matchingBet.Status;
@@ -297,6 +308,10 @@ public partial class Admin
                                         reviewingBetModel.MatchStartTime = matchingBet.MatchStartTime;
                                         reviewingBetModel.AiVisionResultJson = matchingBet.AiVisionResultJson;
                                         reviewingBetModel.AiVisionError = matchingBet.AiVisionError;
+                                        reviewingBetModel.AutoApproveAt = matchingBet.AutoApproveAt;
+                                        reviewingBetModel.IsAutoApproved = matchingBet.IsAutoApproved;
+                                        reviewingBetModel.IsLive = matchingBet.IsLive;
+                                        reviewingBetModel.AutoApproveReason = matchingBet.AutoApproveReason;
                                         if (matchingBet.Legs != null)
                                         {
                                             reviewingBetModel.Legs = matchingBet.Legs.ToList();
@@ -334,6 +349,18 @@ public partial class Admin
         
         adminDebounceTimer.Stop();
         adminDebounceTimer.Start();
+    }
+
+    private async Task CancelAutoApprovalCountdownAsync(int betId)
+    {
+        var reason = $"Auto-Approval countdown manually stopped by {currentAdminName ?? "Admin"}";
+        await AutoApproval.CancelAutoApprovalForBetAsync(betId, reason);
+        if (reviewingBetModel != null && reviewingBetModel.Id == betId)
+        {
+            reviewingBetModel.AutoApproveAt = null;
+            reviewingBetModel.AutoApproveReason = reason;
+        }
+        StateHasChanged();
     }
 
     public async ValueTask DisposeAsync()

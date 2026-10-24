@@ -195,6 +195,9 @@ public partial class Admin
             } : null,
             IsLive = bet.IsLive,
             IsAutoSettled = bet.IsAutoSettled,
+            IsAutoApproved = bet.IsAutoApproved,
+            AutoApproveAt = bet.AutoApproveAt,
+            AutoApproveReason = bet.AutoApproveReason,
             IsBetBuilder = bet.IsBetBuilder,
             Bookmaker = bet.Bookmaker,
             MatchStartTime = bet.MatchStartTime,
@@ -428,37 +431,6 @@ public partial class Admin
             
             if (Math.Round(bet.Odds, 2) != bet.Odds) { errorMessage = "Odds max 2 decimals";
                 return; }
-
-            bool wasStaked = originalStatus == "Approved" || originalStatus == "Won" || originalStatus == "Lost";
-            bool willBeStaked = newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost";
-            bool isNewOrModified = (!wasStaked && willBeStaked) || (matchingOriginal != null && (bet.AmountNOK != matchingOriginal.AmountNOK || bet.Odds != matchingOriginal.Odds));
-
-            if (isNewOrModified)
-            {
-                using var validationContext = DbFactory.CreateDbContext();
-                var settings = await validationContext.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
-                var betUser = await validationContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == bet.UserId);
-                if (settings != null)
-                {
-                     if ((decimal)(bet.AmountNOK ?? 0) < settings.MinBetAmount) { 
-                         errorMessage = $"Amount below limit ({settings.MinBetAmount:N0})";
-                         return; 
-                     }
-                }
-                
-                if (betUser != null)
-                {
-                     decimal currentAmount = (decimal)(bet.AmountNOK ?? 0);
-                     decimal netLiability = Math.Floor(currentAmount * (bet.Odds - 1));
-                     decimal userLimit = betUser.MaxNetLiability;
-
-                     if (netLiability > userLimit) { 
-                         decimal maxBetAmount = Math.Floor(userLimit / (bet.Odds - 1));
-                         errorMessage = $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {bet.Odds} odds is {maxBetAmount:N0} kr.";
-                         return; 
-                     }
-                }
-            }
         }
 
         bool isCompletedStatus(string status) => 

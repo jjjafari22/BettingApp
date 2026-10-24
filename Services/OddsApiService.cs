@@ -368,7 +368,7 @@ public class OddsApiService
         }
     }
 
-    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null, bool isLiveRequest = false, string? sport = null, CancellationToken cancellationToken = default)
+    public async Task<(BettingApp.Models.OddsPapiSearchResult? Result, string? Error)> SearchOddsComparisonAsync(string teamName, int? betId = null, bool isLiveRequest = false, string? sport = null, CancellationToken cancellationToken = default, bool bypassOddsCache = false)
     {
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrWhiteSpace(teamName)) return (null, "API Key is missing or team name is empty.");
         
@@ -379,10 +379,14 @@ public class OddsApiService
         }
 
         // Fast Path: If match fixture AND parsed odds result are already cached, return immediately without acquiring any rate limiter!
-        if (_cache.TryGetValue($"OddspapiMatch4_{sportId}_{teamName}", out (string fid, string mn, DateTime st, bool il, string? fsid, int sid) quickMatch))
+        if (!bypassOddsCache && _cache.TryGetValue($"OddspapiMatch4_{sportId}_{teamName}", out (string fid, string mn, DateTime st, bool il, string? fsid, int sid) quickMatch))
         {
             if (_cache.TryGetValue($"OddspapiParsedResult_{quickMatch.fid}", out BettingApp.Models.OddsPapiSearchResult? cachedParsed) && cachedParsed != null)
             {
+                if (cachedParsed.StatusId == 0 && cachedParsed.StartTime > DateTime.MinValue && cachedParsed.StartTime <= DateTime.UtcNow && cachedParsed.StartTime >= DateTime.UtcNow.AddHours(-4))
+                {
+                    cachedParsed.IsLive = true;
+                }
                 return (cachedParsed, null);
             }
         }
@@ -411,6 +415,10 @@ public class OddsApiService
                 isLive = cachedMatch.il;
                 flashscoreId = cachedMatch.fsid;
                 statusId = cachedMatch.sid;
+                if (statusId == 0 && startTime > DateTime.MinValue && startTime <= DateTime.UtcNow && startTime >= DateTime.UtcNow.AddHours(-4))
+                {
+                    isLive = true;
+                }
             }
             else
             {
@@ -587,8 +595,17 @@ public class OddsApiService
             
             _cache.Set($"OddspapiMatch4_{sportId}_{teamName}", (fixtureId, matchName, startTime, isLive, flashscoreId, statusId), TimeSpan.FromHours(12));
             }
-            if (_cache.TryGetValue($"OddspapiParsedResult_{fixtureId}", out BettingApp.Models.OddsPapiSearchResult? cachedResult) && cachedResult != null)
+            if (bypassOddsCache)
             {
+                _cache.Remove($"OddspapiParsedResult_{fixtureId}");
+                _cache.Remove($"OddspapiOdds_{fixtureId}");
+            }
+            else if (_cache.TryGetValue($"OddspapiParsedResult_{fixtureId}", out BettingApp.Models.OddsPapiSearchResult? cachedResult) && cachedResult != null)
+            {
+                if (cachedResult.StatusId == 0 && cachedResult.StartTime > DateTime.MinValue && cachedResult.StartTime <= DateTime.UtcNow && cachedResult.StartTime >= DateTime.UtcNow.AddHours(-4))
+                {
+                    cachedResult.IsLive = true;
+                }
                 return (cachedResult, null);
             }
             

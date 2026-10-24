@@ -58,6 +58,7 @@ else
                      <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("TotalWithdrawals"))">Total W/D <i class="@SortIconClass("TotalWithdrawals")"></i></th>
                     <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("CreditLimit"))">Credit Limit (NOK) <i class="@SortIconClass("CreditLimit")"></i></th>
                     <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("MaxNetLiability"))">Max Liability (NOK) <i class="@SortIconClass("MaxNetLiability")"></i></th>
+                    <th style="cursor:pointer; user-select:none;" @onclick="@(() => SortBy("AllowAutoApproval"))">Auto-Approve <i class="@SortIconClass("AllowAutoApproval")"></i></th>
                 </tr>
             </thead>
             <tbody>
@@ -79,11 +80,17 @@ else
                              <input type="text" class="form-control form-control-sm" style="width: 120px;" value="@row.User.MaxNetLiability.ToString("N0")"
                                    @onchange="@(async (e) => await UpdateLimit(row.User, e.Value?.ToString(), isCredit: false))" />
                         </td>
+                        <td>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" style="cursor: pointer;" checked="@row.User.AllowAutoApproval"
+                                       @onchange="@(async (e) => await ToggleAutoApproval(row.User, (bool)(e.Value ?? false)))" />
+                            </div>
+                        </td>
                     </tr>
                  }
                  @if (!FilteredUsers.Any())
                  {
-                     <tr><td colspan="9" class="text-center text-muted">No users found.</td></tr>
+                     <tr><td colspan="10" class="text-center text-muted">No users found.</td></tr>
                  }
             </tbody>
         </table>
@@ -272,6 +279,8 @@ else
             query = sortDescending ? query.OrderByDescending(x => x.User.CreditLimit) : query.OrderBy(x => x.User.CreditLimit);
         else if (sortColumn == "MaxNetLiability")
             query = sortDescending ? query.OrderByDescending(x => x.User.MaxNetLiability) : query.OrderBy(x => x.User.MaxNetLiability);
+        else if (sortColumn == "AllowAutoApproval")
+            query = sortDescending ? query.OrderByDescending(x => x.User.AllowAutoApproval) : query.OrderBy(x => x.User.AllowAutoApproval);
         else if (sortColumn == "NumDeposits")
             query = sortDescending ? query.OrderByDescending(x => x.NumDeposits) : query.OrderBy(x => x.NumDeposits);
         else if (sortColumn == "TotalDeposits")
@@ -368,6 +377,51 @@ else
             UiNotifier.NotifyAdmin($"{fieldName} updated for {displayUser}");
             successMessage = $"{fieldName} updated for {displayUser}!";
             
+            await LoadUsers();
+        }
+    }
+
+    private async Task ToggleAutoApproval(ApplicationUser userToUpdate, bool newValue)
+    {
+        var displayUser = !string.IsNullOrEmpty(userToUpdate.DiscordUsername) ? userToUpdate.DiscordUsername : userToUpdate.UserName;
+        string msg = $"Are you sure you want to {(newValue ? "ENABLE" : "DISABLE")} Auto-Approval for {displayUser}?";
+        bool confirmed = await DialogService.ConfirmAsync(msg);
+
+        if (!confirmed)
+        {
+            rowKeys[userToUpdate.Id] = Guid.NewGuid();
+            StateHasChanged();
+            return;
+        }
+
+        using var context = DbFactory.CreateDbContext();
+        var dbUser = await context.Users.FindAsync(userToUpdate.Id);
+        if (dbUser != null)
+        {
+            var oldVal = dbUser.AllowAutoApproval;
+            dbUser.AllowAutoApproval = newValue;
+            dbUser.UpdatedAt = DateTime.UtcNow;
+
+            context.AuditLogs.Add(new AuditLog
+            {
+                AdminUserName = currentAdminName ?? "Unknown",
+                Action = "Toggle Auto-Approval",
+                TargetUserName = userToUpdate.UserName ?? "Unknown",
+                Details = $"AllowAutoApproval: {oldVal} -> {newValue}"
+            });
+
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await LoadUsers();
+                return;
+            }
+
+            UiNotifier.NotifyAdmin($"Auto-Approval {(newValue ? "enabled" : "disabled")} for {displayUser}");
+            successMessage = $"Auto-Approval {(newValue ? "enabled" : "disabled")} for {displayUser}!";
             await LoadUsers();
         }
     }

@@ -59,6 +59,22 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .Property(s => s.MinBetAmount)
             .HasPrecision(18, 0);
 
+        builder.Entity<SystemSetting>()
+            .Property(s => s.AutoApprovalMaxOverPinnaclePercent)
+            .HasPrecision(18, 2);
+
+        builder.Entity<SystemSetting>()
+            .Property(s => s.AutoApprovalMinPinnacleLimitEUR)
+            .HasPrecision(18, 0);
+
+        builder.Entity<SystemSetting>()
+            .Property(s => s.AutoApprovalMaxStakeNOK)
+            .HasPrecision(18, 0);
+
+        builder.Entity<SystemSetting>()
+            .Property(s => s.AutoApprovalMaxNetLiabilityNOK)
+            .HasPrecision(18, 0);
+
         // --- NEW: Configure Balance & MaxPayout Precision (No Decimals) ---
         builder.Entity<ApplicationUser>()
             .Property(u => u.Balance)

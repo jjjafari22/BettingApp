@@ -83,6 +83,9 @@ namespace BettingApp.Data
         // --- NEW METADATA COLUMNS ---
         public bool IsLive { get; set; }
         public bool IsAutoSettled { get; set; }
+        public bool IsAutoApproved { get; set; }
+        public DateTime? AutoApproveAt { get; set; }
+        public string? AutoApproveReason { get; set; }
         public bool IsBetBuilder { get; set; }
         public string Bookmaker { get; set; } = string.Empty;
         
@@ -195,6 +198,14 @@ namespace BettingApp.Data
         public int Id { get; set; }
         public decimal MinBetAmount { get; set; } = 100m; 
         // CashCowsJson removed in favor of dedicated DB Table
+
+        // --- Auto-Approval Settings ---
+        public bool IsAutoApprovalEnabled { get; set; } = true;
+        public int AutoApprovalDelaySeconds { get; set; } = 180;
+        public decimal AutoApprovalMaxOverPinnaclePercent { get; set; } = 3.0m;
+        public decimal AutoApprovalMinPinnacleLimitEUR { get; set; } = 300m;
+        public decimal AutoApprovalMaxStakeNOK { get; set; } = 300m;
+        public decimal AutoApprovalMaxNetLiabilityNOK { get; set; } = 5000m;
     }
 
     public class CashCow
