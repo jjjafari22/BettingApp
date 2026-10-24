@@ -510,7 +510,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
             {
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}] [Outcome Check] " : "[Outcome Check] ";
 
-                                var prompt = $@"You are a sports betting expert analyzing a bet slip uploaded on {betPlacedAt:yyyy-MM-dd HH:mm} UTC (Year: {betPlacedAt.Year}).
+                                var prompt = $@"You are a sports betting expert analyzing a bet slip uploaded on {betPlacedAt:yyyy-MM-dd HH:mm} UTC (Year: {betPlacedAt.Year}). Current UTC time: {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC.
 {extractedBetDataJson}
 
 # CORE DIRECTIVES
@@ -531,6 +531,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
   Before searching for player stats, first verify whether the match scheduled for {betPlacedAt:yyyy-MM-dd} (Year: {betPlacedAt.Year}) has actually FINISHED!
   Always include the year '{betPlacedAt.Year}' in your search query (e.g. 'Buffalo Sabres vs Florida Panthers score {betPlacedAt.Year}' or '{betPlacedAt:yyyy-MM-dd}').
   * If the match is UPCOMING or CURRENTLY IN PROGRESS (Live / 1st/2nd/3rd period / 1st/2nd half), STOP! Do NOT search for player box scores. Grade all legs as 'Pending' and return the match start time in `matchStartTimeIso`.
+  * STALE / UNINDEXED NICHE MATCHES: Compare the match start time against the Current UTC time ({DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC). If more than 3.5 hours have passed since the match started (or >4.5 hours for American Football/Baseball/MMA) and Google Search still has no verified final score (or only shows pre-match/abandoned live-tracker pages), the match window has already passed without indexed coverage. Do NOT grade it as 'Pending'—grade the leg as 'Unknown' so it escalates to manual review instead of polling indefinitely.
 - STEP 2 (PLAYER PROPS ONLY FOR COMPLETED MATCHES):
   Only if Step 1 confirmed the match on {betPlacedAt:yyyy-MM-dd} is 100% FINAL / COMPLETED, search for player box scores for that specific {betPlacedAt.Year} match.
   Append reputable domains:

@@ -60,6 +60,7 @@ public class DiscordNotificationService : IHostedService
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Stopping Discord Bot...");
+        _dmChannelCache.Clear();
         await _client.StopAsync();
     }
 
@@ -532,6 +533,8 @@ public class DiscordNotificationService : IHostedService
                $"------------------------------\n";
     }
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, IDMChannel> _dmChannelCache = new();
+
     public async Task SendDmAsync(string? discordUserId, string message)
     {
         if (string.IsNullOrWhiteSpace(discordUserId) || _client.LoginState != LoginState.LoggedIn) return;
@@ -544,6 +547,20 @@ public class DiscordNotificationService : IHostedService
                 return;
             }
 
+            if (_dmChannelCache.TryGetValue(id, out var cachedChannel))
+            {
+                try
+                {
+                    await cachedChannel.SendMessageAsync(message);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Cached DM channel send failed for Discord user {id}; evicting cache and retrying with fresh channel.");
+                    _dmChannelCache.TryRemove(id, out _);
+                }
+            }
+
             var user = await _client.Rest.GetUserAsync(id);
             
             if (user == null)
@@ -552,7 +569,19 @@ public class DiscordNotificationService : IHostedService
                 return;
             }
 
-            var dmChannel = await user.CreateDMChannelAsync();
+            IDMChannel dmChannel;
+            try
+            {
+                dmChannel = await user.CreateDMChannelAsync();
+            }
+            catch (Discord.Net.HttpException httpEx) when ((int?)httpEx.DiscordCode == 40003 || httpEx.Message.Contains("40003"))
+            {
+                _logger.LogWarning($"Discord rate limit 40003 when opening DM channel for {id}. Waiting 5s and retrying...");
+                await Task.Delay(5000);
+                dmChannel = await user.CreateDMChannelAsync();
+            }
+
+            _dmChannelCache[id] = dmChannel;
             await dmChannel.SendMessageAsync(message);
         }
         catch (Exception ex)

@@ -228,6 +228,7 @@ namespace BettingApp.Services
             { "uhud", "ohod" },
             { "wej taif", "wej" },
             { "eidsvold turn", "eidsvold tf" },
+            { "hamarkameratene", "hamkam" },
             { "ullensaker/kisa", "ull/kisa" },
             { "ullensaker kisa", "ull/kisa" },
             { "d.c. united", "dc united" },
