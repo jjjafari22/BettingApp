@@ -139,6 +139,8 @@ namespace BettingApp.Services
             { "Early Win", "2Up - Full Time Result" },
             { "Early Win (Anytime 2 Goal Lead)", "2Up - Full Time Result" },
             { "Early Payout", "2Up - Full Time Result" },
+            { "Full Time - 2UP", "2Up - Full Time Result" },
+            { "2UP", "2Up - Full Time Result" },
             { "Anytime Goalscorer", "Over Under Player Goals (incl. overtime)|Anytime Goal Scorer|Player Goals (incl. overtime)|Player Goals" },
             { "To Be Booked", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
             { "Player to be Booked", "Player To Be Carded (incl. overtime)|Player To Be Carded|Player Cards" },
@@ -185,6 +187,13 @@ namespace BettingApp.Services
             if (clean.StartsWith("Alternative ", StringComparison.OrdinalIgnoreCase))
             {
                 clean = clean.Substring(12).Trim();
+            }
+
+            if (clean.Contains("Early Win", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Early Payout", StringComparison.OrdinalIgnoreCase) ||
+                System.Text.RegularExpressions.Regex.IsMatch(clean, @"\b2\s*-?\s*up\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                return new List<string> { "2Up - Full Time Result" };
             }
             
             // Detect if the market explicitly specifies a half
@@ -900,13 +909,6 @@ namespace BettingApp.Services
                 return new List<string> { "Player To Be Carded (incl. overtime)", "Player To Be Carded", "Player Cards", "To Be Carded", "To Be Booked", "Cards", "Card" };
             }
             // -----------------------------------------------------------------------------------------
-
-            if (clean.StartsWith("Early Win", StringComparison.OrdinalIgnoreCase) || 
-                clean.StartsWith("Early Payout", StringComparison.OrdinalIgnoreCase) ||
-                clean.StartsWith("2Up", StringComparison.OrdinalIgnoreCase))
-            {
-                return new List<string> { "2Up - Full Time Result" };
-            }
 
             // Strip off any trailing scores (like "0 - 1") for 3-Way Handicaps
             if (clean.StartsWith("Handicap (3 Way)", StringComparison.OrdinalIgnoreCase) || 

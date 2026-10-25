@@ -2437,5 +2437,35 @@ namespace BettingApp.Tests
                 }
             }
         }
+
+        [Fact]
+        public void Test_Soccer_FullTime_2UP_MapsTo_2UpFullTimeResult()
+        {
+            var markets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "101", MarketName = "Full Time Result" },
+                new OddsPapiMarket { MarketId = "102", MarketName = "2Up - Full Time Result" }
+            };
+
+            foreach (var rawMarket in new[] { "Full Time - 2UP", "Match Result - 2UP", "1X2 - 2UP", "Full Time - Early Payout", "Match Result - Early Win", "2Up - Full Time Result" })
+            {
+                var matched = OddsMatchingLogic.FindBestMarket(markets, rawMarket, "Freiburg vs Bayern Munich", "Bayern Munich", _marketMapper, "SC Freiburg vs Bayern Munich");
+                Assert.NotNull(matched);
+                Assert.Equal("2Up - Full Time Result", matched.MarketName);
+            }
+
+            var searchResult = new OddsPapiSearchResult { MatchName = "SC Freiburg vs Bayern Munich" };
+            var leg = new AiVisionLeg
+            {
+                Sport = "Soccer",
+                Match = "Freiburg vs Bayern Munich",
+                Market = "Full Time - 2UP",
+                Selection = "Bayern Munich"
+            };
+
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("2", "Bayern Munich", leg, searchResult, "2Up - Full Time Result"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("1", "SC Freiburg", leg, searchResult, "2Up - Full Time Result"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("X", "Draw", leg, searchResult, "2Up - Full Time Result"));
+        }
     }
 }
