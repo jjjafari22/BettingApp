@@ -1,14 +1,11 @@
 #nullable enable
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using BettingApp.Data;
-using BettingApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,7 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace BettingApp.Services;
 
-public class AutoApprovalService : BackgroundService
+public partial class AutoApprovalService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
@@ -217,6 +214,10 @@ public class AutoApprovalService : BackgroundService
                 return;
             }
 
+            string tierBadge = !string.IsNullOrWhiteSpace(checkResult.MatchedTierName)
+                ? $" ({checkResult.MatchedTierName})"
+                : "";
+
             int delaySeconds = Math.Max(0, settings.AutoApprovalDelaySeconds);
             if (delaySeconds == 0)
             {
@@ -233,11 +234,12 @@ public class AutoApprovalService : BackgroundService
                     expectedOriginalStatus: "Pending",
                     newAmount: (decimal)(freshBet.AmountNOK ?? 0),
                     newOdds: freshBet.Odds,
-                    isAutoApproved: true);
+                    isAutoApproved: true,
+                    autoApproveReason: $"✅ Approved automatically{tierBadge}");
 
                 if (procRes.Success)
                 {
-                    _logger.LogInformation($"[Bet #{betId}] [Auto-Approve] ✅ Immediately auto-approved (0s timer).");
+                    _logger.LogInformation($"[Bet #{betId}] [Auto-Approve] ✅ Immediately auto-approved{tierBadge} (0s timer).");
                 }
                 else
                 {
@@ -247,10 +249,10 @@ public class AutoApprovalService : BackgroundService
             }
 
             freshBet.AutoApproveAt = DateTime.UtcNow.AddSeconds(delaySeconds);
-            freshBet.AutoApproveReason = $"⏳ Auto-Approve timer running ({delaySeconds}s)";
+            freshBet.AutoApproveReason = $"⏳ Auto-Approve{tierBadge} timer running ({delaySeconds}s)";
             await saveContext.SaveChangesAsync(ct);
 
-            _logger.LogInformation($"[Bet #{betId}] [Auto-Approve] Eligible! Started {delaySeconds}s countdown (until {freshBet.AutoApproveAt:HH:mm:ss} UTC).");
+            _logger.LogInformation($"[Bet #{betId}] [Auto-Approve] Eligible{tierBadge}! Started {delaySeconds}s countdown (until {freshBet.AutoApproveAt:HH:mm:ss} UTC).");
             _uiNotifier.NotifyAdmin("PendingUpdate");
             WakeUp();
         }
@@ -321,6 +323,10 @@ public class AutoApprovalService : BackgroundService
             ApplyLookupMetadataToBet(freshBet, checkResult, saveBookmakerOdds: true);
             await saveContext.SaveChangesAsync(ct);
 
+            string tierBadge = !string.IsNullOrWhiteSpace(checkResult.MatchedTierName)
+                ? $" ({checkResult.MatchedTierName})"
+                : "";
+
             using var scope = _scopeFactory.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<BetProcessingService>();
             var procRes = await processor.ProcessBetAsync(
@@ -330,11 +336,12 @@ public class AutoApprovalService : BackgroundService
                 expectedOriginalStatus: "Pending",
                 newAmount: (decimal)(freshBet.AmountNOK ?? 0),
                 newOdds: freshBet.Odds,
-                isAutoApproved: true);
+                isAutoApproved: true,
+                autoApproveReason: $"✅ Approved automatically{tierBadge}");
 
             if (procRes.Success)
             {
-                _logger.LogInformation($"[Bet #{betId}] [Auto-Approve] ✅ Auto-approved Bet #{betId} ({freshBet.AmountNOK:N0} kr @ {freshBet.Odds:0.00}).");
+                _logger.LogInformation($"[Bet #{betId}] [Auto-Approve] ✅ Auto-approved Bet #{betId}{tierBadge} ({freshBet.AmountNOK:N0} kr @ {freshBet.Odds:0.00}).");
                 if (!freshBet.MatchStartTime.HasValue || (freshBet.Legs != null && freshBet.Legs.Any(l => !l.StartTime.HasValue)) || freshBet.MatchStartTime.Value <= DateTime.UtcNow)
                 {
                     BetMonitoringService.WakeUp();
@@ -391,421 +398,6 @@ public class AutoApprovalService : BackgroundService
 
         await context.SaveChangesAsync();
         _uiNotifier.NotifyAdmin("PendingUpdate");
-    }
-
-    public class AutoApprovalEvaluationResult
-    {
-        public bool CanAutoApprove { get; set; }
-        public string Reason { get; set; } = "";
-        public bool MetadataUpdated { get; set; }
-        public bool DetectedLiveFromOp { get; set; }
-        public AiVisionExtractionResult? UpdatedVisionResult { get; set; }
-        public Dictionary<int, EvaluatedLegOdds> LegResults { get; set; } = new();
-    }
-
-    public class EvaluatedLegOdds
-    {
-        public string? ErrorMessage { get; set; }
-        public string? WarningMessage { get; set; }
-        public OddsPapiSearchResult? SearchResult { get; set; }
-        public string? SelectedMarketId { get; set; }
-        public string? HighlightedOutcome { get; set; }
-        public DateTime LookedUpAt { get; set; } = DateTime.UtcNow;
-        public Dictionary<string, OddsData> MatchedBookieOdds { get; set; } = new();
-    }
-
-    public async Task<AutoApprovalEvaluationResult> CheckIfBetCanBeAutoApprovedAsync(
-        Bet dbBet,
-        ApplicationUser? dbUser,
-        SystemSetting settings,
-        bool isFinalCheck,
-        CancellationToken ct = default)
-    {
-        var eval = new AutoApprovalEvaluationResult();
-
-        if (dbBet.Status != "Pending")
-        {
-            eval.Reason = $"❌ Bet status is '{dbBet.Status}'.";
-            return eval;
-        }
-
-        // Parse AI Vision JSON first so we can still look up start times if needed
-        AiVisionExtractionResult? aiVision = null;
-        if (!string.IsNullOrEmpty(dbBet.AiVisionResultJson))
-        {
-            try
-            {
-                aiVision = JsonSerializer.Deserialize<AiVisionExtractionResult>(
-                    dbBet.AiVisionResultJson,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                eval.UpdatedVisionResult = aiVision;
-            }
-            catch { }
-        }
-
-        // 1. Master Toggle & User Toggle
-        if (!settings.IsAutoApprovalEnabled)
-        {
-            eval.Reason = "❌ Global Auto-Approval is turned OFF in Admin Settings.";
-            return eval;
-        }
-
-        if (dbUser == null)
-        {
-            eval.Reason = "❌ User not found.";
-            return eval;
-        }
-
-        if (!dbUser.AllowAutoApproval)
-        {
-            eval.Reason = "❌ Auto-Approval is disabled for this user.";
-            return eval;
-        }
-
-        // 2. Basic Bet & AI Extraction Presence
-        if (aiVision == null || aiVision.Legs == null || aiVision.Legs.Count == 0)
-        {
-            eval.Reason = "❌ No legs extracted by AI Vision.";
-            return eval;
-        }
-
-        if (!dbBet.AmountNOK.HasValue || dbBet.AmountNOK.Value <= 0)
-        {
-            eval.Reason = "❌ Missing or invalid stake amount.";
-            return eval;
-        }
-
-        if (dbBet.Odds <= 1m || Math.Round(dbBet.Odds, 2) != dbBet.Odds)
-        {
-            eval.Reason = $"❌ Invalid total odds ({dbBet.Odds:0.00}).";
-            return eval;
-        }
-
-        // 3. Bet Type Checks: Bet Builder, AI Live flag
-        if (dbBet.IsBetBuilder || aiVision.IsBetBuilder)
-        {
-            eval.Reason = "❌ Bet Builder is not eligible for Auto-Approval.";
-            return eval;
-        }
-
-        if (dbBet.IsLive || aiVision.IsLive)
-        {
-            eval.Reason = "❌ Bet is marked as a Live Bet.";
-            return eval;
-        }
-
-        // 4. Size, Credit & Liability Guardrails
-        decimal stake = (decimal)dbBet.AmountNOK.Value;
-        if (stake < settings.MinBetAmount)
-        {
-            eval.Reason = $"❌ Stake ({stake:N0} kr) is below minimum bet ({settings.MinBetAmount:N0} kr).";
-            return eval;
-        }
-
-        if (stake > settings.AutoApprovalMaxStakeNOK)
-        {
-            eval.Reason = $"❌ Stake ({stake:N0} kr) exceeds Auto-Approve max stake ({settings.AutoApprovalMaxStakeNOK:N0} kr).";
-            return eval;
-        }
-
-        decimal netLiability = Math.Floor(stake * (dbBet.Odds - 1m));
-        if (netLiability > settings.AutoApprovalMaxNetLiabilityNOK)
-        {
-            eval.Reason = $"❌ Net Liability ({netLiability:N0} kr) exceeds Auto-Approve max liability ({settings.AutoApprovalMaxNetLiabilityNOK:N0} kr).";
-            return eval;
-        }
-
-        if (netLiability > dbUser.MaxNetLiability)
-        {
-            eval.Reason = $"❌ Net Liability ({netLiability:N0} kr) exceeds user Max Liability ({dbUser.MaxNetLiability:N0} kr).";
-            return eval;
-        }
-
-        decimal availableCredit = dbUser.Balance + dbUser.FreeBetBalance + (decimal)dbUser.CreditLimit;
-        if (availableCredit < stake)
-        {
-            eval.Reason = $"❌ Insufficient funds (Available: {availableCredit:N0} kr, Required: {stake:N0} kr).";
-            return eval;
-        }
-
-        // 5. Individual Leg Odds Presence & Total Odds Consistency (with unrounded leg wiggle room)
-        var legDecimalOddsList = new List<decimal>(aiVision.Legs.Count);
-        for (int i = 0; i < aiVision.Legs.Count; i++)
-        {
-            if (!TryParseOddsDecimal(aiVision.Legs[i].Odds, out decimal legOdds) || legOdds <= 1.0m)
-            {
-                eval.Reason = $"❌ Leg {i + 1} is missing valid individual odds on the screenshot.";
-                return eval;
-            }
-            legDecimalOddsList.Add(legOdds);
-        }
-
-        if (!IsTotalOddsConsistentWithLegs(dbBet.Odds, legDecimalOddsList, out string? totalOddsMismatchReason))
-        {
-            eval.Reason = $"❌ {totalOddsMismatchReason}";
-            return eval;
-        }
-
-        // 6. Query OddsPapi for Every Leg (Pre-match check + Market/Outcome match + Pinnacle Price & € Limit)
-        string? firstFailureReason = null;
-
-        for (int i = 0; i < aiVision.Legs.Count; i++)
-        {
-            var leg = aiVision.Legs[i];
-            decimal slipLegOdds = legDecimalOddsList[i];
-            string teamToSearch = !string.IsNullOrWhiteSpace(leg.Match) ? leg.Match : (leg.Selection ?? "");
-
-            var (apiResult, apiError) = await _oddsApi.SearchOddsComparisonAsync(
-                teamToSearch,
-                dbBet.Id,
-                isLiveRequest: false,
-                sport: leg.Sport,
-                cancellationToken: ct,
-                bypassOddsCache: isFinalCheck);
-
-            var legEval = EvaluateLegOdds(leg, apiResult, apiError, _marketMapper);
-            eval.LegResults[i] = legEval;
-
-            if (apiResult != null && apiResult.StartTime > DateTime.MinValue)
-            {
-                if (leg.StartTime != apiResult.StartTime)
-                {
-                    leg.StartTime = apiResult.StartTime;
-                    eval.MetadataUpdated = true;
-                }
-            }
-
-            if (apiResult != null && (apiResult.IsLive || apiResult.StatusId == 1 || (apiResult.StatusId == 0 && apiResult.StartTime > DateTime.MinValue && apiResult.StartTime <= DateTime.UtcNow && apiResult.StartTime >= DateTime.UtcNow.AddHours(-4))))
-            {
-                eval.DetectedLiveFromOp = true;
-                eval.MetadataUpdated = true;
-            }
-
-            if (firstFailureReason != null)
-            {
-                continue;
-            }
-
-            if (apiResult == null)
-            {
-                firstFailureReason = $"❌ Leg {i + 1} ('{teamToSearch}'): {apiError ?? "Match not found in OddsPapi"}.";
-                continue;
-            }
-
-            if (apiResult.IsLive || apiResult.StatusId == 1)
-            {
-                firstFailureReason = $"❌ Leg {i + 1} ('{apiResult.MatchName}') is LIVE in OddsPapi.";
-                continue;
-            }
-
-            if (apiResult.StatusId == 2)
-            {
-                firstFailureReason = $"❌ Leg {i + 1} ('{apiResult.MatchName}') has already finished.";
-                continue;
-            }
-
-            if (apiResult.StatusId != 0 || apiResult.StartTime <= DateTime.UtcNow)
-            {
-                firstFailureReason = $"❌ Leg {i + 1} ('{apiResult.MatchName}') has already started.";
-                continue;
-            }
-
-            if (!string.IsNullOrEmpty(legEval.ErrorMessage) || !string.IsNullOrEmpty(legEval.WarningMessage) || string.IsNullOrEmpty(legEval.HighlightedOutcome))
-            {
-                string detail = legEval.WarningMessage ?? legEval.ErrorMessage ?? "Could not match market/outcome in OddsPapi";
-                firstFailureReason = $"❌ Leg {i + 1} ({leg.Market} - {leg.Selection}): {detail}";
-                continue;
-            }
-
-            if (!legEval.MatchedBookieOdds.TryGetValue("pinnacle+30", out var pinData) || pinData.Price <= 1.0)
-            {
-                firstFailureReason = $"❌ Leg {i + 1} ('{leg.Selection}'): Pinnacle odds not available.";
-                continue;
-            }
-
-            if (pinData.IsSuspended)
-            {
-                firstFailureReason = $"❌ Leg {i + 1} ('{leg.Selection}'): Pinnacle market is suspended.";
-                continue;
-            }
-
-            decimal pinLimit = pinData.Limit.HasValue ? Convert.ToDecimal(pinData.Limit.Value) : 0m;
-            if (!pinData.Limit.HasValue || pinLimit < settings.AutoApprovalMinPinnacleLimitEUR)
-            {
-                firstFailureReason = $"❌ Leg {i + 1} ('{leg.Selection}'): Pinnacle limit €{pinLimit:0} < €{settings.AutoApprovalMinPinnacleLimitEUR:0} min.";
-                continue;
-            }
-
-            decimal pinOdds = Convert.ToDecimal(pinData.Price);
-            if (!IsLegOddsWithinPinnacleTolerance(slipLegOdds, pinOdds, settings.AutoApprovalMaxOverPinnaclePercent, out decimal maxAllowedOdds, out decimal overPercent))
-            {
-                firstFailureReason = $"❌ Leg {i + 1} ('{leg.Selection}'): Odds {slipLegOdds:0.00} > Pinnacle {pinOdds:0.00} (+{overPercent:0.1}% > {settings.AutoApprovalMaxOverPinnaclePercent:0.##}% max, limit {maxAllowedOdds:0.000}).";
-                continue;
-            }
-        }
-
-        if (firstFailureReason != null)
-        {
-            eval.CanAutoApprove = false;
-            eval.Reason = firstFailureReason;
-            return eval;
-        }
-
-        eval.CanAutoApprove = true;
-        eval.Reason = "✅ All Auto-Approval criteria met.";
-        return eval;
-    }
-
-    public static bool TryParseOddsDecimal(string? rawOdds, out decimal oddsValue)
-    {
-        oddsValue = 0m;
-        if (string.IsNullOrWhiteSpace(rawOdds)) return false;
-        string clean = rawOdds.Trim().Replace(",", ".");
-        return decimal.TryParse(clean, NumberStyles.Any, CultureInfo.InvariantCulture, out oddsValue);
-    }
-
-    public static bool IsLegOddsWithinPinnacleTolerance(
-        decimal slipLegOdds,
-        decimal pinnacleOdds,
-        decimal maxOverPinnaclePercent,
-        out decimal maxAllowedOdds,
-        out decimal actualOverPercent)
-    {
-        maxAllowedOdds = pinnacleOdds * (1m + (maxOverPinnaclePercent / 100m));
-        actualOverPercent = pinnacleOdds > 0m ? ((slipLegOdds - pinnacleOdds) / pinnacleOdds) * 100m : 0m;
-        return slipLegOdds <= maxAllowedOdds;
-    }
-
-    public static bool IsTotalOddsConsistentWithLegs(
-        decimal totalBetOdds,
-        IReadOnlyList<decimal> legOdds,
-        out string? mismatchReason)
-    {
-        mismatchReason = null;
-        if (legOdds == null || legOdds.Count == 0)
-        {
-            mismatchReason = "No leg odds provided.";
-            return false;
-        }
-
-        if (legOdds.Count == 1)
-        {
-            // Single leg: dbBet.Odds is floored to 0.05 in Home.razor, plus allow +-0.01 rounding
-            decimal expectedFloored = Math.Floor(legOdds[0] / 0.05m) * 0.05m;
-            decimal minSingle = Math.Min(expectedFloored, legOdds[0]) - 0.06m;
-            decimal maxSingle = Math.Max(expectedFloored, legOdds[0]) + 0.06m;
-            if (totalBetOdds < minSingle || totalBetOdds > maxSingle)
-            {
-                mismatchReason = $"Total odds ({totalBetOdds:0.00}) does not match single leg odds ({legOdds[0]:0.00}).";
-                return false;
-            }
-            return true;
-        }
-
-        // Multi-leg parlay: bookmakers often multiply unrounded 3-decimal odds (e.g. 1.515 * 1.725 = 2.613)
-        // while displaying 2-decimal truncated/rounded leg odds (e.g. 1.51 and 1.72).
-        decimal minProduct = 1m;
-        decimal maxProduct = 1m;
-        foreach (var l in legOdds)
-        {
-            minProduct *= Math.Max(1.001m, l - 0.01m);
-            maxProduct *= (l + 0.01m);
-        }
-
-        decimal minAllowed = (Math.Floor(minProduct / 0.05m) * 0.05m) - 0.06m;
-        decimal maxAllowed = maxProduct + 0.06m;
-
-        if (totalBetOdds < minAllowed || totalBetOdds > maxAllowed)
-        {
-            decimal exactProduct = legOdds.Aggregate(1m, (acc, x) => acc * x);
-            mismatchReason = $"Total odds ({totalBetOdds:0.00}) does not match product of legs ({exactProduct:0.00}, allowed {minAllowed:0.00}–{maxAllowed:0.00}).";
-            return false;
-        }
-
-        return true;
-    }
-
-    public static EvaluatedLegOdds EvaluateLegOdds(
-        AiVisionLeg leg,
-        OddsPapiSearchResult? apiResult,
-        string? error,
-        MarketMappingService marketMapper)
-    {
-        var resultData = new EvaluatedLegOdds
-        {
-            LookedUpAt = DateTime.UtcNow
-        };
-
-        if (apiResult == null)
-        {
-            if (error != null && error.StartsWith("Castle doesn't yet pay for odds for"))
-            {
-                resultData.WarningMessage = error;
-                resultData.SearchResult = new OddsPapiSearchResult { MatchName = leg.Match ?? leg.Selection ?? "" };
-                return resultData;
-            }
-
-            resultData.ErrorMessage = error ?? "No OddsPapi matches found.";
-            return resultData;
-        }
-
-        resultData.SearchResult = apiResult;
-
-        string preSelectCategory = leg.Market ?? "";
-        var bestMatch = OddsMatchingLogic.FindBestMarket(apiResult.Markets, preSelectCategory, leg.Match, leg.Selection, marketMapper, apiResult.MatchName);
-
-        if (bestMatch != null)
-        {
-            resultData.SelectedMarketId = bestMatch.MarketId;
-
-            if (apiResult.BookmakerOdds.TryGetValue(bestMatch.MarketId, out var bookiesDict))
-            {
-                string? bestOutcome = null;
-                var ctx = new OddsMatchingLogic.OutcomeMatchingContext(leg, apiResult, bestMatch.MarketName);
-
-                foreach (var kvp in bestMatch.OutcomeNames)
-                {
-                    string oName = kvp.Value;
-                    string displayOName = OddsMatchingLogic.GetTranslatedOutcomeName(oName, apiResult.MatchName ?? "");
-
-                    if (OddsMatchingLogic.IsOutcomeMatch(oName, displayOName, ctx))
-                    {
-                        bestOutcome = oName;
-                        resultData.HighlightedOutcome = displayOName;
-                        break;
-                    }
-                }
-
-                if (!string.IsNullOrEmpty(bestOutcome))
-                {
-                    var targets = new[] { "pinnacle+30", "unibet.se", "coolbet", "bet365", "betsson" };
-                    foreach (var tb in targets)
-                    {
-                        if (bookiesDict.TryGetValue(tb, out var bData) && bData.TryGetValue(bestOutcome, out var pd))
-                        {
-                            resultData.MatchedBookieOdds[tb] = pd;
-                        }
-                    }
-                }
-                else
-                {
-                    resultData.WarningMessage = $"OddsPapi doesn't offer selection '{leg.Selection}' for '{bestMatch.MarketName}'.";
-                }
-            }
-        }
-        else
-        {
-            if (apiResult.StatusId == 2)
-            {
-                resultData.WarningMessage = "This match has already finished. Bookmakers do not offer odds on ended matches.";
-            }
-            else
-            {
-                resultData.WarningMessage = $"The betslip is for '{preSelectCategory}', but OddsPapi doesn't offer it for this match.";
-            }
-        }
-
-        return resultData;
     }
 
     private static void ApplyLookupMetadataToBet(Bet dbBet, AutoApprovalEvaluationResult checkResult, bool saveBookmakerOdds)

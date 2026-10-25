@@ -1,19 +1,8 @@
 @page "/admin/settings"
 <PageTitle>Settings - Castle of Happiness</PageTitle>
 @using BettingApp.Data
-@using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
-@using BettingApp.Services
 @attribute [Authorize]
-@inject IDbContextFactory<ApplicationDbContext> DbFactory
-@inject AuthenticationStateProvider AuthStateProvider
-@inject NavigationManager Nav
-@inject UiNotificationService UiNotifier
-@inject BettingApp.Services.DiscordNotificationService DiscordService
-@inject BettingApp.Services.DialogService DialogService
-@inject BettingApp.Services.AutoApprovalService AutoApproval
-@inject IJSRuntime JS
-@implements IDisposable
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h3>Admin Settings</h3>
@@ -28,21 +17,211 @@ else if (!hasAccess)
 }
 else
 {
+    @if (showSuccess)
+    {
+        <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 9999; min-width: 300px;">
+            Settings updated successfully!
+            <button type="button" class="btn-close" @onclick="() => showSuccess = false"></button>
+        </div>
+    }
+
     <div class="row">
+        <div class="col-12">
+            <div class="card border-primary shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-robot me-2"></i>Auto-Approval Engine</span>
+                    <div @key="autoApprovalToggleKey" class="form-check form-switch mb-0 bg-white px-3 py-1 rounded-pill shadow-sm d-flex align-items-center" style="padding-left: 2.5rem !important;">
+                        <input class="form-check-input me-2 mt-0" type="checkbox" id="autoApprovalMasterSwitch" style="cursor: pointer;"
+                               checked="@settings.IsAutoApprovalEnabled"
+                               @onchange="@(async (e) => await ToggleGlobalAutoApproval((bool)(e.Value ?? false)))" />
+                        <label class="form-check-label fw-bold @(settings.IsAutoApprovalEnabled ? "text-success" : "text-secondary")" for="autoApprovalMasterSwitch" style="cursor: pointer;">
+                            @(settings.IsAutoApprovalEnabled ? "Enabled" : "Disabled")
+                        </label>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="form-text mb-3">
+                        Bets are evaluated in order from <strong>Tier 1 &rarr; Tier 2 &rarr; Tier 3</strong>. Universal checks (Available Credit, User Max Liability, Minimum Bet Amount, and Per-User Auto-Approval permission) always apply across all tiers. Turning off the master switch above immediately cancels any active countdowns.
+                    </p>
+                    <EditForm Model="settings" OnValidSubmit="SaveAutoApprovalSettings">
+                        <DataAnnotationsValidator />
+
+                        <!-- High-Level Settings -->
+                        <div class="p-3 mb-3 bg-light border rounded">
+                            <h6 class="fw-bold mb-3"><i class="bi bi-sliders me-2 text-primary"></i>High-Level Settings</h6>
+                            <div class="row g-3 align-items-stretch">
+                                <div class="col-md-6">
+                                    <label for="autoApproveDelay" class="form-label fw-bold">Countdown Timer (Seconds)</label>
+                                    <InputNumber id="autoApproveDelay" class="form-control" @bind-Value="settings.AutoApprovalDelaySeconds" />
+                                    <div class="form-text">Visible countdown before final re-verification and auto-approval (e.g. 180s).</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="p-2 bg-white border rounded h-100 d-flex flex-column justify-content-center">
+                                        <div class="form-check form-switch mb-1">
+                                            <InputCheckbox id="autoApproveAllowLive" class="form-check-input" style="cursor: pointer;" @bind-Value="settings.AutoApprovalAllowLiveBets" />
+                                            <label class="form-check-label fw-bold" for="autoApproveAllowLive" style="cursor: pointer;">
+                                                Allow Auto-Approval of Live Bets
+                                            </label>
+                                        </div>
+                                        <div class="form-text mt-0">If off, any bet flagged as live or already in-play in OddsPapi is blocked across all tiers.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tier 1: Pinnacle -->
+                        <div class="card mb-3 border-primary">
+                            <div class="card-header bg-primary bg-opacity-10 d-flex justify-content-between align-items-center py-2">
+                                <div>
+                                    <span class="badge bg-primary me-2">Tier 1</span>
+                                    <span class="fw-bold text-dark">Pinnacle (Sharp Odds)</span>
+                                </div>
+                                <div class="form-check form-switch mb-0">
+                                    <InputCheckbox id="tier1EnabledSwitch" class="form-check-input" style="cursor: pointer;" @bind-Value="settings.IsTier1PinnacleEnabled" />
+                                    <label class="form-check-label fw-bold @(settings.IsTier1PinnacleEnabled ? "text-success" : "text-muted")" for="tier1EnabledSwitch" style="cursor: pointer;">
+                                        @(settings.IsTier1PinnacleEnabled ? "Enabled" : "Disabled")
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="card-body @(settings.IsTier1PinnacleEnabled ? "" : "opacity-50")">
+                                <div class="form-text mb-3 mt-0">
+                                    Evaluated first. Every leg must have active Pinnacle odds in OddsPapi with sufficient max bet limit and within the discrepancy threshold.
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-3">
+                                        <label for="tier1MaxStake" class="form-label fw-bold">Max Stake (NOK)</label>
+                                        <InputNumber id="tier1MaxStake" class="form-control" @bind-Value="settings.AutoApprovalMaxStakeNOK" />
+                                        <div class="form-text">Max stake for Tier 1.</div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="tier1MaxLiability" class="form-label fw-bold">Max Net Liability (NOK)</label>
+                                        <InputNumber id="tier1MaxLiability" class="form-control" @bind-Value="settings.AutoApprovalMaxNetLiabilityNOK" />
+                                        <div class="form-text">Max net liability for Tier 1.</div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="tier1MaxOverPin" class="form-label fw-bold">Max Above Pinnacle (%)</label>
+                                        <div class="input-group">
+                                            <InputNumber id="tier1MaxOverPin" step="0.1" class="form-control" @bind-Value="settings.AutoApprovalMaxOverPinnaclePercent" />
+                                            <span class="input-group-text fw-bold">%</span>
+                                        </div>
+                                        <div class="form-text">
+                                            At <strong>@settings.AutoApprovalMaxOverPinnaclePercent.ToString("0.#")%</strong>, Pinnacle <strong>2.00</strong> allows up to <strong>@((2.00m * (1m + settings.AutoApprovalMaxOverPinnaclePercent / 100m)).ToString("0.00"))</strong>.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="tier1MinPinLimit" class="form-label fw-bold">Min Pinnacle Limit (€)</label>
+                                        <InputNumber id="tier1MinPinLimit" class="form-control" @bind-Value="settings.AutoApprovalMinPinnacleLimitEUR" />
+                                        <div class="form-text">Min EUR limit required on each leg.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tier 2: Soft Bookies -->
+                        <div class="card mb-3 border-info">
+                            <div class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center py-2">
+                                <div>
+                                    <span class="badge bg-info text-dark me-2">Tier 2</span>
+                                    <span class="fw-bold text-dark">Soft Bookies (Min. 2 Bookmakers Average)</span>
+                                </div>
+                                <div class="form-check form-switch mb-0">
+                                    <InputCheckbox id="tier2EnabledSwitch" class="form-check-input" style="cursor: pointer;" @bind-Value="settings.IsTier2SoftBookiesEnabled" />
+                                    <label class="form-check-label fw-bold @(settings.IsTier2SoftBookiesEnabled ? "text-success" : "text-muted")" for="tier2EnabledSwitch" style="cursor: pointer;">
+                                        @(settings.IsTier2SoftBookiesEnabled ? "Enabled" : "Disabled")
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="card-body @(settings.IsTier2SoftBookiesEnabled ? "" : "opacity-50")">
+                                <div class="form-text mb-3 mt-0">
+                                    Evaluated if Tier 1 does not match (e.g. player specials without Pinnacle odds). Requires at least <strong>2 bookmakers</strong> (across Pinnacle, Unibet, Coolbet, Bet365, Betsson) to return valid odds for each leg, comparing user leg odds against their average.
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label for="tier2MaxStake" class="form-label fw-bold">Max Stake (NOK)</label>
+                                        <InputNumber id="tier2MaxStake" class="form-control" @bind-Value="settings.Tier2MaxStakeNOK" />
+                                        <div class="form-text">Max stake for Tier 2.</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="tier2MaxLiability" class="form-label fw-bold">Max Net Liability (NOK)</label>
+                                        <InputNumber id="tier2MaxLiability" class="form-control" @bind-Value="settings.Tier2MaxNetLiabilityNOK" />
+                                        <div class="form-text">Max net liability for Tier 2.</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="tier2MaxOverAvg" class="form-label fw-bold">Max Above Bookie Average (%)</label>
+                                        <div class="input-group">
+                                            <InputNumber id="tier2MaxOverAvg" step="0.1" class="form-control" @bind-Value="settings.Tier2MaxOverBookieAvgPercent" />
+                                            <span class="input-group-text fw-bold">%</span>
+                                        </div>
+                                        <div class="form-text">
+                                            At <strong>@settings.Tier2MaxOverBookieAvgPercent.ToString("0.#")%</strong>, Avg <strong>2.00</strong> allows up to <strong>@((2.00m * (1m + settings.Tier2MaxOverBookieAvgPercent / 100m)).ToString("0.00"))</strong>.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tier 3: Small Stake -->
+                        <div class="card mb-3 border-success">
+                            <div class="card-header bg-success bg-opacity-10 d-flex justify-content-between align-items-center py-2">
+                                <div>
+                                    <span class="badge bg-success me-2">Tier 3</span>
+                                    <span class="fw-bold text-dark">Small Stake (No Bookmaker Odds Required)</span>
+                                </div>
+                                <div class="form-check form-switch mb-0">
+                                    <InputCheckbox id="tier3EnabledSwitch" class="form-check-input" style="cursor: pointer;" @bind-Value="settings.IsTier3SmallStakeEnabled" />
+                                    <label class="form-check-label fw-bold @(settings.IsTier3SmallStakeEnabled ? "text-success" : "text-muted")" for="tier3EnabledSwitch" style="cursor: pointer;">
+                                        @(settings.IsTier3SmallStakeEnabled ? "Enabled" : "Disabled")
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="card-body @(settings.IsTier3SmallStakeEnabled ? "" : "opacity-50")">
+                                <div class="form-text mb-3 mt-0">
+                                    Evaluated if Tier 1 and Tier 2 do not match. Auto-approves low-stake bets regardless of odds or whether any bookmakers return odds, provided credit, liability, and high-level settings are satisfied.
+                                </div>
+                                <div class="row g-3 align-items-stretch">
+                                    <div class="col-md-4">
+                                        <label for="tier3MaxStake" class="form-label fw-bold">Max Stake (NOK)</label>
+                                        <InputNumber id="tier3MaxStake" class="form-control" @bind-Value="settings.Tier3MaxStakeNOK" />
+                                        <div class="form-text">Bets at or below this stake (e.g. 200 kr) auto-approve without bookmaker odds checks.</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="tier3MaxLiability" class="form-label fw-bold">Max Net Liability (NOK)</label>
+                                        <InputNumber id="tier3MaxLiability" class="form-control" @bind-Value="settings.Tier3MaxNetLiabilityNOK" />
+                                        <div class="form-text">Max net liability for Tier 3 (in addition to the user's personal liability limit).</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-2 bg-light border rounded h-100 d-flex flex-column justify-content-center">
+                                            <div class="form-check form-switch mb-1">
+                                                <InputCheckbox id="autoApproveAllowBetBuilder" class="form-check-input" style="cursor: pointer;" @bind-Value="settings.AutoApprovalAllowBetBuilders" />
+                                                <label class="form-check-label fw-bold" for="autoApproveAllowBetBuilder" style="cursor: pointer;">
+                                                    Allow Auto-Approval of Bet Builders
+                                                </label>
+                                            </div>
+                                            <div class="form-text mt-0">If on, Bet Builders within Tier 3 stake and liability limits can be auto-approved.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check2-circle me-1"></i> Save Auto-Approval Criteria
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
         <div class="col-md-6">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-header">
                     Global Betting Limits
                 </div>
                 <div class="card-body">
-                    @if (showSuccess)
-                    {
-                        <div class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-4 shadow" role="alert" style="z-index: 9999; min-width: 300px;">
-                            Settings updated successfully!
-                            <button type="button" class="btn-close" @onclick="() => showSuccess = false"></button>
-                        </div>
-                    }
-
                     <EditForm Model="settings" OnValidSubmit="SaveSettings">
                         <DataAnnotationsValidator />
                         <ValidationSummary />
@@ -53,16 +232,13 @@ else
                             <div class="form-text">The minimum amount required for a single bet.</div>
                         </div>
 
-                        @* Max Payout removed from here (now managed per-user in Credit / Liability) *@
-
                         <button type="submit" class="btn btn-primary">Save Changes</button>
                     </EditForm>
                 </div>
             </div>
-            
         </div>
         <div class="col-md-6 mt-4 mt-md-0">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-header">
                     Discord Integration
                 </div>
@@ -83,73 +259,11 @@ else
                     <p class="form-text mb-3">Sort all user text channels alphabetically within the <strong>Admins</strong>, <strong>Active Users</strong>, and <strong>Inactive Users</strong> categories.</p>
                     <button type="button" class="btn btn-outline-primary" @onclick="SortDiscordChannels">
                         <i class="bi bi-sort-alpha-down"></i> Sort Channels Alphabetically
-                        @if (isSorting) {
+                        @if (isSorting)
+                        {
                             <span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>
                         }
                     </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card border-primary shadow-sm">
-                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                    <span class="fw-bold"><i class="bi bi-robot me-2"></i>Auto-Approval Engine</span>
-                    <div @key="autoApprovalToggleKey" class="form-check form-switch mb-0 bg-white px-3 py-1 rounded-pill shadow-sm d-flex align-items-center" style="padding-left: 2.5rem !important;">
-                        <input class="form-check-input me-2 mt-0" type="checkbox" id="autoApprovalMasterSwitch" style="cursor: pointer;"
-                               checked="@settings.IsAutoApprovalEnabled"
-                               @onchange="@(async (e) => await ToggleGlobalAutoApproval((bool)(e.Value ?? false)))" />
-                        <label class="form-check-label fw-bold @(settings.IsAutoApprovalEnabled ? "text-success" : "text-secondary")" for="autoApprovalMasterSwitch" style="cursor: pointer;">
-                            @(settings.IsAutoApprovalEnabled ? "Enabled" : "Disabled")
-                        </label>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p class="form-text mb-3">
-                        Configure criteria for automatic approval of pre-match bets. Turning off the master switch above immediately cancels any active auto-approval countdowns.
-                    </p>
-                    <EditForm Model="settings" OnValidSubmit="SaveAutoApprovalSettings">
-                        <DataAnnotationsValidator />
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label for="autoApproveDelay" class="form-label fw-bold">Countdown Timer (Seconds)</label>
-                                <InputNumber id="autoApproveDelay" class="form-control" @bind-Value="settings.AutoApprovalDelaySeconds" />
-                                <div class="form-text">Visible countdown before final re-verification and auto-approval (e.g. 180s).</div>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="autoApproveMaxOverPin" class="form-label fw-bold">Max Odds Discrepancy Above Pinnacle (%)</label>
-                                <div class="input-group">
-                                    <InputNumber id="autoApproveMaxOverPin" step="0.1" class="form-control" @bind-Value="settings.AutoApprovalMaxOverPinnaclePercent" />
-                                    <span class="input-group-text fw-bold">%</span>
-                                </div>
-                                <div class="form-text">
-                                    Max % a leg's odds can exceed Pinnacle (e.g. at <strong>@settings.AutoApprovalMaxOverPinnaclePercent.ToString("0.#")%</strong>, if Pinnacle is <strong>2.00</strong>, max allowed user odds is <strong>@((2.00m * (1m + settings.AutoApprovalMaxOverPinnaclePercent / 100m)).ToString("0.00"))</strong>). Lower odds are always allowed.
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="autoApproveMinPinLimit" class="form-label fw-bold">Minimum Pinnacle Limit (€)</label>
-                                <InputNumber id="autoApproveMinPinLimit" class="form-control" @bind-Value="settings.AutoApprovalMinPinnacleLimitEUR" />
-                                <div class="form-text">Every leg must have a Pinnacle max bet limit of at least this EUR amount.</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="autoApproveMaxStake" class="form-label fw-bold">Max Auto-Approve Stake (NOK)</label>
-                                <InputNumber id="autoApproveMaxStake" class="form-control" @bind-Value="settings.AutoApprovalMaxStakeNOK" />
-                                <div class="form-text">Maximum stake eligible for auto-approval.</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="autoApproveMaxLiability" class="form-label fw-bold">Max Auto-Approve Net Liability (NOK)</label>
-                                <InputNumber id="autoApproveMaxLiability" class="form-control" @bind-Value="settings.AutoApprovalMaxNetLiabilityNOK" />
-                                <div class="form-text">Maximum single-bet net liability eligible for auto-approval.</div>
-                            </div>
-                        </div>
-                        <div class="mt-3">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-check2-circle me-1"></i> Save Auto-Approval Criteria
-                            </button>
-                        </div>
-                    </EditForm>
                 </div>
             </div>
         </div>
@@ -216,10 +330,9 @@ else
                                         <button type="button" class="btn btn-primary" @onclick='() => SavePwaPackageName("coolbetPwaPackageName", pwaPackageCoolbet)'>Save</button>
                                     </div>
                                 </div>
-
                             </div>
                             <div class="form-text mt-3">
-                                If your Android app was installed directly from Google Chrome (a WebAPK), Android may block normal links. 
+                                If your Android app was installed directly from Google Chrome (a WebAPK), Android may block normal links.
                                 Open a new tab in Chrome, go to <strong>chrome://webapks</strong>, find the bookie, and paste its exact Package Name here to force it to open.
                             </div>
                         </div>
@@ -228,340 +341,4 @@ else
             </div>
         </div>
     </div>
-}
-
-@code {
-    private SystemSetting settings = new();
-    private bool hasAccess = false;
-    private bool isLoading = true;
-    private bool showSuccess = false;
-    private bool showDiscordSuccess = false;
-    private bool showPwaSuccess = false;
-    private string discordMessage = "";
-    private bool isSorting = false;
-    private string? currentAdminName;
-    private bool openInNativeApp = false;
-    private string pwaPackageName = "";
-    private string pwaPackagePinnacle = "";
-    private string pwaPackageBet365 = "";
-    private string pwaPackageBetsson = "";
-    private string pwaPackageCoolbet = "";
-
-    protected override async Task OnInitializedAsync()
-    {
-        try
-        {
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            currentAdminName = user.Identity?.Name;
-
-            using var context = DbFactory.CreateDbContext();
-            if (user.Identity?.IsAuthenticated == true)
-            {
-                var dbUser = await context.Users.AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
-                hasAccess = dbUser?.IsAdmin ?? false;
-            }
-
-            if (!hasAccess)
-            {
-                Nav.NavigateTo("/");
-                return;
-            }
-
-            await LoadSettings(context);
-            UiNotifier.OnAdminNotification += HandleAdminNotification;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error initializing AdminSettings: {ex.Message}");
-        }
-        finally
-        {
-            isLoading = false;
-        }
-    }
-
-    private bool _isDisposed;
-    private Guid autoApprovalToggleKey = Guid.NewGuid();
-
-    private void HandleAdminNotification(string? message)
-    {
-        if (_isDisposed) return;
-        if (message != null && message.Contains("Settings"))
-        {
-            try
-            {
-                _ = InvokeAsync(async () =>
-                {
-                    try
-                    {
-                        if (_isDisposed) return;
-                        using var ctx = DbFactory.CreateDbContext();
-                        await LoadSettings(ctx);
-                        StateHasChanged();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error reloading admin settings: {ex.Message}");
-                    }
-                });
-            }
-            catch { }
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            try
-            {
-                var value = await JS.InvokeAsync<string>("localStorage.getItem", "openInNativeApp");
-                if (!string.IsNullOrEmpty(value))
-                {
-                    openInNativeApp = value == "true";
-                }
-                var pkg = await JS.InvokeAsync<string>("localStorage.getItem", "unibetPwaPackageName");
-                if (!string.IsNullOrEmpty(pkg)) pwaPackageName = pkg;
-
-                var pkgPin = await JS.InvokeAsync<string>("localStorage.getItem", "pinnaclePwaPackageName");
-                if (!string.IsNullOrEmpty(pkgPin)) pwaPackagePinnacle = pkgPin;
-
-                var pkgBetsson = await JS.InvokeAsync<string>("localStorage.getItem", "betssonPwaPackageName");
-                if (!string.IsNullOrEmpty(pkgBetsson)) pwaPackageBetsson = pkgBetsson;
-
-                var pkgBet365 = await JS.InvokeAsync<string>("localStorage.getItem", "bet365PwaPackageName");
-                if (!string.IsNullOrEmpty(pkgBet365)) pwaPackageBet365 = pkgBet365;
-
-                var pkgCoolbet = await JS.InvokeAsync<string>("localStorage.getItem", "coolbetPwaPackageName");
-                if (!string.IsNullOrEmpty(pkgCoolbet)) pwaPackageCoolbet = pkgCoolbet;
-
-                if (!string.IsNullOrEmpty(value) || !string.IsNullOrEmpty(pkg) || !string.IsNullOrEmpty(pkgPin))
-                {
-                    StateHasChanged();
-                }
-            }
-            catch { }
-        }
-    }
-
-    private async Task ToggleOpenNativeApp(ChangeEventArgs e)
-    {
-        openInNativeApp = (bool)(e.Value ?? false);
-        showPwaSuccess = false;
-        try
-        {
-            await JS.InvokeVoidAsync("localStorage.setItem", "openInNativeApp", openInNativeApp.ToString().ToLower());
-            showPwaSuccess = true;
-        }
-        catch { }
-    }
-
-    private async Task SavePwaPackageName(string key, string value)
-    {
-        showPwaSuccess = false;
-        try
-        {
-            await JS.InvokeVoidAsync("localStorage.setItem", key, value.Trim());
-            showPwaSuccess = true;
-            StateHasChanged();
-        }
-        catch { }
-    }
-
-    private async Task LoadSettings(ApplicationDbContext context)
-    {
-        var existingSettings = await context.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
-        if (existingSettings == null)
-        {
-            // Default MinBet 100
-            settings = new SystemSetting { MinBetAmount = 100m };
-            context.Settings.Add(settings);
-            await context.SaveChangesAsync();
-        }
-        else
-        {
-            settings = existingSettings;
-        }
-    }
-
-    private async Task SaveSettings()
-    {
-        showSuccess = false;
-        using var context = DbFactory.CreateDbContext();
-        
-        var dbSettings = await context.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
-        if (dbSettings != null)
-        {
-            var oldMinBet = dbSettings.MinBetAmount;
-            bool confirmed = await DialogService.ConfirmAsync($"Are you sure you want to change Minimum Bet Amount from {oldMinBet:N0} NOK to {settings.MinBetAmount:N0} NOK?");
-            if (!confirmed)
-            {
-                await LoadSettings(context);
-                StateHasChanged();
-                return;
-            }
-
-            dbSettings.MinBetAmount = settings.MinBetAmount;
-            
-            context.AuditLogs.Add(new AuditLog
-            {
-                AdminUserName = currentAdminName ?? "Unknown",
-                Action = "Changed System Settings",
-                TargetUserName = "System",
-                Details = $"MinBet: {oldMinBet}->{settings.MinBetAmount}"
-            });
-            await context.SaveChangesAsync();
-            
-            // Notify other admins
-            UiNotifier.NotifyAdmin("System Settings Updated");
-            showSuccess = true;
-        }
-    }
-
-    private async Task ToggleGlobalAutoApproval(bool newValue)
-    {
-        showSuccess = false;
-        bool confirmed = await DialogService.ConfirmAsync(
-            $"Are you sure you want to {(newValue ? "ENABLE" : "DISABLE")} Auto-Approval globally?" +
-            (!newValue ? "\n\nAny active Auto-Approval countdown timers on pending bets will be immediately cancelled." : ""));
-        if (!confirmed)
-        {
-            using var reloadCtx = DbFactory.CreateDbContext();
-            await LoadSettings(reloadCtx);
-            autoApprovalToggleKey = Guid.NewGuid();
-            StateHasChanged();
-            return;
-        }
-
-        using var context = DbFactory.CreateDbContext();
-        var dbSettings = await context.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
-        if (dbSettings != null)
-        {
-            var oldVal = dbSettings.IsAutoApprovalEnabled;
-            dbSettings.IsAutoApprovalEnabled = newValue;
-            settings.IsAutoApprovalEnabled = newValue;
-
-            context.AuditLogs.Add(new AuditLog
-            {
-                AdminUserName = currentAdminName ?? "Unknown",
-                Action = "Toggle Auto-Approval",
-                TargetUserName = "System",
-                Details = $"IsAutoApprovalEnabled: {oldVal} -> {newValue}"
-            });
-            await context.SaveChangesAsync();
-
-            if (!newValue)
-            {
-                await AutoApproval.CancelAllActiveCountdownsAsync($"Auto-Approval disabled globally by {currentAdminName ?? "Admin"}");
-            }
-
-            UiNotifier.NotifyAdmin("System Settings Updated");
-            showSuccess = true;
-        }
-    }
-
-    private async Task SaveAutoApprovalSettings()
-    {
-        showSuccess = false;
-        using var context = DbFactory.CreateDbContext();
-        var dbSettings = await context.Settings.OrderBy(s => s.Id).FirstOrDefaultAsync();
-        if (dbSettings == null) return;
-
-        var changes = new List<string>();
-        if (dbSettings.AutoApprovalDelaySeconds != settings.AutoApprovalDelaySeconds)
-            changes.Add($"Countdown Timer: {dbSettings.AutoApprovalDelaySeconds}s -> {settings.AutoApprovalDelaySeconds}s");
-        if (dbSettings.AutoApprovalMaxOverPinnaclePercent != settings.AutoApprovalMaxOverPinnaclePercent)
-            changes.Add($"Max Over Pinnacle: {dbSettings.AutoApprovalMaxOverPinnaclePercent:0.##}% -> {settings.AutoApprovalMaxOverPinnaclePercent:0.##}%");
-        if (dbSettings.AutoApprovalMinPinnacleLimitEUR != settings.AutoApprovalMinPinnacleLimitEUR)
-            changes.Add($"Min Pinnacle Limit: €{dbSettings.AutoApprovalMinPinnacleLimitEUR:N0} -> €{settings.AutoApprovalMinPinnacleLimitEUR:N0}");
-        if (dbSettings.AutoApprovalMaxStakeNOK != settings.AutoApprovalMaxStakeNOK)
-            changes.Add($"Max Stake: {dbSettings.AutoApprovalMaxStakeNOK:N0} NOK -> {settings.AutoApprovalMaxStakeNOK:N0} NOK");
-        if (dbSettings.AutoApprovalMaxNetLiabilityNOK != settings.AutoApprovalMaxNetLiabilityNOK)
-            changes.Add($"Max Net Liability: {dbSettings.AutoApprovalMaxNetLiabilityNOK:N0} NOK -> {settings.AutoApprovalMaxNetLiabilityNOK:N0} NOK");
-
-        string confirmSummary = changes.Count > 0
-            ? $"Are you sure you want to update Auto-Approval criteria?\n\n{string.Join("\n", changes)}"
-            : "No Auto-Approval values were changed. Save anyway?";
-
-        bool confirmed = await DialogService.ConfirmAsync(confirmSummary);
-        if (!confirmed)
-        {
-            await LoadSettings(context);
-            StateHasChanged();
-            return;
-        }
-
-        if (settings.AutoApprovalDelaySeconds < 0) settings.AutoApprovalDelaySeconds = 0;
-        if (settings.AutoApprovalMinPinnacleLimitEUR < 0) settings.AutoApprovalMinPinnacleLimitEUR = 0;
-        if (settings.AutoApprovalMaxStakeNOK < 0) settings.AutoApprovalMaxStakeNOK = 0;
-        if (settings.AutoApprovalMaxNetLiabilityNOK < 0) settings.AutoApprovalMaxNetLiabilityNOK = 0;
-
-        dbSettings.AutoApprovalDelaySeconds = settings.AutoApprovalDelaySeconds;
-        dbSettings.AutoApprovalMaxOverPinnaclePercent = settings.AutoApprovalMaxOverPinnaclePercent;
-        dbSettings.AutoApprovalMinPinnacleLimitEUR = settings.AutoApprovalMinPinnacleLimitEUR;
-        dbSettings.AutoApprovalMaxStakeNOK = settings.AutoApprovalMaxStakeNOK;
-        dbSettings.AutoApprovalMaxNetLiabilityNOK = settings.AutoApprovalMaxNetLiabilityNOK;
-
-        if (changes.Count > 0)
-        {
-            context.AuditLogs.Add(new AuditLog
-            {
-                AdminUserName = currentAdminName ?? "Unknown",
-                Action = "Changed System Settings",
-                TargetUserName = "System",
-                Details = string.Join("; ", changes)
-            });
-        }
-
-        await context.SaveChangesAsync();
-        UiNotifier.NotifyAdmin("System Settings Updated");
-        showSuccess = true;
-    }
-
-    private void RefreshDiscordCache()
-    {
-        DiscordService.InvalidateChannelCache();
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await DiscordService.GetGuildTextChannelsAsync();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[AdminSettings] Failed to refresh discord channel cache: {ex.Message}");
-            }
-        });
-        discordMessage = "Discord cache refreshed successfully!";
-        showDiscordSuccess = true;
-    }
-
-    private async Task SortDiscordChannels()
-    {
-        isSorting = true;
-        StateHasChanged();
-
-        try
-        {
-            discordMessage = await DiscordService.SortUserChannelsAlphabeticallyAsync();
-            showDiscordSuccess = true;
-        }
-        catch (Exception ex)
-        {
-            discordMessage = $"Error sorting channels: {ex.Message}";
-            showDiscordSuccess = true;
-        }
-        finally
-        {
-            isSorting = false;
-        }
-    }
-
-    public void Dispose()
-    {
-        _isDisposed = true;
-        UiNotifier.OnAdminNotification -= HandleAdminNotification;
-    }
 }

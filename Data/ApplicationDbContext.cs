@@ -72,6 +72,26 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasPrecision(18, 0);
 
         builder.Entity<SystemSetting>()
+            .Property(s => s.Tier2MaxOverBookieAvgPercent)
+            .HasPrecision(18, 2);
+
+        builder.Entity<SystemSetting>()
+            .Property(s => s.Tier2MaxStakeNOK)
+            .HasPrecision(18, 0);
+
+        builder.Entity<SystemSetting>()
+            .Property(s => s.Tier2MaxNetLiabilityNOK)
+            .HasPrecision(18, 0);
+
+        builder.Entity<SystemSetting>()
+            .Property(s => s.Tier3MaxStakeNOK)
+            .HasPrecision(18, 0);
+
+        builder.Entity<SystemSetting>()
+            .Property(s => s.Tier3MaxNetLiabilityNOK)
+            .HasPrecision(18, 0);
+
+        builder.Entity<SystemSetting>()
             .Property(s => s.AutoApprovalMaxNetLiabilityNOK)
             .HasPrecision(18, 0);
 

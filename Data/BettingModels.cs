@@ -199,13 +199,29 @@ namespace BettingApp.Data
         public decimal MinBetAmount { get; set; } = 100m; 
         // CashCowsJson removed in favor of dedicated DB Table
 
-        // --- Auto-Approval Settings ---
+        // --- Auto-Approval High-Level Settings ---
         public bool IsAutoApprovalEnabled { get; set; } = true;
         public int AutoApprovalDelaySeconds { get; set; } = 180;
+        public bool AutoApprovalAllowLiveBets { get; set; } = false;
+        public bool AutoApprovalAllowBetBuilders { get; set; } = false;
+
+        // --- Tier 1: Pinnacle (Sharp Odds) ---
+        public bool IsTier1PinnacleEnabled { get; set; } = true;
         public decimal AutoApprovalMaxOverPinnaclePercent { get; set; } = 3.0m;
         public decimal AutoApprovalMinPinnacleLimitEUR { get; set; } = 300m;
         public decimal AutoApprovalMaxStakeNOK { get; set; } = 300m;
         public decimal AutoApprovalMaxNetLiabilityNOK { get; set; } = 5000m;
+
+        // --- Tier 2: Soft Bookies (Min. 2 Bookmakers Average) ---
+        public bool IsTier2SoftBookiesEnabled { get; set; } = true;
+        public decimal Tier2MaxOverBookieAvgPercent { get; set; } = 3.0m;
+        public decimal Tier2MaxStakeNOK { get; set; } = 300m;
+        public decimal Tier2MaxNetLiabilityNOK { get; set; } = 3000m;
+
+        // --- Tier 3: Small Stake (No Bookmaker Odds Required) ---
+        public bool IsTier3SmallStakeEnabled { get; set; } = true;
+        public decimal Tier3MaxStakeNOK { get; set; } = 200m;
+        public decimal Tier3MaxNetLiabilityNOK { get; set; } = 2000m;
     }
 
     public class CashCow

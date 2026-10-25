@@ -584,6 +584,12 @@ namespace BettingApp.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AutoApprovalAllowBetBuilders")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AutoApprovalAllowLiveBets")
+                        .HasColumnType("bit");
+
                     b.Property<int>("AutoApprovalDelaySeconds")
                         .HasColumnType("int");
 
@@ -606,7 +612,36 @@ namespace BettingApp.Migrations
                     b.Property<bool>("IsAutoApprovalEnabled")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsTier1PinnacleEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsTier2SoftBookiesEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsTier3SmallStakeEnabled")
+                        .HasColumnType("bit");
+
                     b.Property<decimal>("MinBetAmount")
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
+
+                    b.Property<decimal>("Tier2MaxNetLiabilityNOK")
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
+
+                    b.Property<decimal>("Tier2MaxOverBookieAvgPercent")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Tier2MaxStakeNOK")
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
+
+                    b.Property<decimal>("Tier3MaxNetLiabilityNOK")
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
+
+                    b.Property<decimal>("Tier3MaxStakeNOK")
                         .HasPrecision(18)
                         .HasColumnType("decimal(18,0)");
 

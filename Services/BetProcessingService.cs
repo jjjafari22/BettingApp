@@ -35,7 +35,8 @@ namespace BettingApp.Services
             decimal newOdds,
             string? customAuditDetails = null,
             bool isAutoSettled = false,
-            bool isAutoApproved = false)
+            bool isAutoApproved = false,
+            string? autoApproveReason = null)
         {
             const int maxConcurrencyAttempts = 3;
 
@@ -159,7 +160,9 @@ namespace BettingApp.Services
                 if (isAutoApproved)
                 {
                     dbBet.IsAutoApproved = true;
-                    dbBet.AutoApproveReason = "✅ Approved automatically";
+                    dbBet.AutoApproveReason = !string.IsNullOrWhiteSpace(autoApproveReason)
+                        ? autoApproveReason
+                        : "✅ Approved automatically";
                 }
 
                 if (isFirstApproval)
