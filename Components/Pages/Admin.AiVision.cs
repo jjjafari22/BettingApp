@@ -352,24 +352,6 @@ public partial class Admin
                                     status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
                                     status == "UNKNOWN";
 
-                                string? bestStartTimeIso = parsedData.Legs?
-                                    .Where(l => l.Outcome?.ToUpperInvariant() == "PENDING" && !string.IsNullOrEmpty(l.MatchStartTimeIso))
-                                    .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
-                                    .FirstOrDefault()?.MatchStartTimeIso;
-                                    
-                                if (string.IsNullOrEmpty(bestStartTimeIso))
-                                {
-                                    bestStartTimeIso = parsedData.Legs?
-                                        .Where(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))
-                                        .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
-                                        .FirstOrDefault()?.MatchStartTimeIso;
-                                }
-
-                                if (!string.IsNullOrEmpty(bestStartTimeIso) && DateTime.TryParse(bestStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
-                                {
-                                    dbBet.MatchStartTime = st;
-                                }
-
                                 // Securely store start times found by Google into the actual extraction legs
                                 bool aiVisionUpdated = false;
                                 if (!string.IsNullOrEmpty(dbBet.AiVisionResultJson))
@@ -421,12 +403,50 @@ public partial class Admin
                                             
                                             if (!string.IsNullOrEmpty(parsedLeg.MatchStartTimeIso) && DateTime.TryParse(parsedLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime legStartTime))
                                             {
-                                                dbLeg.StartTime = legStartTime;
+                                                bool hasLockedFixtureStart = !string.IsNullOrEmpty(dbLeg.FixtureId) && dbLeg.StartTime.HasValue && dbLeg.StartTime.Value > DateTime.MinValue;
+                                                if (!hasLockedFixtureStart || Math.Abs((legStartTime - dbLeg.StartTime!.Value).TotalHours) <= 24)
+                                                {
+                                                    dbLeg.StartTime = legStartTime;
+                                                }
                                             }
                                         }
                                     }
                                 }
                                 // --------------------------
+
+                                DateTime? bestLegStart = dbBet.Legs?
+                                    .Where(l => string.Equals(l.Outcome, "Pending", StringComparison.OrdinalIgnoreCase) && l.StartTime.HasValue && l.StartTime.Value > DateTime.MinValue)
+                                    .OrderBy(l => l.StartTime!.Value)
+                                    .FirstOrDefault()?.StartTime
+                                    ?? dbBet.Legs?
+                                        .Where(l => l.StartTime.HasValue && l.StartTime.Value > DateTime.MinValue)
+                                        .OrderBy(l => l.StartTime!.Value)
+                                        .FirstOrDefault()?.StartTime;
+
+                                if (bestLegStart.HasValue)
+                                {
+                                    dbBet.MatchStartTime = bestLegStart.Value;
+                                }
+                                else
+                                {
+                                    string? bestStartTimeIso = parsedData.Legs?
+                                        .Where(l => l.Outcome?.ToUpperInvariant() == "PENDING" && !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                                        .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
+                                        .FirstOrDefault()?.MatchStartTimeIso;
+                                        
+                                    if (string.IsNullOrEmpty(bestStartTimeIso))
+                                    {
+                                        bestStartTimeIso = parsedData.Legs?
+                                            .Where(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                                            .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
+                                            .FirstOrDefault()?.MatchStartTimeIso;
+                                    }
+
+                                    if (!string.IsNullOrEmpty(bestStartTimeIso) && DateTime.TryParse(bestStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
+                                    {
+                                        dbBet.MatchStartTime = st;
+                                    }
+                                }
 
                                 // --- GATEKEEPER AUTO-SETTLEMENT LOGIC ---
                                 if (isFinished && dbBet.Status == "Approved")

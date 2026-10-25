@@ -587,16 +587,17 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                         string? rawJson = null;
                         string providerLabel = "";
 
+                        DateTime? legStartTime = group.FirstOrDefault(l => l.StartTime > DateTime.MinValue)?.StartTime ?? matchStartTime;
+
                         // 1. Soccer -> FotMob
                         if (legSport.Equals("Soccer", StringComparison.OrdinalIgnoreCase))
                         {
-                            rawJson = await _fotMob.GetMatchStatsJsonAsync(matchName, betPlacedAt, betId);
+                            rawJson = await _fotMob.GetMatchStatsJsonAsync(matchName, betPlacedAt, betId, legStartTime);
                             providerLabel = "FotMob";
                         }
                         else
                         {
                             // 2. US Sports (American Football, Ice Hockey, Basketball, Baseball) & Tennis -> ESPN
-                            DateTime? legStartTime = group.FirstOrDefault(l => l.StartTime > DateTime.MinValue)?.StartTime ?? matchStartTime;
                             rawJson = await _espn.GetMatchStatsJsonAsync(matchName, legSport, betPlacedAt, legStartTime, betId);
                             providerLabel = "ESPN";
                         }

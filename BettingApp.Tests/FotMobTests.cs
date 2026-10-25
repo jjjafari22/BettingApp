@@ -42,6 +42,8 @@ namespace BettingApp.Tests
         [InlineData("Lyon Women", "Chelsea Women", "Lyon (W)", "Chelsea (W)", "Women's Champions League", true)]
         [InlineData("Benfica Women", "Bayern Munich Women", "Benfica (W)", "Bayern Munich (W)", "Women's Champions League", true)]
         [InlineData("SL Benfica Women", "Bayern Munich Women", "Benfica (W)", "Bayern Munich (W)", "Women's Champions League", true)]
+        [InlineData("Lens", "Paris FC", "Le Havre", "Paris Saint-Germain", "Ligue 1", false)] // Bet #9393: "Lens" must not substring-match "Le" in "Le Havre"
+        [InlineData("Lens", "Paris FC", "Lens", "Paris FC", "Ligue 1", true)]
         public void Test_AreTeamsMatching(string qHome, string qAway, string oHome, string oAway, string? optLeague, bool expected)
         {
             var mapper = new BettingApp.Services.TeamAliasMappingService();
@@ -49,6 +51,21 @@ namespace BettingApp.Tests
             var service = new BettingApp.Services.FotMobScraperService(new System.Net.Http.HttpClient(), mapper, logger);
             bool result = service.AreTeamsMatching(qHome, qAway, oHome, oAway, optLeague);
             Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void Test_GetTeamMatchScore_PrefersFullBidirectionalMatchOverOneWaySubset()
+        {
+            var mapper = new BettingApp.Services.TeamAliasMappingService();
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BettingApp.Services.FotMobScraperService>.Instance;
+            var service = new BettingApp.Services.FotMobScraperService(new System.Net.Http.HttpClient(), mapper, logger);
+
+            int exactParisFcScore = service.GetTeamMatchScore("Lens", "Paris FC", "Lens", "Paris FC", "Ligue 1");
+            int subsetPsgScore = service.GetTeamMatchScore("Lens", "Paris FC", "Lens", "Paris Saint-Germain", "Ligue 1");
+
+            Assert.Equal(200, exactParisFcScore);
+            Assert.Equal(150, subsetPsgScore);
+            Assert.True(exactParisFcScore > subsetPsgScore);
         }
 
         [Fact]

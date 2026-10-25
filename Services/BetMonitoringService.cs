@@ -240,23 +240,6 @@ namespace BettingApp.Services
                                          status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
                                          status == "UNKNOWN";
 
-                        string? bestStartTimeIso = parsedData.Legs?
-                            .Where(l => l.Outcome?.ToUpperInvariant() == "PENDING" && !string.IsNullOrEmpty(l.MatchStartTimeIso))
-                            .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
-                            .FirstOrDefault()?.MatchStartTimeIso;
-                            
-                        if (string.IsNullOrEmpty(bestStartTimeIso))
-                        {
-                            bestStartTimeIso = parsedData.Legs?
-                                .Where(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))
-                                .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
-                                .FirstOrDefault()?.MatchStartTimeIso;
-                        }
-                        if (!string.IsNullOrEmpty(bestStartTimeIso) && DateTime.TryParse(bestStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime parsedStart))
-                        {
-                            dbBet.MatchStartTime = parsedStart;
-                        }
-
                         // --- UPDATE DB BET LEGS ---
                         if (parsedData.Legs != null && dbBet.Legs != null && dbBet.Legs.Count > 0)
                         {
@@ -274,9 +257,46 @@ namespace BettingApp.Services
                                     
                                     if (!string.IsNullOrEmpty(parsedLeg.MatchStartTimeIso) && DateTime.TryParse(parsedLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
                                     {
-                                        dbLeg.StartTime = st;
+                                        bool hasLockedFixtureStart = !string.IsNullOrEmpty(dbLeg.FixtureId) && dbLeg.StartTime.HasValue && dbLeg.StartTime.Value > DateTime.MinValue;
+                                        if (!hasLockedFixtureStart || Math.Abs((st - dbLeg.StartTime!.Value).TotalHours) <= 24)
+                                        {
+                                            dbLeg.StartTime = st;
+                                        }
                                     }
                                 }
+                            }
+                        }
+
+                        DateTime? bestLegStart = dbBet.Legs?
+                            .Where(l => string.Equals(l.Outcome, "Pending", StringComparison.OrdinalIgnoreCase) && l.StartTime.HasValue && l.StartTime.Value > DateTime.MinValue)
+                            .OrderBy(l => l.StartTime!.Value)
+                            .FirstOrDefault()?.StartTime
+                            ?? dbBet.Legs?
+                                .Where(l => l.StartTime.HasValue && l.StartTime.Value > DateTime.MinValue)
+                                .OrderBy(l => l.StartTime!.Value)
+                                .FirstOrDefault()?.StartTime;
+
+                        if (bestLegStart.HasValue)
+                        {
+                            dbBet.MatchStartTime = bestLegStart.Value;
+                        }
+                        else
+                        {
+                            string? bestStartTimeIso = parsedData.Legs?
+                                .Where(l => l.Outcome?.ToUpperInvariant() == "PENDING" && !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                                .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
+                                .FirstOrDefault()?.MatchStartTimeIso;
+                                
+                            if (string.IsNullOrEmpty(bestStartTimeIso))
+                            {
+                                bestStartTimeIso = parsedData.Legs?
+                                    .Where(l => !string.IsNullOrEmpty(l.MatchStartTimeIso))
+                                    .OrderBy(l => DateTime.TryParse(l.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime d) ? d : DateTime.MaxValue)
+                                    .FirstOrDefault()?.MatchStartTimeIso;
+                            }
+                            if (!string.IsNullOrEmpty(bestStartTimeIso) && DateTime.TryParse(bestStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime parsedStart))
+                            {
+                                dbBet.MatchStartTime = parsedStart;
                             }
                         }
 

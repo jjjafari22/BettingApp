@@ -28,17 +28,18 @@ namespace BettingApp.Services
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
         }
 
-        public async Task<string?> GetMatchStatsJsonAsync(string matchName, DateTime? betPlacedAt = null, int? betId = null)
+        public async Task<string?> GetMatchStatsJsonAsync(string matchName, DateTime? betPlacedAt = null, int? betId = null, DateTime? legStartTime = null)
         {
             try
             {
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
+                DateTime? effectiveTargetDate = (legStartTime.HasValue && legStartTime.Value > DateTime.MinValue) ? legStartTime : betPlacedAt;
                 // 1. Clean the match name and extract Home Team for robust searching
                 string[] split = matchName.Split(new[] { " vs ", " - ", " v " }, StringSplitOptions.None);
                 string homeTeam = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: false);
                 string awayTeam = split.Length > 1 ? _teamAliasMapper.NormalizeTeamName(split[1].Trim(), removeStopWords: false) : "";
 
-                string dateKey = (betPlacedAt ?? DateTime.UtcNow).ToString("yyyy-MM-dd");
+                string dateKey = (effectiveTargetDate ?? DateTime.UtcNow).ToString("yyyy-MM-dd");
                 string eventIdCacheKey = $"FotMob_EventId_{homeTeam}_{awayTeam}_{dateKey}";
 
                 string? eventId = null;
@@ -68,7 +69,7 @@ namespace BettingApp.Services
 
                         if (string.IsNullOrEmpty(eventId))
                         {
-                            eventId = await ResolveFotMobEventIdAsync(matchName, homeTeam, awayTeam, betPlacedAt);
+                            eventId = await ResolveFotMobEventIdAsync(matchName, homeTeam, awayTeam, effectiveTargetDate);
                             if (_cache != null)
                             {
                                 if (!string.IsNullOrEmpty(eventId))
@@ -323,7 +324,7 @@ namespace BettingApp.Services
                     }
 
                     // Fallback 2: Sometimes the home team has prefixes like "FK " and FotMob search completely fails, but the away team works perfectly!
-                    if (string.IsNullOrEmpty(eventId) && !string.IsNullOrEmpty(awayTeam))
+                    if (currentBestScore < 200 && !string.IsNullOrEmpty(awayTeam))
                     {
                         string cleanAwayTeam = awayTeam;
                         var awayDateMatch = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -336,11 +337,28 @@ namespace BettingApp.Services
                             }
                         }
                         
+                        string rawNormalizedAway = _teamAliasMapper.NormalizeTeamName(cleanAwayTeam, removeStopWords: false);
                         string awaySearchStr = _teamAliasMapper.NormalizeTeamName(cleanAwayTeam, removeStopWords: true);
                         if (string.IsNullOrEmpty(awaySearchStr)) awaySearchStr = cleanAwayTeam;
 
-                        // Try full stop-word-stripped away name first (e.g. "al wehda" where single-word "wehda" only returns players on FotMob)
-                        if (awaySearchStr.Contains(' ') && awaySearchStr.Length >= 3)
+                        // Try full normalized away name first (e.g. "paris fc", "sheffield united") to avoid colliding with same-city rivals
+                        if (rawNormalizedAway.Length >= 3)
+                        {
+                            string awayRawQuery = Uri.EscapeDataString(rawNormalizedAway);
+                            searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={awayRawQuery}";
+                            string awayRawJson = await _httpClient.GetStringAsync(searchUrl);
+
+                            using var awayRawDoc = System.Text.Json.JsonDocument.Parse(awayRawJson);
+                            var awayRawRes = ExtractEventIdWithScore(awayRawDoc, homeTeam, awayTeam, betPlacedAt);
+                            if (awayRawRes.score > currentBestScore || (awayRawRes.score == currentBestScore && awayRawRes.score > 0 && string.IsNullOrEmpty(eventId)))
+                            {
+                                eventId = awayRawRes.id;
+                                currentBestScore = awayRawRes.score;
+                            }
+                        }
+
+                        // Try full stop-word-stripped away name next (e.g. "al wehda" where single-word "wehda" only returns players on FotMob)
+                        if (currentBestScore < 200 && !string.Equals(awaySearchStr, rawNormalizedAway, StringComparison.OrdinalIgnoreCase) && awaySearchStr.Contains(' ') && awaySearchStr.Length >= 3)
                         {
                             string awayFullQuery = Uri.EscapeDataString(awaySearchStr);
                             searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={awayFullQuery}";
@@ -356,7 +374,7 @@ namespace BettingApp.Services
                         }
 
                         string longestAway = awaySearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? awaySearchStr.Split(' ')[0];
-                        if (string.IsNullOrEmpty(eventId) && longestAway.Length >= 3 && longestAway != awaySearchStr)
+                        if (currentBestScore < 200 && longestAway.Length >= 3 && longestAway != awaySearchStr && !string.Equals(longestAway, rawNormalizedAway, StringComparison.OrdinalIgnoreCase))
                         {
                             string fallbackQuery = Uri.EscapeDataString(longestAway);
                             searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
@@ -370,7 +388,7 @@ namespace BettingApp.Services
                                 currentBestScore = fallbackRes.score;
                             }
                         }
-                        else if (string.IsNullOrEmpty(eventId) && longestAway.Length >= 3 && !awaySearchStr.Contains(' '))
+                        else if (currentBestScore < 200 && longestAway.Length >= 3 && !awaySearchStr.Contains(' ') && !string.Equals(longestAway, rawNormalizedAway, StringComparison.OrdinalIgnoreCase))
                         {
                             string fallbackQuery = Uri.EscapeDataString(longestAway);
                             searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
@@ -388,15 +406,13 @@ namespace BettingApp.Services
                 }
 
                 // Fallback 3: Deep dive into Team Fixtures! (Because apigw suggest only returns top 3-4 matches, hiding older or pre-season friendlies)
-                // If currentBestScore < 200, it means we only found a swappedMatch or nothing. Do a Deep Dive to ensure we don't miss a straightMatch!
+                // If currentBestScore < 200, it means we only found a swappedMatch or subset match or nothing. Do a Deep Dive to ensure we don't miss a full straightMatch!
                 if (currentBestScore < 200)
                 {
-                    // Collect team IDs from our previous searches!
-                    var teamIdsToDeepSearch = new System.Collections.Generic.HashSet<string>();
-                    
-                    async Task TryCollectTeamIds(string query)
+                    async Task<System.Collections.Generic.List<string>> TryCollectTeamIds(string query)
                     {
-                        if (string.IsNullOrEmpty(query) || query.Length < 3) return;
+                        var foundIds = new System.Collections.Generic.List<string>();
+                        if (string.IsNullOrEmpty(query) || query.Length < 3) return foundIds;
                         try {
                             string qUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={Uri.EscapeDataString(query)}";
                             string qJson = await _httpClient.GetStringAsync(qUrl);
@@ -414,7 +430,7 @@ namespace BettingApp.Services
                                             string idStr = tid.ValueKind == System.Text.Json.JsonValueKind.Number ? tid.GetInt32().ToString() : tid.GetString() ?? "";
                                             if (!string.IsNullOrEmpty(idStr)) 
                                             {
-                                                teamIdsToDeepSearch.Add(idStr);
+                                                foundIds.Add(idStr);
                                                 foundTeam = true;
                                             }
                                         }
@@ -436,20 +452,22 @@ namespace BettingApp.Services
                                             if (CheckTeamMatch(query, homeName) && payload.TryGetProperty("homeTeamId", out var htid))
                                             {
                                                 string idStr = htid.ValueKind == System.Text.Json.JsonValueKind.Number ? htid.GetInt32().ToString() : htid.GetString() ?? "";
-                                                if (!string.IsNullOrEmpty(idStr)) teamIdsToDeepSearch.Add(idStr);
+                                                if (!string.IsNullOrEmpty(idStr)) foundIds.Add(idStr);
                                             }
                                             if (CheckTeamMatch(query, awayName) && payload.TryGetProperty("awayTeamId", out var atid))
                                             {
                                                 string idStr = atid.ValueKind == System.Text.Json.JsonValueKind.Number ? atid.GetInt32().ToString() : atid.GetString() ?? "";
-                                                if (!string.IsNullOrEmpty(idStr)) teamIdsToDeepSearch.Add(idStr);
+                                                if (!string.IsNullOrEmpty(idStr)) foundIds.Add(idStr);
                                             }
                                         }
                                     }
                                 }
                             }
                         } catch { }
+                        return foundIds;
                     }
 
+                    string rawNormalizedHome = _teamAliasMapper.NormalizeTeamName(homeTeam, removeStopWords: false);
                     string longestHome = homeSearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
                     string cleanAway = awayTeam;
                     var dm = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -459,17 +477,37 @@ namespace BettingApp.Services
                         if (dmVal != "w" && dmVal != "m" && dmVal != "n") cleanAway = awayTeam.Substring(0, dm.Index).Trim();
                     }
                     
+                    string rawNormalizedAway = _teamAliasMapper.NormalizeTeamName(cleanAway, removeStopWords: false);
                     string awaySearchStr = _teamAliasMapper.NormalizeTeamName(cleanAway, removeStopWords: true);
                     if (string.IsNullOrEmpty(awaySearchStr)) awaySearchStr = cleanAway;
 
                     string longestAway = awaySearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? "";
 
-                    await Task.WhenAll(
+                    var collectedLists = await Task.WhenAll(
+                        TryCollectTeamIds(rawNormalizedHome),
                         TryCollectTeamIds(homeSearchStr),
+                        TryCollectTeamIds(rawNormalizedAway),
                         TryCollectTeamIds(awaySearchStr),
                         TryCollectTeamIds(longestHome),
                         TryCollectTeamIds(longestAway)
                     );
+
+                    var teamIdsToDeepSearch = new System.Collections.Generic.List<string>();
+                    var seenTeamIds = new System.Collections.Generic.HashSet<string>();
+                    foreach (var list in collectedLists)
+                    {
+                        foreach (var id in list)
+                        {
+                            if (seenTeamIds.Add(id))
+                            {
+                                teamIdsToDeepSearch.Add(id);
+                            }
+                        }
+                    }
+
+                    DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
+                    // Carry over smallestTimeDiff across teams to prefer closer matches
+                    TimeSpan smallestTimeDiff = TimeSpan.MaxValue;
 
                     // Now for each team ID, fetch their full fixture list!
                     foreach (var teamId in teamIdsToDeepSearch)
@@ -491,10 +529,6 @@ namespace BettingApp.Services
                                 {
                                     continue; // Skip if no fixtures exist for this team
                                 }
-                                
-                                DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
-                                // We will carry over smallestTimeDiff to prefer closer matches
-                                TimeSpan smallestTimeDiff = TimeSpan.MaxValue;
                                 
                                 foreach (var f in fixtures.EnumerateArray())
                                 {
@@ -537,7 +571,7 @@ namespace BettingApp.Services
                         } 
                         catch { }
                         
-                        if (!string.IsNullOrEmpty(eventId)) break; // Found it, stop searching teams!
+                        if (currentBestScore >= 200 && !string.IsNullOrEmpty(eventId)) break; // Found a full straight match, stop searching teams!
                     }
                 }
 
@@ -742,7 +776,7 @@ namespace BettingApp.Services
                    text.Contains("u18") || text.Contains("u20") || text.Contains("reserves") || text.Contains("youth");
         }
 
-        public bool CheckTeamMatch(string query, string option, string? leagueName = null)
+        private (bool matched, bool isFullMatch) EvaluateTeamMatch(string query, string option, string? leagueName = null)
         {
             query = _teamAliasMapper.NormalizeTeamName(query, removeStopWords: false);
             option = _teamAliasMapper.NormalizeTeamName(option, removeStopWords: false);
@@ -753,7 +787,7 @@ namespace BettingApp.Services
             var oTokens = option.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries).Where(w => w.Length >= 2 && !IsGenericPrefix(w)).ToArray();
             if (oTokens.Length == 0 && !string.IsNullOrEmpty(option)) oTokens = new[] { _teamAliasMapper.NormalizeTeamName(option, removeStopWords: false) };
 
-            if (oTokens.Length == 0) return false;
+            if (oTokens.Length == 0) return (false, false);
 
             bool qInO = CheckSubset(qTokens, oTokens);
             bool oInQ = CheckSubset(oTokens, qTokens);
@@ -761,21 +795,34 @@ namespace BettingApp.Services
             bool optHasModifier = HasSpecialModifier(option) || (!string.IsNullOrEmpty(leagueName) && HasSpecialModifier(leagueName));
             if (optHasModifier != HasSpecialModifier(query))
             {
-                return false;
+                return (false, false);
             }
 
-            return qInO || oInQ;
+            return (qInO || oInQ, qInO && oInQ);
+        }
+
+        public bool CheckTeamMatch(string query, string option, string? leagueName = null)
+        {
+            return EvaluateTeamMatch(query, option, leagueName).matched;
         }
 
         public int GetTeamMatchScore(string queryHome, string queryAway, string optHome, string optAway, string? optLeague = null)
         {
             if (string.IsNullOrEmpty(queryHome)) return 0;
             
-            bool straightMatch = CheckTeamMatch(queryHome, optHome, optLeague) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optAway, optLeague));
-            if (straightMatch) return 200;
+            var homeStraight = EvaluateTeamMatch(queryHome, optHome, optLeague);
+            var awayStraight = string.IsNullOrEmpty(queryAway) ? (matched: true, isFullMatch: true) : EvaluateTeamMatch(queryAway, optAway, optLeague);
+            if (homeStraight.matched && awayStraight.matched)
+            {
+                return (homeStraight.isFullMatch && awayStraight.isFullMatch) ? 200 : 150;
+            }
 
-            bool swappedMatch = CheckTeamMatch(queryHome, optAway, optLeague) && (string.IsNullOrEmpty(queryAway) || CheckTeamMatch(queryAway, optHome, optLeague));
-            if (swappedMatch) return 100;
+            var homeSwapped = EvaluateTeamMatch(queryHome, optAway, optLeague);
+            var awaySwapped = string.IsNullOrEmpty(queryAway) ? (matched: true, isFullMatch: true) : EvaluateTeamMatch(queryAway, optHome, optLeague);
+            if (homeSwapped.matched && awaySwapped.matched)
+            {
+                return (homeSwapped.isFullMatch && awaySwapped.isFullMatch) ? 100 : 80;
+            }
 
             return 0;
         }
@@ -887,10 +934,17 @@ namespace BettingApp.Services
         public static bool FuzzyMatch(string token, string fixtureName)
         {
             if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(fixtureName)) return false;
-            if (fixtureName.Contains(token)) return true;
-            if (token.Contains(fixtureName)) return true;
-            
+            if (string.Equals(token, fixtureName, StringComparison.OrdinalIgnoreCase)) return true;
+
             var fixtureTokens = fixtureName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var ft in fixtureTokens)
+            {
+                if (string.Equals(token, ft, StringComparison.OrdinalIgnoreCase)) return true;
+                if (token.Length >= 4 && ft.Length >= 4)
+                {
+                    if (ft.Contains(token, StringComparison.OrdinalIgnoreCase) || token.Contains(ft, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
 
             // Check if any word in fixtureName shares the first 4 chars with token
             if (token.Length >= 4)
@@ -924,7 +978,7 @@ namespace BettingApp.Services
 
         private static readonly System.Collections.Generic.HashSet<string> _genericPrefixesAndQualifiers = new(StringComparer.OrdinalIgnoreCase)
         {
-            "fc", "fk", "bk", "if", "il", "ik", "ff", "gf", "cd", "cf", "al", "el", "la", "de",
+            "fc", "fk", "bk", "if", "il", "ik", "ff", "gf", "cd", "cf", "al", "el", "la", "le", "de",
             "club", "sc", "sfc",
             // Saudi / Gulf regional & city qualifiers appended by bookmakers/OddsPapi but omitted by FotMob
             "mecca", "makkah", "riyadh", "jeddah", "dammam", "buraidah", "khobar", "najran",
