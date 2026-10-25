@@ -348,7 +348,7 @@ public partial class Admin
         else
         {
             approvedSortColumn = column;
-            approvedSortDesc = false; // default to ascending on new column
+            approvedSortDesc = column is "Id" or "AmountNOK" or "Odds" or "PotentialPayout" or "NetLiability";
         }
         approvedPage = 1;
         ApplyApprovedFilterAndSort();
