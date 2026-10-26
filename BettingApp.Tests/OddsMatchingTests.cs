@@ -2467,5 +2467,81 @@ namespace BettingApp.Tests
             Assert.False(OddsMatchingLogic.IsOutcomeMatch("1", "SC Freiburg", leg, searchResult, "2Up - Full Time Result"));
             Assert.False(OddsMatchingLogic.IsOutcomeMatch("X", "Draw", leg, searchResult, "2Up - Full Time Result"));
         }
+
+        [Fact]
+        public void Test_Unibet_NormalizeBookmakerMarkets_CanonicalizesAllPlayerFoulVariantsToFoulsCommitted()
+        {
+            var opMarkets = new List<OddsPapiMarket>
+            {
+                new OddsPapiMarket { MarketId = "104", MarketName = "Over Under Player Fouls Committed (incl. overtime)" }
+            };
+
+            // 1. All AI translation variants of Swedish Unibet "Fouls mot spelaren" / English "Player's fouls conceded"
+            var unibetSlip = new AiVisionExtractionResult
+            {
+                Bookmaker = "Unibet",
+                IsBetBuilder = true,
+                Legs = new List<AiVisionLeg>
+                {
+                    new AiVisionLeg { Match = "Sunderland vs Leeds", Sport = "Soccer", Market = "Player Fouls Won", Selection = "Ethan Ampadu - Over 1.5 (Power Sub)" },
+                    new AiVisionLeg { Match = "Stuttgart vs Dortmund", Sport = "Soccer", Market = "Player Fouls Suffered", Selection = "Josha Vagnoman - Over 0.5" },
+                    new AiVisionLeg { Match = "Stuttgart vs Dortmund", Sport = "Soccer", Market = "Player Fouls Drawn", Selection = "Ramon Hendriks - Over 0.5" },
+                    new AiVisionLeg { Match = "Sunderland vs Leeds", Sport = "Soccer", Market = "Player To Be Fouled", Selection = "Ethan Ampadu - Over 1.5" },
+                    new AiVisionLeg { Match = "Sunderland vs Leeds", Sport = "Soccer", Market = "Fouls Against Player", Selection = "Ethan Ampadu - Over 1.5" },
+                    new AiVisionLeg { Match = "Sunderland vs Leeds", Sport = "Soccer", Market = "Fouls Won", Selection = "Ethan Ampadu - Over 1.5 (Power Sub)" },
+                    new AiVisionLeg { Match = "Sunderland vs Leeds", Sport = "Soccer", Market = "Player's Fouls Conceded", Selection = "Ethan Ampadu - Over 1.5" },
+                    // Team/Match Total Fouls on Unibet must NOT be touched:
+                    new AiVisionLeg { Match = "Roma vs Real Madrid", Sport = "Soccer", Market = "Total Fouls", Selection = "Over 28.5" },
+                    new AiVisionLeg { Match = "Roma vs Real Madrid", Sport = "Soccer", Market = "Total Fouls - Roma", Selection = "Over 14.5" },
+                    new AiVisionLeg { Match = "Sunderland vs Leeds", Sport = "Soccer", Market = "Total Fouls Conceded by Leeds United", Selection = "Over 11.5" }
+                }
+            };
+
+            AiVisionService.NormalizeBookmakerMarkets(unibetSlip);
+
+            for (int i = 0; i < 7; i++)
+            {
+                Assert.Equal("Player Fouls Committed", unibetSlip.Legs[i].Market);
+                var matchedMarket = OddsMatchingLogic.FindBestMarket(opMarkets, unibetSlip.Legs[i].Market, unibetSlip.Legs[i].Match, unibetSlip.Legs[i].Selection, _marketMapper);
+                Assert.NotNull(matchedMarket);
+                Assert.Equal("Over Under Player Fouls Committed (incl. overtime)", matchedMarket.MarketName);
+            }
+
+            Assert.Equal("Total Fouls", unibetSlip.Legs[7].Market);
+            Assert.Equal("Total Fouls - Roma", unibetSlip.Legs[8].Market);
+            Assert.Equal("Total Fouls Conceded by Leeds United", unibetSlip.Legs[9].Market);
+
+            // 2. Bet365 and Coolbet slips with "Player Fouls Won" / "Player To Be Fouled" must NOT be modified
+            var bet365Slip = new AiVisionExtractionResult
+            {
+                Bookmaker = "Bet365",
+                Legs = new List<AiVisionLeg>
+                {
+                    new AiVisionLeg { Match = "Roma vs Real Madrid", Sport = "Soccer", Market = "Alternative Player To Be Fouled", Selection = "Arda Guler: 2+ Fouls Won (Power Sub)" },
+                    new AiVisionLeg { Match = "Como vs Lazio", Sport = "Soccer", Market = "Player Fouls Won", Selection = "Nicolas Paz - 2+ Fouls Won (Power Sub)" }
+                }
+            };
+
+            AiVisionService.NormalizeBookmakerMarkets(bet365Slip);
+
+            Assert.Equal("Alternative Player To Be Fouled", bet365Slip.Legs[0].Market);
+            Assert.Equal("Arda Guler: 2+ Fouls Won (Power Sub)", bet365Slip.Legs[0].Selection);
+            Assert.Equal("Player Fouls Won", bet365Slip.Legs[1].Market);
+            Assert.Null(OddsMatchingLogic.FindBestMarket(opMarkets, bet365Slip.Legs[0].Market, bet365Slip.Legs[0].Match, bet365Slip.Legs[0].Selection, _marketMapper));
+            Assert.Null(OddsMatchingLogic.FindBestMarket(opMarkets, bet365Slip.Legs[1].Market, bet365Slip.Legs[1].Match, bet365Slip.Legs[1].Selection, _marketMapper));
+
+            // 3. If Bookmaker is "Unknown", it must NOT be modified
+            var unknownBookieSlip = new AiVisionExtractionResult
+            {
+                Bookmaker = "Unknown",
+                Legs = new List<AiVisionLeg>
+                {
+                    new AiVisionLeg { Match = "Sunderland vs Leeds", Sport = "Soccer", Market = "Player Fouls Won", Selection = "Ethan Ampadu - Over 1.5" }
+                }
+            };
+
+            AiVisionService.NormalizeBookmakerMarkets(unknownBookieSlip);
+            Assert.Equal("Player Fouls Won", unknownBookieSlip.Legs[0].Market);
+        }
     }
 }

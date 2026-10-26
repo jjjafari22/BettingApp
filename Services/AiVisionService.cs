@@ -476,6 +476,8 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                                 }
                             }
                         }
+
+                        NormalizeBookmakerMarkets(result);
                     }
 
                     return (result, null);
@@ -493,6 +495,124 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                 _logger.LogError($"{betLabel}EXCEPTION in ExtractBetSlipDataAsync: {ex.ToString()}");
                 return (null, $"Exception: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Applies deterministic Unibet market normalization to AI-extracted legs.
+        /// Unibet only offers "Player Fouls Committed" and never offers "Player Fouls Won/Suffered/Drawn".
+        /// Because Unibet Sweden ("Fouls mot spelaren") is literally translated by AI as "Player Fouls Won",
+        /// "Player Fouls Suffered", "Player Fouls Drawn", or "Player To Be Fouled", canonicalizing any Unibet
+        /// player foul leg to "Player Fouls Committed" ensures Admin UI, OddsPapi matching, and FotMob
+        /// auto-settlement all evaluate the correct stat without touching any other bookmaker.
+        /// </summary>
+        public static void NormalizeBookmakerMarkets(AiVisionExtractionResult? result)
+        {
+            if (result?.Legs == null) return;
+
+            bool isUnibet = !string.IsNullOrWhiteSpace(result.Bookmaker) &&
+                            result.Bookmaker.Contains("Unibet", StringComparison.OrdinalIgnoreCase);
+            if (!isUnibet) return;
+
+            foreach (var leg in result.Legs)
+            {
+                if (leg == null) continue;
+
+                string market = leg.Market?.Trim() ?? "";
+                if (string.IsNullOrEmpty(market)) continue;
+
+                if (!IsPlayerFoulLeg(leg, out bool selectionHasPlayerName)) continue;
+
+                if (selectionHasPlayerName || !HasSpecificPersonName(market, leg.Match))
+                {
+                    leg.Market = "Player Fouls Committed";
+                }
+                else
+                {
+                    // Preserve embedded player name if it was only placed in Market (e.g. "Ethan Ampadu Total Fouls Won" -> "Ethan Ampadu Total Fouls Committed")
+                    leg.Market = System.Text.RegularExpressions.Regex.Replace(
+                        market,
+                        @"\b(Fouls?\s+(Won|Suffered|Drawn|Conceded)|To\s+Be\s+Fouled)\b",
+                        "Fouls Committed",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                }
+
+                if (!string.IsNullOrEmpty(leg.Selection))
+                {
+                    leg.Selection = System.Text.RegularExpressions.Regex.Replace(
+                        leg.Selection,
+                        @"\b(Fouls?\s+(Won|Suffered|Drawn|Conceded)|To\s+Be\s+Fouled)\b",
+                        "Fouls Committed",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                }
+            }
+        }
+
+        private static bool IsPlayerFoulLeg(AiVisionLeg leg, out bool selectionHasPlayerName)
+        {
+            selectionHasPlayerName = HasSpecificPersonName(leg.Selection, leg.Match);
+
+            string market = leg.Market?.Trim() ?? "";
+            if (!market.Contains("foul", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (market.Contains("interval", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (market.Contains("player", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (selectionHasPlayerName)
+                return true;
+
+            if (HasSpecificPersonName(market, leg.Match) &&
+                (market.Contains("won", StringComparison.OrdinalIgnoreCase) ||
+                 market.Contains("suffered", StringComparison.OrdinalIgnoreCase) ||
+                 market.Contains("drawn", StringComparison.OrdinalIgnoreCase) ||
+                 market.Contains("fouled", StringComparison.OrdinalIgnoreCase) ||
+                 market.Contains("conceded", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool HasSpecificPersonName(string? text, string? match)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            string cleaned = text;
+            if (!string.IsNullOrWhiteSpace(match))
+            {
+                var teams = match.Split(new[] { " vs ", " v ", " - ", " @ " }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var team in teams)
+                {
+                    string t = team.Trim();
+                    if (t.Length >= 3)
+                    {
+                        cleaned = System.Text.RegularExpressions.Regex.Replace(
+                            cleaned,
+                            System.Text.RegularExpressions.Regex.Escape(t),
+                            "",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    }
+                }
+            }
+
+            cleaned = System.Text.RegularExpressions.Regex.Replace(
+                cleaned,
+                @"\(\s*(Power\s+Sub|Super\s+Sub|Epic\s+Sub|Sub\s+on\s+Play\s+on|Sub\s+On|incl\.\s*overtime|Settled\s+using\s+Opta\s+data)\s*\)",
+                "",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            cleaned = System.Text.RegularExpressions.Regex.Replace(
+                cleaned,
+                @"\b(player's|players|player|over|under|yes|no|total|team|home|away|fouls|foul|fouled|won|drawn|suffered|conceded|committed|win|against|by|to|be|or|at|least|anytime|alternative|1st|2nd|first|second|half|full|time|match|in|of|number|most|more|fc|afc|cf|sc|ac|united|city|town|rovers|albion|wanderers|hotspur|athletic|atletico|sporting|real|borussia|dynamo)\b",
+                "",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"[0-9\.\+\-:\(\)\/']", "").Trim();
+            return cleaned.Length >= 3;
         }
 
         public async Task<string?> ConfirmOutcomeAsync(string extractedBetDataJson, DateTime betPlacedAt, DateTime? matchStartTime = null, int? betId = null, string thinkingLevel = "medium")
