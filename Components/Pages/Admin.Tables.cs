@@ -23,6 +23,7 @@ public partial class Admin
 {
     private HashSet<string> completedStatusFilters = new() { "Won", "Lost", "Void", "Rejected", "Cancelled" };
     private bool showOnlyMismatch = false;
+    private bool showOnlyAutoApproved = false;
     private bool showOnlyAdminOverride = false;
     private string completedSearchTerm = "";
     private string approvedSearchTerm = "";
@@ -41,6 +42,13 @@ public partial class Admin
     private async Task ToggleMismatchFilter()
     {
         showOnlyMismatch = !showOnlyMismatch;
+        completedPage = 1;
+        await LoadCompletedBets();
+    }
+
+    private async Task ToggleAutoApprovedFilter()
+    {
+        showOnlyAutoApproved = !showOnlyAutoApproved;
         completedPage = 1;
         await LoadCompletedBets();
     }
@@ -361,28 +369,63 @@ public partial class Admin
         {
             using var context = DbFactory.CreateDbContext();
             
-            var query = context.Bets.Include(b => b.AiEvaluation).Include(b => b.Legs).ThenInclude(l => l.BookmakerOdds).AsQueryable();
+            var query = context.Bets
+                .AsSplitQuery()
+                .Include(b => b.AiEvaluation)
+                .Include(b => b.Legs)
+                .ThenInclude(l => l.BookmakerOdds)
+                .AsQueryable();
 
             if (showOnlyMismatch)
             {
-                // Evaluate complex text matching locally to avoid massive 20-second PostgreSQL LIKE query table scans
-                var allCompleted = await context.Bets
-                    .Where(b => b.AiEvaluation != null && b.AiEvaluation.AiOutcomeResult != null && b.AiEvaluation.AiOutcomeResult != "" && b.AiEvaluation.AiOutcomeResult != "Admin Override" && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void"))
-                    .Select(b => new { b.Id, b.Status, AiOutcomeResult = b.AiEvaluation != null ? b.AiEvaluation.AiOutcomeResult : null })
+                // Pre-filter on SQL Server using Substring around "overallStatus" (and blank outcome checks)
+                // so we never transfer 1.8M+ chars of full JSON blobs over the wire for rows that already match.
+                var candidates = await context.Bets
+                    .Where(b => b.AiEvaluation != null &&
+                                b.AiEvaluation.AiOutcomeResult != "Admin Override" &&
+                                (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void") &&
+                                (b.AiEvaluation.AiOutcomeResult == null ||
+                                 b.AiEvaluation.AiOutcomeResult == "" ||
+                                 !b.AiEvaluation.AiOutcomeResult.Contains("\"overallStatus\"") ||
+                                 !((b.Status == "Won" && b.AiEvaluation.AiOutcomeResult.Substring(b.AiEvaluation.AiOutcomeResult.IndexOf("\"overallStatus\""), 42).Contains("WON")) ||
+                                   (b.Status == "Lost" && b.AiEvaluation.AiOutcomeResult.Substring(b.AiEvaluation.AiOutcomeResult.IndexOf("\"overallStatus\""), 42).Contains("LOST")) ||
+                                   (b.Status == "Void" && b.AiEvaluation.AiOutcomeResult.Substring(b.AiEvaluation.AiOutcomeResult.IndexOf("\"overallStatus\""), 42).Contains("VOID")))))
+                    .Select(b => new
+                    {
+                        b.Id,
+                        b.Status,
+                        OutcomeSnippet = b.AiEvaluation!.AiOutcomeResult == null || b.AiEvaluation.AiOutcomeResult == ""
+                            ? null
+                            : (b.AiEvaluation.AiOutcomeResult.Contains("\"overallStatus\"")
+                                ? b.AiEvaluation.AiOutcomeResult.Substring(b.AiEvaluation.AiOutcomeResult.IndexOf("\"overallStatus\""), 60)
+                                : ""),
+                        HasVision = b.AiEvaluation.AiVisionResultJson != null && b.AiEvaluation.AiVisionResultJson != ""
+                    })
                     .ToListAsync();
 
-                var mismatchedIds = allCompleted.Where(b => 
+                var mismatchedIds = candidates.Where(b => 
                 {
-                    string aiStatus = "";
-                    try {
-                        var doc = System.Text.Json.JsonDocument.Parse(b.AiOutcomeResult!);
-                        if (doc.RootElement.TryGetProperty("overallStatus", out var prop))
-                        {
-                            aiStatus = prop.GetString()?.Trim().ToUpperInvariant() ?? "";
-                        }
-                    } catch {}
+                    if (string.IsNullOrWhiteSpace(b.OutcomeSnippet))
+                    {
+                        return b.HasVision;
+                    }
 
-                    if (string.IsNullOrEmpty(aiStatus)) return false;
+                    string aiStatus = "";
+                    int colonIdx = b.OutcomeSnippet.IndexOf(':', 15);
+                    if (colonIdx >= 0)
+                    {
+                        int firstQuote = b.OutcomeSnippet.IndexOf('"', colonIdx + 1);
+                        if (firstQuote >= 0)
+                        {
+                            int secondQuote = b.OutcomeSnippet.IndexOf('"', firstQuote + 1);
+                            if (secondQuote > firstQuote)
+                            {
+                                aiStatus = b.OutcomeSnippet.Substring(firstQuote + 1, secondQuote - firstQuote - 1).Trim().ToUpperInvariant();
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(aiStatus)) return b.HasVision;
                     
                     if (aiStatus.Contains("WON")) aiStatus = "WON";
                     else if (aiStatus.Contains("LOST")) aiStatus = "LOST";
@@ -392,7 +435,18 @@ public partial class Admin
                     return b.Status.ToUpperInvariant() != aiStatus;
                 }).Select(b => b.Id).ToList();
 
+                if (mismatchedIds.Count == 0)
+                {
+                    hasMoreCompletedBets = false;
+                    completedBets = new List<Bet>();
+                    return;
+                }
+
                 query = query.Where(b => mismatchedIds.Contains(b.Id));
+            }
+            else if (showOnlyAutoApproved)
+            {
+                query = query.Where(b => b.IsAutoApproved && (b.Status == "Won" || b.Status == "Lost" || b.Status == "Void" || b.Status == "Rejected" || b.Status == "Cancelled"));
             }
             else if (showOnlyAdminOverride)
             {
