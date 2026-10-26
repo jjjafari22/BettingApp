@@ -217,8 +217,27 @@ namespace BettingApp.Services
                 dbBet.UpdatedAt = DateTime.UtcNow;
 
                 string effectiveAdminName = (isAutoSettled || isAutoApproved) ? "SYSTEM_AUTO" : adminName;
+                string verificationProvider = "FotMob";
+                if (isAutoSettled && dbBet.Legs != null && dbBet.Legs.Count > 0)
+                {
+                    var relevantLegs = string.Equals(newStatus, "Lost", StringComparison.OrdinalIgnoreCase)
+                        ? dbBet.Legs.Where(l => string.Equals(l.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) &&
+                                                (string.Equals(l.VerificationSource, "FotMob_Verified", StringComparison.OrdinalIgnoreCase) ||
+                                                 string.Equals(l.VerificationSource, "ESPN_Verified", StringComparison.OrdinalIgnoreCase))).ToList()
+                        : dbBet.Legs.ToList();
+
+                    if (relevantLegs.Count == 0)
+                    {
+                        relevantLegs = dbBet.Legs.ToList();
+                    }
+
+                    bool hasFotMob = relevantLegs.Any(l => string.Equals(l.VerificationSource, "FotMob_Verified", StringComparison.OrdinalIgnoreCase));
+                    bool hasEspn = relevantLegs.Any(l => string.Equals(l.VerificationSource, "ESPN_Verified", StringComparison.OrdinalIgnoreCase));
+                    verificationProvider = (hasFotMob && hasEspn) ? "FotMob & ESPN" : (hasEspn ? "ESPN" : "FotMob");
+                }
+
                 string? effectiveAuditDetails = isAutoSettled
-                    ? $"Bet ID: {betId} was auto-settled to {newStatus} based on FotMob verification."
+                    ? $"Bet ID: {betId} was auto-settled to {newStatus} based on {verificationProvider} verification."
                     : (isAutoApproved
                         ? $"Bet ID: {betId} was auto-approved. Amount: {dbBet.AmountNOK}, FreeBetPart: {dbBet.FreeBetAmount}, Odds: {dbBet.Odds:N2}, Payout: {dbBet.PotentialPayout:N0}"
                         : customAuditDetails);
