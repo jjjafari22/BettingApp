@@ -146,6 +146,9 @@ namespace BettingApp.Services
                 }
                 // originalStatus == Void/Rejected/Cancelled/Pending already has balance returned
 
+                bool hadActiveAutoApproveTimer = dbBet.AutoApproveAt != null ||
+                    (!string.IsNullOrWhiteSpace(dbBet.AutoApproveReason) && dbBet.AutoApproveReason.StartsWith("⏳"));
+
                 // APPLY NEW VALUES
                 dbBet.Status = newStatus;
                 dbBet.AmountNOK = (int?)newAmount;
@@ -163,6 +166,19 @@ namespace BettingApp.Services
                     dbBet.AutoApproveReason = !string.IsNullOrWhiteSpace(autoApproveReason)
                         ? autoApproveReason
                         : "✅ Approved automatically";
+                }
+                else if (hadActiveAutoApproveTimer)
+                {
+                    string tierSuffix = "";
+                    if (!string.IsNullOrWhiteSpace(dbBet.AutoApproveReason))
+                    {
+                        var tierMatch = System.Text.RegularExpressions.Regex.Match(dbBet.AutoApproveReason, @"\(Tier \d+:[^)]+\)");
+                        if (tierMatch.Success)
+                        {
+                            tierSuffix = $" {tierMatch.Value}";
+                        }
+                    }
+                    dbBet.AutoApproveReason = $"⏹️ {newStatus} manually by {adminName}{tierSuffix}";
                 }
 
                 if (isFirstApproval)

@@ -367,18 +367,30 @@ public partial class AutoApprovalService : BackgroundService
         }
     }
 
-    public async Task CancelAutoApprovalForBetAsync(int betId, string adminName)
+    public async Task<string?> CancelAutoApprovalForBetAsync(int betId, string adminName)
     {
         using var context = _dbFactory.CreateDbContext();
         var dbBet = await context.Bets.FirstOrDefaultAsync(b => b.Id == betId);
         if (dbBet != null && dbBet.AutoApproveAt != null)
         {
+            string tierSuffix = "";
+            if (!string.IsNullOrWhiteSpace(dbBet.AutoApproveReason))
+            {
+                var tierMatch = System.Text.RegularExpressions.Regex.Match(dbBet.AutoApproveReason, @"\(Tier \d+:[^)]+\)");
+                if (tierMatch.Success)
+                {
+                    tierSuffix = $" {tierMatch.Value}";
+                }
+            }
+
             dbBet.AutoApproveAt = null;
-            dbBet.AutoApproveReason = $"⏹️ Stopped manually by {adminName}";
+            dbBet.AutoApproveReason = $"⏹️ Stopped manually by {adminName}{tierSuffix}";
             await context.SaveChangesAsync();
             _logger.LogInformation($"[Bet #{betId}] [Auto-Approve] Timer stopped manually by {adminName}.");
             _uiNotifier.NotifyAdmin("PendingUpdate");
+            return dbBet.AutoApproveReason;
         }
+        return dbBet?.AutoApproveReason;
     }
 
     public async Task CancelAllActiveCountdownsAsync(string reason)

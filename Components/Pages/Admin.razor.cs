@@ -353,12 +353,14 @@ public partial class Admin
 
     private async Task CancelAutoApprovalCountdownAsync(int betId)
     {
-        var reason = $"Auto-Approval countdown manually stopped by {currentAdminName ?? "Admin"}";
-        await AutoApproval.CancelAutoApprovalForBetAsync(betId, reason);
+        var admin = currentAdminName ?? "Admin";
+        var updatedReason = await AutoApproval.CancelAutoApprovalForBetAsync(betId, admin);
         if (reviewingBetModel != null && reviewingBetModel.Id == betId)
         {
             reviewingBetModel.AutoApproveAt = null;
-            reviewingBetModel.AutoApproveReason = reason;
+            reviewingBetModel.AutoApproveReason = !string.IsNullOrWhiteSpace(updatedReason)
+                ? updatedReason
+                : $"⏹️ Stopped manually by {admin}";
         }
         StateHasChanged();
     }
