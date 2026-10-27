@@ -111,13 +111,5 @@ namespace BettingApp.Tests
         {
             Assert.Equal(expectedIsGeneric, PlayerMatchResolverService.IsGenericBettingSelection(selection));
         }
-
-        [Fact]
-        public void Test_MarketMapping_OverallWinnerInclExtraTimeMapsToQualify()
-        {
-            var mapper = new MarketMappingService();
-            var mapped = mapper.NormalizeMarketName("Overall Winner (incl. Extra Time/Penalties)", "Tromsdalen vs Lyn", "Lyn");
-            Assert.Contains("To Qualify", mapped);
-        }
     }
 }

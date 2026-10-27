@@ -2543,5 +2543,12 @@ namespace BettingApp.Tests
             AiVisionService.NormalizeBookmakerMarkets(unknownBookieSlip);
             Assert.Equal("Player Fouls Won", unknownBookieSlip.Legs[0].Market);
         }
+
+        [Fact]
+        public void Test_MarketMapping_OverallWinnerInclExtraTimeMapsToQualify()
+        {
+            var mapped = _marketMapper.NormalizeMarketName("Overall Winner (incl. Extra Time/Penalties)", "Tromsdalen vs Lyn", "Lyn");
+            Assert.Contains("To Qualify", mapped);
+        }
     }
 }
