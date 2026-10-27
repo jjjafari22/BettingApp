@@ -3,6 +3,7 @@
 @using System.ComponentModel.DataAnnotations
 @using System.Text
 @using System.Text.Encodings.Web
+@using System.Text.RegularExpressions
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
 @using BettingApp.Data
@@ -115,6 +116,15 @@
 
         try
         {
+            var validationError = ValidateRegistrationInput(Input.FirstName, Input.LastName, Input.ReferredBy);
+            if (validationError != null)
+            {
+                Logger.LogWarning("[BotProtection] Blocked suspicious registration attempt: Name='{FirstName} {LastName}', Email='{Email}', ReferredBy='{ReferredBy}'. Reason: {Reason}",
+                    Input.FirstName, Input.LastName, Input.Email, Input.ReferredBy, validationError);
+                Message = $"Error: {validationError}";
+                return;
+            }
+
             var user = CreateUser();
             // Use Email as the Username
             await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
@@ -189,6 +199,38 @@
             // Reset the flag just in case the execution yields an error and the user needs to try again
             _isSubmitting = false;
         }
+    }
+
+    public static string? ValidateRegistrationInput(string? firstName, string? lastName, string? referredBy)
+    {
+        string fn = (firstName ?? "").Trim();
+        string ln = (lastName ?? "").Trim();
+        string rf = (referredBy ?? "").Trim();
+
+        if (!string.IsNullOrEmpty(fn) && string.Equals(fn, ln, StringComparison.OrdinalIgnoreCase))
+            return "First Name and Last Name cannot be identical.";
+
+        // Block XRumer/GSA bot-generated names ending in a random trailing capital letter (e.g., "RodneyvoikE")
+        if (Regex.IsMatch(fn, @"\p{Ll}{2,}\p{Lu}$") || Regex.IsMatch(ln, @"\p{Ll}{2,}\p{Lu}$"))
+            return "Please enter a valid First Name and Last Name.";
+
+        // Block digits and password/code symbols in First Name and Last Name
+        if (Regex.IsMatch(fn, @"[0-9\^\$\*\+\=\<\>\{\}\[\]\\\|~`@#%&]") ||
+            Regex.IsMatch(ln, @"[0-9\^\$\*\+\=\<\>\{\}\[\]\\\|~`@#%&]"))
+            return "First Name and Last Name cannot contain numbers or special symbols.";
+
+        // Block password tokens / random alphanumeric strings in Referred By (e.g., "8Fldz5^6UzlN")
+        if (!string.IsNullOrEmpty(rf))
+        {
+            if (Regex.IsMatch(rf, @"[\^\$\*\+\=\<\>\{\}\[\]\\\|~`%]") ||
+                Regex.IsMatch(rf, @"\p{Ll}{2,}\p{Lu}$") ||
+                Regex.IsMatch(rf, @"\d+[A-Za-z]+\d+[A-Za-z]+"))
+            {
+                return "Please enter a valid name in the 'Referred By' field (or leave it blank).";
+            }
+        }
+
+        return null;
     }
 
     private ApplicationUser CreateUser()
