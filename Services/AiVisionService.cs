@@ -388,7 +388,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 
                             if (string.IsNullOrWhiteSpace(groupMatch))
                             {
-                                foreach (var leg in group.Where(l => !string.IsNullOrWhiteSpace(l.Selection)))
+                                foreach (var leg in group.Where(l => !string.IsNullOrWhiteSpace(l.Selection) && !PlayerMatchResolverService.IsGenericBettingSelection(l.Selection)))
                                 {
                                     if (timeoutToken.IsCancellationRequested)
                                     {
@@ -980,13 +980,13 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                                 // If ANY group is definitively lost, the entire betslip is immediately LOST
                                 resultObj.OverallStatus = "LOST";
                             }
-                            else if (hasUnknown)
-                            {
-                                resultObj.OverallStatus = "UNKNOWN";
-                            }
                             else if (hasPending)
                             {
                                 resultObj.OverallStatus = pendingStatus;
+                            }
+                            else if (hasUnknown)
+                            {
+                                resultObj.OverallStatus = "UNKNOWN";
                             }
                             else if (hasVoid)
                             {

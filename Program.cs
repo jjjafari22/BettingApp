@@ -160,7 +160,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString, sqlOptions => 
     {
-        sqlOptions.EnableRetryOnFailure();
+        sqlOptions.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: new[] { 0 });
         sqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
     }));
 

@@ -47,7 +47,7 @@ namespace BettingApp.Services
                 string splitStr = selection.Split(new[] { " - ", ": ", ":", " to " }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
                 string playerName = Regex.Match(splitStr, @"^([\p{L}\s\-\'\.]+)").Groups[1].Value.Trim();
 
-                if (string.IsNullOrWhiteSpace(playerName) || playerName.Length < 3)
+                if (string.IsNullOrWhiteSpace(playerName) || playerName.Length < 3 || IsGenericBettingSelection(playerName))
                 {
                     return null;
                 }
@@ -358,6 +358,20 @@ namespace BettingApp.Services
             catch { }
 
             return null;
+        }
+
+        public static bool IsGenericBettingSelection(string? candidate)
+        {
+            if (string.IsNullOrWhiteSpace(candidate)) return true;
+
+            string stripped = Regex.Replace(
+                candidate,
+                @"\b(over|under|yes|no|draw|tie|home|away|odd|even|both|neither|none|either|total|team|teams|half|halves|first|second|third|1st|2nd|3rd|full|time|regular|extra|penalties|penalty|overtime|goals|goal|corners|corner|cards|card|bookings|booking|shots|shot|target|saves|save|goalkeeper|keeper|fouls|foul|fouled|offsides|offside|tackles|tackle|assists|assist|points|point|handicap|asian|european|winner|result|match|clean|sheet|nil|score|most|more|least|exactly|exact|number|of|at|in|to|or|and|by|the|ja|nej|nei|oavgjort|uavgjort|hjemme|borte|flest|flera|kort|mal|hörnor|hjørnespark)\b",
+                " ",
+                RegexOptions.IgnoreCase);
+
+            stripped = Regex.Replace(stripped, @"[^\p{L}]", "").Trim();
+            return stripped.Length < 3;
         }
     }
 }

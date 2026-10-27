@@ -54,7 +54,7 @@ public class OddsApiService
     private async Task<(string? Json, string CacheKey)> GetFixturesJsonAsync(int sportId = 10, CancellationToken cancellationToken = default)
     {
         string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
-        string toDate = DateTime.UtcNow.AddDays(4).ToString("yyyy-MM-dd");
+        string toDate = DateTime.UtcNow.AddDays(7).ToString("yyyy-MM-dd");
         string cacheKey = $"OddspapiFixtures_{sportId}_{fromDate}";
         var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId={sportId}&from={fromDate}&to={toDate}";
         
@@ -351,8 +351,14 @@ public class OddsApiService
     {
         var sportsToWarm = specificSportId.HasValue ? new[] { specificSportId.Value } : new[] { 10, 15, 12 };
         
-        foreach (var sportId in sportsToWarm)
+        for (int i = 0; i < sportsToWarm.Length; i++)
         {
+            var sportId = sportsToWarm[i];
+            if (i > 0)
+            {
+                await Task.Delay(1500);
+            }
+
             string sportLabel = sportId == 15 ? "Ice Hockey" : (sportId == 12 ? "Tennis" : "Soccer");
             _logger.LogInformation($"OddsPapi: Background worker warming up cache for {sportLabel} (sportId={sportId}) Fixtures (6h) and Markets (24h)...");
             try

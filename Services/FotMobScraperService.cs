@@ -791,6 +791,28 @@ namespace BettingApp.Services
             bool qInO = CheckSubset(qTokens, oTokens);
             bool oInQ = CheckSubset(oTokens, qTokens);
 
+            if (!qInO && !oInQ)
+            {
+                string qCompact = string.Concat(qTokens);
+                string oCompact = string.Concat(oTokens);
+                if (qCompact.Length >= 4 && oCompact.Length >= 4)
+                {
+                    if (string.Equals(qCompact, oCompact, StringComparison.OrdinalIgnoreCase))
+                    {
+                        qInO = true;
+                        oInQ = true;
+                    }
+                    else if (qCompact.Contains(oCompact, StringComparison.OrdinalIgnoreCase))
+                    {
+                        oInQ = true;
+                    }
+                    else if (oCompact.Contains(qCompact, StringComparison.OrdinalIgnoreCase))
+                    {
+                        qInO = true;
+                    }
+                }
+            }
+
             bool optHasModifier = HasSpecialModifier(option) || (!string.IsNullOrEmpty(leagueName) && HasSpecialModifier(leagueName));
             if (optHasModifier != HasSpecialModifier(query))
             {

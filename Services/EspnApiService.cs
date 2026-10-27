@@ -279,6 +279,11 @@ namespace BettingApp.Services
                 {
                     prunedSummary["gameInfo"] = PruneGameInfo(gi);
                 }
+                var prunedScoringPlays = PruneScoringPlays(sumDoc.RootElement);
+                if (prunedScoringPlays != null)
+                {
+                    prunedSummary["scoringPlays"] = prunedScoringPlays;
+                }
 
                 return JsonSerializer.Serialize(prunedSummary);
             }
@@ -457,6 +462,75 @@ namespace BettingApp.Services
                 result["venue"] = new Dictionary<string, object> { ["fullName"] = fn };
             }
             return result;
+        }
+
+        private static List<Dictionary<string, object>>? PruneScoringPlays(JsonElement root)
+        {
+            var list = new List<Dictionary<string, object>>();
+
+            if (root.TryGetProperty("scoringPlays", out var spArr) && spArr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var sp in spArr.EnumerateArray())
+                {
+                    var item = new Dictionary<string, object>();
+                    if (sp.TryGetProperty("period", out var per))
+                    {
+                        if (per.TryGetProperty("displayValue", out var pdv)) item["period"] = pdv;
+                        else if (per.TryGetProperty("number", out var pnum)) item["period"] = pnum;
+                    }
+                    if (sp.TryGetProperty("clock", out var clk) && clk.TryGetProperty("displayValue", out var cdv))
+                        item["clock"] = cdv;
+                    if (sp.TryGetProperty("team", out var tm))
+                    {
+                        if (tm.TryGetProperty("displayName", out var tdn)) item["team"] = tdn;
+                        else if (tm.TryGetProperty("abbreviation", out var tabbr)) item["team"] = tabbr;
+                    }
+                    if (sp.TryGetProperty("scoringType", out var st) && st.TryGetProperty("displayName", out var stdn))
+                        item["type"] = stdn;
+                    else if (sp.TryGetProperty("type", out var tp) && tp.TryGetProperty("text", out var tpt))
+                        item["type"] = tpt;
+                    if (sp.TryGetProperty("text", out var txt)) item["text"] = txt;
+                    if (sp.TryGetProperty("awayScore", out var aws)) item["awayScore"] = aws;
+                    if (sp.TryGetProperty("homeScore", out var hms)) item["homeScore"] = hms;
+                    list.Add(item);
+                }
+                return list.Count > 0 ? list : null;
+            }
+
+            if (root.TryGetProperty("plays", out var playsArr) && playsArr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var pl in playsArr.EnumerateArray())
+                {
+                    if (!pl.TryGetProperty("scoringPlay", out var isSp) || isSp.ValueKind != JsonValueKind.True)
+                        continue;
+
+                    var item = new Dictionary<string, object>();
+                    if (pl.TryGetProperty("period", out var per))
+                    {
+                        if (per.TryGetProperty("displayValue", out var pdv)) item["period"] = pdv;
+                        else if (per.TryGetProperty("number", out var pnum)) item["period"] = pnum;
+                    }
+                    if (pl.TryGetProperty("clock", out var clk) && clk.TryGetProperty("displayValue", out var cdv))
+                        item["clock"] = cdv;
+                    if (pl.TryGetProperty("strength", out var str) && str.TryGetProperty("text", out var strTxt))
+                        item["strength"] = strTxt;
+                    if (pl.TryGetProperty("participants", out var parts) && parts.ValueKind == JsonValueKind.Array && parts.GetArrayLength() > 0)
+                    {
+                        var firstPart = parts[0];
+                        if (firstPart.TryGetProperty("athlete", out var ath) && ath.TryGetProperty("displayName", out var adn))
+                            item["scorer"] = adn;
+                    }
+                    if (pl.TryGetProperty("text", out var txt)) item["text"] = txt;
+                    if (pl.TryGetProperty("awayScore", out var aws)) item["awayScore"] = aws;
+                    if (pl.TryGetProperty("homeScore", out var hms)) item["homeScore"] = hms;
+                    list.Add(item);
+
+                    if (list.Count > 30) return null; // Skip high-frequency basketball play-by-play
+                }
+                return list.Count > 0 ? list : null;
+            }
+
+            return null;
         }
 
         public bool IsEventMatch(JsonElement ev, string teamA, string teamB)

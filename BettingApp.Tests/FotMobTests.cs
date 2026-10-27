@@ -44,6 +44,8 @@ namespace BettingApp.Tests
         [InlineData("SL Benfica Women", "Bayern Munich Women", "Benfica (W)", "Bayern Munich (W)", "Women's Champions League", true)]
         [InlineData("Lens", "Paris FC", "Le Havre", "Paris Saint-Germain", "Ligue 1", false)] // Bet #9393: "Lens" must not substring-match "Le" in "Le Havre"
         [InlineData("Lens", "Paris FC", "Lens", "Paris FC", "Ligue 1", true)]
+        [InlineData("FC Copenhagen", "Odense", "FC København", "OB", "Superligaen", true)] // Bet #9620/#9624: Odense -> OB
+        [InlineData("Shanghai Port", "Cong An Hanoi FC", "Shanghai Port", "Cong An Ha Noi", "AFC Champions League Elite", true)] // Bet #9661: Hanoi <-> Ha Noi
         public void Test_AreTeamsMatching(string qHome, string qAway, string oHome, string oAway, string? optLeague, bool expected)
         {
             var mapper = new BettingApp.Services.TeamAliasMappingService();
@@ -92,6 +94,30 @@ namespace BettingApp.Tests
             // Graceful fallback if API structure changes
             Assert.False(AiVisionService.TryExtractUnstartedMatchStartTime("{\"unexpected\":123}", "FotMob", out _));
             Assert.False(AiVisionService.TryExtractUnstartedMatchStartTime("{\"unexpected\":123}", "ESPN", out _));
+        }
+
+        [Theory]
+        [InlineData("Over 2.5", true)]
+        [InlineData("Over 3.5", true)]
+        [InlineData("Under 1.5", true)]
+        [InlineData("Yes", true)]
+        [InlineData("No", true)]
+        [InlineData("Draw", true)]
+        [InlineData("Home or Draw", true)]
+        [InlineData("Victor Osimhen", false)]
+        [InlineData("Matteo Guendouzi", false)]
+        [InlineData("Desire Doue - Yes", false)]
+        public void Test_IsGenericBettingSelection_BlocksNonPlayerStrings(string selection, bool expectedIsGeneric)
+        {
+            Assert.Equal(expectedIsGeneric, PlayerMatchResolverService.IsGenericBettingSelection(selection));
+        }
+
+        [Fact]
+        public void Test_MarketMapping_OverallWinnerInclExtraTimeMapsToQualify()
+        {
+            var mapper = new MarketMappingService();
+            var mapped = mapper.NormalizeMarketName("Overall Winner (incl. Extra Time/Penalties)", "Tromsdalen vs Lyn", "Lyn");
+            Assert.Contains("To Qualify", mapped);
         }
     }
 }

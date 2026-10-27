@@ -26,19 +26,19 @@ namespace BettingApp.Services
             { "Money Line (incl. overtime and penalties)", "Winner (incl. overtime and penalties)|Moneyline" },
             { "Money Line (incl. overtime)", "Winner (incl. overtime and penalties)|Moneyline" },
             { "Money Line (including overtime)", "Winner (incl. overtime and penalties)|Moneyline" },
-            { "Match Winner (incl. overtime and penalties)", "Winner (incl. overtime and penalties)|Moneyline" },
-            { "Match Winner (incl. overtime and shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
-            { "Match Winner (including overtime and shootout)", "Winner (incl. overtime and penalties)|Moneyline" },
-            { "Match Winner (incl. overtime)", "Winner (incl. overtime and penalties)|Moneyline" },
-            { "Winner (incl. overtime and penalties)", "Winner (incl. overtime and penalties)" },
-            { "Winner (incl. overtime and shootout)", "Winner (incl. overtime and penalties)" },
-            { "Winner (including overtime and shootout)", "Winner (incl. overtime and penalties)" },
-            { "To Win (incl. overtime and shootout)", "Winner (incl. overtime and penalties)" },
-            { "To Win (including overtime and shootout)", "Winner (incl. overtime and penalties)" },
-            { "To Win (incl. overtime and penalties)", "Winner (incl. overtime and penalties)" },
-            { "To Win (including overtime and penalties)", "Winner (incl. overtime and penalties)" },
-            { "To Win (incl. overtime)", "Winner (incl. overtime and penalties)" },
-            { "To Win (including overtime)", "Winner (incl. overtime and penalties)" },
+            { "Match Winner (incl. overtime and penalties)", "Winner (incl. overtime and penalties)|Moneyline|To Qualify" },
+            { "Match Winner (incl. overtime and shootout)", "Winner (incl. overtime and penalties)|Moneyline|To Qualify" },
+            { "Match Winner (including overtime and shootout)", "Winner (incl. overtime and penalties)|Moneyline|To Qualify" },
+            { "Match Winner (incl. overtime)", "Winner (incl. overtime and penalties)|Moneyline|To Qualify" },
+            { "Winner (incl. overtime and penalties)", "Winner (incl. overtime and penalties)|To Qualify" },
+            { "Winner (incl. overtime and shootout)", "Winner (incl. overtime and penalties)|To Qualify" },
+            { "Winner (including overtime and shootout)", "Winner (incl. overtime and penalties)|To Qualify" },
+            { "To Win (incl. overtime and shootout)", "Winner (incl. overtime and penalties)|To Qualify" },
+            { "To Win (including overtime and shootout)", "Winner (incl. overtime and penalties)|To Qualify" },
+            { "To Win (incl. overtime and penalties)", "Winner (incl. overtime and penalties)|To Qualify" },
+            { "To Win (including overtime and penalties)", "Winner (incl. overtime and penalties)|To Qualify" },
+            { "To Win (incl. overtime)", "Winner (incl. overtime and penalties)|To Qualify" },
+            { "To Win (including overtime)", "Winner (incl. overtime and penalties)|To Qualify" },
             { "Total Goals - Regular Time", "Total|Total Goals|Over Under Full Time" },
             { "Total Goals (incl. overtime and penalties)", "Total (incl. overtime and penalties)|Total|Total Goals|Over Under Full Time" },
             { "Anytime Goalscorer - Including Overtime", "Over Under Player Goals (incl. overtime)|Anytime Goal Scorer|Player Goals (incl. overtime)|Player Goals" },
@@ -685,14 +685,19 @@ namespace BettingApp.Services
             
             if (clean.Contains("Moneyline", StringComparison.OrdinalIgnoreCase) || 
                 clean.Contains("Money Line", StringComparison.OrdinalIgnoreCase) ||
-                clean.Contains("Winner", StringComparison.OrdinalIgnoreCase))
+                clean.Contains("Winner", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("To Qualify", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("Advance", StringComparison.OrdinalIgnoreCase))
             {
                 if (clean.Contains("overtime", StringComparison.OrdinalIgnoreCase) || 
+                    clean.Contains("extra time", StringComparison.OrdinalIgnoreCase) ||
                     clean.Contains("shootout", StringComparison.OrdinalIgnoreCase) || 
                     clean.Contains("penalties", StringComparison.OrdinalIgnoreCase) ||
-                    clean.Contains("ot", StringComparison.OrdinalIgnoreCase))
+                    clean.Contains("ot", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("To Qualify", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("Advance", StringComparison.OrdinalIgnoreCase))
                 {
-                    return new List<string> { "Winner (incl. overtime and penalties)", "Moneyline" };
+                    return new List<string> { "Winner (incl. overtime and penalties)", "Moneyline", "To Qualify" };
                 }
             }
             
