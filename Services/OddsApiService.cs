@@ -384,10 +384,11 @@ public class OddsApiService
             return (null, $"Castle doesn't yet pay for odds for {sport}.");
         }
 
-        // Fast Path: If match fixture AND parsed odds result are already cached, return immediately without acquiring any rate limiter!
+        // Fast Path: If match fixture AND parsed odds result are already cached (and the cached fixture hasn't finished >4h ago), return immediately without acquiring any rate limiter!
         if (!bypassOddsCache && _cache.TryGetValue($"OddspapiMatch4_{sportId}_{teamName}", out (string fid, string mn, DateTime st, bool il, string? fsid, int sid) quickMatch))
         {
-            if (_cache.TryGetValue($"OddspapiParsedResult_{quickMatch.fid}", out BettingApp.Models.OddsPapiSearchResult? cachedParsed) && cachedParsed != null)
+            bool quickStaleFinished = quickMatch.sid != 1 && quickMatch.st > DateTime.MinValue && quickMatch.st < DateTime.UtcNow.AddHours(-4);
+            if (!quickStaleFinished && _cache.TryGetValue($"OddspapiParsedResult_{quickMatch.fid}", out BettingApp.Models.OddsPapiSearchResult? cachedParsed) && cachedParsed != null)
             {
                 if (cachedParsed.StatusId == 0 && cachedParsed.StartTime > DateTime.MinValue && cachedParsed.StartTime <= DateTime.UtcNow && cachedParsed.StartTime >= DateTime.UtcNow.AddHours(-4))
                 {
@@ -412,7 +413,8 @@ public class OddsApiService
             string? flashscoreId = null;
             int statusId = -1;
             
-            bool skipParse = _cache.TryGetValue($"OddspapiMatch4_{sportId}_{teamName}", out (string fid, string mn, DateTime st, bool il, string? fsid, int sid) cachedMatch);
+            bool skipParse = _cache.TryGetValue($"OddspapiMatch4_{sportId}_{teamName}", out (string fid, string mn, DateTime st, bool il, string? fsid, int sid) cachedMatch) &&
+                             !(cachedMatch.sid != 1 && cachedMatch.st > DateTime.MinValue && cachedMatch.st < DateTime.UtcNow.AddHours(-4));
             if (skipParse)
             {
                 fixtureId = cachedMatch.fid;
@@ -446,7 +448,7 @@ public class OddsApiService
             var normHomeTokens = ExtractSignificantTokens(normHomeTeam);
             var normAwayTokens = string.IsNullOrEmpty(normAwayTeam) ? new List<string>() : ExtractSignificantTokens(normAwayTeam);
 
-            var bestMatches = new List<(BettingApp.Models.OddsPapiFixtureDto fixture, int score)>();
+            var bestMatches = new List<(BettingApp.Models.OddsPapiFixtureDto fixture, int score, bool isStraightOrder)>();
 
             foreach (var f in parsedFixtures)
             {
@@ -552,13 +554,22 @@ public class OddsApiService
                 
                 if (score > 0)
                 {
-                    // Prioritize live and upcoming matches with odds over finished matches
+                    // Prioritize live and upcoming matches with odds over finished matches.
+                    // Also treat StatusId == 0 fixtures whose kickoff was >4h ago in the 6h fixture cache as finished.
+                    bool isStaleFinished = f.StatusId == 0 && f.StartTime.HasValue && f.StartTime.Value < DateTime.UtcNow.AddHours(-4);
                     if (f.StatusId == 1) score += 300; // Live match gets huge priority
-                    else if (f.StatusId == 0) score += 200; // Upcoming match gets priority
-                    else if (f.StatusId == 2) score -= 300; // Finished match gets deprioritized
+                    else if (f.StatusId == 0 && !isStaleFinished) score += 200; // Upcoming (or recently kicked off within 4h) match gets priority
+                    else if (f.StatusId == 2 || isStaleFinished) score -= 300; // Finished match gets deprioritized
                     if (f.HasOdds) score += 100;
 
-                    bestMatches.Add((f, score));
+                    bool p1MatchesHome = IsNameMatch(normP1, normHomeTeam, true) || normHomeTokens.Any(t => IsNameMatch(normP1, t, true)) ||
+                                         (sportId == 12 && TeamAliasMappingService.IsTeamMatch(homeTeam, f.Participant1Name));
+                    bool p2MatchesAway = !string.IsNullOrEmpty(normAwayTeam) &&
+                                         (IsNameMatch(normP2, normAwayTeam, true) || normAwayTokens.Any(t => IsNameMatch(normP2, t, true)) ||
+                                          (sportId == 12 && TeamAliasMappingService.IsTeamMatch(awayTeam, f.Participant2Name)));
+                    bool isStraightOrder = !string.IsNullOrEmpty(normAwayTeam) && p1MatchesHome && p2MatchesAway;
+
+                    bestMatches.Add((f, score, isStraightOrder));
                 }
             }
 
@@ -568,7 +579,13 @@ public class OddsApiService
                 return (null, $"No matching fixtures found for '{teamName}' in the next 7 days.");
             }
             
-            var bestFixture = bestMatches.OrderByDescending(m => m.score).ThenByDescending(m => m.fixture.StartTime).First().fixture;
+            // Break score ties by closest StartTime to now (soonest upcoming / most recently played), then Home/Away straight alignment
+            var nowUtc = DateTime.UtcNow;
+            var bestFixture = bestMatches
+                .OrderByDescending(m => m.score)
+                .ThenBy(m => m.fixture.StartTime.HasValue ? Math.Abs((m.fixture.StartTime.Value - nowUtc).TotalSeconds) : double.MaxValue)
+                .ThenByDescending(m => m.isStraightOrder)
+                .First().fixture;
             
             fixtureId = bestFixture.FixtureId;
             string finalP1 = bestFixture.Participant1Name;

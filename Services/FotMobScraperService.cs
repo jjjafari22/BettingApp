@@ -290,17 +290,19 @@ namespace BettingApp.Services
                 int httpErrorFlag = 0;
                 Action markHttpError = () => Interlocked.Exchange(ref httpErrorFlag, 1);
 
-                void TryUpdateBestFromJson(string? json, ref string? bestEventId, ref int bestScore)
+                void TryUpdateBestFromJson(string? json, ref string? bestEventId, ref int bestScore, ref TimeSpan bestTimeDiff)
                 {
                     if (string.IsNullOrWhiteSpace(json)) return;
                     try
                     {
                         using var doc = System.Text.Json.JsonDocument.Parse(json);
                         var res = ExtractEventIdWithScore(doc, homeTeam, awayTeam, betPlacedAt);
-                        if (res.score > bestScore || (res.score == bestScore && res.score > 0 && string.IsNullOrEmpty(bestEventId)))
+                        if (res.score > bestScore ||
+                            (res.score == bestScore && res.score > 0 && (string.IsNullOrEmpty(bestEventId) || res.timeDiff < bestTimeDiff)))
                         {
                             bestEventId = res.id;
                             bestScore = res.score;
+                            bestTimeDiff = res.timeDiff;
                         }
                     }
                     catch
@@ -321,21 +323,23 @@ namespace BettingApp.Services
                 
                 string? eventId = null;
                 int currentBestScore = 0;
+                TimeSpan bestTimeDiff = TimeSpan.MaxValue;
+                bool HasCloseFullMatch() => currentBestScore >= 200 && bestTimeDiff <= TimeSpan.FromHours(36);
 
-                TryUpdateBestFromJson(searchJson, ref eventId, ref currentBestScore);
+                TryUpdateBestFromJson(searchJson, ref eventId, ref currentBestScore, ref bestTimeDiff);
 
                 // Fallback 1a: If the full raw name had stop words (e.g. "Al-Anwar Club" -> "al anwar"), search the stop-word-stripped team name first (critical for "Al ..." teams where single-word search fails on FotMob).
                 string rawNormalizedHome = _teamAliasMapper.NormalizeTeamName(homeTeam, removeStopWords: false);
-                if (currentBestScore < 200 && !string.Equals(homeSearchStr, rawNormalizedHome, StringComparison.OrdinalIgnoreCase) && homeSearchStr.Length >= 3)
+                if (!HasCloseFullMatch() && !string.Equals(homeSearchStr, rawNormalizedHome, StringComparison.OrdinalIgnoreCase) && homeSearchStr.Length >= 3)
                 {
                     string strippedQuery = Uri.EscapeDataString(homeSearchStr);
                     searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={strippedQuery}";
                     string? strippedJson = await TryGetStringWithRetryAsync(searchUrl, betLabel, markHttpError);
-                    TryUpdateBestFromJson(strippedJson, ref eventId, ref currentBestScore);
+                    TryUpdateBestFromJson(strippedJson, ref eventId, ref currentBestScore, ref bestTimeDiff);
                 }
 
                 // Fallback 1b: If we still didn't find a perfect straight match, try searching the most significant word (longest word).
-                if (currentBestScore < 200)
+                if (!HasCloseFullMatch())
                 {
                     string longestWord = homeSearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? homeSearchStr.Split(' ')[0];
                     if (longestWord != homeSearchStr && longestWord.Length >= 3)
@@ -343,12 +347,12 @@ namespace BettingApp.Services
                         string fallbackQuery = Uri.EscapeDataString(longestWord);
                         searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
                         string? fallbackJson = await TryGetStringWithRetryAsync(searchUrl, betLabel, markHttpError);
-                        TryUpdateBestFromJson(fallbackJson, ref eventId, ref currentBestScore);
+                        TryUpdateBestFromJson(fallbackJson, ref eventId, ref currentBestScore, ref bestTimeDiff);
                     }
                 }
 
                 // Fallback 2: Sometimes the home team has prefixes like "FK " and FotMob search completely fails, but the away team works perfectly!
-                if (currentBestScore < 200 && !string.IsNullOrEmpty(awayTeam))
+                if (!HasCloseFullMatch() && !string.IsNullOrEmpty(awayTeam))
                 {
                     string cleanAwayTeam = awayTeam;
                     var awayDateMatch = System.Text.RegularExpressions.Regex.Match(awayTeam, @"\((?:Starts:\s*)?([^)]+)\)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
@@ -371,38 +375,38 @@ namespace BettingApp.Services
                         string awayRawQuery = Uri.EscapeDataString(rawNormalizedAway);
                         searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={awayRawQuery}";
                         string? awayRawJson = await TryGetStringWithRetryAsync(searchUrl, betLabel, markHttpError);
-                        TryUpdateBestFromJson(awayRawJson, ref eventId, ref currentBestScore);
+                        TryUpdateBestFromJson(awayRawJson, ref eventId, ref currentBestScore, ref bestTimeDiff);
                     }
 
                     // Try full stop-word-stripped away name next (e.g. "al wehda" where single-word "wehda" only returns players on FotMob)
-                    if (currentBestScore < 200 && !string.Equals(awaySearchStr, rawNormalizedAway, StringComparison.OrdinalIgnoreCase) && awaySearchStr.Contains(' ') && awaySearchStr.Length >= 3)
+                    if (!HasCloseFullMatch() && !string.Equals(awaySearchStr, rawNormalizedAway, StringComparison.OrdinalIgnoreCase) && awaySearchStr.Contains(' ') && awaySearchStr.Length >= 3)
                     {
                         string awayFullQuery = Uri.EscapeDataString(awaySearchStr);
                         searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={awayFullQuery}";
                         string? awayFullJson = await TryGetStringWithRetryAsync(searchUrl, betLabel, markHttpError);
-                        TryUpdateBestFromJson(awayFullJson, ref eventId, ref currentBestScore);
+                        TryUpdateBestFromJson(awayFullJson, ref eventId, ref currentBestScore, ref bestTimeDiff);
                     }
 
                     string longestAway = awaySearchStr.Split(' ').OrderByDescending(w => w.Length).FirstOrDefault() ?? awaySearchStr.Split(' ')[0];
-                    if (currentBestScore < 200 && longestAway.Length >= 3 && longestAway != awaySearchStr && !string.Equals(longestAway, rawNormalizedAway, StringComparison.OrdinalIgnoreCase))
+                    if (!HasCloseFullMatch() && longestAway.Length >= 3 && longestAway != awaySearchStr && !string.Equals(longestAway, rawNormalizedAway, StringComparison.OrdinalIgnoreCase))
                     {
                         string fallbackQuery = Uri.EscapeDataString(longestAway);
                         searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
                         string? fallbackJson = await TryGetStringWithRetryAsync(searchUrl, betLabel, markHttpError);
-                        TryUpdateBestFromJson(fallbackJson, ref eventId, ref currentBestScore);
+                        TryUpdateBestFromJson(fallbackJson, ref eventId, ref currentBestScore, ref bestTimeDiff);
                     }
-                    else if (currentBestScore < 200 && longestAway.Length >= 3 && !awaySearchStr.Contains(' ') && !string.Equals(longestAway, rawNormalizedAway, StringComparison.OrdinalIgnoreCase))
+                    else if (!HasCloseFullMatch() && longestAway.Length >= 3 && !awaySearchStr.Contains(' ') && !string.Equals(longestAway, rawNormalizedAway, StringComparison.OrdinalIgnoreCase))
                     {
                         string fallbackQuery = Uri.EscapeDataString(longestAway);
                         searchUrl = $"https://apigw.fotmob.com/searchapi/suggest?term={fallbackQuery}";
                         string? fallbackJson = await TryGetStringWithRetryAsync(searchUrl, betLabel, markHttpError);
-                        TryUpdateBestFromJson(fallbackJson, ref eventId, ref currentBestScore);
+                        TryUpdateBestFromJson(fallbackJson, ref eventId, ref currentBestScore, ref bestTimeDiff);
                     }
                 }
 
-                // Fallback 3: Deep dive into Team Fixtures! (Because apigw suggest only returns top 3-4 matches, hiding older or pre-season friendlies)
-                // If currentBestScore < 200, it means we only found a swappedMatch or subset match or nothing. Do a Deep Dive to ensure we don't miss a full straightMatch!
-                if (currentBestScore < 200)
+                // Fallback 3: Deep dive into Team Fixtures! (Because apigw suggest only returns top 3-4 matches, hiding older, cup, or pre-season fixtures)
+                // If we don't yet have a full straight match within 36h of targetDate, do a Deep Dive to ensure a league fixture days later didn't shadow today's match!
+                if (!HasCloseFullMatch())
                 {
                     async Task<System.Collections.Generic.List<string>> TryCollectTeamIds(string query)
                     {
@@ -503,8 +507,8 @@ namespace BettingApp.Services
                     }
 
                     DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
-                    // Carry over smallestTimeDiff across teams to prefer closer matches
-                    TimeSpan smallestTimeDiff = TimeSpan.MaxValue;
+                    // Carry over bestTimeDiff from suggest lookups (and across teams) to prefer closer matches
+                    TimeSpan smallestTimeDiff = bestTimeDiff;
 
                     // Now for each team ID, fetch their full fixture list!
                     foreach (var teamId in teamIdsToDeepSearch)
@@ -570,7 +574,7 @@ namespace BettingApp.Services
                         } 
                         catch { markHttpError(); }
                         
-                        if (currentBestScore >= 200 && !string.IsNullOrEmpty(eventId)) break; // Found a full straight match, stop searching teams!
+                        if (currentBestScore >= 200 && smallestTimeDiff <= TimeSpan.FromHours(36) && !string.IsNullOrEmpty(eventId)) break; // Found a close full straight match, stop searching teams!
                     }
                 }
 
@@ -853,13 +857,13 @@ namespace BettingApp.Services
             return GetTeamMatchScore(queryHome, queryAway, optHome, optAway, optLeague) > 0;
         }
 
-        private (string? id, int score) ExtractEventIdWithScore(System.Text.Json.JsonDocument doc, string homeTeam, string awayTeam, DateTime? betPlacedAt)
+        private (string? id, int score, TimeSpan timeDiff) ExtractEventIdWithScore(System.Text.Json.JsonDocument doc, string homeTeam, string awayTeam, DateTime? betPlacedAt)
         {
             if (!doc.RootElement.TryGetProperty("matchSuggest", out var matchSuggests) || matchSuggests.GetArrayLength() == 0)
-                return (null, 0);
+                return (null, 0, TimeSpan.MaxValue);
 
             if (!matchSuggests[0].TryGetProperty("options", out var options) || options.GetArrayLength() == 0)
-                return (null, 0);
+                return (null, 0, TimeSpan.MaxValue);
 
             DateTime? parsedTargetDate = null;
             if (awayTeam != null)
@@ -945,11 +949,12 @@ namespace BettingApp.Services
                 if (score > bestScore)
                 {
                     bestScore = score;
+                    smallestTimeDiff = TimeSpan.MaxValue;
                     bestId = payload.GetProperty("id").GetString();
                 }
             }
 
-            return (bestId, bestScore);
+            return (bestId, bestScore > 0 ? bestScore : 0, smallestTimeDiff);
         }
 
         public static bool FuzzyMatch(string token, string fixtureName)
