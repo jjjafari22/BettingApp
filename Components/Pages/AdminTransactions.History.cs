@@ -18,33 +18,41 @@ public partial class AdminTransactions
     private int totalTransactions = 0;
 
     private string filterSearchTerm = "";
-    private List<ApplicationUser> filterSearchResults = new();
-    private ApplicationUser? filterSelectedUser;
+    private List<TransactionPartyFilterItem> filterSearchResults = new();
+    private TransactionPartyFilterItem? filterSelectedParty;
+    private int _filterSearchVersion = 0;
 
     private string? filterType;
     private string? filterStatus;
 
     private async Task PerformFilterSearch()
     {
-        if (string.IsNullOrWhiteSpace(filterSearchTerm) || filterSearchTerm.Length < 2)
+        int version = ++_filterSearchVersion;
+
+        if (filterSelectedParty != null && filterSearchTerm != filterSelectedParty.PrimaryLabel)
+        {
+            filterSelectedParty = null;
+            currentPage = 1;
+            using var context = DbFactory.CreateDbContext();
+            await LoadTransactions(context);
+        }
+
+        if (string.IsNullOrWhiteSpace(filterSearchTerm) || filterSearchTerm.Trim().Length < 2)
         {
             filterSearchResults.Clear();
             return;
         }
 
-        using var context = DbFactory.CreateDbContext();
-        filterSearchResults = await context.Users
-            .Where(u => u.DiscordUsername != null && u.DiscordUsername.Contains(filterSearchTerm) || (u.UserName != null && u.UserName.Contains(filterSearchTerm)))
-            .OrderBy(u => u.DiscordUsername)
-            .Take(5)
-            .AsNoTracking()
-            .ToListAsync();
+        var results = await SearchTransactionPartiesAsync(filterSearchTerm);
+        if (version != _filterSearchVersion) return;
+        filterSearchResults = results;
     }
 
-    private async Task SelectFilterUser(ApplicationUser user)
+    private async Task SelectFilterParty(TransactionPartyFilterItem party)
     {
-        filterSelectedUser = user;
-        filterSearchTerm = "";
+        ++_filterSearchVersion;
+        filterSelectedParty = party;
+        filterSearchTerm = party.PrimaryLabel;
         filterSearchResults.Clear();
         currentPage = 1;
 
@@ -54,13 +62,18 @@ public partial class AdminTransactions
 
     private async Task ClearFilterSelection()
     {
-        filterSelectedUser = null;
+        ++_filterSearchVersion;
+        bool hadSelection = filterSelectedParty != null;
+        filterSelectedParty = null;
         filterSearchTerm = "";
         filterSearchResults.Clear();
-        currentPage = 1;
 
-        using var context = DbFactory.CreateDbContext();
-        await LoadTransactions(context);
+        if (hadSelection)
+        {
+            currentPage = 1;
+            using var context = DbFactory.CreateDbContext();
+            await LoadTransactions(context);
+        }
     }
 
     private async Task OnTypeFilterChanged(ChangeEventArgs e)
@@ -82,9 +95,17 @@ public partial class AdminTransactions
     private async Task LoadTransactions(ApplicationDbContext context)
     {
         var query = context.Transactions.Where(t => t.Status != "Pending").AsQueryable();
-        if (filterSelectedUser != null)
+        if (filterSelectedParty != null)
         {
-            query = query.Where(t => t.UserId == filterSelectedUser.Id);
+            var selectedId = filterSelectedParty.Id;
+            if (filterSelectedParty.IsCashCow)
+            {
+                query = query.Where(t => t.SenderId == selectedId || t.ReceiverId == selectedId);
+            }
+            else
+            {
+                query = query.Where(t => t.UserId == selectedId);
+            }
         }
 
         if (!string.IsNullOrEmpty(filterType))

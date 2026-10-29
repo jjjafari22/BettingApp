@@ -405,31 +405,43 @@ else
     <h4 class="mb-0">Transaction History (@totalTransactions)</h4>
     
     <div class="d-flex gap-2 flex-wrap align-items-start">
-        <select class="form-select form-select-sm" style="width: auto;" @onchange="OnTypeFilterChanged">
+        <select class="form-select form-select-sm" style="width: auto;" value="@(filterType ?? "")" @onchange="OnTypeFilterChanged">
             <option value="">All Types</option>
             <option value="Deposit">Deposits</option>
             <option value="Withdrawal">Withdrawals</option>
+            <option value="Transfer">Transfers</option>
             <option value="Free Bet">Free Bets</option>
         </select>
         
-        <select class="form-select form-select-sm" style="width: auto;" @onchange="OnStatusFilterChanged">
+        <select class="form-select form-select-sm" style="width: auto;" value="@(filterStatus ?? "")" @onchange="OnStatusFilterChanged">
             <option value="">All Statuses</option>
             <option value="Completed">Completed</option>
             <option value="Rejected">Rejected</option>
             <option value="Cancelled">Cancelled</option>
         </select>
 
-        <div class="position-relative" style="min-width: 250px;">
+        <div class="position-relative" style="min-width: 260px;">
             <div class="input-group input-group-sm">
                 <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                @if (filterSelectedParty != null)
+                {
+                    if (filterSelectedParty.IsCashCow)
+                    {
+                        <span class="input-group-text bg-info text-dark fw-bold px-2">CC</span>
+                    }
+                    else
+                    {
+                        <span class="input-group-text bg-secondary text-white px-2">User</span>
+                    }
+                }
                 <input type="text" class="form-control" 
-                       placeholder="Filter by user..." 
+                       placeholder="Filter by user or CC..." 
                        @bind="filterSearchTerm" 
                        @bind:event="oninput" 
                        @bind:after="PerformFilterSearch" />
-                @if (filterSelectedUser != null)
+                @if (filterSelectedParty != null || !string.IsNullOrEmpty(filterSearchTerm))
                 {
-                    <button class="btn btn-outline-secondary" type="button" @onclick="ClearFilterSelection">
+                    <button class="btn btn-outline-secondary" type="button" @onclick="ClearFilterSelection" title="Clear filter">
                         <i class="bi bi-x"></i>
                     </button>
                 }
@@ -437,16 +449,27 @@ else
             
             @if (filterSearchResults.Any())
             {
-                <ul class="list-group position-absolute w-100 shadow" style="z-index: 1050; max-height: 200px; overflow-y: auto;">
-                    @foreach (var user in filterSearchResults)
+                <ul class="list-group position-absolute w-100 shadow" style="z-index: 1050; max-height: 250px; overflow-y: auto;">
+                    @foreach (var party in filterSearchResults)
                     {
                         <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2" 
                             style="cursor: pointer;" 
-                            @onclick="() => SelectFilterUser(user)">
-                            <div>
-                                <strong>@user.DiscordUsername</strong>
-                                <small class="text-muted d-block">@user.FirstName @user.LastName</small>
+                            @onclick="() => SelectFilterParty(party)">
+                            <div class="me-2 text-truncate">
+                                <strong translate="no" class="notranslate">@party.PrimaryLabel</strong>
+                                @if (!string.IsNullOrEmpty(party.SecondaryLabel))
+                                {
+                                    <small class="text-muted d-block">@party.SecondaryLabel</small>
+                                }
                             </div>
+                            @if (party.IsCashCow)
+                            {
+                                <span class="badge bg-info text-dark fw-bold flex-shrink-0"><i class="bi bi-wallet2 me-1"></i>CC</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-secondary border flex-shrink-0">User</span>
+                            }
                         </li>
                     }
                 </ul>
@@ -479,6 +502,8 @@ else
                     <td>
                         @if (!string.IsNullOrEmpty(t.SenderId) && userLookup.TryGetValue(t.SenderId, out var su)) {
                             <strong>@su.DiscordName</strong> <small class="text-muted">(@FormatFullName(su.FirstName, su.LastName))</small>
+                        } else if (t.SenderType == "CashCow") {
+                            <strong translate="no" class="notranslate">@ResolveCashCowName(t.SenderId, t.SenderName)</strong>
                         } else {
                             <strong>@t.SenderName</strong>
                         }
@@ -487,6 +512,8 @@ else
                     <td>
                         @if (!string.IsNullOrEmpty(t.ReceiverId) && userLookup.TryGetValue(t.ReceiverId, out var ru)) {
                             <strong>@ru.DiscordName</strong> <small class="text-muted">(@FormatFullName(ru.FirstName, ru.LastName))</small>
+                        } else if (t.ReceiverType == "CashCow") {
+                            <strong translate="no" class="notranslate">@ResolveCashCowName(t.ReceiverId, t.ReceiverName)</strong>
                         } else {
                             <strong>@t.ReceiverName</strong>
                         }
@@ -730,8 +757,90 @@ else
             {
                 <div class="card shadow-sm border-0 mt-4 border-info">
                     <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
-                        <strong translate="no" class="notranslate">Ledger: @FormatFullName(viewingCow.FirstName, viewingCow.LastName)</strong>
-                        <button class="btn-close" @onclick="() => viewingCow = null"></button>
+                        <strong translate="no" class="notranslate">Ledger: @FormatFullName(viewingCow.FirstName, viewingCow.LastName) (@viewingCowTotalTransactions)</strong>
+                        <button class="btn-close" @onclick="CloseCowLedger"></button>
+                    </div>
+                    <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="d-flex gap-2 flex-wrap align-items-center">
+                            <select class="form-select form-select-sm" style="width: auto;" value="@cowLedgerFilterType" @onchange="OnCowLedgerTypeChanged">
+                                <option value="">All Types</option>
+                                @foreach (var typeOpt in cowLedgerAvailableTypes)
+                                {
+                                    <option @key="typeOpt" value="@typeOpt">@FormatCowLedgerTypeOptionLabel(typeOpt)</option>
+                                }
+                            </select>
+
+                            <select class="form-select form-select-sm" style="width: auto;" value="@cowLedgerFilterPlatform" @onchange="OnCowLedgerPlatformChanged">
+                                <option value="">All Platforms</option>
+                                @foreach (var platformOpt in cowLedgerAvailablePlatforms)
+                                {
+                                    <option @key="platformOpt" value="@platformOpt">@platformOpt</option>
+                                }
+                            </select>
+
+                            <div class="position-relative" style="min-width: 280px;">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                    @if (cowLedgerSelectedParty != null)
+                                    {
+                                        if (cowLedgerSelectedParty.IsCashCow)
+                                        {
+                                            <span class="input-group-text bg-info text-dark fw-bold px-2">CC</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="input-group-text bg-secondary text-white px-2">User</span>
+                                        }
+                                    }
+                                    <input type="text" class="form-control"
+                                           placeholder="User/CC involved in transaction..."
+                                           @bind="cowLedgerSearchTerm"
+                                           @bind:event="oninput"
+                                           @bind:after="PerformCowLedgerPartySearch" />
+                                    @if (cowLedgerSelectedParty != null || !string.IsNullOrEmpty(cowLedgerSearchTerm))
+                                    {
+                                        <button class="btn btn-outline-secondary" type="button" @onclick="ClearCowLedgerPartySelection" title="Clear filter">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                    }
+                                </div>
+
+                                @if (cowLedgerSearchResults.Any())
+                                {
+                                    <ul class="list-group position-absolute w-100 shadow" style="z-index: 1050; max-height: 250px; overflow-y: auto;">
+                                        @foreach (var party in cowLedgerSearchResults)
+                                        {
+                                            <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2"
+                                                style="cursor: pointer;"
+                                                @onclick="() => SelectCowLedgerParty(party)">
+                                                <div class="me-2 text-truncate">
+                                                    <strong translate="no" class="notranslate">@party.PrimaryLabel</strong>
+                                                    @if (!string.IsNullOrEmpty(party.SecondaryLabel))
+                                                    {
+                                                        <small class="text-muted d-block">@party.SecondaryLabel</small>
+                                                    }
+                                                </div>
+                                                @if (party.IsCashCow)
+                                                {
+                                                    <span class="badge bg-info text-dark fw-bold flex-shrink-0"><i class="bi bi-wallet2 me-1"></i>CC</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-light text-secondary border flex-shrink-0">User</span>
+                                                }
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        </div>
+
+                        @if (HasActiveCowLedgerFilters)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="ClearAllCowLedgerFilters">
+                                <i class="bi bi-x-circle me-1"></i>Clear Filters
+                            </button>
+                        }
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -763,7 +872,9 @@ else
                                             </td>
                                             <td>
                                                 @if (isIncoming) { 
-                                                    string nameDisplay = t.SenderName ?? "";
+                                                    string nameDisplay = t.SenderType == "CashCow"
+                                                        ? ResolveCashCowName(t.SenderId, t.SenderName)
+                                                        : (t.SenderName ?? "");
                                                     if (userLookup.TryGetValue(t.SenderId ?? "", out var u))
                                                     {
                                                         var fullName = FormatFullName(u.FirstName, u.LastName);
@@ -771,10 +882,13 @@ else
                                                             ? fullName
                                                             : (string.IsNullOrEmpty(fullName) ? u.DiscordName : $"{u.DiscordName} ({fullName})");
                                                     }
-                                                    <span class="text-success"><i class="bi bi-arrow-down-left"></i> From @nameDisplay</span> 
+                                                    <span class="text-success"><i class="bi bi-arrow-down-left"></i> From <span translate="no" class="notranslate">@nameDisplay</span></span>
+                                                    @if (t.SenderType == "CashCow") { <span class="badge bg-secondary ms-1">CC</span> }
                                                 }
                                                 else { 
-                                                    string nameDisplay = t.ReceiverName ?? "";
+                                                    string nameDisplay = t.ReceiverType == "CashCow"
+                                                        ? ResolveCashCowName(t.ReceiverId, t.ReceiverName)
+                                                        : (t.ReceiverName ?? "");
                                                     if (userLookup.TryGetValue(t.ReceiverId ?? "", out var u))
                                                     {
                                                         var fullName = FormatFullName(u.FirstName, u.LastName);
@@ -782,7 +896,8 @@ else
                                                             ? fullName
                                                             : (string.IsNullOrEmpty(fullName) ? u.DiscordName : $"{u.DiscordName} ({fullName})");
                                                     }
-                                                    <span class="text-danger"><i class="bi bi-arrow-up-right"></i> To @nameDisplay</span> 
+                                                    <span class="text-danger"><i class="bi bi-arrow-up-right"></i> To <span translate="no" class="notranslate">@nameDisplay</span></span>
+                                                    @if (t.ReceiverType == "CashCow") { <span class="badge bg-secondary ms-1">CC</span> }
                                                 }
                                             </td>
                                             <td class="text-muted small">

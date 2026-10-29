@@ -32,6 +32,93 @@ public partial class AdminTransactions : IDisposable
     private Dictionary<string, (string DiscordName, string FirstName, string LastName)> userLookup = new();
     private Dictionary<string, decimal> currentBalances = new();
 
+    private sealed record TransactionPartyFilterItem(
+        string Id,
+        bool IsCashCow,
+        string PrimaryLabel,
+        string SecondaryLabel);
+
+    private string ResolveCashCowName(string? cowId, string? fallbackName)
+    {
+        if (!string.IsNullOrEmpty(cowId))
+        {
+            var cow = cashCows.FirstOrDefault(c => c.Id == cowId);
+            if (cow != null)
+            {
+                var fullName = FormatFullName(cow.FirstName, cow.LastName);
+                if (!string.IsNullOrEmpty(fullName)) return fullName;
+            }
+        }
+        return fallbackName ?? "";
+    }
+
+    private async Task<List<TransactionPartyFilterItem>> SearchTransactionPartiesAsync(string? rawTerm, string? excludeCashCowId = null)
+    {
+        var trimmed = rawTerm?.Trim() ?? "";
+        if (trimmed.Length < 2)
+        {
+            return new List<TransactionPartyFilterItem>();
+        }
+
+        using var context = DbFactory.CreateDbContext();
+        var cowsSource = cashCows.Any()
+            ? cashCows
+            : await context.CashCows.AsNoTracking().ToListAsync();
+
+        bool isCcKeyword =
+            trimmed.Equals("cc", StringComparison.OrdinalIgnoreCase) ||
+            (trimmed.Length >= 3 && (
+                "cash cow".Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                "cashcow".Contains(trimmed, StringComparison.OrdinalIgnoreCase)));
+
+        var matchingCowItems = cowsSource
+            .Where(c => string.IsNullOrEmpty(excludeCashCowId) || c.Id != excludeCashCowId)
+            .Select(c => new
+            {
+                Cow = c,
+                FullName = FormatFullName(c.FirstName, c.LastName)
+            })
+            .Where(x =>
+                isCcKeyword ||
+                x.FullName.Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrEmpty(x.Cow.FirstName) && x.Cow.FirstName.Contains(trimmed, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(x.Cow.LastName) && x.Cow.LastName.Contains(trimmed, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(x =>
+                x.FullName.StartsWith(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrEmpty(x.Cow.FirstName) && x.Cow.FirstName.StartsWith(trimmed, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(x.Cow.LastName) && x.Cow.LastName.StartsWith(trimmed, StringComparison.OrdinalIgnoreCase)))
+            .ThenBy(x => x.FullName, StringComparer.OrdinalIgnoreCase)
+            .Take(10)
+            .Select(x => new TransactionPartyFilterItem(
+                x.Cow.Id,
+                IsCashCow: true,
+                PrimaryLabel: x.FullName,
+                SecondaryLabel: "Cash Cow"))
+            .ToList();
+
+        var matchingUsers = await context.Users
+            .AsNoTracking()
+            .Where(u =>
+                (u.DiscordUsername != null && u.DiscordUsername.Contains(trimmed)) ||
+                (u.UserName != null && u.UserName.Contains(trimmed)) ||
+                (u.FirstName != null && u.FirstName.Contains(trimmed)) ||
+                (u.LastName != null && u.LastName.Contains(trimmed)) ||
+                ((u.FirstName ?? "") + " " + (u.LastName ?? "")).Contains(trimmed))
+            .OrderBy(u => u.DiscordUsername ?? u.UserName)
+            .Take(10)
+            .ToListAsync();
+
+        var matchingUserItems = matchingUsers
+            .Select(u => new TransactionPartyFilterItem(
+                u.Id,
+                IsCashCow: false,
+                PrimaryLabel: !string.IsNullOrWhiteSpace(u.DiscordUsername) ? u.DiscordUsername : (u.UserName ?? "Unknown"),
+                SecondaryLabel: FormatFullName(u.FirstName, u.LastName)))
+            .ToList();
+
+        return matchingCowItems.Concat(matchingUserItems).ToList();
+    }
+
     private DateTime ToUserLocal(DateTime utcDate)
     {
         if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;

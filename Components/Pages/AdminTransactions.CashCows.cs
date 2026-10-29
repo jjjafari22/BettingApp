@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using BettingApp.Data;
 
@@ -18,7 +19,22 @@ public partial class AdminTransactions
     private List<Transaction> viewingCowTransactions = new();
     private int viewingCowCurrentPage = 1;
     private bool viewingCowHasMore = false;
+    private int viewingCowTotalTransactions = 0;
     private const int ViewingCowPageSize = 20;
+
+    private string cowLedgerFilterType = "";
+    private string cowLedgerFilterPlatform = "";
+    private List<string> cowLedgerAvailableTypes = new() { "Deposit", "Withdrawal", "Transfer" };
+    private List<string> cowLedgerAvailablePlatforms = new() { "Vipps", "Revolut", "Bank Transfer" };
+    private string cowLedgerSearchTerm = "";
+    private List<TransactionPartyFilterItem> cowLedgerSearchResults = new();
+    private TransactionPartyFilterItem? cowLedgerSelectedParty;
+    private int _cowLedgerSearchVersion = 0;
+
+    private bool HasActiveCowLedgerFilters =>
+        !string.IsNullOrEmpty(cowLedgerFilterType) ||
+        !string.IsNullOrEmpty(cowLedgerFilterPlatform) ||
+        cowLedgerSelectedParty != null;
 
     private DateTime? ccStartDate;
     private DateTime? ccEndDate;
@@ -69,10 +85,121 @@ public partial class AdminTransactions
         }
     }
 
+    private static string FormatCowLedgerTypeOptionLabel(string type) => type switch
+    {
+        "Deposit" => "Deposits",
+        "Withdrawal" => "Withdrawals",
+        "Transfer" => "Transfers",
+        _ => type
+    };
+
+    private void ResetCowLedgerFiltersState()
+    {
+        ++_cowLedgerSearchVersion;
+        cowLedgerFilterType = "";
+        cowLedgerFilterPlatform = "";
+        cowLedgerSearchTerm = "";
+        cowLedgerSearchResults.Clear();
+        cowLedgerSelectedParty = null;
+    }
+
     private async Task OpenCowLedger(CashCow cow)
     {
+        ResetCowLedgerFiltersState();
         viewingCowCurrentPage = 1;
         await LoadCowTransactions(cow);
+    }
+
+    private void CloseCowLedger()
+    {
+        ResetCowLedgerFiltersState();
+        viewingCow = null;
+        viewingCowTransactions.Clear();
+        viewingCowTotalTransactions = 0;
+        viewingCowHasMore = false;
+    }
+
+    private async Task ClearAllCowLedgerFilters()
+    {
+        ResetCowLedgerFiltersState();
+        if (viewingCow != null)
+        {
+            viewingCowCurrentPage = 1;
+            await LoadCowTransactions(viewingCow);
+        }
+    }
+
+    private async Task OnCowLedgerTypeChanged(ChangeEventArgs e)
+    {
+        cowLedgerFilterType = e.Value?.ToString() ?? "";
+        if (viewingCow != null)
+        {
+            viewingCowCurrentPage = 1;
+            await LoadCowTransactions(viewingCow);
+        }
+    }
+
+    private async Task OnCowLedgerPlatformChanged(ChangeEventArgs e)
+    {
+        cowLedgerFilterPlatform = e.Value?.ToString() ?? "";
+        if (viewingCow != null)
+        {
+            viewingCowCurrentPage = 1;
+            await LoadCowTransactions(viewingCow);
+        }
+    }
+
+    private async Task PerformCowLedgerPartySearch()
+    {
+        int version = ++_cowLedgerSearchVersion;
+
+        if (cowLedgerSelectedParty != null && cowLedgerSearchTerm != cowLedgerSelectedParty.PrimaryLabel)
+        {
+            cowLedgerSelectedParty = null;
+            if (viewingCow != null)
+            {
+                viewingCowCurrentPage = 1;
+                await LoadCowTransactions(viewingCow);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(cowLedgerSearchTerm) || cowLedgerSearchTerm.Trim().Length < 2)
+        {
+            cowLedgerSearchResults.Clear();
+            return;
+        }
+
+        var results = await SearchTransactionPartiesAsync(cowLedgerSearchTerm, excludeCashCowId: viewingCow?.Id);
+        if (version != _cowLedgerSearchVersion) return;
+        cowLedgerSearchResults = results;
+    }
+
+    private async Task SelectCowLedgerParty(TransactionPartyFilterItem party)
+    {
+        ++_cowLedgerSearchVersion;
+        cowLedgerSelectedParty = party;
+        cowLedgerSearchTerm = party.PrimaryLabel;
+        cowLedgerSearchResults.Clear();
+        if (viewingCow != null)
+        {
+            viewingCowCurrentPage = 1;
+            await LoadCowTransactions(viewingCow);
+        }
+    }
+
+    private async Task ClearCowLedgerPartySelection()
+    {
+        ++_cowLedgerSearchVersion;
+        bool hadSelection = cowLedgerSelectedParty != null;
+        cowLedgerSelectedParty = null;
+        cowLedgerSearchTerm = "";
+        cowLedgerSearchResults.Clear();
+
+        if (hadSelection && viewingCow != null)
+        {
+            viewingCowCurrentPage = 1;
+            await LoadCowTransactions(viewingCow);
+        }
     }
 
     private async Task NextCowPage()
@@ -95,7 +222,44 @@ public partial class AdminTransactions
         viewingCow = cow;
         using var context = DbFactory.CreateDbContext();
 
-        var query = context.Transactions.Where(t => t.SenderId == cow.Id || t.ReceiverId == cow.Id);
+        var baseCowQuery = context.Transactions
+            .AsNoTracking()
+            .Where(t => t.SenderId == cow.Id || t.ReceiverId == cow.Id);
+
+        var distinctMeta = await baseCowQuery
+            .Select(t => new { t.Type, t.Platform })
+            .Distinct()
+            .ToListAsync();
+
+        var types = new List<string> { "Deposit", "Withdrawal", "Transfer" };
+        foreach (var t in distinctMeta.Select(x => x.Type).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!types.Any(existing => string.Equals(existing, t, StringComparison.OrdinalIgnoreCase)))
+            {
+                types.Add(t);
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(cowLedgerFilterType) && !types.Any(existing => string.Equals(existing, cowLedgerFilterType, StringComparison.OrdinalIgnoreCase)))
+        {
+            types.Add(cowLedgerFilterType);
+        }
+        cowLedgerAvailableTypes = types;
+
+        var platforms = new List<string> { "Vipps", "Revolut", "Bank Transfer" };
+        foreach (var p in distinctMeta.Select(x => x.Platform).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!platforms.Any(existing => string.Equals(existing, p, StringComparison.OrdinalIgnoreCase)))
+            {
+                platforms.Add(p);
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(cowLedgerFilterPlatform) && !platforms.Any(existing => string.Equals(existing, cowLedgerFilterPlatform, StringComparison.OrdinalIgnoreCase)))
+        {
+            platforms.Add(cowLedgerFilterPlatform);
+        }
+        cowLedgerAvailablePlatforms = platforms;
+
+        var query = baseCowQuery;
 
         if (viewMode != ViewMode.AllTime)
         {
@@ -137,8 +301,31 @@ public partial class AdminTransactions
             }
         }
 
-        var total = await query.CountAsync();
-        viewingCowHasMore = total > (viewingCowCurrentPage * ViewingCowPageSize);
+        if (!string.IsNullOrEmpty(cowLedgerFilterType))
+        {
+            query = query.Where(t => t.Type == cowLedgerFilterType);
+        }
+
+        if (!string.IsNullOrEmpty(cowLedgerFilterPlatform))
+        {
+            query = query.Where(t => t.Platform == cowLedgerFilterPlatform);
+        }
+
+        if (cowLedgerSelectedParty != null)
+        {
+            var partyId = cowLedgerSelectedParty.Id;
+            query = query.Where(t =>
+                (t.SenderId == cow.Id && t.ReceiverId == partyId) ||
+                (t.ReceiverId == cow.Id && t.SenderId == partyId));
+        }
+
+        viewingCowTotalTransactions = await query.CountAsync();
+        var maxPage = Math.Max(1, (int)Math.Ceiling((double)viewingCowTotalTransactions / ViewingCowPageSize));
+        if (viewingCowCurrentPage > maxPage)
+        {
+            viewingCowCurrentPage = maxPage;
+        }
+        viewingCowHasMore = viewingCowTotalTransactions > (viewingCowCurrentPage * ViewingCowPageSize);
 
         viewingCowTransactions = await query
             .OrderByDescending(t => t.UpdatedAt)
@@ -146,8 +333,13 @@ public partial class AdminTransactions
             .Take(ViewingCowPageSize)
             .ToListAsync();
 
-        var additionalUserIds = viewingCowTransactions.Select(t => t.SenderId).Concat(viewingCowTransactions.Select(t => t.ReceiverId)).Distinct();
-        await PopulateUserLookup(additionalUserIds!);
+        var additionalUserIds = viewingCowTransactions
+            .Select(t => t.SenderId)
+            .Concat(viewingCowTransactions.Select(t => t.ReceiverId))
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Select(id => id!)
+            .Distinct();
+        await PopulateUserLookup(additionalUserIds);
     }
 
     private void EditCashCow(CashCow cow)
