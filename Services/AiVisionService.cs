@@ -666,10 +666,11 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
 - TEAMS: Verify the exact Home vs Away order.
 
 # 4. PLAYER PROPS & VOIDS
-- RULE 1: If a player plays 0 minutes / does not play (`didNotPlay: true`, not in squad, left on bench), outcome is ALWAYS 'Void' (even for live/Power Sub).
-- RULE 2 (SOCCER ONLY): For `sport: 'Soccer'` with `isLive: false`, the player MUST START. If they are subbed on later, it is 'Void'.
-- RULE 3 (LIVE BETS & NON-SOCCER SPORTS): If `isLive: true`, OR for non-Soccer sports (Basketball, Ice Hockey, American Football, etc.), the starter rule does NOT apply; if the player plays/participates in the match at all (even off the bench), the bet stands.
-- POWER SUB: If selection contains '(Power Sub)' (or market/selection mentions 'Epic Sub' / 'Super Sub' / 'Power Sub') and the named player STARTED, stats of their substitute are ADDED to theirs. Find this in the 'Substitution' events array ('swap'). If the named player didn't start, Power Sub is ignored (evaluate via rules above).
+- RULE 1 (0 MINUTES PLAYED): If a player plays 0 minutes / does not play (`didNotPlay: true`, not in squad, or unused substitute left on the bench with 0 minutes played and no appearance in 'Substitution' events), outcome is ALWAYS 'Void' (even for Anytime Goalscorer, live bets, or Power Sub).
+- RULE 2 (SOCCER 'ANYTIME GOALSCORER' ONLY): For `sport: 'Soccer'` ONLY when the market (or selection) is explicitly 'Anytime Goalscorer' / 'Anytime Goal Scorer', the player does NOT need to start. If the player plays 1 minute or more (started OR subbed on), the bet STANDS ('Won' if they score, 'Lost' if they play >= 1 minute and do not score). It is ONLY 'Void' if they play 0 minutes (unused bench / not in squad). This exception applies STRICTLY to 'Anytime Goalscorer' ONLY — NOT to 'Will/Will not Score' or other goal/player markets!
+- RULE 3 (ALL OTHER PRE-MATCH SOCCER PLAYER PROPS): For all OTHER `sport: 'Soccer'` player props with `isLive: false` (including 'Will/Will not Score', 'Player to Score', 'To Score 2+ Goals', 'First Goalscorer', 'Goal or Assist', Shots, Shots on Target, Fouls, Tackles, Passes, Assists, Cards / To Be Booked), the player MUST START. If they are subbed on later, it is 'Void'.
+- RULE 4 (LIVE BETS & NON-SOCCER SPORTS): If `isLive: true`, OR for non-Soccer sports (Basketball, Ice Hockey, American Football, etc.), the starter rule does NOT apply; if the player plays/participates in the match at all (even off the bench), the bet stands.
+- POWER SUB: If selection contains '(Power Sub)' (or market/selection mentions 'Epic Sub' / 'Super Sub' / 'Power Sub') and the named player STARTED, stats of their substitute are ADDED to theirs. Find this in the 'Substitution' events array ('swap'). If the named player didn't start, Power Sub stat-combining is ignored (evaluate the player via Rules 1-4 above).
 
 # 5. MARKETS & LINES
 - ASIAN LINES (.0): Any line ending in exactly '.0', '.25', or '.75' is Asian. If it lands exactly on a '.0' line (tie), outcome is 'Void' (Refund), unless it explicitly says '3-way'.
