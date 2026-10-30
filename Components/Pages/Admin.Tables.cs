@@ -534,8 +534,8 @@ public partial class Admin
 
         foreach (var bet in bets)
         {
-            var localTime = ToUserLocal(bet.UpdatedAt).ToString("g");
-            var norwayTime = TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("g");
+            var localTime = ToUserLocal(bet.UpdatedAt).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+            var norwayTime = TimeHelpers.GetNorwayTime(bet.UpdatedAt).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
             var discordName = userLookup.TryGetValue(bet.UserId, out var u) && !string.IsNullOrEmpty(u.DiscordName) ? u.DiscordName : bet.UserName;
             var lastName = userLookup.TryGetValue(bet.UserId, out var u2) ? u2.LastName : "";
 
