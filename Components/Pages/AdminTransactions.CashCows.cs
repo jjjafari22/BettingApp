@@ -47,6 +47,8 @@ public partial class AdminTransactions
     private ViewMode viewMode = ViewMode.AllTime;
     private DateTime currentViewDate = DateTime.UtcNow.Date;
     private bool showInternalAccounts = false;
+    private bool ccShowNorwayTimezone = false;
+    private int _ccPeriodQueryVersion = 0;
 
     private string newCowVippsBound
     {
@@ -261,44 +263,14 @@ public partial class AdminTransactions
 
         var query = baseCowQuery;
 
-        if (viewMode != ViewMode.AllTime)
+        var (startUtc, endUtc) = GetCashCowPeriodUtcBounds();
+        if (startUtc.HasValue)
         {
-            DateTime startBase, endBase;
-            switch (viewMode)
-            {
-                case ViewMode.Daily:
-                    startBase = currentViewDate.Date;
-                    endBase = startBase.AddDays(1);
-                    break;
-                case ViewMode.Weekly:
-                    startBase = GetStartOfWeek(currentViewDate);
-                    endBase = startBase.AddDays(7);
-                    break;
-                case ViewMode.Monthly:
-                    startBase = new DateTime(currentViewDate.Year, currentViewDate.Month, 1);
-                    endBase = startBase.AddMonths(1);
-                    break;
-                case ViewMode.Yearly:
-                    startBase = new DateTime(currentViewDate.Year, 1, 1);
-                    endBase = startBase.AddYears(1);
-                    break;
-                case ViewMode.Custom:
-                    startBase = ccStartDate?.Date ?? currentViewDate.Date;
-                    endBase = (ccEndDate?.Date ?? currentViewDate.Date).AddDays(1);
-                    break;
-                default:
-                    startBase = currentViewDate.Date;
-                    endBase = startBase.AddDays(1);
-                    break;
-            }
-
-            bool isFiltering = viewMode != ViewMode.Custom || ccStartDate.HasValue || ccEndDate.HasValue;
-            if (isFiltering)
-            {
-                var startUtc = DateTime.SpecifyKind(startBase.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
-                var endUtc = DateTime.SpecifyKind(endBase.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
-                query = query.Where(t => t.Date >= startUtc && t.Date < endUtc);
-            }
+            query = query.Where(t => t.Date >= startUtc.Value);
+        }
+        if (endUtc.HasValue)
+        {
+            query = query.Where(t => t.Date < endUtc.Value);
         }
 
         if (!string.IsNullOrEmpty(cowLedgerFilterType))
@@ -477,8 +449,92 @@ public partial class AdminTransactions
         return ordered.ThenBy(c => FormatFullName(c.FirstName, c.LastName), StringComparer.OrdinalIgnoreCase).ThenBy(c => c.Id);
     }
 
+    private DateTime GetCashCowBaseTime()
+    {
+        var nowUtc = DateTime.UtcNow;
+        if (ccShowNorwayTimezone) return TimeHelpers.GetNorwayTime(nowUtc);
+        return hasFetchedOffset ? nowUtc.AddMinutes(-TimezoneOffset) : nowUtc;
+    }
+
+    private DateTime GetCashCowUtcFromBaseTime(DateTime baseTime)
+    {
+        if (ccShowNorwayTimezone)
+        {
+            return DateTime.SpecifyKind(TimeHelpers.GetUtcFromNorwayTime(baseTime), DateTimeKind.Utc);
+        }
+        var utc = hasFetchedOffset ? baseTime.AddMinutes(TimezoneOffset) : baseTime;
+        return DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+    }
+
+    private DateTime ToCashCowDisplayTime(DateTime utcDate)
+    {
+        if (utcDate == DateTime.MinValue || utcDate == DateTime.MaxValue) return utcDate;
+        var normalizedUtc = DateTime.SpecifyKind(utcDate, DateTimeKind.Utc);
+        if (ccShowNorwayTimezone) return TimeHelpers.GetNorwayTime(normalizedUtc);
+        return ToUserLocal(normalizedUtc);
+    }
+
+    private (DateTime? StartUtc, DateTime? EndUtc) GetCashCowPeriodUtcBounds()
+    {
+        switch (viewMode)
+        {
+            case ViewMode.AllTime:
+                return (null, null);
+            case ViewMode.Daily:
+            {
+                var startBase = currentViewDate.Date;
+                var endBase = startBase.AddDays(1);
+                return (GetCashCowUtcFromBaseTime(startBase), GetCashCowUtcFromBaseTime(endBase));
+            }
+            case ViewMode.Weekly:
+            {
+                var startBase = GetStartOfWeek(currentViewDate);
+                var endBase = startBase.AddDays(7);
+                return (GetCashCowUtcFromBaseTime(startBase), GetCashCowUtcFromBaseTime(endBase));
+            }
+            case ViewMode.Monthly:
+            {
+                var startBase = new DateTime(currentViewDate.Year, currentViewDate.Month, 1);
+                var endBase = startBase.AddMonths(1);
+                return (GetCashCowUtcFromBaseTime(startBase), GetCashCowUtcFromBaseTime(endBase));
+            }
+            case ViewMode.Yearly:
+            {
+                var startBase = new DateTime(currentViewDate.Year, 1, 1);
+                var endBase = startBase.AddYears(1);
+                return (GetCashCowUtcFromBaseTime(startBase), GetCashCowUtcFromBaseTime(endBase));
+            }
+            case ViewMode.Custom:
+            {
+                DateTime? startUtc = ccStartDate.HasValue
+                    ? GetCashCowUtcFromBaseTime(ccStartDate.Value.Date)
+                    : null;
+                DateTime? endUtc = ccEndDate.HasValue
+                    ? GetCashCowUtcFromBaseTime(ccEndDate.Value.Date.AddDays(1))
+                    : null;
+                return (startUtc, endUtc);
+            }
+            default:
+            {
+                var startBase = currentViewDate.Date;
+                var endBase = startBase.AddDays(1);
+                return (GetCashCowUtcFromBaseTime(startBase), GetCashCowUtcFromBaseTime(endBase));
+            }
+        }
+    }
+
+    private async Task OnCashCowTimezoneToggled()
+    {
+        if (viewMode == ViewMode.AllTime)
+        {
+            currentViewDate = GetCashCowBaseTime().Date;
+        }
+        await UpdateCashCowPeriodNet();
+    }
+
     private async Task ClearCashCowFilter()
     {
+        ++_ccPeriodQueryVersion;
         ccStartDate = null;
         ccEndDate = null;
         ccPeriodNet = new Dictionary<string, int>();
@@ -489,26 +545,26 @@ public partial class AdminTransactions
         }
     }
 
-    private void SetViewMode(ViewMode mode)
+    private async Task SetViewMode(ViewMode mode)
     {
         viewMode = mode;
         if (mode != ViewMode.Custom)
         {
-            _ = GoToCurrent();
+            await GoToCurrent();
         }
         else
         {
-            _ = UpdateCashCowPeriodNet();
+            await UpdateCashCowPeriodNet();
         }
     }
 
     private async Task GoToCurrent()
     {
-        currentViewDate = DateTime.UtcNow.AddMinutes(-TimezoneOffset).Date;
+        currentViewDate = GetCashCowBaseTime().Date;
         await UpdateCashCowPeriodNet();
     }
 
-    private void PreviousPeriod()
+    private async Task PreviousPeriod()
     {
         currentViewDate = viewMode switch
         {
@@ -518,10 +574,10 @@ public partial class AdminTransactions
             ViewMode.Yearly => currentViewDate.AddYears(-1),
             _ => currentViewDate
         };
-        _ = UpdateCashCowPeriodNet();
+        await UpdateCashCowPeriodNet();
     }
 
-    private void NextPeriod()
+    private async Task NextPeriod()
     {
         currentViewDate = viewMode switch
         {
@@ -531,7 +587,7 @@ public partial class AdminTransactions
             ViewMode.Yearly => currentViewDate.AddYears(1),
             _ => currentViewDate
         };
-        _ = UpdateCashCowPeriodNet();
+        await UpdateCashCowPeriodNet();
     }
 
     private string GetPeriodDisplayString()
@@ -556,14 +612,21 @@ public partial class AdminTransactions
 
     private async Task OnCustomDateChanged()
     {
+        if (ccStartDate.HasValue && ccEndDate.HasValue && ccStartDate.Value.Date > ccEndDate.Value.Date)
+        {
+            (ccStartDate, ccEndDate) = (ccEndDate, ccStartDate);
+        }
+
         if (viewMode == ViewMode.Custom)
         {
             await UpdateCashCowPeriodNet();
         }
     }
 
-    private async Task UpdateCashCowPeriodNetCore(ApplicationDbContext context)
+    private async Task UpdateCashCowPeriodNetCore(ApplicationDbContext context, int? expectedVersion = null)
     {
+        int version = expectedVersion ?? ++_ccPeriodQueryVersion;
+
         if (viewMode == ViewMode.Custom && ccStartDate == null && ccEndDate == null)
         {
             ccPeriodNet = new Dictionary<string, int>();
@@ -574,45 +637,21 @@ public partial class AdminTransactions
             .AsNoTracking()
             .Where(t => t.Status == "Completed" && (t.SenderType == "CashCow" || t.ReceiverType == "CashCow"));
 
-        if (viewMode != ViewMode.AllTime)
+        var (startUtc, endUtc) = GetCashCowPeriodUtcBounds();
+        if (startUtc.HasValue)
         {
-            DateTime startBase, endBase;
-            switch (viewMode)
-            {
-                case ViewMode.Daily:
-                    startBase = currentViewDate.Date;
-                    endBase = startBase.AddDays(1);
-                    break;
-                case ViewMode.Weekly:
-                    startBase = GetStartOfWeek(currentViewDate);
-                    endBase = startBase.AddDays(7);
-                    break;
-                case ViewMode.Monthly:
-                    startBase = new DateTime(currentViewDate.Year, currentViewDate.Month, 1);
-                    endBase = startBase.AddMonths(1);
-                    break;
-                case ViewMode.Yearly:
-                    startBase = new DateTime(currentViewDate.Year, 1, 1);
-                    endBase = startBase.AddYears(1);
-                    break;
-                case ViewMode.Custom:
-                    startBase = ccStartDate?.Date ?? currentViewDate.Date;
-                    endBase = (ccEndDate?.Date ?? currentViewDate.Date).AddDays(1);
-                    break;
-                default:
-                    startBase = currentViewDate.Date;
-                    endBase = startBase.AddDays(1);
-                    break;
-            }
-
-            var startUtc = DateTime.SpecifyKind(startBase.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
-            var endUtc = DateTime.SpecifyKind(endBase.AddMinutes(TimezoneOffset), DateTimeKind.Utc);
-            query = query.Where(t => t.Date >= startUtc && t.Date < endUtc);
+            query = query.Where(t => t.Date >= startUtc.Value);
+        }
+        if (endUtc.HasValue)
+        {
+            query = query.Where(t => t.Date < endUtc.Value);
         }
 
         var txs = await query
             .Select(t => new { t.SenderType, t.SenderId, t.ReceiverType, t.ReceiverId, t.AmountNOK })
             .ToListAsync();
+
+        if (version != _ccPeriodQueryVersion) return;
 
         var nextPeriodNet = new Dictionary<string, int>();
         foreach (var cow in cashCows)
@@ -627,15 +666,20 @@ public partial class AdminTransactions
 
     private async Task UpdateCashCowPeriodNet()
     {
+        if (_isDisposed) return;
+
         if (viewMode == ViewMode.Custom && ccStartDate == null && ccEndDate == null)
         {
             await ClearCashCowFilter();
-            await InvokeAsync(StateHasChanged);
+            if (!_isDisposed) await InvokeAsync(StateHasChanged);
             return;
         }
 
+        int version = ++_ccPeriodQueryVersion;
         using var context = DbFactory.CreateDbContext();
-        await UpdateCashCowPeriodNetCore(context);
+        await UpdateCashCowPeriodNetCore(context, version);
+
+        if (version != _ccPeriodQueryVersion || _isDisposed) return;
 
         if (viewingCow != null)
         {
@@ -643,6 +687,6 @@ public partial class AdminTransactions
             await LoadCowTransactions(viewingCow);
         }
 
-        await InvokeAsync(StateHasChanged);
+        if (!_isDisposed) await InvokeAsync(StateHasChanged);
     }
 }

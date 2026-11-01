@@ -28,6 +28,8 @@ public partial class AdminTransactions : IDisposable
     private bool _isDisposed = false;
 
     private int TimezoneOffset { get; set; }
+    private bool hasFetchedOffset = false;
+    private bool _isFetchingOffset = false;
 
     private Dictionary<string, (string DiscordName, string FirstName, string LastName)> userLookup = new();
     private Dictionary<string, decimal> currentBalances = new();
@@ -174,7 +176,7 @@ public partial class AdminTransactions : IDisposable
                 return;
             }
 
-            currentViewDate = DateTime.UtcNow.AddMinutes(-TimezoneOffset).Date;
+            currentViewDate = GetCashCowBaseTime().Date;
             await LoadTransactions(context);
             UiNotifier.OnAdminNotification += HandleAdminNotification;
         }
@@ -223,15 +225,26 @@ public partial class AdminTransactions : IDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!hasFetchedOffset && !_isFetchingOffset && !isInitializing)
         {
+            _isFetchingOffset = true;
+            bool fetchedSuccessfully = false;
             try
             {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                fetchedSuccessfully = true;
             }
             catch { }
+            finally
+            {
+                hasFetchedOffset = true;
+                _isFetchingOffset = false;
+            }
 
-            _ = GoToCurrent();
+            if (fetchedSuccessfully && !_isDisposed)
+            {
+                await GoToCurrent();
+            }
         }
     }
 

@@ -657,6 +657,11 @@ else
                         </div>
                         
                         <div class="form-check form-switch d-flex align-items-center gap-2 mb-0" style="margin-top: 2px;">
+                            <input class="form-check-input mt-0" type="checkbox" role="switch" id="ccNorwayTzToggle" @bind="ccShowNorwayTimezone" @bind:after="OnCashCowTimezoneToggled">
+                            <label class="form-check-label small text-white" for="ccNorwayTzToggle">Norway TZ</label>
+                        </div>
+
+                        <div class="form-check form-switch d-flex align-items-center gap-2 mb-0" style="margin-top: 2px;">
                             <input class="form-check-input mt-0" type="checkbox" role="switch" id="showInternalToggle" @bind="showInternalAccounts">
                             <label class="form-check-label small text-white" for="showInternalToggle">Show Internal (Misc)</label>
                         </div>
@@ -676,6 +681,7 @@ else
                             <button class="btn btn-outline-light btn-sm" @onclick="PreviousPeriod"><i class="bi bi-chevron-left"></i></button>
                             <span class="fw-bold mx-2" style="min-width: 120px; text-align: center;">@GetPeriodDisplayString()</span>
                             <button class="btn btn-outline-light btn-sm" @onclick="NextPeriod"><i class="bi bi-chevron-right"></i></button>
+                            <button class="btn btn-light btn-sm ms-2" @onclick="GoToCurrent">Today</button>
                         }
                     </div>
                 </div>
@@ -710,7 +716,7 @@ else
                                             @{
                                                 var lastUpd = ccLastUpdated.TryGetValue(cow.Id, out var dt) ? dt : null;
                                                 if (lastUpd.HasValue) {
-                                                    <span class="text-muted small">@ToUserLocal(lastUpd.Value).ToString("g")</span>
+                                                    <span class="text-muted small">@ToCashCowDisplayTime(lastUpd.Value).ToString("g")</span>
                                                 } else {
                                                     <span class="text-muted small fst-italic">No transactions</span>
                                                 }
@@ -864,7 +870,7 @@ else
                                     {
                                         var isIncoming = t.ReceiverId == viewingCow.Id;
                                         <tr @key="t.Id">
-                                            <td>@ToUserLocal(t.UpdatedAt).ToString("g")</td>
+                                            <td>@ToCashCowDisplayTime(t.UpdatedAt).ToString("g")</td>
                                             <td><span class="badge bg-secondary">@t.Type</span></td>
                                             <td><small class="text-muted">@t.Platform</small></td>
                                             <td class="@(isIncoming ? "text-success fw-bold" : "text-danger fw-bold")">
