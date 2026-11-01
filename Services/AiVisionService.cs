@@ -212,10 +212,11 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 - Team Names in Market: If a team name is in the market (e.g. 'FC Midtjylland Total Goals'), include it exactly as written.
 
 # FIELDS TO EXTRACT
-1. bookmaker: 'Unibet', 'Bet365', 'Coolbet', 'EpicBet', etc. If the logo is missing, guess based on UI colors:
+1. bookmaker: 'Unibet', 'Bet365', 'Coolbet', 'EpicBet', 'Norsk Tipping', etc. ('Oddsen' is Norsk Tipping's sportsbook — ALWAYS output 'Norsk Tipping', NEVER 'Oddsen'). If the logo is missing, guess based on UI colors/layout:
    - Coolbet: Dark theme, cyan/light-blue rounded odds boxes, bright green 'PLACE BET' button, green-bordered stake input.
    - Unibet: Dark gray theme, bright yellow 'Place bet' (or 'Placer væddemål') button, green numeric keyboard keys.
    - Bet365: Green header, grey/yellow UI elements.
+   - Norsk Tipping: 'Oddsen' header or multicolored 4-arrow X logo, bottom nav ('Hjem', 'Spill', 'Mine spill', 'Profil'), top-right 'Saldo' pill, royal-blue odds badges/preset stake buttons (10, 25, 50, 100, 250, 500), 'HUB' market label, 'Mulig premie', green 'Til betaling' / 'Tap to bet' button. Always output 'Norsk Tipping'.
    Output 'Unknown' if impossible to tell. Do NOT leave empty.
 2. isLive: boolean. true ONLY if you clearly see an explicit 'LIVE' or 'In-Play' badge, or ongoing current match score ('1-0', '0-0'). Default to false.
 3. totalOdds: Final combined odds of the slip as a clean decimal number (e.g. '27.84'). Never include CSS units like 'px'.
@@ -262,7 +263,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                             properties = new
                             {
                                 thoughtProcess = new { type = "STRING", description = "Your detailed, step-by-step reasoning for extracting the slip. Analyze the image carefully here before filling the rest of the fields." },
-                                bookmaker = new { type = "STRING", nullable = true, description = "The name of the bookmaker/sportsbook. If logo is missing, guess from UI colors (Coolbet=cyan odds/green button, Unibet=yellow button/green keyboard). Output 'Unknown' if impossible to tell." },
+                                bookmaker = new { type = "STRING", nullable = true, description = "The name of the bookmaker/sportsbook (e.g. 'Unibet', 'Bet365', 'Coolbet', 'EpicBet', 'Norsk Tipping'). Note: 'Oddsen' is Norsk Tipping — always output 'Norsk Tipping', never 'Oddsen'. If logo is missing, guess from UI (Coolbet=cyan odds/green button, Unibet=yellow button/green keyboard, Norsk Tipping=multicolored X logo/'Hjem-Spill-Mine spill-Profil' nav/'Saldo' pill/royal-blue odds & 10-500 buttons/'HUB'/'Til betaling'). Output 'Unknown' if impossible to tell." },
                                 isLive = new { type = "BOOLEAN", description = "True ONLY if explicitly marked as a LIVE or In-Play bet." },
                                 totalOdds = new { type = "STRING", nullable = true },
                                 stake = new { type = "STRING", nullable = true },
@@ -344,6 +345,8 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                     
                     if (result != null)
                     {
+                        result.Bookmaker = NormalizeBookmakerName(result.Bookmaker);
+
                         if (!string.IsNullOrEmpty(result.TotalOdds))
                         {
                             var match = System.Text.RegularExpressions.Regex.Match(result.TotalOdds, @"\d+([.,]\d+)?");
@@ -495,6 +498,28 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                 _logger.LogError($"{betLabel}EXCEPTION in ExtractBetSlipDataAsync: {ex.ToString()}");
                 return (null, $"Exception: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Canonicalizes AI-extracted bookmaker aliases (e.g., Norsk Tipping's sportsbook brand "Oddsen" /
+        /// "Langoddsen" / "Liveoddsen") to their standard bookmaker name.
+        /// </summary>
+        public static string NormalizeBookmakerName(string? bookmaker)
+        {
+            if (string.IsNullOrWhiteSpace(bookmaker)) return bookmaker ?? "";
+
+            string trimmed = bookmaker.Trim();
+            if (trimmed.Equals("Oddsen", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("Oddsen.no", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("Langoddsen", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Equals("Liveoddsen", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Contains("Norsk Tipping", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.Contains("NorskTipping", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Norsk Tipping";
+            }
+
+            return trimmed;
         }
 
         /// <summary>

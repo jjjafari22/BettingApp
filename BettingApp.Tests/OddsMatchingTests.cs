@@ -2550,5 +2550,23 @@ namespace BettingApp.Tests
             var mapped = _marketMapper.NormalizeMarketName("Overall Winner (incl. Extra Time/Penalties)", "Tromsdalen vs Lyn", "Lyn");
             Assert.Contains("To Qualify", mapped);
         }
+
+        [Fact]
+        public void Test_NormalizeBookmakerName_MapsOddsenToNorskTipping()
+        {
+            Assert.Equal("Norsk Tipping", AiVisionService.NormalizeBookmakerName("Oddsen"));
+            Assert.Equal("Norsk Tipping", AiVisionService.NormalizeBookmakerName("oddsen"));
+            Assert.Equal("Norsk Tipping", AiVisionService.NormalizeBookmakerName("Langoddsen"));
+            Assert.Equal("Norsk Tipping", AiVisionService.NormalizeBookmakerName("Liveoddsen"));
+            Assert.Equal("Norsk Tipping", AiVisionService.NormalizeBookmakerName("Norsk Tipping - Oddsen"));
+            Assert.Equal("Norsk Tipping", AiVisionService.NormalizeBookmakerName("  Norsk Tipping  "));
+
+            // Must not falsely map other bookmakers (e.g., Danske Spil's "Oddset")
+            Assert.Equal("Oddset", AiVisionService.NormalizeBookmakerName("Oddset"));
+            Assert.Equal("Danske Spil", AiVisionService.NormalizeBookmakerName("Danske Spil"));
+            Assert.Equal("Unibet", AiVisionService.NormalizeBookmakerName("Unibet"));
+            Assert.Equal("Unknown", AiVisionService.NormalizeBookmakerName("Unknown"));
+            Assert.Equal("", AiVisionService.NormalizeBookmakerName(null));
+        }
     }
 }
