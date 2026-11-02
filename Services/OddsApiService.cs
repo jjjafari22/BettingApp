@@ -433,7 +433,7 @@ public class OddsApiService
                 var parsedFixtures = await GetParsedFixturesAsync(sportId, cancellationToken);
                 if (parsedFixtures == null) return (null, "Fixtures API failed or returned 429");
 
-            string[] split = teamName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+            string[] split = TeamAliasMappingService.SplitMatchTeams(teamName);
             string homeTeam = split[0].Trim();
             string awayTeam = split.Length > 1 ? split[1].Trim() : "";
 

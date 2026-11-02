@@ -44,6 +44,8 @@ builder.Services.AddSignalR(hubOptions =>
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<BetProcessingService>();
 builder.Services.AddScoped<DialogService>();
+builder.Services.AddScoped<CircuitConnectionTracker>();
+builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler>(sp => sp.GetRequiredService<CircuitConnectionTracker>());
 Func<HttpMessageHandler> compressedHandler = () => new HttpClientHandler
 {
     AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate | System.Net.DecompressionMethods.Brotli
@@ -83,7 +85,6 @@ builder.Services.AddHttpClient<AiVisionService>(client =>
         }
     }
 });
-builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<FotMobScraperService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<EspnApiService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
 builder.Services.AddHttpClient<PlayerMatchResolverService>().ConfigurePrimaryHttpMessageHandler(compressedHandler);
@@ -160,7 +161,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString, sqlOptions => 
     {
-        sqlOptions.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: new[] { 0 });
+        sqlOptions.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: new[] { 0, 11001, 11002, 11004 });
         sqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
     }));
 

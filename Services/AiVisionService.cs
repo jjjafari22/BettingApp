@@ -255,7 +255,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                     },
                     generationConfig = new
                     {
-                        maxOutputTokens = 16384,
+                        maxOutputTokens = 32768,
                         responseMimeType = "application/json",
                         responseSchema = new
                         {
@@ -321,6 +321,18 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                 using var doc = JsonDocument.Parse(responseString);
                 string textResponse = ExtractGeminiText(doc)?.Trim() ?? "";
 
+                if (string.IsNullOrEmpty(textResponse))
+                {
+                    _logger.LogWarning($"{betLabel}{usedProviderTag}Gemini returned an empty extraction response.");
+                    return (null, $"Gemini returned an empty response ({usedProviderTag.Trim()}).");
+                }
+
+                if (textResponse.StartsWith("Error:", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning($"{betLabel}{usedProviderTag}{textResponse}");
+                    return (null, textResponse);
+                }
+
                 if (!string.IsNullOrEmpty(textResponse))
                 {
                     // Sometimes the LLM returns ```json ... ``` despite instructions. Strip it.
@@ -341,7 +353,16 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                     }
 
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    var result = JsonSerializer.Deserialize<AiVisionExtractionResult>(textResponse, options);
+                    AiVisionExtractionResult? result;
+                    try
+                    {
+                        result = JsonSerializer.Deserialize<AiVisionExtractionResult>(textResponse, options);
+                    }
+                    catch (JsonException jex)
+                    {
+                        _logger.LogWarning($"{betLabel}{usedProviderTag}Gemini returned malformed or truncated extraction JSON: {jex.Message}");
+                        return (null, $"Gemini returned malformed or truncated extraction JSON ({usedProviderTag.Trim()}): {jex.Message}");
+                    }
                     
                     if (result != null)
                     {
@@ -370,6 +391,11 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                         {
                             var leg = result.Legs[i];
                             if (leg == null) continue;
+
+                            if (!string.IsNullOrWhiteSpace(leg.Match))
+                            {
+                                leg.Match = TeamAliasMappingService.NormalizeMatchSeparator(leg.Match);
+                            }
 
                             bool startNewGroup = currentLegGroup == null
                                 || !string.IsNullOrWhiteSpace(leg.Odds)
@@ -609,7 +635,7 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
             string cleaned = text;
             if (!string.IsNullOrWhiteSpace(match))
             {
-                var teams = match.Split(new[] { " vs ", " v ", " - ", " @ " }, StringSplitOptions.RemoveEmptyEntries);
+                var teams = TeamAliasMappingService.SplitMatchTeams(match, includeAtSeparators: true, options: StringSplitOptions.RemoveEmptyEntries);
                 foreach (var team in teams)
                 {
                     string t = team.Trim();
@@ -859,7 +885,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
 
                 payload["generationConfig"] = new Dictionary<string, object>
                 {
-                    ["maxOutputTokens"] = 16384,
+                    ["maxOutputTokens"] = 32768,
                     ["responseMimeType"] = "application/json",
                     ["responseSchema"] = JsonSerializer.Deserialize<object>(schemaJson, options)!,
                     ["thinkingConfig"] = new Dictionary<string, object>
@@ -900,157 +926,177 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                 using var doc = JsonDocument.Parse(json);
                 var text = ExtractGeminiText(doc);
 
-                if (!string.IsNullOrEmpty(text))
+                if (string.IsNullOrWhiteSpace(text))
                 {
-                    int startIndex = text.IndexOf('{');
-                    int endIndex = text.LastIndexOf('}');
-                    if (startIndex >= 0 && endIndex >= startIndex)
-                    {
-                        text = text.Substring(startIndex, endIndex - startIndex + 1);
-                    }
+                    _logger.LogWarning($"{betLabel}{usedProviderTag}Gemini returned an empty outcome response.");
+                    return $"Error: Empty outcome response from Gemini ({usedProviderTag.Trim()}).";
                 }
 
-                string? finalJson = text?.Trim();
+                if (text.StartsWith("Error:", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning($"{betLabel}{usedProviderTag}{text}");
+                    return text;
+                }
+
+                int startIndex = text.IndexOf('{');
+                int endIndex = text.LastIndexOf('}');
+                if (startIndex >= 0 && endIndex >= startIndex)
+                {
+                    text = text.Substring(startIndex, endIndex - startIndex + 1);
+                }
+
+                string? finalJson = text.Trim();
                 if (!string.IsNullOrEmpty(finalJson))
                 {
                     try
                     {
                         var resOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                         var resultObj = JsonSerializer.Deserialize<AiOutcomeResultData>(finalJson, resOptions);
-                        if (resultObj != null && resultObj.Legs != null && resultObj.Legs.Count > 0)
+                        if (resultObj == null || resultObj.Legs == null || resultObj.Legs.Count == 0)
                         {
-                            var outcomes = resultObj.Legs.Select(l => l.Outcome?.ToUpperInvariant() ?? "").ToList();
-                            
-                            var originalBet = JsonSerializer.Deserialize<AiVisionExtractionResult>(extractedBetDataJson, resOptions);
-                            bool isBetBuilder = originalBet?.IsBetBuilder ?? false;
+                            _logger.LogWarning($"{betLabel}{usedProviderTag}AI returned outcome JSON without valid legs.");
+                            return "Error: Gemini returned outcome JSON without valid legs.";
+                        }
 
-                            bool hasVoid = outcomes.Any(o => o == "VOID");
-                            bool hasWonOrLost = outcomes.Any(o => o == "WON" || o == "LOST");
-                            bool hasUnknown = outcomes.Any(o => o == "UNKNOWN");
-                            bool hasPending = outcomes.Any(o => o == "PENDING");
-                            bool hasLost = outcomes.Any(o => o == "LOST");
+                        var outcomes = resultObj.Legs.Select(l => l.Outcome?.ToUpperInvariant() ?? "").ToList();
+                        
+                        var originalBet = JsonSerializer.Deserialize<AiVisionExtractionResult>(extractedBetDataJson, resOptions);
+                        bool isBetBuilder = originalBet?.IsBetBuilder ?? false;
 
-                            string pendingStatus = "MATCH IN PROGRESS";
-                            if (hasPending && resultObj.Legs != null) 
+                        bool hasVoid = outcomes.Any(o => o == "VOID");
+                        bool hasWonOrLost = outcomes.Any(o => o == "WON" || o == "LOST");
+                        bool hasUnknown = outcomes.Any(o => o == "UNKNOWN");
+                        bool hasPending = outcomes.Any(o => o == "PENDING");
+                        bool hasLost = outcomes.Any(o => o == "LOST");
+
+                        string pendingStatus = "MATCH IN PROGRESS";
+                        if (hasPending && resultObj.Legs != null) 
+                        {
+                            var pendingLegs = resultObj.Legs.Where(l => l.Outcome?.ToUpperInvariant() == "PENDING").ToList();
+                            bool allFuture = true;
+                            foreach (var leg in pendingLegs)
                             {
-                                var pendingLegs = resultObj.Legs.Where(l => l.Outcome?.ToUpperInvariant() == "PENDING").ToList();
-                                bool allFuture = true;
-                                foreach (var leg in pendingLegs)
+                                if (DateTime.TryParse(leg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
                                 {
-                                    if (DateTime.TryParse(leg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
-                                    {
-                                        if (st <= DateTime.UtcNow) { allFuture = false; break; }
-                                    }
-                                    else
-                                    {
-                                        allFuture = false; break;
-                                    }
-                                }
-                                if (allFuture && pendingLegs.Count > 0) pendingStatus = "MATCH NOT STARTED";
-                            }
-
-                            // Group legs to evaluate sub-betbuilders and single legs independently.
-                            // We chunk them contiguously. If adjacent legs have the same match, they form a BetBuilder group.
-                            // We also use originalBet's odds to detect if a new distinct bet starts for the same match.
-                            var groupsByMatch = new List<List<AiOutcomeLegResult>>();
-                            List<AiOutcomeLegResult>? currentGroup = null;
-                            string? currentMatch = null;
-
-                            for (int i = 0; i < resultObj.Legs!.Count; i++)
-                            {
-                                var leg = resultObj.Legs[i];
-                                var origLeg = (originalBet?.Legs != null && i < originalBet.Legs.Count) ? originalBet.Legs[i] : null;
-                                string match = leg.Match ?? "";
-
-                                bool startNewGroup = false;
-                                if (currentGroup == null || match != currentMatch)
-                                {
-                                    startNewGroup = true;
-                                }
-                                else if (origLeg != null && !string.IsNullOrWhiteSpace(origLeg.Odds))
-                                {
-                                    // Even if the match is the same, explicit odds mean a new bet on the slip
-                                    startNewGroup = true;
-                                }
-
-                                if (startNewGroup)
-                                {
-                                    currentGroup = new List<AiOutcomeLegResult>();
-                                    groupsByMatch.Add(currentGroup);
-                                    currentMatch = match;
-                                }
-                                
-                                currentGroup!.Add(leg);
-                            }
-                            
-                            bool anyGroupDefinitivelyLost = false;
-
-                            foreach (var group in groupsByMatch)
-                            {
-                                bool gHasPending = group.Any(l => l.Outcome?.ToUpperInvariant() == "PENDING");
-                                bool gHasUnknown = group.Any(l => l.Outcome?.ToUpperInvariant() == "UNKNOWN");
-                                bool gHasVoid = group.Any(l => l.Outcome?.ToUpperInvariant() == "VOID");
-                                bool gHasLost = group.Any(l => l.Outcome?.ToUpperInvariant() == "LOST");
-
-                                // A group is definitively lost if it is fully finished, has no voids, and has at least one loss.
-                                if (!gHasPending && !gHasUnknown && !gHasVoid && gHasLost)
-                                {
-                                    anyGroupDefinitivelyLost = true;
-                                    break;
-                                }
-                            }
-
-                            // Determine Overall Status
-                            if (anyGroupDefinitivelyLost)
-                            {
-                                // If ANY group is definitively lost, the entire betslip is immediately LOST
-                                resultObj.OverallStatus = "LOST";
-                            }
-                            else if (hasPending)
-                            {
-                                resultObj.OverallStatus = pendingStatus;
-                            }
-                            else if (hasUnknown)
-                            {
-                                resultObj.OverallStatus = "UNKNOWN";
-                            }
-                            else if (hasVoid)
-                            {
-                                if (isBetBuilder)
-                                {
-                                    resultObj.OverallStatus = "UNKNOWN"; // Bookmaker BB void rules vary, requires manual review
+                                    if (st <= DateTime.UtcNow) { allFuture = false; break; }
                                 }
                                 else
                                 {
-                                    if (outcomes.All(o => o == "VOID")) resultObj.OverallStatus = "VOID";
-                                    else resultObj.OverallStatus = "UNKNOWN"; // Needs manual odds recalculation for won/void mix
+                                    allFuture = false; break;
                                 }
                             }
-                            else if (outcomes.All(o => o == "WON"))
+                            if (allFuture && pendingLegs.Count > 0) pendingStatus = "MATCH NOT STARTED";
+                        }
+
+                        // Group legs to evaluate sub-betbuilders and single legs independently.
+                        // We chunk them contiguously. If adjacent legs have the same match, they form a BetBuilder group.
+                        // We also use originalBet's odds to detect if a new distinct bet starts for the same match.
+                        var groupsByMatch = new List<List<AiOutcomeLegResult>>();
+                        List<AiOutcomeLegResult>? currentGroup = null;
+                        string? currentMatch = null;
+
+                        for (int i = 0; i < resultObj.Legs!.Count; i++)
+                        {
+                            var leg = resultObj.Legs[i];
+                            var origLeg = (originalBet?.Legs != null && i < originalBet.Legs.Count) ? originalBet.Legs[i] : null;
+                            string match = leg.Match ?? "";
+
+                            bool startNewGroup = false;
+                            if (currentGroup == null || match != currentMatch)
                             {
-                                resultObj.OverallStatus = "WON";
+                                startNewGroup = true;
+                            }
+                            else if (origLeg != null && !string.IsNullOrWhiteSpace(origLeg.Odds))
+                            {
+                                // Even if the match is the same, explicit odds mean a new bet on the slip
+                                startNewGroup = true;
+                            }
+
+                            if (startNewGroup)
+                            {
+                                currentGroup = new List<AiOutcomeLegResult>();
+                                groupsByMatch.Add(currentGroup);
+                                currentMatch = match;
+                            }
+                            
+                            currentGroup!.Add(leg);
+                        }
+                        
+                        bool anyGroupDefinitivelyLost = false;
+
+                        foreach (var group in groupsByMatch)
+                        {
+                            bool gHasPending = group.Any(l => l.Outcome?.ToUpperInvariant() == "PENDING");
+                            bool gHasUnknown = group.Any(l => l.Outcome?.ToUpperInvariant() == "UNKNOWN");
+                            bool gHasVoid = group.Any(l => l.Outcome?.ToUpperInvariant() == "VOID");
+                            bool gHasLost = group.Any(l => l.Outcome?.ToUpperInvariant() == "LOST");
+
+                            // A group is definitively lost if it is fully finished, has no voids, and has at least one loss.
+                            if (!gHasPending && !gHasUnknown && !gHasVoid && gHasLost)
+                            {
+                                anyGroupDefinitivelyLost = true;
+                                break;
+                            }
+                        }
+
+                        // Determine Overall Status
+                        if (anyGroupDefinitivelyLost)
+                        {
+                            // If ANY group is definitively lost, the entire betslip is immediately LOST
+                            resultObj.OverallStatus = "LOST";
+                        }
+                        else if (hasPending)
+                        {
+                            resultObj.OverallStatus = pendingStatus;
+                        }
+                        else if (hasUnknown)
+                        {
+                            resultObj.OverallStatus = "UNKNOWN";
+                        }
+                        else if (hasVoid)
+                        {
+                            if (isBetBuilder)
+                            {
+                                resultObj.OverallStatus = "UNKNOWN"; // Bookmaker BB void rules vary, requires manual review
                             }
                             else
                             {
-                                resultObj.OverallStatus = "UNKNOWN";
+                                if (outcomes.All(o => o == "VOID")) resultObj.OverallStatus = "VOID";
+                                else resultObj.OverallStatus = "UNKNOWN"; // Needs manual odds recalculation for won/void mix
                             }
-                            
-                            finalJson = JsonSerializer.Serialize(resultObj, new JsonSerializerOptions { WriteIndented = false });
+                        }
+                        else if (outcomes.All(o => o == "WON"))
+                        {
+                            resultObj.OverallStatus = "WON";
+                        }
+                        else
+                        {
+                            resultObj.OverallStatus = "UNKNOWN";
                         }
                         
-                        string status = resultObj?.OverallStatus ?? "UNKNOWN";
-                        bool hasStartTime = !string.IsNullOrEmpty(resultObj?.MatchStartTimeIso);
+                        finalJson = JsonSerializer.Serialize(resultObj, new JsonSerializerOptions { WriteIndented = false });
+                        
+                        string status = resultObj.OverallStatus ?? "UNKNOWN";
+                        bool hasStartTime = !string.IsNullOrEmpty(resultObj.MatchStartTimeIso);
                         
                         if (status == "MATCH IN PROGRESS" && hasStartTime)
                         {
-                            _logger.LogInformation($"{betLabel}AI: Found start time -> {resultObj!.MatchStartTimeIso}");
+                            _logger.LogInformation($"{betLabel}AI: Found start time -> {resultObj.MatchStartTimeIso}");
                         }
                         else
                         {
                             _logger.LogInformation($"{betLabel}AI: Checked outcome -> Status: {status}");
                         }
                     }
-                    catch { } // ignore parsing errors
+                    catch (JsonException jex)
+                    {
+                        _logger.LogWarning($"{betLabel}{usedProviderTag}AI returned malformed or truncated outcome JSON ({jex.Message}). Rejecting partial output.");
+                        return $"Error: Gemini returned malformed or truncated outcome JSON ({jex.Message})";
+                    }
+                }
+                else
+                {
+                    return "Error: Gemini returned empty outcome JSON.";
                 }
 
                 return finalJson;
@@ -1095,24 +1141,36 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
             if (doc.RootElement.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
             {
                 var candidate = candidates[0];
+                string? finishReasonStr = candidate.TryGetProperty("finishReason", out var finishReasonProp)
+                    ? finishReasonProp.GetString()
+                    : null;
+
+                if (string.Equals(finishReasonStr, "MAX_TOKENS", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("[AI WARNING] Gemini generation truncated due to MAX_TOKENS");
+                    return "Error: Gemini generation truncated due to MAX_TOKENS";
+                }
+
                 if (candidate.TryGetProperty("content", out var content) && content.TryGetProperty("parts", out var parts) && parts.GetArrayLength() > 0)
                 {
-                    // If thinking is enabled, the actual text is usually the last part
-                    var textProp = parts[parts.GetArrayLength() - 1];
-                    if (textProp.TryGetProperty("text", out var text))
+                    // If thinking is enabled, iterate backwards to pick the last non-thought text part
+                    for (int i = parts.GetArrayLength() - 1; i >= 0; i--)
                     {
-                        return text.GetString();
+                        var part = parts[i];
+                        bool isThought = part.TryGetProperty("thought", out var thoughtProp) && thoughtProp.ValueKind == JsonValueKind.True;
+                        if (!isThought && part.TryGetProperty("text", out var text))
+                        {
+                            return text.GetString();
+                        }
                     }
-                    else
-                    {
-                        return $"Error: Gemini returned a part without a 'text' property. Raw part: {textProp.ToString()}";
-                    }
+
+                    var lastPart = parts[parts.GetArrayLength() - 1];
+                    return $"Error: Gemini returned no non-thought 'text' part (finishReason: {finishReasonStr ?? "Unknown"}). Raw part: {lastPart}";
                 }
-                else if (candidate.TryGetProperty("finishReason", out var finishReason))
+                else if (!string.IsNullOrEmpty(finishReasonStr))
                 {
-                    string reason = finishReason.GetString() ?? "Unknown";
-                    _logger.LogWarning($"[AI WARNING] Gemini generation stopped due to: {reason}");
-                    return $"Error: Gemini generation stopped due to {reason}";
+                    _logger.LogWarning($"[AI WARNING] Gemini generation stopped due to: {finishReasonStr}");
+                    return $"Error: Gemini generation stopped due to {finishReasonStr}";
                 }
             }
             else if (doc.RootElement.TryGetProperty("promptFeedback", out var feedback))

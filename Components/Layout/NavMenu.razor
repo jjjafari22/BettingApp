@@ -9,6 +9,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject ILogger<NavMenu> Logger
 @inject UiNotificationService UiNotifier
+@inject CircuitConnectionTracker CircuitTracker
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <div class="top-row navbar navbar-dark d-flex align-items-center" style="padding-left: 1rem;">
@@ -210,6 +211,7 @@
     private System.Timers.Timer? _debounceTimer;
     private bool _isDisposed = false;
     private bool _hasPendingRefresh = false;
+    private volatile bool _needsRefreshOnReconnect = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -231,6 +233,7 @@
                 if (isAdmin)
                 {
                     UiNotifier.OnAdminNotification += HandleAdminNotification;
+                    CircuitTracker.OnConnectionRestored += HandleConnectionRestored;
                     await RefreshTasksAsync();
                 }
             }
@@ -241,9 +244,24 @@
         }
     }
 
+    private void HandleConnectionRestored()
+    {
+        if (_isDisposed || !isAdmin || CircuitTracker.IsClosed) return;
+        if (_needsRefreshOnReconnect)
+        {
+            _needsRefreshOnReconnect = false;
+            TriggerDebouncedRefresh();
+        }
+    }
+
     private void HandleAdminNotification(string? message)
     {
-        if (_isDisposed) return;
+        if (_isDisposed || CircuitTracker.IsClosed) return;
+        if (!CircuitTracker.IsConnected)
+        {
+            _needsRefreshOnReconnect = true;
+            return;
+        }
         TriggerDebouncedRefresh();
     }
 
@@ -287,7 +305,12 @@
 
     private async Task RefreshTasksAsync()
     {
-        if (_isDisposed || !isAdmin) return;
+        if (_isDisposed || !isAdmin || CircuitTracker.IsClosed) return;
+        if (!CircuitTracker.IsConnected)
+        {
+            _needsRefreshOnReconnect = true;
+            return;
+        }
 
         // If another refresh is already in progress, flag it so a follow-up check runs after it finishes
         try
@@ -402,13 +425,18 @@
             transactionTasks = newTransactionTasks;
             userTasks = newUserTasks;
             referralTasks = newReferralTasks;
+            if (!CircuitTracker.IsConnected)
+            {
+                _needsRefreshOnReconnect = true;
+                return;
+            }
             try
             {
                 await InvokeAsync(StateHasChanged);
             }
-            catch (Exception) when (_isDisposed)
+            catch (Exception ex) when (_isDisposed || !CircuitTracker.IsConnected || ex is TaskCanceledException || ex is ObjectDisposedException || ex is InvalidOperationException)
             {
-                // Component disposed during invocation, ignore safely
+                // Component disposed or circuit disconnected during invocation, ignore safely
             }
         }
     }
@@ -418,6 +446,7 @@
         _isDisposed = true;
         NavigationManager.LocationChanged -= OnLocationChanged;
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
+        CircuitTracker.OnConnectionRestored -= HandleConnectionRestored;
         if (_debounceTimer != null)
         {
             _debounceTimer.Stop();

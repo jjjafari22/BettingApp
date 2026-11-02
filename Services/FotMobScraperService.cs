@@ -35,7 +35,7 @@ namespace BettingApp.Services
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
                 DateTime? effectiveTargetDate = (legStartTime.HasValue && legStartTime.Value > DateTime.MinValue) ? legStartTime : betPlacedAt;
                 // 1. Clean the match name and extract Home Team for robust searching
-                string[] split = matchName.Split(new[] { " vs ", " - ", " v " }, StringSplitOptions.None);
+                string[] split = TeamAliasMappingService.SplitMatchTeams(matchName);
                 string homeTeam = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: false);
                 string awayTeam = split.Length > 1 ? _teamAliasMapper.NormalizeTeamName(split[1].Trim(), removeStopWords: false) : "";
 
@@ -311,7 +311,7 @@ namespace BettingApp.Services
                     }
                 }
 
-                string[] split = matchName.Split(new[] { " vs ", " - ", " v " }, StringSplitOptions.None);
+                string[] split = TeamAliasMappingService.SplitMatchTeams(matchName);
                 string homeSearchStr = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: true);
                 if (string.IsNullOrEmpty(homeSearchStr)) homeSearchStr = homeTeam; // Fallback if it was ONLY stop words
                 

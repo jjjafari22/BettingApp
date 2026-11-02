@@ -64,10 +64,13 @@ public partial class Admin
     }
 
     private bool _isDisposed = false;
+    private int _isTimerTickInFlight = 0;
+    private volatile bool _needsRefreshOnReconnect = false;
+    private volatile bool _reconnectPendingOnly = true;
 
     private void AutoClearMessages()
     {
-        if (_isDisposed) return;
+        if (_isDisposed || CircuitTracker.IsClosed) return;
         _ = Task.Run(async () =>
         {
             try
@@ -76,7 +79,7 @@ public partial class Admin
                 var changed = false;
                 if (_successMessage != null) { _successMessage = null; changed = true; }
                 if (_errorMessage != null) { _errorMessage = null; changed = true; }
-                if (changed && !_isDisposed)
+                if (changed && !_isDisposed && CircuitTracker.IsConnected)
                 {
                     try { await InvokeAsync(StateHasChanged); } catch { }
                 }
@@ -176,6 +179,8 @@ public partial class Admin
     {
         if (firstRender)
         {
+            CircuitTracker.OnConnectionRestored += HandleConnectionRestored;
+
             try
             {
                 var value = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "openInNativeApp");
@@ -204,29 +209,56 @@ public partial class Admin
             }
             catch { }
 
-             try
+            try
             {
                 TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
                 
                 int tickCount = 0;
                 uiRefreshTimer = new System.Timers.Timer(1000); // 1 second for live auto-approval countdowns
-                uiRefreshTimer.Elapsed += (s, e) =>
+                uiRefreshTimer.Elapsed += async (s, e) =>
                 {
+                    if (_isDisposed || !CircuitTracker.IsConnected)
+                    {
+                        return;
+                    }
+
+                    if (System.Threading.Interlocked.CompareExchange(ref _isTimerTickInFlight, 1, 0) != 0)
+                    {
+                        return;
+                    }
+
                     try
                     {
                         tickCount++;
                         bool hasActiveCountdown = (reviewingBetModel?.Status == "Pending" && reviewingBetModel?.AutoApproveAt != null) ||
                                                   (pendingBets != null && pendingBets.Any(b => b.Status == "Pending" && b.AutoApproveAt != null));
-                        if (!_isDisposed && (hasActiveCountdown || tickCount % 15 == 0))
+                        if (!_isDisposed && CircuitTracker.IsConnected && (hasActiveCountdown || tickCount % 15 == 0))
                         {
-                            _ = InvokeAsync(StateHasChanged);
+                            await InvokeAsync(() =>
+                            {
+                                if (!_isDisposed && CircuitTracker.IsConnected)
+                                {
+                                    StateHasChanged();
+                                }
+                            });
                         }
                     }
+                    catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex is ObjectDisposedException || ex is InvalidOperationException)
+                    {
+                        // Circuit disconnected or disposed mid-tick; safe to ignore
+                    }
                     catch { }
+                    finally
+                    {
+                        System.Threading.Interlocked.Exchange(ref _isTimerTickInFlight, 0);
+                    }
                 };
                 uiRefreshTimer.Start();
                 
-                StateHasChanged(); 
+                if (!_isDisposed && CircuitTracker.IsConnected)
+                {
+                    StateHasChanged();
+                }
             }
             catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex.Message.Contains("circuit has disconnected") || ex.Message.Contains("disposed"))
             {
@@ -239,14 +271,59 @@ public partial class Admin
 
             UiNotifier.OnAdminNotification += HandleAdminNotification;
         }
-        if (shouldFocusReviewModal) { shouldFocusReviewModal = false;
-            try { await reviewModalRef.FocusAsync(); } catch { } }
+        if (shouldFocusReviewModal)
+        {
+            shouldFocusReviewModal = false;
+            if (!_isDisposed && CircuitTracker.IsConnected)
+            {
+                try { await reviewModalRef.FocusAsync(); } catch { }
+            }
+        }
+    }
+
+    private void HandleConnectionRestored()
+    {
+        if (_isDisposed || CircuitTracker.IsClosed) return;
+
+        if (_needsRefreshOnReconnect)
+        {
+            bool onlyPending = _reconnectPendingOnly;
+            _needsRefreshOnReconnect = false;
+            _reconnectPendingOnly = true;
+            HandleAdminNotification(onlyPending ? "PendingUpdate" : "Update");
+        }
+        else
+        {
+            try
+            {
+                _ = InvokeAsync(() =>
+                {
+                    if (!_isDisposed && CircuitTracker.IsConnected)
+                    {
+                        StateHasChanged();
+                    }
+                });
+            }
+            catch { }
+        }
     }
 
     private bool _pendingOnlyRefresh = true;
 
     private void HandleAdminNotification(string? message)
     {
+        if (_isDisposed || CircuitTracker.IsClosed) return;
+
+        if (!CircuitTracker.IsConnected)
+        {
+            if (message != "PendingUpdate")
+            {
+                _reconnectPendingOnly = false;
+            }
+            _needsRefreshOnReconnect = true;
+            return;
+        }
+
         if (!string.IsNullOrEmpty(message) && message != "Update" && message != "PendingUpdate") successMessage = message;
         if (message != "PendingUpdate")
         {
@@ -263,11 +340,26 @@ public partial class Admin
                 _pendingOnlyRefresh = true;
                 try
                 {
-                    if (_isDisposed) return;
+                    if (_isDisposed || CircuitTracker.IsClosed) return;
+
+                    if (!CircuitTracker.IsConnected)
+                    {
+                        if (!onlyPending) _reconnectPendingOnly = false;
+                        _needsRefreshOnReconnect = true;
+                        return;
+                    }
+
                     await InvokeAsync(async () =>
                     {
                         try
                         {
+                            if (_isDisposed || !CircuitTracker.IsConnected)
+                            {
+                                if (!onlyPending) _reconnectPendingOnly = false;
+                                _needsRefreshOnReconnect = true;
+                                return;
+                            }
+
                             if (onlyPending)
                             {
                                 await LoadPendingBets();
@@ -332,13 +424,29 @@ public partial class Admin
                                 }
                             }
 
-                            StateHasChanged();
+                            if (!_isDisposed && CircuitTracker.IsConnected)
+                            {
+                                StateHasChanged();
+                            }
+                            else if (!_isDisposed)
+                            {
+                                if (!onlyPending) _reconnectPendingOnly = false;
+                                _needsRefreshOnReconnect = true;
+                            }
+                        }
+                        catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex is ObjectDisposedException || ex is InvalidOperationException)
+                        {
+                            // Ignore disconnect races during debounced reload
                         }
                         catch (Exception ex)
                         {
                             Logger.LogWarning(ex, "Failed to refresh bets on admin notification.");
                         }
                     });
+                }
+                catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex is ObjectDisposedException || ex is InvalidOperationException)
+                {
+                    // Ignore disconnect races
                 }
                 catch (Exception ex)
                 {
@@ -372,6 +480,7 @@ public partial class Admin
         uiRefreshTimer?.Dispose();
         adminDebounceTimer?.Dispose();
         UiNotifier.OnAdminNotification -= HandleAdminNotification;
+        CircuitTracker.OnConnectionRestored -= HandleConnectionRestored;
         await Task.CompletedTask;
     }
 

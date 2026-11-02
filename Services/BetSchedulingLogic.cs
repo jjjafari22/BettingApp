@@ -37,11 +37,13 @@ namespace BettingApp.Services
                 return null;
             }
 
-            // 3. If ANY pending leg is completely missing a start time, we need to schedule a check immediately 
-            // so the FotMob AI service can wake up and find the start times.
+            // 3. If ANY pending leg is completely missing a start time, schedule an immediate check on initial approval
+            // so the AI / sports APIs can wake up and discover start times. If an outcome check has ALREADY run and still
+            // couldn't determine a start time, back off for 15 minutes to prevent a 60-second infinite polling loop.
+            bool hasPriorOutcomeCheck = !string.IsNullOrWhiteSpace(dbBet.AiOutcomeResult);
             if (pendingLegs.Any(l => !l.StartTime.HasValue))
             {
-                return DateTime.UtcNow;
+                return hasPriorOutcomeCheck ? DateTime.UtcNow.AddMinutes(15) : DateTime.UtcNow;
             }
 
             // 4. Determine the earliest start time among pending legs.
@@ -57,11 +59,11 @@ namespace BettingApp.Services
             else
             {
                 // Fallback: If for some reason we have pending legs but no start times, and step 3 didn't catch it
-                // (e.g., if there's no start time and we couldn't schedule), we fallback to MatchStartTime or 1h check.
+                // (e.g., if there's no start time and we couldn't schedule), we fallback to MatchStartTime or 15m backoff.
                 earliestStart = dbBet.MatchStartTime;
                 if (!earliestStart.HasValue)
                 {
-                    return DateTime.UtcNow;
+                    return hasPriorOutcomeCheck ? DateTime.UtcNow.AddMinutes(15) : DateTime.UtcNow;
                 }
             }
 

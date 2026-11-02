@@ -131,7 +131,7 @@ namespace BettingApp.Services
 
                 if (leg.Match != null)
                 {
-                    var hcSplit = leg.Match.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                    var hcSplit = TeamAliasMappingService.SplitMatchTeams(leg.Match);
                     if (hcSplit.Length >= 2)
                     {
                         AiT1 = TeamAliasMappingService.RemoveDiacritics(hcSplit[0].Split('(')[0].Trim()).ToLowerInvariant();
@@ -139,7 +139,7 @@ namespace BettingApp.Services
 
                         if (searchResult != null && !string.IsNullOrEmpty(searchResult.MatchName))
                         {
-                            var opMatchSplit = searchResult.MatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                            var opMatchSplit = TeamAliasMappingService.SplitMatchTeams(searchResult.MatchName);
                             if (opMatchSplit.Length >= 2)
                             {
                                 OpT1 = TeamAliasMappingService.RemoveDiacritics(opMatchSplit[0].Trim()).ToLowerInvariant();

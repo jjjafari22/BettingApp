@@ -129,7 +129,7 @@ namespace BettingApp.Services
             {
                 if (!string.IsNullOrEmpty(matchName) && !string.IsNullOrEmpty(selectionName))
                 {
-                    var hcSplit = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                    var hcSplit = TeamAliasMappingService.SplitMatchTeams(matchName);
                     if (hcSplit.Length >= 2)
                     {
                         int matchedTeam = TeamAliasMappingService.ResolveTeamSelection(selectionName, hcSplit[0], hcSplit[1]);

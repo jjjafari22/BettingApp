@@ -215,19 +215,22 @@ namespace BettingApp.Services
 
                     if (parsedData == null)
                     {
-                        if (string.IsNullOrEmpty(dbBet.AiEvaluation.AiOutcomeResult))
+                        if (string.IsNullOrEmpty(dbBet.AiEvaluation.AiOutcomeResult) &&
+                            !string.IsNullOrWhiteSpace(result) &&
+                            (result.StartsWith("Error", StringComparison.OrdinalIgnoreCase) ||
+                             result.StartsWith("Exception", StringComparison.OrdinalIgnoreCase)))
                         {
                             dbBet.AiEvaluation.AiOutcomeResult = result;
                         }
                         if (dbBet.Status == "Approved")
                         {
                             dbBet.NextCheckTime = DateTime.UtcNow.AddMinutes(15);
-                            _logger.LogWarning($"[Bet #{dbBet.Id}] [Outcome Check] Outcome check did not return valid JSON. Scheduling next check in 15 minutes.");
+                            _logger.LogWarning($"[Bet #{dbBet.Id}] [Outcome Check] Outcome check did not return valid JSON ({result ?? "null"}). Scheduling next check in 15 minutes.");
                         }
                         else
                         {
                             dbBet.NextCheckTime = null;
-                            _logger.LogWarning($"[Bet #{dbBet.Id}] [Outcome Check] Post-settlement outcome check did not return valid JSON. Clearing NextCheckTime.");
+                            _logger.LogWarning($"[Bet #{dbBet.Id}] [Outcome Check] Post-settlement outcome check did not return valid JSON ({result ?? "null"}). Clearing NextCheckTime.");
                         }
                     }
                     else
@@ -357,7 +360,8 @@ namespace BettingApp.Services
                                 // Save the extracted legs and outcome string first
                                 await taskContext.SaveChangesAsync(ct);
 
-                                var betProcessor = scope.ServiceProvider.GetRequiredService<BettingApp.Services.BetProcessingService>();
+                                using var settleScope = _serviceProvider.CreateScope();
+                                var betProcessor = settleScope.ServiceProvider.GetRequiredService<BettingApp.Services.BetProcessingService>();
                                 var processResult = await betProcessor.ProcessBetAsync(
                                     betId: dbBet.Id,
                                     newStatus: targetStatus,

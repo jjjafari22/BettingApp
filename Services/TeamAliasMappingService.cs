@@ -5,6 +5,94 @@ namespace BettingApp.Services
 {
     public class TeamAliasMappingService
     {
+        private static readonly System.Text.RegularExpressions.Regex _vsSeparatorRegex =
+            new(@"\s+vs\.?\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        private static readonly System.Text.RegularExpressions.Regex _atSeparatorRegex =
+            new(@"\s+(?:@|at)\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        // Matches standalone " v. " only when NOT preceded by a single-letter initial (e.g. "B. v. d. Zandschulp")
+        // and NOT followed by a single-letter particle like "d.".
+        private static readonly System.Text.RegularExpressions.Regex _vDotSeparatorRegex =
+            new(@"(?<!\b[A-Za-z]\.)\s+v\.\s+(?![A-Za-z]\.)", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        public static string[] SplitMatchTeams(string? matchName, bool includeAtSeparators = false, StringSplitOptions options = StringSplitOptions.None)
+        {
+            if (string.IsNullOrEmpty(matchName))
+            {
+                return options.HasFlag(StringSplitOptions.RemoveEmptyEntries)
+                    ? Array.Empty<string>()
+                    : new[] { matchName ?? string.Empty };
+            }
+
+            string[] parts;
+            if (_vsSeparatorRegex.IsMatch(matchName))
+            {
+                parts = _vsSeparatorRegex.Split(matchName);
+            }
+            else if (includeAtSeparators && _atSeparatorRegex.IsMatch(matchName))
+            {
+                parts = _atSeparatorRegex.Split(matchName);
+            }
+            else if (matchName.Contains(" - ", StringComparison.Ordinal))
+            {
+                parts = matchName.Split(new[] { " - " }, StringSplitOptions.None);
+            }
+            else if (matchName.Contains(" v ", StringComparison.Ordinal))
+            {
+                parts = matchName.Split(new[] { " v " }, StringSplitOptions.None);
+            }
+            else if (_vDotSeparatorRegex.IsMatch(matchName))
+            {
+                parts = _vDotSeparatorRegex.Split(matchName);
+            }
+            else
+            {
+                parts = new[] { matchName };
+            }
+
+            if (options.HasFlag(StringSplitOptions.TrimEntries))
+            {
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    parts[i] = parts[i].Trim();
+                }
+            }
+
+            if (options.HasFlag(StringSplitOptions.RemoveEmptyEntries))
+            {
+                var filtered = new List<string>(parts.Length);
+                foreach (var p in parts)
+                {
+                    if (!string.IsNullOrEmpty(p))
+                    {
+                        filtered.Add(p);
+                    }
+                }
+                return filtered.ToArray();
+            }
+
+            return parts;
+        }
+
+        public static string NormalizeMatchSeparator(string? matchName)
+        {
+            if (string.IsNullOrWhiteSpace(matchName)) return matchName ?? string.Empty;
+
+            string trimmed = matchName.Trim();
+            if (_vsSeparatorRegex.IsMatch(trimmed))
+            {
+                return _vsSeparatorRegex.Replace(trimmed, " vs ");
+            }
+            if (!trimmed.Contains(" - ", StringComparison.Ordinal) &&
+                !trimmed.Contains(" v ", StringComparison.Ordinal) &&
+                _vDotSeparatorRegex.IsMatch(trimmed))
+            {
+                return _vDotSeparatorRegex.Replace(trimmed, " vs ");
+            }
+            return trimmed;
+        }
+
         public static string RemoveDiacritics(string? text)
         {
             if (string.IsNullOrWhiteSpace(text)) return text ?? "";

@@ -20,6 +20,7 @@
 @inject ILogger<Admin> Logger
 @inject BettingApp.Services.BetProcessingService BetProcessor
 @inject BettingApp.Services.AutoApprovalService AutoApproval
+@inject BettingApp.Services.CircuitConnectionTracker CircuitTracker
 @attribute [Authorize]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IAsyncDisposable

@@ -258,7 +258,7 @@ namespace BettingApp.Services
             string? effectiveMatchName = !string.IsNullOrWhiteSpace(matchName) ? matchName : opMatchName;
             if (!string.IsNullOrWhiteSpace(effectiveMatchName))
             {
-                var split = effectiveMatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                var split = TeamAliasMappingService.SplitMatchTeams(effectiveMatchName);
                 if (split.Length >= 2)
                 {
                     string team1 = split[0].Trim();
@@ -274,7 +274,7 @@ namespace BettingApp.Services
                     string? opTeam2 = null;
                     if (!string.IsNullOrWhiteSpace(opMatchName))
                     {
-                        var opSplit = opMatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                        var opSplit = TeamAliasMappingService.SplitMatchTeams(opMatchName);
                         if (opSplit.Length >= 2)
                         {
                             opTeam1 = opSplit[0].Trim();
@@ -1158,7 +1158,7 @@ namespace BettingApp.Services
             string cleanWithoutTeams = clean;
             if (!string.IsNullOrWhiteSpace(matchName))
             {
-                var split = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                var split = TeamAliasMappingService.SplitMatchTeams(matchName);
                 if (split.Length >= 2)
                 {
                     string t1 = split[0].Trim();

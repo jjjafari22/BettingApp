@@ -228,8 +228,8 @@ public partial class Admin
 
         ConfirmingOutcomeBetIds.Add(capturingBetId);
         if (reviewingBetModel.Id == capturingBetId) errorMessage = null;
+        shouldFocusReviewModal = true;
         StateHasChanged();
-        try { _ = reviewModalRef.FocusAsync(); } catch { }
 
         _ = Task.Run(async () =>
         {
@@ -318,16 +318,19 @@ public partial class Admin
 
                 // 2. We now have the JSON payload for the legs. Ask Gemini to search Google for the outcome.
                 var outcome = await AiVision.ConfirmOutcomeAsync(currentBet.AiVisionResultJson, currentBet.CreatedAt, currentBet.MatchStartTime, capturingBetId);
-                
-                if (!string.IsNullOrEmpty(outcome) && !outcome.StartsWith("Error") && !outcome.StartsWith("Exception"))
+
+                BettingApp.Services.AiOutcomeResultData? parsedData = null;
+                if (!string.IsNullOrEmpty(outcome) && !outcome.StartsWith("Error", StringComparison.OrdinalIgnoreCase) && !outcome.StartsWith("Exception", StringComparison.OrdinalIgnoreCase))
                 {
-                    BettingApp.Services.AiOutcomeResultData? parsedData = null;
                     try {
                         parsedData = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiOutcomeResultData>(
                             outcome, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
                         );
                     } catch { }
+                }
 
+                if (parsedData != null && !string.IsNullOrEmpty(outcome))
+                {
                     await InvokeAsync(async () =>
                     {
                         using var context = DbFactory.CreateDbContext();
@@ -613,7 +616,10 @@ public partial class Admin
         ActiveLookupLeg = null;
         AiVisionError = null;
         StateHasChanged();
-        try { await reviewModalRef.FocusAsync(); } catch { }
+        if (!_isDisposed && CircuitTracker.IsConnected)
+        {
+            try { await reviewModalRef.FocusAsync(); } catch { }
+        }
 
         try
         {

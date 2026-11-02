@@ -59,6 +59,68 @@ namespace BettingApp.Tests
         }
 
         [Fact]
+        public void PendingLegMissingStartTime_AfterPriorOutcomeCheck_BacksOff15Minutes()
+        {
+            var bet = new Bet
+            {
+                Status = "Approved",
+                AiOutcomeResult = "{\"overallStatus\":\"MATCH IN PROGRESS\",\"legs\":[{\"outcome\":\"PENDING\"}]}",
+                Legs = new List<BetLeg>
+                {
+                    new BetLeg { Outcome = "Pending", StartTime = null, Sport = "Soccer" }
+                }
+            };
+
+            var before = DateTime.UtcNow.AddMinutes(15);
+            var nextCheck = BetSchedulingLogic.CalculateNextCheckTime(bet);
+            var after = DateTime.UtcNow.AddMinutes(15);
+
+            Assert.NotNull(nextCheck);
+            Assert.True(nextCheck.Value >= before.AddSeconds(-1) && nextCheck.Value <= after.AddSeconds(1));
+        }
+
+        [Fact]
+        public void SplitMatchTeams_HandlesVsWithPeriodAndInitials()
+        {
+            var split1 = TeamAliasMappingService.SplitMatchTeams("Deportivo Pereira vs. Jaguares de Córdoba");
+            Assert.Equal(2, split1.Length);
+            Assert.Equal("Deportivo Pereira", split1[0]);
+            Assert.Equal("Jaguares de Córdoba", split1[1]);
+
+            var split2 = TeamAliasMappingService.SplitMatchTeams("B. v. d. Zandschulp vs. J. V. Struff");
+            Assert.Equal(2, split2.Length);
+            Assert.Equal("B. v. d. Zandschulp", split2[0]);
+            Assert.Equal("J. V. Struff", split2[1]);
+
+            var split2Dash = TeamAliasMappingService.SplitMatchTeams("B. v. d. Zandschulp - J. V. Struff");
+            Assert.Equal(2, split2Dash.Length);
+            Assert.Equal("B. v. d. Zandschulp", split2Dash[0]);
+            Assert.Equal("J. V. Struff", split2Dash[1]);
+
+            var split2NoDot = TeamAliasMappingService.SplitMatchTeams("B. v d Zandschulp - J. V. Struff");
+            Assert.Equal(2, split2NoDot.Length);
+            Assert.Equal("B. v d Zandschulp", split2NoDot[0]);
+            Assert.Equal("J. V. Struff", split2NoDot[1]);
+
+            var splitVDot = TeamAliasMappingService.SplitMatchTeams("Arsenal v. Chelsea");
+            Assert.Equal(2, splitVDot.Length);
+            Assert.Equal("Arsenal", splitVDot[0]);
+            Assert.Equal("Chelsea", splitVDot[1]);
+
+            var split3 = TeamAliasMappingService.SplitMatchTeams("Boston Celtics @ New York Knicks", includeAtSeparators: true);
+            Assert.Equal(2, split3.Length);
+            Assert.Equal("Boston Celtics", split3[0]);
+            Assert.Equal("New York Knicks", split3[1]);
+
+            Assert.Equal("Deportivo Pereira vs Jaguares de Córdoba",
+                TeamAliasMappingService.NormalizeMatchSeparator("Deportivo Pereira vs. Jaguares de Córdoba"));
+            Assert.Equal("B. v. d. Zandschulp - J. V. Struff",
+                TeamAliasMappingService.NormalizeMatchSeparator("B. v. d. Zandschulp - J. V. Struff"));
+            Assert.Equal("Arsenal vs Chelsea",
+                TeamAliasMappingService.NormalizeMatchSeparator("Arsenal v. Chelsea"));
+        }
+
+        [Fact]
         public void LiveSoccerBet_Started30MinsAgo_ReturnsStartTimePlusTwoHours()
         {
             var startTime = DateTime.UtcNow.AddMinutes(-30);

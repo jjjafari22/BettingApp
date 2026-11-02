@@ -89,7 +89,7 @@ namespace BettingApp.Services
             string displayOName = oName;
             if (string.IsNullOrEmpty(matchName)) return displayOName;
 
-            var matchSplit = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+            var matchSplit = TeamAliasMappingService.SplitMatchTeams(matchName);
             if (matchSplit.Length < 2) return displayOName;
 
             string t1 = matchSplit[0].Trim();

@@ -324,7 +324,7 @@ public partial class Admin
                     
                     if (!string.IsNullOrEmpty(apiResult.MatchName) && !isTeamNumber)
                     {
-                        var matchSplit = apiResult.MatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                        var matchSplit = BettingApp.Services.TeamAliasMappingService.SplitMatchTeams(apiResult.MatchName);
                         if (matchSplit.Length >= 2)
                         {
                             string t1 = matchSplit[0].Trim();
@@ -424,7 +424,7 @@ public partial class Admin
         string searchTerm = "";
         if (!string.IsNullOrEmpty(matchName))
         {
-            var tokens = matchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.RemoveEmptyEntries);
+            var tokens = BettingApp.Services.TeamAliasMappingService.SplitMatchTeams(matchName, options: StringSplitOptions.RemoveEmptyEntries);
             if (tokens.Length > 0)
             {
                 searchTerm = Uri.EscapeDataString(tokens[0].Trim());
@@ -646,7 +646,7 @@ public partial class Admin
                             
                             if (!string.IsNullOrEmpty(result.MatchName) && !isTeamNumber)
                             {
-                                var matchSplit = result.MatchName.Split(new[] { " vs ", " v ", " - " }, StringSplitOptions.None);
+                                var matchSplit = BettingApp.Services.TeamAliasMappingService.SplitMatchTeams(result.MatchName);
                                 if (matchSplit.Length >= 2)
                                 {
                                     string t1 = matchSplit[0].Trim();

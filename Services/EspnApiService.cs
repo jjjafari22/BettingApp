@@ -103,7 +103,7 @@ namespace BettingApp.Services
             try
             {
                 // 1. Clean the match name to extract Home and Away terms
-                string[] split = matchName.Split(new[] { " vs ", " - ", " v ", " at ", " @ " }, StringSplitOptions.None);
+                string[] split = TeamAliasMappingService.SplitMatchTeams(matchName, includeAtSeparators: true);
                 if (split.Length < 2) return null;
 
                 string teamA = split[0].Trim();
@@ -744,7 +744,7 @@ namespace BettingApp.Services
         {
             try
             {
-                string[] split = matchName.Split(new[] { " vs ", " - ", " v ", " at ", " @ " }, StringSplitOptions.None);
+                string[] split = TeamAliasMappingService.SplitMatchTeams(matchName, includeAtSeparators: true);
                 if (split.Length < 2) return null;
 
                 string playerA = NormalizeTeam(split[0]);

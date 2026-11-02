@@ -16,6 +16,7 @@
 @inject IJSRuntime JSRuntime
 @inject Microsoft.Extensions.DependencyInjection.IServiceScopeFactory ScopeFactory
 @inject ILogger<Home> Logger
+@inject CircuitConnectionTracker CircuitTracker
 @implements IDisposable
 
 <PageTitle>Castle of Happiness</PageTitle>
@@ -504,6 +505,7 @@ else
                 newBet.UserId = userId;
                 newBet.UserName = userName;
                 UiNotifier.OnUserNotification += HandleUserNotification;
+                CircuitTracker.OnConnectionRestored += HandleConnectionRestored;
             }
             else
             {
@@ -517,20 +519,69 @@ else
         }
     }
 
+    private volatile bool _needsRefreshOnReconnect = false;
+
+    private void HandleConnectionRestored()
+    {
+        if (_isDisposed || CircuitTracker.IsClosed || !_needsRefreshOnReconnect) return;
+        _needsRefreshOnReconnect = false;
+
+        try
+        {
+            _ = InvokeAsync(async () =>
+            {
+                try
+                {
+                    if (_isDisposed || !CircuitTracker.IsConnected)
+                    {
+                        _needsRefreshOnReconnect = true;
+                        return;
+                    }
+                    await LoadData();
+                    StateHasChanged();
+                }
+                catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex is ObjectDisposedException || ex is InvalidOperationException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error refreshing home user data on reconnect");
+                }
+            });
+        }
+        catch { }
+    }
+
     private void HandleUserNotification(string targetUserId, string? message)
     {
-        if (_isDisposed) return;
+        if (_isDisposed || CircuitTracker.IsClosed) return;
         if (targetUserId == userId)
         {
+            if (!CircuitTracker.IsConnected)
+            {
+                _needsRefreshOnReconnect = true;
+                return;
+            }
+
             try
             {
                 _ = InvokeAsync(async () =>
                 {
                     try
                     {
-                        if (_isDisposed) return;
+                        if (_isDisposed || !CircuitTracker.IsConnected)
+                        {
+                            _needsRefreshOnReconnect = true;
+                            return;
+                        }
                         await LoadData();
-                        StateHasChanged();
+                        if (!_isDisposed && CircuitTracker.IsConnected)
+                        {
+                            StateHasChanged();
+                        }
+                    }
+                    catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex is ObjectDisposedException || ex is InvalidOperationException)
+                    {
                     }
                     catch (Exception ex)
                     {
@@ -1136,6 +1187,7 @@ else
     {
         _isDisposed = true;
         UiNotifier.OnUserNotification -= HandleUserNotification;
+        CircuitTracker.OnConnectionRestored -= HandleConnectionRestored;
         try
         {
             _messageCts?.Cancel();
