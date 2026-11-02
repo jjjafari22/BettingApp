@@ -127,7 +127,11 @@ public partial class AdminTransactions
         totalTransactions = await query.CountAsync();
         hasMoreTransactions = totalTransactions > (currentPage * PageSize);
 
-        cashCows = await context.CashCows.AsNoTracking().ToListAsync();
+        cashCows = (await context.CashCows.AsNoTracking().ToListAsync())
+            .OrderBy(c => c.FirstName?.Trim() ?? "", CashCowNameComparer)
+            .ThenBy(c => c.LastName?.Trim() ?? "", CashCowNameComparer)
+            .ThenBy(c => c.Id, StringComparer.Ordinal)
+            .ToList();
         var nextLastUpdated = new Dictionary<string, DateTime?>();
         if (cashCows.Any())
         {

@@ -127,6 +127,26 @@ public partial class AdminTransactions : IDisposable
         return utcDate.AddMinutes(-TimezoneOffset);
     }
 
+    private static readonly StringComparer CashCowNameComparer = CreateCashCowNameComparer();
+
+    private static StringComparer CreateCashCowNameComparer()
+    {
+        try
+        {
+            return StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("nb-NO"), ignoreCase: true);
+        }
+        catch
+        {
+            return StringComparer.OrdinalIgnoreCase;
+        }
+    }
+
+    private IEnumerable<CashCow> GetAlphabeticalCashCows() =>
+        cashCows
+            .OrderBy(c => c.FirstName?.Trim() ?? "", CashCowNameComparer)
+            .ThenBy(c => c.LastName?.Trim() ?? "", CashCowNameComparer)
+            .ThenBy(c => c.Id, StringComparer.Ordinal);
+
     private static string FormatFullName(string? firstName, string? lastName)
     {
         var first = firstName?.Trim() ?? "";

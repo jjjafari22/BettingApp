@@ -221,7 +221,7 @@ else
                         {
                             <select class="form-select" @bind="addTransSenderId">
                                 <option value="">-- Select Cash Cow (Scroll for more) --</option>
-                                @foreach (var cow in cashCows) { <option @key="cow.Id" value="@cow.Id">@FormatFullName(cow.FirstName, cow.LastName)</option> }
+                                @foreach (var cow in GetAlphabeticalCashCows()) { <option @key="cow.Id" value="@cow.Id">@FormatFullName(cow.FirstName, cow.LastName)</option> }
                             </select>
                             @if (!string.IsNullOrEmpty(addTransSenderId)) {
                                 var cc = cashCows.FirstOrDefault(c => c.Id == addTransSenderId);
@@ -278,7 +278,7 @@ else
                         {
                             <select class="form-select" @bind="addTransReceiverId" @bind:after="AutoFillPaymentDetails">
                                 <option value="">-- Select Cash Cow (Scroll for more) --</option>
-                                @foreach (var cow in cashCows) { <option @key="cow.Id" value="@cow.Id">@FormatFullName(cow.FirstName, cow.LastName)</option> }
+                                @foreach (var cow in GetAlphabeticalCashCows()) { <option @key="cow.Id" value="@cow.Id">@FormatFullName(cow.FirstName, cow.LastName)</option> }
                             </select>
                             @if (!string.IsNullOrEmpty(addTransReceiverId)) {
                                 var cc = cashCows.FirstOrDefault(c => c.Id == addTransReceiverId);
