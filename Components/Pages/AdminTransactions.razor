@@ -547,7 +547,7 @@ else
                             }
                         }
                     </td>
-                    <td>@t.AmountNOK.ToString("N0") kr</td>
+                    <td class="text-nowrap">@t.AmountNOK.ToString("N0") kr</td>
                      <td>
                         @if (t.Status == "Completed")
                         {
@@ -566,8 +566,24 @@ else
                             <span class="badge bg-secondary">@t.Status</span>
                         }
                     </td>
-                    <td class="text-muted small" style="max-width: 200px; word-break: break-word;">
-                        @(string.IsNullOrWhiteSpace(t.Note) ? "-" : t.Note)
+                    @{
+                        var txNote = t.Note?.Trim();
+                        bool hasTxNote = !string.IsNullOrEmpty(txNote);
+                        bool isLongTxNote = hasTxNote && txNote!.Length > 24;
+                    }
+                    <td class="text-muted small @(isLongTxNote ? "tx-note-cell-long" : (hasTxNote ? "text-nowrap" : ""))">
+                        @if (!hasTxNote)
+                        {
+                            <text>-</text>
+                        }
+                        else if (isLongTxNote)
+                        {
+                            <div class="tx-note-wrap">@txNote</div>
+                        }
+                        else
+                        {
+                            @txNote
+                        }
                     </td>
                 </tr>
             }
@@ -593,54 +609,79 @@ else
 
 @if (activeTab == "cashcows")
 {
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-primary text-white">
-                    @(editingCowId == null ? "Add New Cash Cow" : "Edit Cash Cow")
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">First Name</label>
-                            <input type="text" class="form-control" @bind="newCow.FirstName" />
+    var sortedCashCows = GetSortedCashCows().ToList();
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h4 class="mb-0">Cash Cows (@sortedCashCows.Count)</h4>
+        <button type="button" class="btn btn-primary fw-bold shadow-sm" @onclick="OpenAddCashCowModal">
+            <i class="bi bi-plus-lg me-1"></i> Add New Cash Cow
+        </button>
+    </div>
+
+    @if (showCashCowModal)
+    {
+        <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background-color: rgba(0,0,0,0.5);" @onkeydown="HandleCashCowModalKeyDown">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" role="document">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title fw-bold">
+                            <i class="bi @(editingCowId == null ? "bi-plus-circle" : "bi-pencil-square") me-2"></i>@(editingCowId == null ? "Add New Cash Cow" : "Edit Cash Cow")
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @onclick="CancelEditCashCow" disabled="@isSavingCashCow"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (!string.IsNullOrEmpty(cashCowModalError))
+                        {
+                            <div class="alert alert-danger d-flex align-items-center py-2 mb-3" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-2 flex-shrink-0"></i>
+                                <div>@cashCowModalError</div>
+                            </div>
+                        }
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label fw-bold">First Name</label>
+                                <input type="text" class="form-control" @bind="newCow.FirstName" disabled="@isSavingCashCow" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-bold">Last Name</label>
+                                <input type="text" class="form-control" @bind="newCow.LastName" disabled="@isSavingCashCow" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bold">Vipps (Phone)</label>
+                                <input type="text" inputmode="numeric" class="form-control" @bind="newCowVippsBound" @bind:event="oninput" placeholder="8-digit Norwegian Phone Number" disabled="@isSavingCashCow" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bold">Revolut (Revtag)</label>
+                                <input type="text" class="form-control" @bind="newCowRevolutBound" @bind:event="oninput" placeholder="Revolut Tag / Username" disabled="@isSavingCashCow" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Bank Transfer</label>
+                                <input type="text" inputmode="numeric" class="form-control" @bind="newCowBankTransferBound" @bind:event="oninput" placeholder="Account Number" disabled="@isSavingCashCow" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bold">Other Platform</label>
+                                <input type="text" class="form-control" placeholder="e.g. PayPal" @bind="newCow.OtherPlatformName" disabled="@isSavingCashCow" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bold">Other Details</label>
+                                <input type="text" class="form-control" placeholder="Email/Tag" @bind="newCow.OtherPaymentDetails" disabled="@isSavingCashCow" />
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Last Name</label>
-                            <input type="text" class="form-control" @bind="newCow.LastName" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Vipps (Phone)</label>
-                            <input type="text" class="form-control" @bind="newCowVippsBound" @bind:event="oninput" placeholder="8-digit Norwegian Phone Number" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Revolut (Revtag)</label>
-                            <input type="text" class="form-control" @bind="newCowRevolutBound" @bind:event="oninput" placeholder="Revolut Tag / Username" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Bank Transfer</label>
-                            <input type="text" class="form-control" @bind="newCowBankTransferBound" @bind:event="oninput" placeholder="Account Number" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Other Platform</label>
-                            <input type="text" class="form-control" placeholder="e.g. PayPal" @bind="newCow.OtherPlatformName" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-bold">Other Details</label>
-                            <input type="text" class="form-control" placeholder="Email/Tag" @bind="newCow.OtherPaymentDetails" />
-                        </div>
-                        <div class="col-md-3 d-flex align-items-end justify-content-end gap-2">
-                            @if (editingCowId != null)
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" @onclick="CancelEditCashCow" disabled="@isSavingCashCow">Cancel</button>
+                        <button type="button" class="btn btn-primary fw-bold px-4" @onclick="SaveCashCow" disabled="@isSavingCashCow">
+                            @if (isSavingCashCow)
                             {
-                                <button class="btn btn-secondary w-100" @onclick="CancelEditCashCow">Cancel</button>
+                                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                             }
-                            <button class="btn btn-primary w-100 fw-bold" @onclick="SaveCashCow">@(editingCowId == null ? "Add" : "Save Changes")</button>
-                        </div>
+                            @(editingCowId == null ? "Add Cash Cow" : "Save Changes")
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    }
         
     <div class="row mb-4">
         <div class="col-12">
@@ -701,15 +742,15 @@ else
                                     <th style="cursor: pointer; user-select: none;" @onclick='() => SortCashCows("PeriodNet")'>
                                         Period Net @GetSortIcon("PeriodNet")
                                     </th>
-                                    <th class="text-end">Actions</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @if (!cashCows.Any())
+                                @if (!sortedCashCows.Any())
                                 {
                                     <tr><td colspan="6" class="text-center text-muted p-3">No Cash Cows configured.</td></tr>
                                 }
-                                @foreach (var cow in GetSortedCashCows())
+                                @foreach (var cow in sortedCashCows)
                                 {
                                     <tr @key="cow.Id">
                                         <td>
@@ -729,14 +770,16 @@ else
                                             @if(!string.IsNullOrEmpty(cow.BankTransfer)) { <span class="badge bg-secondary">Bank: @cow.BankTransfer</span> }
                                             @if(!string.IsNullOrEmpty(cow.OtherPlatformName)) { <span class="badge bg-info text-dark">@cow.OtherPlatformName: @cow.OtherPaymentDetails</span> }
                                         </td>
-                                        <td><strong class="@(cow.Balance >= 0 ? "text-success" : "text-danger")">@cow.Balance.ToString("N0") kr</strong></td>
+                                        <td class="text-nowrap"><strong class="@(cow.Balance >= 0 ? "text-success" : "text-danger")">@cow.Balance.ToString("N0") kr</strong></td>
                                         @{
                                             var pNet = GetCashCowPeriodNet(cow);
                                         }
-                                        <td><strong class="@(pNet >= 0 ? "text-success" : "text-danger")">@pNet.ToString("N0") kr</strong></td>
-                                        <td class="text-end">
-                                            <button class="btn btn-sm btn-outline-info me-2" @onclick="() => OpenCowLedger(cow)">Ledger</button>
-                                            <button class="btn btn-sm btn-outline-primary" @onclick="() => EditCashCow(cow)">Edit</button>
+                                        <td class="text-nowrap"><strong class="@(pNet >= 0 ? "text-success" : "text-danger")">@pNet.ToString("N0") kr</strong></td>
+                                        <td>
+                                            <div class="d-flex flex-nowrap align-items-center gap-1 gap-md-2">
+                                                <button type="button" class="btn btn-sm btn-outline-info text-nowrap" @onclick="() => OpenCowLedger(cow)">Ledger</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" @onclick="() => EditCashCow(cow)">Edit</button>
+                                            </div>
                                         </td>
                                     </tr>
                                 }
@@ -745,12 +788,11 @@ else
                                 <tr>
                                     <td colspan="3" class="text-end pe-4">TOTAL:</td>
                                     @{
-                                        var allCows = GetSortedCashCows().ToList();
-                                        var totalLifetime = allCows.Sum(c => c.Balance);
-                                        var totalPeriod = allCows.Sum(c => GetCashCowPeriodNet(c));
+                                        var totalLifetime = sortedCashCows.Sum(c => c.Balance);
+                                        var totalPeriod = sortedCashCows.Sum(c => GetCashCowPeriodNet(c));
                                     }
-                                    <td class="@(totalLifetime >= 0 ? "text-success" : "text-danger") fs-6">@totalLifetime.ToString("N0") kr</td>
-                                    <td class="@(totalPeriod >= 0 ? "text-success" : "text-danger") fs-6">@totalPeriod.ToString("N0") kr</td>
+                                    <td class="@(totalLifetime >= 0 ? "text-success" : "text-danger") fs-6 text-nowrap">@totalLifetime.ToString("N0") kr</td>
+                                    <td class="@(totalPeriod >= 0 ? "text-success" : "text-danger") fs-6 text-nowrap">@totalPeriod.ToString("N0") kr</td>
                                     <td></td>
                                 </tr>
                             </tfoot>
@@ -906,8 +948,24 @@ else
                                                     @if (t.ReceiverType == "CashCow") { <span class="badge bg-secondary ms-1">CC</span> }
                                                 }
                                             </td>
-                                            <td class="text-muted small">
-                                                @(string.IsNullOrWhiteSpace(t.Note) ? "-" : t.Note)
+                                            @{
+                                                var ledgerNote = t.Note?.Trim();
+                                                bool hasLedgerNote = !string.IsNullOrEmpty(ledgerNote);
+                                                bool isLongLedgerNote = hasLedgerNote && ledgerNote!.Length > 24;
+                                            }
+                                            <td class="text-muted small @(isLongLedgerNote ? "tx-note-cell-long" : (hasLedgerNote ? "text-nowrap" : ""))">
+                                                @if (!hasLedgerNote)
+                                                {
+                                                    <text>-</text>
+                                                }
+                                                else if (isLongLedgerNote)
+                                                {
+                                                    <div class="tx-note-wrap">@ledgerNote</div>
+                                                }
+                                                else
+                                                {
+                                                    @ledgerNote
+                                                }
                                             </td>
                                         </tr>
                                     }

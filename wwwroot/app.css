@@ -92,10 +92,30 @@ h1:focus {
     font-size: 0.8rem; /* Smaller text for headers */
 }
 
+/* Transaction / Ledger Note column sizing */
+.tx-note-cell-long {
+    min-width: 210px;
+    max-width: 280px;
+}
+
+.tx-note-wrap {
+    min-width: 210px;
+    max-width: 280px;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
 /* Mobile specific tweaks */
 @media (max-width: 576px) {
     .table th, .table td {
         padding: 0.2rem !important; /* Even tighter padding on mobile */
         font-size: 0.75rem; /* Smaller text on mobile to fit columns */
+    }
+
+    .tx-note-cell-long,
+    .tx-note-wrap {
+        min-width: 210px;
+        max-width: 260px;
     }
 }

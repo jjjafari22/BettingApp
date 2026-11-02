@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.EntityFrameworkCore;
 using BettingApp.Data;
 
@@ -14,6 +15,9 @@ public partial class AdminTransactions
     private List<CashCow> cashCows = new();
     private CashCow newCow = new();
     private string? editingCowId = null;
+    private bool showCashCowModal = false;
+    private string? cashCowModalError = null;
+    private bool isSavingCashCow = false;
 
     private CashCow? viewingCow = null;
     private List<Transaction> viewingCowTransactions = new();
@@ -314,9 +318,19 @@ public partial class AdminTransactions
         await PopulateUserLookup(additionalUserIds);
     }
 
+    private void OpenAddCashCowModal()
+    {
+        errorMessage = null;
+        cashCowModalError = null;
+        editingCowId = null;
+        newCow = new CashCow();
+        showCashCowModal = true;
+    }
+
     private void EditCashCow(CashCow cow)
     {
         errorMessage = null;
+        cashCowModalError = null;
         editingCowId = cow.Id;
         newCow = new CashCow
         {
@@ -331,18 +345,33 @@ public partial class AdminTransactions
             Balance = cow.Balance,
             CreatedAt = cow.CreatedAt
         };
+        showCashCowModal = true;
     }
 
     private void CancelEditCashCow()
     {
+        if (isSavingCashCow) return;
         errorMessage = null;
+        cashCowModalError = null;
         editingCowId = null;
         newCow = new CashCow();
+        showCashCowModal = false;
+    }
+
+    private void HandleCashCowModalKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && !isSavingCashCow)
+        {
+            CancelEditCashCow();
+        }
     }
 
     private async Task SaveCashCow()
     {
+        if (isSavingCashCow) return;
+
         errorMessage = null;
+        cashCowModalError = null;
         successMessage = null;
 
         newCow.FirstName = (newCow.FirstName ?? "").Trim();
@@ -352,7 +381,7 @@ public partial class AdminTransactions
 
         if (string.IsNullOrWhiteSpace(newCow.FirstName))
         {
-            errorMessage = "First Name is required.";
+            cashCowModalError = "First Name is required.";
             return;
         }
 
@@ -361,36 +390,45 @@ public partial class AdminTransactions
 
         if (!validationResult.isValid)
         {
-            errorMessage = validationResult.errorMessage;
+            cashCowModalError = validationResult.errorMessage;
             return;
         }
 
-        using var context = DbFactory.CreateDbContext();
-        if (editingCowId == null)
+        try
         {
-            context.CashCows.Add(newCow);
-        }
-        else
-        {
-            var dbCow = await context.CashCows.FindAsync(editingCowId);
-            if (dbCow != null)
+            isSavingCashCow = true;
+            using var context = DbFactory.CreateDbContext();
+            if (editingCowId == null)
             {
-                dbCow.FirstName = newCow.FirstName;
-                dbCow.LastName = newCow.LastName;
-                dbCow.Vipps = newCow.Vipps;
-                dbCow.Revolut = newCow.Revolut;
-                dbCow.BankTransfer = newCow.BankTransfer;
-                dbCow.OtherPlatformName = newCow.OtherPlatformName;
-                dbCow.OtherPaymentDetails = newCow.OtherPaymentDetails;
+                context.CashCows.Add(newCow);
             }
-        }
-        await context.SaveChangesAsync();
+            else
+            {
+                var dbCow = await context.CashCows.FindAsync(editingCowId);
+                if (dbCow != null)
+                {
+                    dbCow.FirstName = newCow.FirstName;
+                    dbCow.LastName = newCow.LastName;
+                    dbCow.Vipps = newCow.Vipps;
+                    dbCow.Revolut = newCow.Revolut;
+                    dbCow.BankTransfer = newCow.BankTransfer;
+                    dbCow.OtherPlatformName = newCow.OtherPlatformName;
+                    dbCow.OtherPaymentDetails = newCow.OtherPaymentDetails;
+                }
+            }
+            await context.SaveChangesAsync();
 
-        bool wasEditing = editingCowId != null;
-        editingCowId = null;
-        newCow = new CashCow();
-        await LoadTransactions(context);
-        _ = ShowSuccess(wasEditing ? "Cash Cow updated successfully." : "Cash Cow added successfully.");
+            bool wasEditing = editingCowId != null;
+            editingCowId = null;
+            newCow = new CashCow();
+            showCashCowModal = false;
+            await LoadTransactions(context);
+            _ = ShowSuccess(wasEditing ? "Cash Cow updated successfully." : "Cash Cow added successfully.");
+        }
+        finally
+        {
+            isSavingCashCow = false;
+        }
     }
 
     private void SortCashCows(string column)
