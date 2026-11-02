@@ -1,11 +1,14 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.JSInterop;
 using BettingApp.Data;
 
 namespace BettingApp.Components.Pages;
@@ -25,6 +28,7 @@ public partial class AdminTransactions
     private bool viewingCowHasMore = false;
     private int viewingCowTotalTransactions = 0;
     private const int ViewingCowPageSize = 20;
+    private bool isExportingCowLedgerCsv = false;
 
     private string cowLedgerFilterType = "";
     private string cowLedgerFilterPlatform = "";
@@ -223,6 +227,134 @@ public partial class AdminTransactions
         }
     }
 
+    private IQueryable<Transaction> BuildCowLedgerFilteredQuery(ApplicationDbContext context, string cowId)
+    {
+        var query = context.Transactions
+            .AsNoTracking()
+            .Where(t => t.SenderId == cowId || t.ReceiverId == cowId);
+
+        var (startUtc, endUtc) = GetCashCowPeriodUtcBounds();
+        if (startUtc.HasValue)
+        {
+            query = query.Where(t => t.Date >= startUtc.Value);
+        }
+        if (endUtc.HasValue)
+        {
+            query = query.Where(t => t.Date < endUtc.Value);
+        }
+
+        if (!string.IsNullOrEmpty(cowLedgerFilterType))
+        {
+            query = query.Where(t => t.Type == cowLedgerFilterType);
+        }
+
+        if (!string.IsNullOrEmpty(cowLedgerFilterPlatform))
+        {
+            query = query.Where(t => t.Platform == cowLedgerFilterPlatform);
+        }
+
+        if (cowLedgerSelectedParty != null)
+        {
+            var partyId = cowLedgerSelectedParty.Id;
+            query = query.Where(t =>
+                (t.SenderId == cowId && t.ReceiverId == partyId) ||
+                (t.ReceiverId == cowId && t.SenderId == partyId));
+        }
+
+        return query;
+    }
+
+    private string FormatCowLedgerCounterpartyName(string? partyType, string? partyId, string? fallbackName)
+    {
+        string nameDisplay = partyType == "CashCow"
+            ? ResolveCashCowName(partyId, fallbackName)
+            : (fallbackName ?? "");
+
+        if (!string.IsNullOrEmpty(partyId) && userLookup.TryGetValue(partyId, out var u))
+        {
+            var fullName = FormatFullName(u.FirstName, u.LastName);
+            nameDisplay = string.IsNullOrEmpty(u.DiscordName)
+                ? fullName
+                : (string.IsNullOrEmpty(fullName) ? u.DiscordName : $"{u.DiscordName} ({fullName})");
+        }
+
+        return nameDisplay;
+    }
+
+    private async Task ExportCowLedgerCsv()
+    {
+        if (viewingCow == null || isExportingCowLedgerCsv) return;
+
+        try
+        {
+            isExportingCowLedgerCsv = true;
+            var cow = viewingCow;
+
+            using var context = DbFactory.CreateDbContext();
+            var transactions = await BuildCowLedgerFilteredQuery(context, cow.Id)
+                .OrderByDescending(t => t.UpdatedAt)
+                .ToListAsync();
+
+            var allPartyIds = transactions
+                .Select(t => t.SenderId)
+                .Concat(transactions.Select(t => t.ReceiverId))
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Select(id => id!)
+                .Distinct();
+            await PopulateUserLookup(allPartyIds);
+
+            var sb = new StringBuilder();
+            sb.AppendLine("Date,Type,Platform,Amount,Direction,Note");
+
+            foreach (var t in transactions)
+            {
+                bool isIncoming = t.ReceiverId == cow.Id;
+                var dateStr = ToCashCowDisplayTime(t.UpdatedAt).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+                int signedAmount = isIncoming ? t.AmountNOK : -t.AmountNOK;
+
+                string? partyType = isIncoming ? t.SenderType : t.ReceiverType;
+                string? partyId = isIncoming ? t.SenderId : t.ReceiverId;
+                string? partyFallback = isIncoming ? t.SenderName : t.ReceiverName;
+                string counterpartyName = FormatCowLedgerCounterpartyName(partyType, partyId, partyFallback);
+                string ccSuffix = partyType == "CashCow" ? " (CC)" : "";
+                string directionText = isIncoming
+                    ? $"From {counterpartyName}{ccSuffix}".Trim()
+                    : $"To {counterpartyName}{ccSuffix}".Trim();
+
+                string noteText = string.IsNullOrWhiteSpace(t.Note) ? "" : t.Note.Trim();
+
+                sb.AppendLine($"{EscapeCsv(dateStr)},{EscapeCsv(t.Type)},{EscapeCsv(t.Platform)},{signedAmount.ToString(CultureInfo.InvariantCulture)},{EscapeCsv(directionText)},{EscapeCsv(noteText)}");
+            }
+
+            var cowFullName = FormatFullName(cow.FirstName, cow.LastName);
+            var safeName = string.Concat((string.IsNullOrWhiteSpace(cowFullName) ? "CashCow" : cowFullName)
+                .Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'))
+                .Trim('_');
+            while (safeName.Contains("__")) safeName = safeName.Replace("__", "_");
+            if (string.IsNullOrEmpty(safeName)) safeName = "CashCow";
+
+            var timestamp = GetCashCowBaseTime().ToString("yyyyMMdd_HHmm", CultureInfo.InvariantCulture);
+            var filename = $"Ledger_{safeName}_{timestamp}.csv";
+
+            await JSRuntime.InvokeVoidAsync("downloadCsv", filename, sb.ToString());
+        }
+        finally
+        {
+            isExportingCowLedgerCsv = false;
+        }
+    }
+
+    private static string EscapeCsv(string? field)
+    {
+        if (string.IsNullOrEmpty(field)) return "";
+        field = field.Replace("\"", "\"\"");
+        if (field.Contains(',') || field.Contains('"') || field.Contains('\n') || field.Contains('\r'))
+        {
+            return $"\"{field}\"";
+        }
+        return field;
+    }
+
     private async Task LoadCowTransactions(CashCow cow)
     {
         viewingCow = cow;
@@ -265,35 +397,7 @@ public partial class AdminTransactions
         }
         cowLedgerAvailablePlatforms = platforms;
 
-        var query = baseCowQuery;
-
-        var (startUtc, endUtc) = GetCashCowPeriodUtcBounds();
-        if (startUtc.HasValue)
-        {
-            query = query.Where(t => t.Date >= startUtc.Value);
-        }
-        if (endUtc.HasValue)
-        {
-            query = query.Where(t => t.Date < endUtc.Value);
-        }
-
-        if (!string.IsNullOrEmpty(cowLedgerFilterType))
-        {
-            query = query.Where(t => t.Type == cowLedgerFilterType);
-        }
-
-        if (!string.IsNullOrEmpty(cowLedgerFilterPlatform))
-        {
-            query = query.Where(t => t.Platform == cowLedgerFilterPlatform);
-        }
-
-        if (cowLedgerSelectedParty != null)
-        {
-            var partyId = cowLedgerSelectedParty.Id;
-            query = query.Where(t =>
-                (t.SenderId == cow.Id && t.ReceiverId == partyId) ||
-                (t.ReceiverId == cow.Id && t.SenderId == partyId));
-        }
+        var query = BuildCowLedgerFilteredQuery(context, cow.Id);
 
         viewingCowTotalTransactions = await query.CountAsync();
         var maxPage = Math.Max(1, (int)Math.Ceiling((double)viewingCowTotalTransactions / ViewingCowPageSize));

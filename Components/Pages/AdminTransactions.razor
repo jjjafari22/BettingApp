@@ -804,9 +804,22 @@ else
             @if (viewingCow != null)
             {
                 <div class="card shadow-sm border-0 mt-4 border-info">
-                    <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
-                        <strong translate="no" class="notranslate">Ledger: @FormatFullName(viewingCow.FirstName, viewingCow.LastName) (@viewingCowTotalTransactions)</strong>
-                        <button class="btn-close" @onclick="CloseCowLedger"></button>
+                    <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center gap-2">
+                        <strong translate="no" class="notranslate text-truncate">Ledger: @FormatFullName(viewingCow.FirstName, viewingCow.LastName) (@viewingCowTotalTransactions)</strong>
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            <button type="button" class="btn btn-light btn-sm border border-dark border-opacity-25 shadow-sm flex-shrink-0" @onclick="ExportCowLedgerCsv" disabled="@(isExportingCowLedgerCsv || viewingCowTotalTransactions == 0)" title="Export CSV">
+                                @if (isExportingCowLedgerCsv)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-download"></i>
+                                }
+                                <span class="d-none d-sm-inline ms-1">Export CSV</span>
+                            </button>
+                            <button type="button" class="btn-close" @onclick="CloseCowLedger"></button>
+                        </div>
                     </div>
                     <div class="px-3 py-2 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -919,31 +932,15 @@ else
                                                 @(isIncoming ? "+" : "-")@t.AmountNOK kr
                                             </td>
                                             <td>
-                                                @if (isIncoming) { 
-                                                    string nameDisplay = t.SenderType == "CashCow"
-                                                        ? ResolveCashCowName(t.SenderId, t.SenderName)
-                                                        : (t.SenderName ?? "");
-                                                    if (userLookup.TryGetValue(t.SenderId ?? "", out var u))
-                                                    {
-                                                        var fullName = FormatFullName(u.FirstName, u.LastName);
-                                                        nameDisplay = string.IsNullOrEmpty(u.DiscordName)
-                                                            ? fullName
-                                                            : (string.IsNullOrEmpty(fullName) ? u.DiscordName : $"{u.DiscordName} ({fullName})");
-                                                    }
+                                                @if (isIncoming)
+                                                {
+                                                    string nameDisplay = FormatCowLedgerCounterpartyName(t.SenderType, t.SenderId, t.SenderName);
                                                     <span class="text-success"><i class="bi bi-arrow-down-left"></i> From <span translate="no" class="notranslate">@nameDisplay</span></span>
                                                     @if (t.SenderType == "CashCow") { <span class="badge bg-secondary ms-1">CC</span> }
                                                 }
-                                                else { 
-                                                    string nameDisplay = t.ReceiverType == "CashCow"
-                                                        ? ResolveCashCowName(t.ReceiverId, t.ReceiverName)
-                                                        : (t.ReceiverName ?? "");
-                                                    if (userLookup.TryGetValue(t.ReceiverId ?? "", out var u))
-                                                    {
-                                                        var fullName = FormatFullName(u.FirstName, u.LastName);
-                                                        nameDisplay = string.IsNullOrEmpty(u.DiscordName)
-                                                            ? fullName
-                                                            : (string.IsNullOrEmpty(fullName) ? u.DiscordName : $"{u.DiscordName} ({fullName})");
-                                                    }
+                                                else
+                                                {
+                                                    string nameDisplay = FormatCowLedgerCounterpartyName(t.ReceiverType, t.ReceiverId, t.ReceiverName);
                                                     <span class="text-danger"><i class="bi bi-arrow-up-right"></i> To <span translate="no" class="notranslate">@nameDisplay</span></span>
                                                     @if (t.ReceiverType == "CashCow") { <span class="badge bg-secondary ms-1">CC</span> }
                                                 }
