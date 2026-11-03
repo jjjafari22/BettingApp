@@ -42,6 +42,30 @@ namespace BettingApp.Data
         }
         
         public string? ScreenshotUrl { get; set; }
+        public string? ExtraScreenshotUrls { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public bool HasExtraScreenshots => !string.IsNullOrWhiteSpace(ExtraScreenshotUrls);
+
+        public List<string> GetAllScreenshotUrls()
+        {
+            var list = new List<string>();
+            if (!string.IsNullOrWhiteSpace(ScreenshotUrl))
+            {
+                list.Add(ScreenshotUrl.Trim());
+            }
+            if (!string.IsNullOrWhiteSpace(ExtraScreenshotUrls))
+            {
+                foreach (var url in ExtraScreenshotUrls.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!list.Contains(url, StringComparer.OrdinalIgnoreCase))
+                    {
+                        list.Add(url);
+                    }
+                }
+            }
+            return list;
+        }
         
         public BetAiEvaluation? AiEvaluation { get; set; }
         

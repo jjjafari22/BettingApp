@@ -513,10 +513,13 @@ public class DiscordNotificationService : IHostedService
                 break;
         }
 
-        string fullScreenshotUrl = bet.ScreenshotUrl ?? "";
-        string screenshotLink = string.IsNullOrEmpty(fullScreenshotUrl) 
-            ? "" 
-            : $"\n[View Screenshot]({fullScreenshotUrl})";
+        var allScreenshots = bet.GetAllScreenshotUrls();
+        string screenshotLink = allScreenshots.Count switch
+        {
+            0 => "",
+            1 => $"\n[View Screenshot]({allScreenshots[0]})",
+            _ => "\n" + string.Join("\n", allScreenshots.Select((url, idx) => $"[View Screenshot {idx + 1}]({url})"))
+        };
 
         string outcomeLine = "";
         if (status == "Won" || status == "Lost" || status == "Void")

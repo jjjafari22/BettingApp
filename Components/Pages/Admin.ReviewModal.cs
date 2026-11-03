@@ -41,6 +41,10 @@ public partial class Admin
     private bool showMobileScreenshot = false;
     private string resolvedScreenshotUrl = "";
     private Dictionary<string, string> localImageCache = new();
+    private int activeScreenshotIndex = 0;
+    private List<string> reviewScreenshotUrls = new();
+    private List<Bet> mergeCandidatePendingBets = new();
+    private bool isMergingBet = false;
 
     private void ToggleModalDropdown()
     {
@@ -102,6 +106,50 @@ public partial class Admin
     private string GetScreenshotUrl(string? originalUrl)
     {
         return string.IsNullOrEmpty(resolvedScreenshotUrl) ? (originalUrl ?? "") : resolvedScreenshotUrl;
+    }
+
+    private string GetActiveScreenshotUrl()
+    {
+        string? rawUrl = (reviewScreenshotUrls.Count > 0 && activeScreenshotIndex >= 0 && activeScreenshotIndex < reviewScreenshotUrls.Count)
+            ? reviewScreenshotUrls[activeScreenshotIndex]
+            : reviewingBetModel?.ScreenshotUrl;
+        return GetScreenshotUrl(rawUrl);
+    }
+
+    private void SelectScreenshot(int index)
+    {
+        if (index < 0 || index >= reviewScreenshotUrls.Count) return;
+        if (activeScreenshotIndex == index && !string.IsNullOrEmpty(resolvedScreenshotUrl)) return;
+        activeScreenshotIndex = index;
+        resolvedScreenshotUrl = "";
+        _ = LoadResolvedScreenshotUrlAsync(reviewScreenshotUrls[index]);
+    }
+
+    private void ShowMobileScreenshotAt(int index)
+    {
+        if (index >= 0 && index < reviewScreenshotUrls.Count && activeScreenshotIndex != index)
+        {
+            activeScreenshotIndex = index;
+            resolvedScreenshotUrl = "";
+            _ = LoadResolvedScreenshotUrlAsync(reviewScreenshotUrls[index]);
+        }
+        showMobileScreenshot = true;
+    }
+
+    private void RefreshMergeCandidatePendingBetsFromMemory()
+    {
+        if (reviewingBetModel == null || (reviewingBetModel.Status != "Pending" && reviewingBetModel.Status != "Processing"))
+        {
+            mergeCandidatePendingBets.Clear();
+            return;
+        }
+
+        mergeCandidatePendingBets = pendingBets
+            .Where(b => b.Id != reviewingBetModel.Id &&
+                        b.UserId == reviewingBetModel.UserId &&
+                        (b.Status == "Pending" || b.Status == "Processing"))
+            .OrderBy(b => b.Id)
+            .ToList();
     }
 
     private async Task LoadResolvedScreenshotUrlAsync(string? originalUrl)
@@ -183,7 +231,8 @@ public partial class Admin
             Id = bet.Id, UserId = bet.UserId, UserName = bet.UserName, 
             AmountNOK = bet.AmountNOK, Odds = bet.Odds, Status = bet.Status, 
             FreeBetAmount = bet.FreeBetAmount,
-            ScreenshotUrl = bet.ScreenshotUrl, CreatedAt = bet.CreatedAt, ArrivedPendingAt = bet.ArrivedPendingAt,
+            ScreenshotUrl = bet.ScreenshotUrl, ExtraScreenshotUrls = bet.ExtraScreenshotUrls,
+            CreatedAt = bet.CreatedAt, ArrivedPendingAt = bet.ArrivedPendingAt,
             AiEvaluation = bet.AiEvaluation != null ? new BetAiEvaluation
             {
                 Id = bet.AiEvaluation.Id,
@@ -206,7 +255,7 @@ public partial class Admin
         };
         if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing")
         {
-            reviewingBetModel.Odds = 0;
+            reviewingBetModel.Odds = (bet.HasExtraScreenshots && bet.Odds > 1.0m) ? bet.Odds : 0;
         }
 
         showModalDropdown = false;
@@ -277,21 +326,56 @@ public partial class Admin
         ShowOddsLookup = false;
         shouldFocusReviewModal = true;
         
+        reviewScreenshotUrls = reviewingBetModel.GetAllScreenshotUrls();
+        activeScreenshotIndex = 0;
+        RefreshMergeCandidatePendingBetsFromMemory();
         resolvedScreenshotUrl = "";
-        _ = LoadResolvedScreenshotUrlAsync(bet.ScreenshotUrl);
+        _ = LoadResolvedScreenshotUrlAsync(reviewScreenshotUrls.FirstOrDefault());
         _ = LoadReviewUserStatsAsync(bet.UserId);
     }
 
     private async Task LoadReviewUserStatsAsync(string userId)
     {
         try {
+            int? activeBetId = reviewingBetModel?.Id;
+            string? activeStatus = reviewingBetModel?.Status;
+
             using var context = DbFactory.CreateDbContext();
             var stats = await context.Users.Where(u => u.Id == userId).Select(u => new { u.FreeBetBalance, u.LifetimeProfit }).FirstOrDefaultAsync();
             if (stats != null) {
                 currentReviewUserFreeBalance = stats.FreeBetBalance;
                 currentReviewUserLifetimeProfit = stats.LifetimeProfit;
-                await InvokeAsync(StateHasChanged);
             }
+
+            if (activeBetId.HasValue && (activeStatus == "Pending" || activeStatus == "Processing"))
+            {
+                var dbCandidates = await context.Bets
+                    .AsNoTracking()
+                    .Where(b => b.UserId == userId &&
+                                b.Id != activeBetId.Value &&
+                                (b.Status == "Pending" || b.Status == "Processing"))
+                    .OrderBy(b => b.Id)
+                    .Select(b => new Bet
+                    {
+                        Id = b.Id,
+                        UserId = b.UserId,
+                        UserName = b.UserName,
+                        Status = b.Status,
+                        AmountNOK = b.AmountNOK,
+                        Odds = b.Odds,
+                        ExtraScreenshotUrls = b.ExtraScreenshotUrls,
+                        CreatedAt = b.CreatedAt
+                    })
+                    .ToListAsync();
+
+                if (reviewingBetModel?.Id == activeBetId.Value &&
+                    (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing"))
+                {
+                    mergeCandidatePendingBets = dbCandidates;
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
         } catch { }
     }
 
@@ -310,6 +394,9 @@ public partial class Admin
         
         reviewingBetModel = null; 
         originalBetModel = null;
+        mergeCandidatePendingBets.Clear();
+        reviewScreenshotUrls.Clear();
+        activeScreenshotIndex = 0;
         SortPendingBetsInPlace();
         errorMessage = null; 
         successMessage = null; 
@@ -686,6 +773,350 @@ public partial class Admin
         );
 
         return (MarkupString)highlighted;
+    }
+
+    private bool IsMergeCandidateBusy(Bet candidate)
+    {
+        return IsAnalyzingAutoRead(candidate.Id) ||
+               (candidate.Status == "Processing" && (DateTime.UtcNow - candidate.CreatedAt).TotalMinutes < 2);
+    }
+
+    private static AiVisionExtractionResult? ParseOrBuildVisionResult(Bet b)
+    {
+        if (!string.IsNullOrWhiteSpace(b.AiVisionResultJson))
+        {
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<AiVisionExtractionResult>(b.AiVisionResultJson);
+                if (parsed != null) return parsed;
+            }
+            catch { }
+        }
+
+        bool hasFallbackData = (b.Legs != null && b.Legs.Count > 0) ||
+                               (b.AmountNOK.HasValue && b.AmountNOK.Value > 0) ||
+                               b.Odds > 1.0m;
+        if (!hasFallbackData) return null;
+
+        return new AiVisionExtractionResult
+        {
+            Bookmaker = b.Bookmaker ?? "",
+            IsBetBuilder = b.IsBetBuilder,
+            IsLive = b.IsLive,
+            Stake = (b.AmountNOK.HasValue && b.AmountNOK.Value > 0) ? b.AmountNOK.Value.ToString() : "",
+            TotalOdds = b.Odds > 1.0m ? b.Odds.ToString(System.Globalization.CultureInfo.InvariantCulture) : "",
+            Legs = b.Legs?.OrderBy(l => l.Id).Select(l => new AiVisionLeg
+            {
+                Match = l.Match ?? "",
+                Sport = l.Sport ?? "",
+                Market = l.Market ?? "",
+                Selection = l.Selection ?? "",
+                Odds = l.Odds ?? "",
+                StartTime = l.StartTime
+            }).ToList() ?? new List<AiVisionLeg>()
+        };
+    }
+
+    private async Task MergeWithPendingBetAsync(int otherBetId)
+    {
+        if (reviewingBetModel == null || isMergingBet || isSavingBet) return;
+        if (reviewingBetModel.Status != "Pending" && reviewingBetModel.Status != "Processing")
+        {
+            errorMessage = "Only pending bets can be merged.";
+            return;
+        }
+
+        int targetBetId = reviewingBetModel.Id;
+        if (targetBetId == otherBetId) return;
+        showModalDropdown = false;
+
+        if (IsAnalyzingAutoRead(targetBetId) || IsAnalyzingAutoRead(otherBetId) ||
+            (reviewingBetModel.Status == "Processing" && (DateTime.UtcNow - reviewingBetModel.CreatedAt).TotalMinutes < 2))
+        {
+            errorMessage = "AI Auto-Read is still finishing on one of these screenshots. Please wait a few seconds and try again.";
+            return;
+        }
+
+        int? manualStake = (reviewingBetModel.AmountNOK.HasValue && reviewingBetModel.AmountNOK.Value > 0)
+            ? reviewingBetModel.AmountNOK
+            : null;
+        decimal? manualOdds = reviewingBetModel.Odds > 1.0m ? reviewingBetModel.Odds : null;
+
+        bool confirmed = await DialogService.ConfirmAsync(
+            $"Merge Bet #{targetBetId} and Bet #{otherBetId} into a single bet (keeping Bet #{targetBetId})?\n\n" +
+            $"• Both screenshots and all unique legs will be combined.\n" +
+            $"• Bet #{otherBetId} will be removed so the user is only charged/paid once.\n" +
+            $"• Auto-settlement will be disabled (manual admin settlement).");
+        if (!confirmed) return;
+
+        CancelCheckingAllOdds();
+        isMergingBet = true;
+        isSavingBet = true;
+        errorMessage = null;
+        successMessage = null;
+        StateHasChanged();
+        await Task.Delay(1);
+        var minOverlayTask = UiExecutionHelper.StartDelay();
+        bool isSuccess = false;
+
+        try
+        {
+            if (IsAnalyzingAutoRead(targetBetId) || IsAnalyzingAutoRead(otherBetId))
+            {
+                errorMessage = "AI Auto-Read is still running on one of these screenshots. Please wait a few seconds and try again.";
+                return;
+            }
+
+            var adminName = currentAdminName ?? "Admin";
+            await AutoApproval.CancelAutoApprovalForBetAsync(targetBetId, adminName);
+            await AutoApproval.CancelAutoApprovalForBetAsync(otherBetId, adminName);
+
+            using var context = DbFactory.CreateDbContext();
+            var bothBets = await context.Bets
+                .Include(b => b.AiEvaluation)
+                .Include(b => b.Legs)
+                .ThenInclude(l => l.BookmakerOdds)
+                .Where(b => b.Id == targetBetId || b.Id == otherBetId)
+                .ToListAsync();
+
+            var targetDbBet = bothBets.FirstOrDefault(b => b.Id == targetBetId);
+            var otherDbBet = bothBets.FirstOrDefault(b => b.Id == otherBetId);
+
+            if (targetDbBet == null || otherDbBet == null)
+            {
+                errorMessage = "One of the bets no longer exists (it may have already been merged or cancelled).";
+                await LoadPendingBets();
+                RefreshMergeCandidatePendingBetsFromMemory();
+                return;
+            }
+
+            if (targetDbBet.UserId != otherDbBet.UserId)
+            {
+                errorMessage = "Cannot merge bets belonging to different users.";
+                return;
+            }
+
+            bool targetReady = targetDbBet.Status == "Pending" ||
+                               (targetDbBet.Status == "Processing" && (DateTime.UtcNow - targetDbBet.CreatedAt).TotalMinutes >= 2);
+            bool otherReady = otherDbBet.Status == "Pending" ||
+                              (otherDbBet.Status == "Processing" && (DateTime.UtcNow - otherDbBet.CreatedAt).TotalMinutes >= 2);
+            if (!targetReady || !otherReady)
+            {
+                errorMessage = (targetDbBet.Status == "Processing" || otherDbBet.Status == "Processing")
+                    ? "One screenshot is still finishing AI Auto-Read. Please wait a few seconds and try again."
+                    : "Both bets must still be Pending to merge (one may have just been approved, rejected, or cancelled).";
+                await LoadPendingBets();
+                RefreshMergeCandidatePendingBetsFromMemory();
+                return;
+            }
+
+            // Order chronologically by Bet ID ascending so merging #1041->#1042 and #1042->#1041 produce identical screenshot & leg ordering
+            var orderedBets = bothBets.OrderBy(b => b.Id).ToList();
+
+            var combinedUrls = new List<string>();
+            foreach (var url in orderedBets.SelectMany(b => b.GetAllScreenshotUrls()))
+            {
+                if (!combinedUrls.Contains(url, StringComparer.OrdinalIgnoreCase))
+                {
+                    combinedUrls.Add(url);
+                }
+            }
+
+            if (combinedUrls.Count == 0)
+            {
+                errorMessage = "No screenshots found on the selected bets.";
+                return;
+            }
+
+            var targetInitialVision = ParseOrBuildVisionResult(targetDbBet);
+            int? targetInitialAiStake = AiVisionExtractionResult.TryParseStakeNok(targetInitialVision?.Stake);
+            decimal targetInitialRawOdds = AiVisionExtractionResult.TryParseOddsValue(targetInitialVision?.TotalOdds);
+            decimal targetInitialFlooredOdds = targetInitialRawOdds > 1.0m
+                ? Math.Floor(targetInitialRawOdds / 0.05m) * 0.05m
+                : 0m;
+
+            bool adminEditedStake = manualStake.HasValue &&
+                                    manualStake != targetInitialAiStake &&
+                                    manualStake != targetDbBet.AmountNOK;
+            bool adminEditedOdds = manualOdds.HasValue &&
+                                   Math.Round(manualOdds.Value, 2) != Math.Round(targetInitialFlooredOdds, 2) &&
+                                   !(targetDbBet.HasExtraScreenshots && Math.Round(manualOdds.Value, 2) == Math.Round(targetDbBet.Odds, 2));
+
+            var perBetVision = orderedBets.Select(ParseOrBuildVisionResult).ToList();
+            var combinedVision = AiVisionExtractionResult.CombineMultiScreenshotResults(perBetVision)
+                                 ?? new AiVisionExtractionResult();
+
+            int? combinedStake = adminEditedStake
+                ? manualStake
+                : (AiVisionExtractionResult.TryParseStakeNok(combinedVision.Stake) ?? manualStake);
+
+            decimal combinedRawOdds = AiVisionExtractionResult.TryParseOddsValue(combinedVision.TotalOdds);
+            decimal combinedFlooredOdds = combinedRawOdds > 1.0m
+                ? Math.Floor(combinedRawOdds / 0.05m) * 0.05m
+                : 0m;
+            decimal finalOdds = adminEditedOdds
+                ? Math.Round(manualOdds!.Value, 2)
+                : (combinedFlooredOdds > 1.0m
+                    ? combinedFlooredOdds
+                    : (manualOdds.HasValue && manualOdds.Value > 1.0m ? Math.Round(manualOdds.Value, 2) : 1.0m));
+
+            if (combinedStake.HasValue && combinedStake.Value > 0 && (adminEditedStake || string.IsNullOrWhiteSpace(combinedVision.Stake)))
+            {
+                combinedVision.Stake = combinedStake.Value.ToString();
+            }
+            if (finalOdds > 1.0m && (adminEditedOdds || string.IsNullOrWhiteSpace(combinedVision.TotalOdds)))
+            {
+                combinedVision.TotalOdds = finalOdds.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            // Preserve any existing StartTime, FixtureId, and BookmakerOdds already looked up on either bet's legs
+            var existingLegsByKey = new Dictionary<string, BetLeg>(StringComparer.Ordinal);
+            foreach (var existingLeg in orderedBets.Where(b => b.Legs != null).SelectMany(b => b.Legs.OrderBy(l => l.Id)))
+            {
+                string key = AiVisionExtractionResult.GetLegDeduplicationKey(existingLeg.Match, existingLeg.Market, existingLeg.Selection, existingLeg.Odds);
+                if (!existingLegsByKey.TryGetValue(key, out var prev) ||
+                    (string.IsNullOrEmpty(prev.FixtureId) && !string.IsNullOrEmpty(existingLeg.FixtureId)) ||
+                    ((prev.BookmakerOdds == null || prev.BookmakerOdds.Count == 0) && existingLeg.BookmakerOdds != null && existingLeg.BookmakerOdds.Count > 0))
+                {
+                    existingLegsByKey[key] = existingLeg;
+                }
+            }
+
+            if (targetDbBet.Legs != null && targetDbBet.Legs.Count > 0)
+            {
+                context.BetLegs.RemoveRange(targetDbBet.Legs.ToList());
+                targetDbBet.Legs.Clear();
+            }
+            else
+            {
+                targetDbBet.Legs = new List<BetLeg>();
+            }
+
+            if (combinedVision.Legs != null)
+            {
+                foreach (var vLeg in combinedVision.Legs)
+                {
+                    string key = AiVisionExtractionResult.GetLegDeduplicationKey(vLeg.Match, vLeg.Market, vLeg.Selection, vLeg.Odds);
+                    existingLegsByKey.TryGetValue(key, out var matchedDbLeg);
+                    DateTime? legStart = (vLeg.StartTime.HasValue && vLeg.StartTime.Value > DateTime.MinValue)
+                        ? vLeg.StartTime
+                        : matchedDbLeg?.StartTime;
+                    if (legStart.HasValue && legStart.Value > DateTime.MinValue)
+                    {
+                        vLeg.StartTime = legStart;
+                    }
+
+                    targetDbBet.Legs.Add(new BetLeg
+                    {
+                        Match = vLeg.Match ?? "",
+                        Sport = vLeg.Sport ?? "",
+                        Market = vLeg.Market ?? "",
+                        Selection = vLeg.Selection ?? "",
+                        Odds = vLeg.Odds ?? "",
+                        StartTime = legStart,
+                        FixtureId = matchedDbLeg?.FixtureId,
+                        Outcome = "Pending",
+                        VerificationSource = "Unknown",
+                        Stats = "",
+                        BookmakerOdds = matchedDbLeg?.BookmakerOdds?.Select(bo => new BetLegBookmakerOdds
+                        {
+                            BookmakerName = bo.BookmakerName,
+                            OddsValue = bo.OddsValue,
+                            Limit = bo.Limit,
+                            LookedUpAt = bo.LookedUpAt,
+                            BookmakerUrl = bo.BookmakerUrl,
+                            MarketId = bo.MarketId,
+                            OutcomeId = bo.OutcomeId,
+                            PlayerId = bo.PlayerId
+                        }).ToList() ?? new List<BetLegBookmakerOdds>()
+                    });
+                }
+            }
+
+            targetDbBet.ScreenshotUrl = combinedUrls[0];
+            targetDbBet.ExtraScreenshotUrls = combinedUrls.Count > 1
+                ? string.Join("\n", combinedUrls.Skip(1))
+                : null;
+            targetDbBet.Status = "Pending";
+            targetDbBet.ArrivedPendingAt ??= otherDbBet.ArrivedPendingAt ?? DateTime.UtcNow;
+            targetDbBet.AmountNOK = combinedStake;
+            targetDbBet.Odds = finalOdds;
+            targetDbBet.IsLive = targetDbBet.IsLive || otherDbBet.IsLive || combinedVision.IsLive;
+            targetDbBet.IsBetBuilder = targetDbBet.IsBetBuilder || otherDbBet.IsBetBuilder || combinedVision.IsBetBuilder;
+            if (!string.IsNullOrWhiteSpace(combinedVision.Bookmaker))
+            {
+                targetDbBet.Bookmaker = combinedVision.Bookmaker;
+            }
+            else if (string.IsNullOrWhiteSpace(targetDbBet.Bookmaker) && !string.IsNullOrWhiteSpace(otherDbBet.Bookmaker))
+            {
+                targetDbBet.Bookmaker = otherDbBet.Bookmaker;
+            }
+
+            bool allLegsScheduled = combinedVision.Legs != null &&
+                                    combinedVision.Legs.Count > 0 &&
+                                    combinedVision.Legs.All(l => l.StartTime.HasValue && l.StartTime.Value > DateTime.MinValue);
+            targetDbBet.MatchStartTime = allLegsScheduled
+                ? combinedVision.Legs!.Min(l => l.StartTime)
+                : null;
+
+            if (targetDbBet.AiEvaluation == null)
+            {
+                var existingEval = await context.BetAiEvaluations.FirstOrDefaultAsync(a => a.BetId == targetDbBet.Id);
+                targetDbBet.AiEvaluation = existingEval ?? new BetAiEvaluation { BetId = targetDbBet.Id };
+            }
+            targetDbBet.AiVisionResultJson = (combinedVision.Legs?.Count > 0 ||
+                                              !string.IsNullOrWhiteSpace(combinedVision.Stake) ||
+                                              !string.IsNullOrWhiteSpace(combinedVision.TotalOdds))
+                ? JsonSerializer.Serialize(combinedVision)
+                : null;
+            targetDbBet.AiVisionError = null;
+            targetDbBet.AutoApproveAt = null;
+            targetDbBet.IsAutoApproved = false;
+            targetDbBet.AutoApproveReason = $"🔗 Merged with Bet #{otherDbBet.Id} by {adminName} ({combinedUrls.Count} screenshots • Manual settle)";
+            targetDbBet.UpdatedAt = DateTime.UtcNow;
+
+            context.Bets.Remove(otherDbBet);
+            context.AuditLogs.Add(new AuditLog
+            {
+                Action = "Merged Pending Bets",
+                AdminUserName = adminName,
+                TargetUserName = targetDbBet.UserName ?? targetDbBet.UserId,
+                Details = $"Merged Pending Bet #{otherDbBet.Id} into Bet #{targetDbBet.Id} ({combinedUrls.Count} screenshots, {targetDbBet.Legs.Count} unique legs). Bet #{otherDbBet.Id} removed; auto-settlement disabled.",
+                Timestamp = DateTime.UtcNow
+            });
+
+            await context.SaveChangesAsync();
+            isSuccess = true;
+
+            _visionCache.Remove(targetBetId);
+            _visionCache.Remove(otherBetId);
+            _outcomeCache.Remove(otherBetId);
+            pendingBets.RemoveAll(b => b.Id == otherBetId);
+
+            await LoadPendingBets();
+            var refreshedTarget = pendingBets.FirstOrDefault(b => b.Id == targetBetId) ?? targetDbBet;
+            StartReview(refreshedTarget, keepExpansionState: true);
+            successMessage = $"Merged Bet #{otherBetId} into Bet #{targetBetId} ({combinedUrls.Count} screenshots, {targetDbBet.Legs.Count} legs). Auto-settle disabled.";
+
+            UiNotifier.NotifyAdmin("PendingUpdate");
+            UiNotifier.NotifyUser(targetDbBet.UserId, $"Your screenshots were combined into Pick #{targetBetId}.");
+            StateHasChanged();
+        }
+        catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException || ex is JSDisconnectedException)
+        {
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to merge bets due to a database error. Please try again.";
+            Console.WriteLine($"[Admin.razor] MergeWithPendingBetAsync Error: {ex.Message}");
+        }
+        finally
+        {
+            await UiExecutionHelper.AwaitMinDurationAsync(minOverlayTask, isSuccess);
+            isMergingBet = false;
+            isSavingBet = false;
+            StateHasChanged();
+        }
     }
 
 }

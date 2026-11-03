@@ -56,9 +56,13 @@ else
 @if (reviewingBetModel != null)
 {
     @if (showMobileScreenshot && !string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
-        <div class="d-lg-none d-flex align-items-center justify-content-center" 
+        <div class="d-lg-none d-flex flex-column align-items-center justify-content-center" 
              style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 2147483647; padding: 10px; pointer-events: none;">
-            <img src="@GetScreenshotUrl(reviewingBetModel.ScreenshotUrl)" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+            @if (reviewScreenshotUrls.Count > 1)
+            {
+                <span class="badge bg-primary mb-2 px-3 py-1 shadow">Screenshot @(activeScreenshotIndex + 1) / @reviewScreenshotUrls.Count</span>
+            }
+            <img src="@GetActiveScreenshotUrl()" style="max-width: 100%; max-height: 92%; object-fit: contain;" />
         </div>
     }
 
@@ -81,6 +85,12 @@ else
                         <h5 class="modal-title fs-6 me-2 flex-grow-1" style="line-height: 1.4;">
                             <span class="badge @GetStatusBadgeClass(reviewingBetModel.Status) me-2 align-middle">@reviewingBetModel.Status</span>
                             @GetLivePlacedBadge(reviewingBetModel, "me-2 align-middle", isModalHeader: true)
+                            @if (reviewingBetModel.HasExtraScreenshots)
+                            {
+                                <span class="badge bg-dark text-white me-2 align-middle" title="Merged multi-screenshot bet — auto-settlement disabled (manual admin settlement)">
+                                    <i class="bi bi-images me-1"></i>@(reviewScreenshotUrls.Count) SS • Manual Settle
+                                </span>
+                            }
                             <span class="align-middle">Bet #@reviewingBetModel.Id</span> 
                             <span class="text-muted ms-sm-2 fw-normal d-flex d-sm-inline-flex align-items-center flex-wrap mt-1 mt-sm-0" style="font-size: 0.9rem; word-break: break-all; gap: 0.35rem;">
                                 @{
@@ -111,6 +121,23 @@ else
                                             }
                                         </button>
                                     </li>
+                                    @if (reviewingBetModel != null && (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") && mergeCandidatePendingBets.Count > 0)
+                                    {
+                                        <li><hr class="dropdown-divider my-1" /></li>
+                                        @foreach (var candidate in mergeCandidatePendingBets)
+                                        {
+                                            var candidateId = candidate.Id;
+                                            bool candidateBusy = IsMergeCandidateBusy(candidate);
+                                            <li>
+                                                <button class="dropdown-item"
+                                                        @onclick="() => MergeWithPendingBetAsync(candidateId)"
+                                                        disabled="@(isMergingBet || isSavingBet || candidateBusy || IsAnalyzingAutoRead(reviewingBetModel.Id))">
+                                                    <i class="bi bi-intersect me-2 text-primary"></i>
+                                                    @(candidateBusy ? $"Reading Bet #{candidateId}..." : $"Merge with Bet #{candidateId}")
+                                                </button>
+                                            </li>
+                                        }
+                                    }
                                     @if (reviewingBetModel != null && (reviewingBetModel.Status == "Approved" || reviewingBetModel.Status == "Won" || reviewingBetModel.Status == "Lost" || reviewingBetModel.Status == "Void" || reviewingBetModel.Status == "Completed" || reviewContext == "Approved" || reviewContext == "Completed"))
                                     {
                                         <li>
@@ -149,9 +176,24 @@ else
                     <div class="row g-0 desktop-modal-row position-relative">
                         <!-- Left Column: Image -->
                         <div class="col-lg-6 position-relative bg-dark d-none d-lg-flex flex-column desktop-left-col" style="min-height: 400px; max-height: 100%;">
+                            @if (reviewScreenshotUrls.Count > 1)
+                            {
+                                <div class="d-flex justify-content-center align-items-center gap-2 pt-2 px-2 flex-shrink-0">
+                                    @for (int i = 0; i < reviewScreenshotUrls.Count; i++)
+                                    {
+                                        var ssIdx = i;
+                                        bool isActiveSs = activeScreenshotIndex == ssIdx;
+                                        <button type="button"
+                                                class="btn btn-sm @(isActiveSs ? "btn-primary fw-bold" : "btn-outline-light") rounded-pill px-3 py-1"
+                                                @onclick="() => SelectScreenshot(ssIdx)">
+                                            <i class="bi bi-image me-1"></i>Screenshot @(ssIdx + 1)
+                                        </button>
+                                    }
+                                </div>
+                            }
                             <div class="desktop-image-area position-relative p-2 d-flex align-items-center justify-content-center overflow-hidden">
                                 @if (!string.IsNullOrEmpty(reviewingBetModel!.ScreenshotUrl)) {
-                                    <img src="@GetScreenshotUrl(reviewingBetModel.ScreenshotUrl)" class="img-fluid rounded shadow" style="max-height: 100%; max-width: 100%; object-fit: contain;" alt="Bet Screenshot" />
+                                    <img src="@GetActiveScreenshotUrl()" class="img-fluid rounded shadow" style="max-height: 100%; max-width: 100%; object-fit: contain;" alt="Bet Screenshot" />
                                 } else {
                                     <div class="text-white-50 fst-italic text-center">
                                         <i class="bi bi-image-fill display-1 d-block mb-3"></i><span>No Image Available</span>
@@ -799,10 +841,30 @@ else
                             <div class="desktop-bottom-actions flex-shrink-0 position-relative">
                                
                                <!-- Mobile Image Toggle Button -->
-                               @if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
+                               @if (reviewScreenshotUrls.Count > 1) {
+                                   <div class="d-lg-none d-flex align-items-center gap-2"
+                                        style="position: absolute; right: 15px; top: -55px; z-index: 1050;">
+                                       @for (int i = 0; i < reviewScreenshotUrls.Count; i++)
+                                       {
+                                           var ssIdx = i;
+                                           bool isActiveSs = activeScreenshotIndex == ssIdx;
+                                           <button type="button"
+                                                   class="btn @(isActiveSs ? "btn-primary" : "btn-dark") shadow-lg rounded-circle d-flex align-items-center justify-content-center border-0 fw-bold"
+                                                   style="width: 45px; height: 45px; opacity: 0.95; user-select: none; -webkit-touch-callout: none; touch-action: none;"
+                                                   @onpointerdown="() => ShowMobileScreenshotAt(ssIdx)"
+                                                   @onpointerup="() => showMobileScreenshot = false"
+                                                   @onpointerout="() => showMobileScreenshot = false"
+                                                   @onpointercancel="() => showMobileScreenshot = false"
+                                                   @oncontextmenu="() => {}" @oncontextmenu:preventDefault="true"
+                                                   title="Hold to view Screenshot @(ssIdx + 1)">
+                                               <i class="bi bi-image me-1" style="font-size: 0.8rem;"></i><span>@(ssIdx + 1)</span>
+                                           </button>
+                                       }
+                                   </div>
+                               } else if (!string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) {
                                    <button class="btn btn-primary d-lg-none shadow-lg rounded-circle d-flex align-items-center justify-content-center border-0" 
                                            style="position: absolute; right: 15px; top: -55px; width: 45px; height: 45px; z-index: 1050; opacity: 0.95; user-select: none; -webkit-touch-callout: none; touch-action: none;"
-                                           @onpointerdown="() => showMobileScreenshot = true" 
+                                           @onpointerdown="() => ShowMobileScreenshotAt(0)" 
                                            @onpointerup="() => showMobileScreenshot = false" 
                                            @onpointerout="() => showMobileScreenshot = false" 
                                            @onpointercancel="() => showMobileScreenshot = false"
@@ -1268,6 +1330,14 @@ else
 
     private RenderFragment GetMonitoringStatusBadge(Bet bet) => __builder =>
     {
+        if (bet.HasExtraScreenshots)
+        {
+            <div class="mb-1">
+                <span class="badge bg-dark text-white shadow-sm" title="Merged multi-screenshot bet — auto-settlement disabled (manual admin settlement)">
+                    <i class="bi bi-images me-1"></i> Manual Settle
+                </span>
+            </div>
+        }
         if (IsCheckingOutcome(bet.Id))
         {
             <span class="badge bg-info text-dark shadow-sm"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Checking</span>

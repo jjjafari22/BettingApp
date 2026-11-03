@@ -65,6 +65,11 @@ namespace BettingApp.Services
                     return (false, $"Action aborted: Bet #{betId} was already updated to '{dbBet.Status}' by Admin {otherAdminName}.", false);
                 }
 
+                if ((isAutoSettled || isAutoApproved) && dbBet.HasExtraScreenshots)
+                {
+                    return (false, $"Merged multi-screenshot Bet #{betId} requires manual admin processing.", true);
+                }
+
                 string originalStatus = dbBet.Status;
                 bool isUndo = (originalStatus == "Won" || originalStatus == "Lost" || originalStatus == "Void" || originalStatus == "Rejected" || originalStatus == "Cancelled") && newStatus == "Approved";
                 bool wasStaked = originalStatus == "Approved" || originalStatus == "Won" || originalStatus == "Lost";

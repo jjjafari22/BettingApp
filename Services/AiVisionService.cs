@@ -29,6 +29,121 @@ namespace BettingApp.Services
         
         [JsonPropertyName("legs")]
         public List<AiVisionLeg> Legs { get; set; } = new();
+
+        public static string GetLegDeduplicationKey(string? match, string? market, string? selection, string? odds)
+        {
+            static string Norm(string? s) => string.IsNullOrWhiteSpace(s)
+                ? ""
+                : string.Join(' ', s.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
+            return $"{Norm(match)}|{Norm(market)}|{Norm(selection)}|{Norm(odds)}";
+        }
+
+        public static decimal TryParseOddsValue(string? rawOdds)
+        {
+            if (string.IsNullOrWhiteSpace(rawOdds)) return 0m;
+            var clean = rawOdds.Trim().Replace(",", ".");
+            return decimal.TryParse(clean, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val)
+                ? val
+                : 0m;
+        }
+
+        public static int? TryParseStakeNok(string? rawStake)
+        {
+            if (string.IsNullOrWhiteSpace(rawStake)) return null;
+            var trimmed = rawStake.Trim().ToLowerInvariant();
+            int multiplier = trimmed.EndsWith("k") ? 1000 : (trimmed.EndsWith("m") ? 1000000 : 1);
+            var clean = new string(trimmed.Where(c => char.IsDigit(c) || c == '.' || c == ',').ToArray()).Replace(",", ".");
+            if (decimal.TryParse(clean, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal val) && val > 0m)
+            {
+                return (int)(val * multiplier);
+            }
+            return null;
+        }
+
+        public static AiVisionExtractionResult? CombineMultiScreenshotResults(IReadOnlyList<AiVisionExtractionResult?> results)
+        {
+            var valid = results.Where(r => r != null).Select(r => r!).ToList();
+            if (valid.Count == 0) return null;
+            if (valid.Count == 1) return valid[0];
+
+            var combined = new AiVisionExtractionResult
+            {
+                Bookmaker = valid.Select(r => r.Bookmaker).FirstOrDefault(b => !string.IsNullOrWhiteSpace(b) && !b.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                            ?? valid.Select(r => r.Bookmaker).FirstOrDefault(b => !string.IsNullOrWhiteSpace(b))
+                            ?? "",
+                IsBetBuilder = valid.Any(r => r.IsBetBuilder),
+                IsLive = valid.Any(r => r.IsLive)
+            };
+
+            int bestStakeVal = 0;
+            string bestStakeRaw = "";
+            decimal bestOddsWithStake = 0m;
+            string bestOddsWithStakeRaw = "";
+            decimal bestOddsAny = 0m;
+            string bestOddsAnyRaw = "";
+
+            foreach (var r in valid)
+            {
+                int parsedStake = TryParseStakeNok(r.Stake) ?? 0;
+                decimal parsedOdds = TryParseOddsValue(r.TotalOdds);
+
+                if (parsedStake > bestStakeVal)
+                {
+                    bestStakeVal = parsedStake;
+                    bestStakeRaw = r.Stake;
+                }
+                if (parsedOdds > 1.0m && parsedOdds > bestOddsAny)
+                {
+                    bestOddsAny = parsedOdds;
+                    bestOddsAnyRaw = r.TotalOdds;
+                }
+                if (parsedStake > 0 && parsedOdds > 1.0m && parsedOdds > bestOddsWithStake)
+                {
+                    bestOddsWithStake = parsedOdds;
+                    bestOddsWithStakeRaw = r.TotalOdds;
+                }
+            }
+
+            combined.Stake = !string.IsNullOrWhiteSpace(bestStakeRaw)
+                ? bestStakeRaw
+                : (valid.Select(r => r.Stake).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)) ?? "");
+            combined.TotalOdds = !string.IsNullOrWhiteSpace(bestOddsWithStakeRaw)
+                ? bestOddsWithStakeRaw
+                : (!string.IsNullOrWhiteSpace(bestOddsAnyRaw)
+                    ? bestOddsAnyRaw
+                    : (valid.Select(r => r.TotalOdds).FirstOrDefault(o => !string.IsNullOrWhiteSpace(o)) ?? ""));
+
+            var seenLegs = new Dictionary<string, AiVisionLeg>(StringComparer.Ordinal);
+            foreach (var r in valid)
+            {
+                if (r.Legs == null) continue;
+                foreach (var leg in r.Legs)
+                {
+                    string key = GetLegDeduplicationKey(leg.Match, leg.Market, leg.Selection, leg.Odds);
+                    if (!seenLegs.TryGetValue(key, out var existing))
+                    {
+                        var cloned = new AiVisionLeg
+                        {
+                            Match = leg.Match ?? "",
+                            Sport = leg.Sport ?? "",
+                            Market = leg.Market ?? "",
+                            Selection = leg.Selection ?? "",
+                            Badges = leg.Badges != null ? new List<string>(leg.Badges) : new List<string>(),
+                            Odds = leg.Odds ?? "",
+                            StartTime = leg.StartTime
+                        };
+                        seenLegs[key] = cloned;
+                        combined.Legs.Add(cloned);
+                    }
+                    else if ((existing.StartTime == null || existing.StartTime <= DateTime.MinValue) && leg.StartTime > DateTime.MinValue)
+                    {
+                        existing.StartTime = leg.StartTime;
+                    }
+                }
+            }
+
+            return combined;
+        }
     }
 
     public class AiVisionLeg

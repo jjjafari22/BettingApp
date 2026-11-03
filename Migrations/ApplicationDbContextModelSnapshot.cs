@@ -204,6 +204,9 @@ namespace BettingApp.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("ExtraScreenshotUrls")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("FreeBetAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");

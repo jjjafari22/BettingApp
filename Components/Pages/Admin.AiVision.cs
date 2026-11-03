@@ -344,12 +344,13 @@ public partial class Admin
                             }
                             dbBet.AiOutcomeResult = outcome;
                             string? targetAutoSettleStatus = null;
+                            bool isFinished = false;
 
                             BettingApp.Services.AiVisionExtractionResult? currentAiVision = null;
                             if (parsedData != null)
                             {
                                 var status = parsedData.OverallStatus?.Trim().ToUpperInvariant() ?? "";
-                                var isFinished = 
+                                isFinished = 
                                     status == "MATCH FINISHED - WON" || status == "MATCH WON" || status == "WON" ||
                                     status == "MATCH FINISHED - LOST" || status == "MATCH LOST" || status == "LOST" ||
                                     status == "MATCH FINISHED - VOID" || status == "MATCH VOID" || status == "VOID" ||
@@ -452,7 +453,7 @@ public partial class Admin
                                 }
 
                                 // --- GATEKEEPER AUTO-SETTLEMENT LOGIC ---
-                                if (isFinished && dbBet.Status == "Approved")
+                                if (isFinished && dbBet.Status == "Approved" && !dbBet.HasExtraScreenshots)
                                 {
                                     targetAutoSettleStatus = BettingApp.Services.BetSchedulingLogic.DetermineAutoSettleStatus(parsedData.OverallStatus, parsedData.Legs);
                                 }
@@ -462,7 +463,7 @@ public partial class Admin
                             // --- UPDATE NEXT CHECK TIME ---
                             dbBet.NextCheckTime = (dbBet.Status == "Won" || dbBet.Status == "Lost" || dbBet.Status == "Void")
                                 ? BettingApp.Services.BetSchedulingLogic.CalculateFollowUpCheckTimeForSettledBet(dbBet)
-                                : BettingApp.Services.BetSchedulingLogic.CalculateNextCheckTime(dbBet);
+                                : (isFinished && targetAutoSettleStatus == null ? null : BettingApp.Services.BetSchedulingLogic.CalculateNextCheckTime(dbBet));
                             
                             await context.SaveChangesAsync();
                             
@@ -610,7 +611,8 @@ public partial class Admin
         if (reviewingBetModel == null || string.IsNullOrEmpty(reviewingBetModel.ScreenshotUrl)) return;
         
         var capturingBetId = reviewingBetModel.Id;
-        var capturingScreenshot = reviewingBetModel.ScreenshotUrl;
+        var capturingScreenshots = reviewingBetModel.GetAllScreenshotUrls();
+        if (capturingScreenshots.Count == 0) return;
         AnalyzingImageBetIds.Add(capturingBetId);
         AiVisionResult = null;
         ActiveLookupLeg = null;
@@ -623,7 +625,30 @@ public partial class Admin
 
         try
         {
-            var (result, error) = await AiVision.ExtractBetSlipDataAsync(capturingScreenshot, capturingBetId);
+            BettingApp.Services.AiVisionExtractionResult? result = null;
+            string? error = null;
+            if (capturingScreenshots.Count == 1)
+            {
+                (result, error) = await AiVision.ExtractBetSlipDataAsync(capturingScreenshots[0], capturingBetId);
+            }
+            else
+            {
+                var perImageResults = new List<BettingApp.Services.AiVisionExtractionResult?>();
+                foreach (var url in capturingScreenshots)
+                {
+                    var (singleRes, singleErr) = await AiVision.ExtractBetSlipDataAsync(url, capturingBetId);
+                    if (singleErr != null)
+                    {
+                        error = singleErr;
+                        break;
+                    }
+                    perImageResults.Add(singleRes);
+                }
+                if (error == null)
+                {
+                    result = BettingApp.Services.AiVisionExtractionResult.CombineMultiScreenshotResults(perImageResults);
+                }
+            }
             
             bool isModalOpenForThisBet = reviewingBetModel != null && reviewingBetModel.Id == capturingBetId;
             var listModel = pendingBets.FirstOrDefault(b => b.Id == capturingBetId) ?? approvedBets.FirstOrDefault(b => b.Id == capturingBetId) ?? allApprovedBets.FirstOrDefault(b => b.Id == capturingBetId) ?? completedBets.FirstOrDefault(b => b.Id == capturingBetId);

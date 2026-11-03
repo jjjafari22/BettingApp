@@ -168,7 +168,7 @@ public partial class AutoApprovalService : BackgroundService
                 .ThenInclude(l => l.BookmakerOdds)
                 .FirstOrDefaultAsync(b => b.Id == betId, ct);
 
-            if (dbBet == null || dbBet.Status != "Pending")
+            if (dbBet == null || dbBet.Status != "Pending" || dbBet.HasExtraScreenshots)
             {
                 return;
             }
@@ -186,7 +186,7 @@ public partial class AutoApprovalService : BackgroundService
                 .ThenInclude(l => l.BookmakerOdds)
                 .FirstOrDefaultAsync(b => b.Id == betId, ct);
 
-            if (freshBet == null || freshBet.Status != "Pending")
+            if (freshBet == null || freshBet.Status != "Pending" || freshBet.HasExtraScreenshots)
             {
                 return;
             }
@@ -278,7 +278,7 @@ public partial class AutoApprovalService : BackgroundService
                 .ThenInclude(l => l.BookmakerOdds)
                 .FirstOrDefaultAsync(b => b.Id == betId, ct);
 
-            if (dbBet == null || dbBet.Status != "Pending" || dbBet.AutoApproveAt == null)
+            if (dbBet == null || dbBet.Status != "Pending" || dbBet.AutoApproveAt == null || dbBet.HasExtraScreenshots)
             {
                 return;
             }
@@ -295,7 +295,7 @@ public partial class AutoApprovalService : BackgroundService
                 .ThenInclude(l => l.BookmakerOdds)
                 .FirstOrDefaultAsync(b => b.Id == betId, ct);
 
-            if (freshBet == null || freshBet.Status != "Pending" || freshBet.AutoApproveAt == null)
+            if (freshBet == null || freshBet.Status != "Pending" || freshBet.AutoApproveAt == null || freshBet.HasExtraScreenshots)
             {
                 return;
             }

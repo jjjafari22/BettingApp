@@ -377,6 +377,7 @@ public partial class Admin
                                     var newIdx = pendingBets.FindIndex(b => b.Id == reviewingBetModel.Id);
                                     if (newIdx >= 0) currentReviewIndex = newIdx;
                                 }
+                                RefreshMergeCandidatePendingBetsFromMemory();
                                 var matchingBet = pendingBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
                                                ?? approvedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
                                                ?? allApprovedBets.FirstOrDefault(b => b.Id == reviewingBetModel.Id)
@@ -391,7 +392,8 @@ public partial class Admin
                                         matchingBet.AutoApproveAt != reviewingBetModel.AutoApproveAt ||
                                         matchingBet.IsAutoApproved != reviewingBetModel.IsAutoApproved ||
                                         matchingBet.IsLive != reviewingBetModel.IsLive ||
-                                        matchingBet.AutoApproveReason != reviewingBetModel.AutoApproveReason)
+                                        matchingBet.AutoApproveReason != reviewingBetModel.AutoApproveReason ||
+                                        matchingBet.ExtraScreenshotUrls != reviewingBetModel.ExtraScreenshotUrls)
                                     {
                                         reviewingBetModel.AiOutcomeResult = matchingBet.AiOutcomeResult;
                                         reviewingBetModel.Status = matchingBet.Status;
@@ -404,6 +406,12 @@ public partial class Admin
                                         reviewingBetModel.IsAutoApproved = matchingBet.IsAutoApproved;
                                         reviewingBetModel.IsLive = matchingBet.IsLive;
                                         reviewingBetModel.AutoApproveReason = matchingBet.AutoApproveReason;
+                                        if (matchingBet.ExtraScreenshotUrls != reviewingBetModel.ExtraScreenshotUrls)
+                                        {
+                                            reviewingBetModel.ScreenshotUrl = matchingBet.ScreenshotUrl;
+                                            reviewingBetModel.ExtraScreenshotUrls = matchingBet.ExtraScreenshotUrls;
+                                            reviewScreenshotUrls = reviewingBetModel.GetAllScreenshotUrls();
+                                        }
                                         if (matchingBet.Legs != null)
                                         {
                                             reviewingBetModel.Legs = matchingBet.Legs.ToList();
