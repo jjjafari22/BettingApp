@@ -40,9 +40,22 @@ namespace BettingApp.Tests
         [InlineData("Atletico PR", "Athletico Paranaense")]
         [InlineData("Atletico-PR", "Athletico Paranaense")]
         [InlineData("Athletico-PR", "Athletico Paranaense")]
+        [InlineData("Atletico GO", "AC Goianiense GO")]
+        [InlineData("Atletico-GO", "AC Goianiense GO")]
+        [InlineData("Atletico Goianiense", "AC Goianiense GO")]
+        [InlineData("Atletico MG", "CA Mineiro MG")]
+        [InlineData("Ruud, C", "Casper Ruud")]
+        [InlineData("Cerundolo, JM", "Juan Manuel Cerundolo")]
         public void Test_IsTeamMatch_Paranaense(string teamA, string teamB)
         {
             Assert.True(TeamAliasMappingService.IsTeamMatch(teamA, teamB));
+        }
+
+        [Fact]
+        public void Test_IsTeamMatch_MultiInitialDoesNotMatchDifferentFirstName()
+        {
+            Assert.False(TeamAliasMappingService.IsTeamMatch("Cerundolo, JM", "Francisco Cerundolo"));
+            Assert.False(TeamAliasMappingService.IsTeamMatch("Cerundolo, F", "Juan Manuel Cerundolo"));
         }
     }
 }

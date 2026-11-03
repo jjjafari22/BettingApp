@@ -84,5 +84,83 @@ namespace BettingApp.Tests
             var denGsw = CreateEvent("Golden State Warriors", "Warriors", "Golden State", "GS", "Denver Nuggets", "Nuggets", "Denver", "DEN");
             Assert.True(espn.IsEventMatch(denGsw, "Denver Nuggets", "Golden State Warriors"));
         }
+
+        [Fact]
+        public void Test_EspnIsTennisMatch_SurnameCommaInitialsAndMultiInitials()
+        {
+            var espn = new EspnApiService(
+                new System.Net.Http.HttpClient(),
+                new TeamAliasMappingService(),
+                new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<EspnApiService>.Instance);
+
+            static System.Text.Json.JsonElement CreateTennisComp(
+                string full1, string short1,
+                string full2, string short2)
+            {
+                string json = $@"{{
+                    ""competitors"": [
+                        {{ ""athlete"": {{ ""displayName"": ""{full1}"", ""fullName"": ""{full1}"", ""shortName"": ""{short1}"" }} }},
+                        {{ ""athlete"": {{ ""displayName"": ""{full2}"", ""fullName"": ""{full2}"", ""shortName"": ""{short2}"" }} }}
+                    ]
+                }}";
+                return System.Text.Json.JsonDocument.Parse(json).RootElement.Clone();
+            }
+
+            // Bet #10204: "Ruud, C vs Cerundolo, JM" against ESPN's "Casper Ruud vs Juan Manuel Cerundolo"
+            var ruudCerundolo = CreateTennisComp("Casper Ruud", "C. Ruud", "Juan Manuel Cerundolo", "J. Cerundolo");
+            Assert.True(espn.IsTennisMatch(ruudCerundolo, "Ruud, C", "Cerundolo, JM"));
+            Assert.True(espn.IsTennisMatch(ruudCerundolo, "Cerundolo, JM", "Ruud, C"));
+            Assert.True(espn.IsTennisMatch(ruudCerundolo, "Casper Ruud", "Juan Manuel Cerundolo"));
+            Assert.True(espn.IsTennisMatch(ruudCerundolo, "C. Ruud", "J.M. Cerundolo"));
+
+            // Must NOT match Juan Manuel Cerundolo's brother Francisco Cerundolo ("Cerundolo, F")
+            Assert.False(espn.IsTennisMatch(ruudCerundolo, "Ruud, C", "Cerundolo, F"));
+            Assert.False(espn.IsTennisMatch(ruudCerundolo, "Ruud, C", "Francisco Cerundolo"));
+
+            // Must NOT match players who only share a first name ("Carlos Alcaraz" vs "Carlos Taberner")
+            var alcarazFritz = CreateTennisComp("Carlos Alcaraz", "C. Alcaraz", "Taylor Fritz", "T. Fritz");
+            Assert.False(espn.IsTennisMatch(alcarazFritz, "Carlos Taberner", "Taylor Fritz"));
+        }
+
+        [Fact]
+        public void Test_TennisRetirementAndWalkoverSafeguards()
+        {
+            string retiredJson = @"{
+                ""provider"": ""ESPN"",
+                ""sport"": ""Tennis"",
+                ""statusType"": ""STATUS_RETIRED"",
+                ""status"": ""Final (Retired)"",
+                ""statusDetail"": ""Retired"",
+                ""resultSummary"": ""Karen Khachanov (RUS) bt Denis Shapovalov (CAN) 6-3 6-7 (6-8) 1-4 ret""
+            }";
+
+            Assert.True(AiVisionService.TryDetectTennisRetirementOrWalkover(
+                retiredJson, out bool isRetired, out bool isWalkover, out string summary));
+            Assert.True(isRetired);
+            Assert.False(isWalkover);
+            Assert.Contains("1-4 ret", summary);
+
+            var legs = new System.Collections.Generic.List<AiOutcomeLegResult>
+            {
+                new AiOutcomeLegResult
+                {
+                    Match = "Denis Shapovalov vs Karen Khachanov",
+                    Outcome = "Lost",
+                    VerificationSource = "ESPN_Verified",
+                    Stats = "Verified via ESPN: Shapovalov retired at 1-4 in Set 3."
+                }
+            };
+
+            var retiredMap = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Denis Shapovalov vs Karen Khachanov"] = summary
+            };
+            var walkoverMap = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            AiVisionService.ApplyTennisRetirementSafeguards(legs, retiredMap, walkoverMap);
+            Assert.Equal("Unknown", legs[0].Outcome);
+            Assert.Null(BetSchedulingLogic.DetermineAutoSettleStatus("UNKNOWN", legs));
+        }
     }
 }

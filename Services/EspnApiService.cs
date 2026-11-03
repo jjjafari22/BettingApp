@@ -629,7 +629,7 @@ namespace BettingApp.Services
 
         private static string[] SplitWords(string text)
         {
-            return text.Split(new[] { ' ', '-', '.', '/', '\'' }, StringSplitOptions.RemoveEmptyEntries);
+            return text.Split(new[] { ' ', ',', '-', '.', '/', '\'' }, StringSplitOptions.RemoveEmptyEntries);
         }
 
         private static bool ContainsAllWords(string[] haystackWords, string[] needleWords)
@@ -843,7 +843,10 @@ namespace BettingApp.Services
                     statusDetail = typ.TryGetProperty("detail", out var det) ? det.GetString() ?? "" : "";
                 }
 
-                bool isFinished = isCompleted && (statusName == "STATUS_FINAL" || statusName == "STATUS_RETIRED" || statusName == "STATUS_WALKOVER" || statusName == "STATUS_DEFAULT");
+                bool isNaturalFinal = isCompleted && statusName == "STATUS_FINAL";
+                bool isRetiredOrDefault = isCompleted && (statusName == "STATUS_RETIRED" || statusName == "STATUS_DEFAULT");
+                bool isWalkover = isCompleted && statusName == "STATUS_WALKOVER";
+                bool isFinished = isNaturalFinal || isRetiredOrDefault || isWalkover;
 
                 _logger.LogInformation($"{betLabel} ✅ [ESPN] Found Tennis Match ID {eventId} ('{matchName}') in {matchedTourney} ({matchedLeague.ToUpperInvariant()}) | Status: {statusName} ({statusDetail}) | StartTime: {startTimeUtc}");
 
@@ -876,7 +879,9 @@ namespace BettingApp.Services
                             }
                         }
 
-                        bool winner = c.TryGetProperty("winner", out var w) && w.GetBoolean();
+                        // Only mark a player as 'winner' on a naturally completed match (STATUS_FINAL).
+                        // On retirements, defaults, or walkovers, do not report a standard match winner so AI/settlement rules handle it properly.
+                        bool winner = isNaturalFinal && c.TryGetProperty("winner", out var w) && w.GetBoolean();
                         var sets = new List<object>();
                         if (c.TryGetProperty("linescores", out var linescores) && linescores.ValueKind == JsonValueKind.Array)
                         {
@@ -899,6 +904,14 @@ namespace BettingApp.Services
                     }
                 }
 
+                string mappedStatus = isNaturalFinal
+                    ? "Final"
+                    : isRetiredOrDefault
+                        ? "Final (Retired)"
+                        : isWalkover
+                            ? "Final (Walkover)"
+                            : (statusName.Contains("PROGRESS") ? "In Progress" : "Scheduled");
+
                 var payload = new Dictionary<string, object>
                 {
                     ["provider"] = "ESPN",
@@ -911,14 +924,23 @@ namespace BettingApp.Services
                     ["match"] = matchName,
                     ["startTimeIso"] = startTimeUtc,
                     ["isFinished"] = isFinished,
-                    ["status"] = isFinished ? "Final" : (statusName.Contains("PROGRESS") ? "In Progress" : "Scheduled"),
+                    ["statusType"] = statusName,
+                    ["status"] = mappedStatus,
                     ["statusDetail"] = statusDetail,
                     ["resultSummary"] = matchNotes.Count > 0 ? string.Join("; ", matchNotes) : "",
                     ["competitors"] = competitorsList,
                     ["rawCompetition"] = comp
                 };
 
-                if (!isFinished)
+                if (isWalkover)
+                {
+                    payload["RETIREMENT_OR_WALKOVER_RULE"] = "WALKOVER (STATUS_WALKOVER): Match did not take place (0 balls played). You MUST grade all legs on this match as 'Void'.";
+                }
+                else if (isRetiredOrDefault)
+                {
+                    payload["RETIREMENT_OR_WALKOVER_RULE"] = "RETIREMENT/DEFAULT (STATUS_RETIRED/STATUS_DEFAULT): Match ended early via retirement or default before natural completion. Bookmaker settlement rules vary. DO NOT grade legs on this match as 'Won' or 'Lost'—you MUST grade them as 'Unknown' for manual admin review.";
+                }
+                else if (!isFinished)
                 {
                     payload["WARNING"] = "MATCH NOT FINISHED YET. DO NOT SEARCH GOOGLE OR GRADE LEGS AS WON/LOST. MARK AS PENDING.";
                 }
@@ -932,26 +954,71 @@ namespace BettingApp.Services
             }
         }
 
-        private bool IsTennisMatch(JsonElement comp, string playerA, string playerB)
+        public bool IsTennisMatch(JsonElement comp, string playerA, string playerB)
         {
             if (!comp.TryGetProperty("competitors", out var competitors) || competitors.GetArrayLength() < 2) return false;
 
             var compArray = competitors.EnumerateArray().ToArray();
             if (compArray.Length < 2) return false;
 
-            return (MatchesTennisCompetitor(playerA, compArray[0]) && MatchesTennisCompetitor(playerB, compArray[1])) ||
-                   (MatchesTennisCompetitor(playerA, compArray[1]) && MatchesTennisCompetitor(playerB, compArray[0]));
+            string normA = NormalizeTeam(playerA);
+            string normB = NormalizeTeam(playerB);
+
+            return (MatchesTennisCompetitor(normA, compArray[0]) && MatchesTennisCompetitor(normB, compArray[1])) ||
+                   (MatchesTennisCompetitor(normA, compArray[1]) && MatchesTennisCompetitor(normB, compArray[0]));
         }
 
         private bool MatchesTennisCompetitor(string player, JsonElement c)
         {
-            if (!c.TryGetProperty("athlete", out var a)) return false;
+            if (string.IsNullOrEmpty(player) || !c.TryGetProperty("athlete", out var a)) return false;
 
             string displayName = NormalizeTeam(a.TryGetProperty("displayName", out var dn) ? dn.GetString() : "");
             string fullName = NormalizeTeam(a.TryGetProperty("fullName", out var fn) ? fn.GetString() : "");
             string shortName = NormalizeTeam(a.TryGetProperty("shortName", out var sn) ? sn.GetString() : "");
 
-            return MatchesAny(player, displayName, fullName, shortName);
+            return MatchesTennisPlayer(player, displayName, fullName, shortName);
+        }
+
+        private static bool MatchesTennisPlayer(string searchPlayer, params string[] candidateNames)
+        {
+            if (string.IsNullOrEmpty(searchPlayer)) return false;
+
+            var searchWords = SplitWords(searchPlayer);
+            if (searchWords.Length == 0) return false;
+
+            foreach (var cand in candidateNames)
+            {
+                if (string.IsNullOrEmpty(cand)) continue;
+                if (cand.Equals(searchPlayer, StringComparison.OrdinalIgnoreCase)) return true;
+
+                var candWords = SplitWords(cand);
+                if (candWords.Length == 0) continue;
+
+                if (searchWords.Length == 1)
+                {
+                    // Single-token surname query (e.g. "Ruud" or "Cerundolo")
+                    if (searchWords[0].Length >= 3 && candWords.Any(cw => cw.Equals(searchWords[0], StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return true;
+                    }
+                }
+                else
+                {
+                    // Multi-token player query (e.g. "Ruud, C", "Cerundolo, JM", "Casper Ruud", "Botic van de Zandschulp"):
+                    // Require all words or initial/multi-initial token match so brothers/same-first-name players never collide.
+                    if (ContainsAllWords(candWords, searchWords) || ContainsAllWords(searchWords, candWords))
+                    {
+                        return true;
+                    }
+
+                    if (TeamAliasMappingService.IsTeamMatch(searchPlayer, cand))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
     }
 }

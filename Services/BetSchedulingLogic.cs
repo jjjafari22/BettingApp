@@ -15,6 +15,13 @@ namespace BettingApp.Services
             if (sport.Contains("American Football", StringComparison.OrdinalIgnoreCase) || sport.Contains("Football", StringComparison.OrdinalIgnoreCase)) return 4;
             if (sport.Contains("Baseball", StringComparison.OrdinalIgnoreCase)) return 3;
             if (sport.Contains("Basketball", StringComparison.OrdinalIgnoreCase)) return 3;
+            if (sport.Contains("Esport", StringComparison.OrdinalIgnoreCase) ||
+                sport.Contains("E-Sport", StringComparison.OrdinalIgnoreCase) ||
+                sport.Contains("CS2", StringComparison.OrdinalIgnoreCase) ||
+                sport.Contains("Counter-Strike", StringComparison.OrdinalIgnoreCase) ||
+                sport.Contains("Valorant", StringComparison.OrdinalIgnoreCase) ||
+                sport.Contains("Dota", StringComparison.OrdinalIgnoreCase) ||
+                sport.Contains("League of Legends", StringComparison.OrdinalIgnoreCase)) return 3;
             return 2;
         }
 

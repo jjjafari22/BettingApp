@@ -344,7 +344,17 @@ namespace BettingApp.Services
             { "ucv moquegua", "ucv" },
             { "frederiksberg alliancen 2000", "fa 2000" },
             { "atletico mineiro", "atletico mg" },
+            { "ca mineiro mg", "atletico mg" },
+            { "ca mineiro", "atletico mg" },
+            { "clube atletico mineiro", "atletico mg" },
+            { "ac goianiense go", "atletico go" },
+            { "ac goianiense", "atletico go" },
+            { "atletico goianiense", "atletico go" },
+            { "clube atletico goianiense", "atletico go" },
             { "atletico paranaense", "athletico paranaense" },
+            { "ca paranaense pr", "athletico paranaense" },
+            { "ca paranaense", "athletico paranaense" },
+            { "club athletico paranaense", "athletico paranaense" },
             { "atletico pr", "athletico paranaense" },
             { "athletico pr", "athletico paranaense" },
             { "manchester utd", "manchester united" },
@@ -489,7 +499,8 @@ namespace BettingApp.Services
             };
             var allWordsA = normA.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var allWordsB = normB.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            bool hasSingleLetterInitial = allWordsA.Any(t => t.Length == 1 && char.IsLetter(t[0])) ||
+            bool hasSingleLetterInitial = teamA.Contains(',') || teamB.Contains(',') ||
+                                          allWordsA.Any(t => t.Length == 1 && char.IsLetter(t[0])) ||
                                           allWordsB.Any(t => t.Length == 1 && char.IsLetter(t[0]));
 
             var tokensA = allWordsA.Where(t => t.Length >= 3 && !genericWords.Contains(t) && !t.All(char.IsDigit)).ToList();
@@ -513,7 +524,7 @@ namespace BettingApp.Services
                 }
             }
 
-            // Person / Doubles / Initials / Short-surname token match (e.g. "Fils, Arthur" <-> "Arthur Fils", "Medvedev, D" <-> "Daniil Medvedev", "Ann Li" <-> "Li, A", "Stan Wawrinka" <-> "Wawrinka, Stanislas")
+            // Person / Doubles / Initials / Short-surname token match (e.g. "Fils, Arthur" <-> "Arthur Fils", "Medvedev, D" <-> "Daniil Medvedev", "Cerundolo, JM" <-> "Juan Manuel Cerundolo", "Ann Li" <-> "Li, A", "Stan Wawrinka" <-> "Wawrinka, Stanislas")
             if (ArePersonOrTeamTokensMatched(normA, normB, genericWords))
             {
                 return true;
@@ -558,7 +569,7 @@ namespace BettingApp.Services
             if (exactMatchesLen2Plus == 0) return false;
             if (unmatched.Count == 0) return true;
 
-            // Pass 2: Initials (e.g. "D" <-> "Daniil", "A" <-> "Ann") and shortened first names (e.g. "Stan" <-> "Stanislas")
+            // Pass 2: Initials (e.g. "D" <-> "Daniil", "JM" <-> "Juan Manuel", "A" <-> "Ann") and shortened first names (e.g. "Stan" <-> "Stanislas")
             foreach (var token in unmatched.ToList())
             {
                 if (token.Length == 1)
@@ -578,6 +589,31 @@ namespace BettingApp.Services
                         unmatched.Remove(token);
                         remaining.RemoveAt(initInRemIdx);
                         continue;
+                    }
+
+                    // Multi-initial token like "jm" -> "juan" + "manuel" or "jj" -> "john" + "jeffrey"
+                    if (token.Length <= 3 && token.All(char.IsLetter))
+                    {
+                        var matchingIndices = new List<int>();
+                        int charIdx = 0;
+                        for (int j = 0; j < remaining.Count && charIdx < token.Length; j++)
+                        {
+                            if (remaining[j].StartsWith(token[charIdx].ToString(), StringComparison.OrdinalIgnoreCase))
+                            {
+                                matchingIndices.Add(j);
+                                charIdx++;
+                            }
+                        }
+
+                        if (charIdx == token.Length)
+                        {
+                            unmatched.Remove(token);
+                            foreach (var idx in matchingIndices.OrderByDescending(x => x))
+                            {
+                                remaining.RemoveAt(idx);
+                            }
+                            continue;
+                        }
                     }
 
                     if (token.Length >= 3)

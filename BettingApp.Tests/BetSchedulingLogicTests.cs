@@ -160,6 +160,31 @@ namespace BettingApp.Tests
             Assert.Equal(expectedFinish, nextCheck.Value);
         }
 
+        [Theory]
+        [InlineData("Esports")]
+        [InlineData("CS2")]
+        [InlineData("Valorant")]
+        [InlineData("Dota 2")]
+        [InlineData("League of Legends")]
+        public void LiveEsportsBet_Started30MinsAgo_ReturnsStartTimePlusThreeHours(string sport)
+        {
+            var startTime = DateTime.UtcNow.AddMinutes(-30);
+            var expectedFinish = startTime.AddHours(3);
+
+            var bet = new Bet
+            {
+                Status = "Approved",
+                Legs = new List<BetLeg>
+                {
+                    new BetLeg { Outcome = "Pending", StartTime = startTime, Sport = sport }
+                }
+            };
+
+            var nextCheck = BetSchedulingLogic.CalculateNextCheckTime(bet);
+            Assert.NotNull(nextCheck);
+            Assert.Equal(expectedFinish, nextCheck.Value);
+        }
+
         [Fact]
         public void MatchOverdue_ExpectedFinishInPast_Returns15MinutesAfterUtcNow()
         {

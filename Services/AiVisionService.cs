@@ -817,7 +817,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
   Before searching for player stats, first verify whether the match scheduled for {betPlacedAt:yyyy-MM-dd} (Year: {betPlacedAt.Year}) has actually FINISHED!
   Always include the year '{betPlacedAt.Year}' in your search query (e.g. 'Buffalo Sabres vs Florida Panthers score {betPlacedAt.Year}' or '{betPlacedAt:yyyy-MM-dd}').
   * If the match is UPCOMING or CURRENTLY IN PROGRESS (Live / 1st/2nd/3rd period / 1st/2nd half), STOP! Do NOT search for player box scores. Grade all legs as 'Pending' and return the match start time in `matchStartTimeIso`.
-  * STALE / UNINDEXED NICHE MATCHES: Compare the match start time against the Current UTC time ({DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC). If more than 3.5 hours have passed since the match started (or >4.5 hours for American Football/Baseball/MMA) and Google Search still has no verified final score (or only shows pre-match/abandoned live-tracker pages), the match window has already passed without indexed coverage. Do NOT grade it as 'Pending'—grade the leg as 'Unknown' so it escalates to manual review instead of polling indefinitely.
+  * STALE / UNINDEXED NICHE MATCHES: Compare the match start time against the Current UTC time ({DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC). If more than 3.5 hours have passed since the match started (or >4.5 hours for American Football/Baseball/MMA/Esports) and Google Search still has no verified final score (or only shows pre-match/abandoned live-tracker pages), the match window has already passed without indexed coverage. Do NOT grade it as 'Pending'—grade the leg as 'Unknown' so it escalates to manual review instead of polling indefinitely.
 - STEP 2 (PLAYER PROPS ONLY FOR COMPLETED MATCHES):
   Only if Step 1 confirmed the match on {betPlacedAt:yyyy-MM-dd} is 100% FINAL / COMPLETED, search for player box scores for that specific {betPlacedAt.Year} match.
   Append reputable domains:
@@ -836,6 +836,7 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
 - RULE 2 (SOCCER 'ANYTIME GOALSCORER' ONLY): For `sport: 'Soccer'` ONLY when the market (or selection) is explicitly 'Anytime Goalscorer' / 'Anytime Goal Scorer', the player does NOT need to start. If the player plays 1 minute or more (started OR subbed on), the bet STANDS ('Won' if they score, 'Lost' if they play >= 1 minute and do not score). It is ONLY 'Void' if they play 0 minutes (unused bench / not in squad). This exception applies STRICTLY to 'Anytime Goalscorer' ONLY — NOT to 'Will/Will not Score' or other goal/player markets!
 - RULE 3 (ALL OTHER PRE-MATCH SOCCER PLAYER PROPS): For all OTHER `sport: 'Soccer'` player props with `isLive: false` (including 'Will/Will not Score', 'Player to Score', 'To Score 2+ Goals', 'First Goalscorer', 'Goal or Assist', Shots, Shots on Target, Fouls, Tackles, Passes, Assists, Cards / To Be Booked), the player MUST START. If they are subbed on later, it is 'Void'.
 - RULE 4 (LIVE BETS & NON-SOCCER SPORTS): If `isLive: true`, OR for non-Soccer sports (Basketball, Ice Hockey, American Football, etc.), the starter rule does NOT apply; if the player plays/participates in the match at all (even off the bench), the bet stands.
+- RULE 5 (TENNIS WALKOVERS, RETIREMENTS & DEFAULTS): If a Tennis match ends in a Walkover ('STATUS_WALKOVER', 'Final (Walkover)', 'Walkover', 'W/O' — match did not start / 0 balls played), outcome is ALWAYS 'Void'. If a Tennis match ends early in a Retirement or Default/Disqualification ('STATUS_RETIRED', 'STATUS_DEFAULT', 'Final (Retired)', 'Retired', 'ret.', 'def.'), bookmaker rules vary by operator and market—NEVER grade the leg as 'Won' or 'Lost'. You MUST grade any leg on a retired/defaulted tennis match as 'Unknown' and include the retirement score in 'stats' so an admin can review it.
 - POWER SUB: If selection contains '(Power Sub)' (or market/selection mentions 'Epic Sub' / 'Super Sub' / 'Power Sub') and the named player STARTED, stats of their substitute are ADDED to theirs. Find this in the 'Substitution' events array ('swap'). If the named player didn't start, Power Sub stat-combining is ignored (evaluate the player via Rules 1-4 above).
 
 # 5. MARKETS & LINES
@@ -862,6 +863,8 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                 bool anyLegNeedsGoogleSearch = false;
                 bool allLegsConfirmedUnstarted = extractionResult?.Legs != null && extractionResult.Legs.Count > 0;
                 var unstartedMatchInfo = new Dictionary<string, (string Provider, DateTime StartTimeUtc)>(StringComparer.OrdinalIgnoreCase);
+                var retiredTennisMatches = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var walkoverTennisMatches = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 if (extractionResult?.Legs != null)
                 {
@@ -895,6 +898,12 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                             {
                                 { "text", $"=== {providerLabel.ToUpperInvariant()} RAW JSON FOR MATCH {matchName} ===\n{rawJson}\n=========================" }
                             });
+
+                            if (TryDetectTennisRetirementOrWalkover(rawJson, out bool isRetiredOrDefault, out bool isWalkover, out string resultSummary))
+                            {
+                                if (isRetiredOrDefault) retiredTennisMatches[matchName] = resultSummary;
+                                else if (isWalkover) walkoverTennisMatches[matchName] = resultSummary;
+                            }
 
                             if (allLegsConfirmedUnstarted && TryExtractUnstartedMatchStartTime(rawJson, providerLabel, out DateTime parsedStartUtc))
                             {
@@ -1072,6 +1081,8 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                             _logger.LogWarning($"{betLabel}{usedProviderTag}AI returned outcome JSON without valid legs.");
                             return "Error: Gemini returned outcome JSON without valid legs.";
                         }
+
+                        ApplyTennisRetirementSafeguards(resultObj.Legs, retiredTennisMatches, walkoverTennisMatches);
 
                         var outcomes = resultObj.Legs.Select(l => l.Outcome?.ToUpperInvariant() ?? "").ToList();
                         
@@ -1508,6 +1519,98 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
             }
 
             return false;
+        }
+
+        public static bool TryDetectTennisRetirementOrWalkover(string rawJson, out bool isRetiredOrDefault, out bool isWalkover, out string resultSummary)
+        {
+            isRetiredOrDefault = false;
+            isWalkover = false;
+            resultSummary = "";
+
+            if (string.IsNullOrWhiteSpace(rawJson)) return false;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(rawJson);
+                var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Object) return false;
+
+                string sport = root.TryGetProperty("sport", out var sp) && sp.ValueKind == JsonValueKind.String
+                    ? (sp.GetString() ?? "")
+                    : "";
+                if (!sport.Equals("Tennis", StringComparison.OrdinalIgnoreCase)) return false;
+
+                string statusType = root.TryGetProperty("statusType", out var stType) && stType.ValueKind == JsonValueKind.String
+                    ? (stType.GetString() ?? "")
+                    : "";
+                string statusDetail = root.TryGetProperty("statusDetail", out var stDet) && stDet.ValueKind == JsonValueKind.String
+                    ? (stDet.GetString() ?? "")
+                    : "";
+                resultSummary = root.TryGetProperty("resultSummary", out var rs) && rs.ValueKind == JsonValueKind.String
+                    ? (rs.GetString() ?? "")
+                    : "";
+
+                if (statusType.Equals("STATUS_WALKOVER", StringComparison.OrdinalIgnoreCase) ||
+                    statusDetail.Contains("Walkover", StringComparison.OrdinalIgnoreCase))
+                {
+                    isWalkover = true;
+                    return true;
+                }
+
+                if (statusType.Equals("STATUS_RETIRED", StringComparison.OrdinalIgnoreCase) ||
+                    statusType.Equals("STATUS_DEFAULT", StringComparison.OrdinalIgnoreCase) ||
+                    statusDetail.Contains("Retired", StringComparison.OrdinalIgnoreCase) ||
+                    statusDetail.Contains("Default", StringComparison.OrdinalIgnoreCase))
+                {
+                    isRetiredOrDefault = true;
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        public static void ApplyTennisRetirementSafeguards(
+            List<AiOutcomeLegResult> legs,
+            Dictionary<string, string> retiredTennisMatches,
+            Dictionary<string, string> walkoverTennisMatches)
+        {
+            if (legs == null || (retiredTennisMatches.Count == 0 && walkoverTennisMatches.Count == 0)) return;
+
+            foreach (var leg in legs)
+            {
+                string match = leg.Match ?? "";
+                if (string.IsNullOrEmpty(match)) continue;
+
+                if (walkoverTennisMatches.TryGetValue(match, out var woSummary))
+                {
+                    leg.Outcome = "Void";
+                    if (string.IsNullOrWhiteSpace(leg.Stats) || !leg.Stats.Contains("Walkover", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string detail = !string.IsNullOrWhiteSpace(woSummary) ? $" ({woSummary})" : "";
+                        leg.Stats = $"Verified via ESPN: Match ended in Walkover{detail}. Graded as Void.";
+                    }
+                }
+                else if (retiredTennisMatches.TryGetValue(match, out var retSummary))
+                {
+                    if (!string.Equals(leg.Outcome, "Unknown", StringComparison.OrdinalIgnoreCase))
+                    {
+                        leg.Outcome = "Unknown";
+                        string detail = !string.IsNullOrWhiteSpace(retSummary) ? $" ({retSummary})" : "";
+                        if (string.IsNullOrWhiteSpace(leg.Stats))
+                        {
+                            leg.Stats = $"Verified via ESPN: Match ended in Retirement/Default{detail}. Requires manual admin review for bookmaker retirement rules.";
+                        }
+                        else if (!leg.Stats.Contains("manual", StringComparison.OrdinalIgnoreCase) && !leg.Stats.Contains("retire", StringComparison.OrdinalIgnoreCase))
+                        {
+                            leg.Stats = $"{leg.Stats.TrimEnd('.')} — Match ended in Retirement/Default{detail}; requires manual admin review.";
+                        }
+                    }
+                }
+            }
         }
 
     }
