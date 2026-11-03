@@ -498,7 +498,7 @@ else
             {
                 <tr>
                     <td class="text-nowrap">@ToUserLocal(t.UpdatedAt).ToString("g")</td>
-                    <td><span class="text-muted small">#@t.Id</span></td>
+                    <td><span class="text-muted small">@t.Id</span></td>
                     <td>
                         @if (!string.IsNullOrEmpty(t.SenderId) && userLookup.TryGetValue(t.SenderId, out var su)) {
                             <strong>@su.DiscordName</strong> <small class="text-muted">(@FormatFullName(su.FirstName, su.LastName))</small>
@@ -909,6 +909,7 @@ else
                                 <thead class="table-light position-sticky top-0">
                                     <tr>
                                         <th>Date</th>
+                                        <th class="text-nowrap">Transaction #</th>
                                         <th>Type</th>
                                         <th>Platform</th>
                                         <th>Amount</th>
@@ -919,13 +920,14 @@ else
                                 <tbody>
                                     @if (!viewingCowTransactions.Any())
                                     {
-                                        <tr><td colspan="6" class="text-center text-muted p-3">No transactions found.</td></tr>
+                                        <tr><td colspan="7" class="text-center text-muted p-3">No transactions found.</td></tr>
                                     }
                                     @foreach (var t in viewingCowTransactions)
                                     {
                                         var isIncoming = t.ReceiverId == viewingCow.Id;
                                         <tr @key="t.Id">
                                             <td>@ToCashCowDisplayTime(t.UpdatedAt).ToString("g")</td>
+                                            <td><span class="text-muted small">@t.Id</span></td>
                                             <td><span class="badge bg-secondary">@t.Type</span></td>
                                             <td><small class="text-muted">@t.Platform</small></td>
                                             <td class="@(isIncoming ? "text-success fw-bold" : "text-danger fw-bold")">

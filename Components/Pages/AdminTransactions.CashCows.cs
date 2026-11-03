@@ -304,7 +304,7 @@ public partial class AdminTransactions
             await PopulateUserLookup(allPartyIds);
 
             var sb = new StringBuilder();
-            sb.AppendLine("Date,Type,Platform,Amount,Direction,Note");
+            sb.AppendLine("Date,Transaction #,Type,Platform,Amount,Direction,Note");
 
             foreach (var t in transactions)
             {
@@ -323,7 +323,7 @@ public partial class AdminTransactions
 
                 string noteText = string.IsNullOrWhiteSpace(t.Note) ? "" : t.Note.Trim();
 
-                sb.AppendLine($"{EscapeCsv(dateStr)},{EscapeCsv(t.Type)},{EscapeCsv(t.Platform)},{signedAmount.ToString(CultureInfo.InvariantCulture)},{EscapeCsv(directionText)},{EscapeCsv(noteText)}");
+                sb.AppendLine($"{EscapeCsv(dateStr)},{t.Id.ToString(CultureInfo.InvariantCulture)},{EscapeCsv(t.Type)},{EscapeCsv(t.Platform)},{signedAmount.ToString(CultureInfo.InvariantCulture)},{EscapeCsv(directionText)},{EscapeCsv(noteText)}");
             }
 
             var cowFullName = FormatFullName(cow.FirstName, cow.LastName);
