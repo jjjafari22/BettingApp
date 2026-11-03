@@ -58,23 +58,34 @@ public class OddsApiService
         string cacheKey = $"OddspapiFixtures_{sportId}_{fromDate}";
         var fixturesUrl = $"https://api.oddspapi.io/v4/fixtures?apiKey={_apiKey}&sportId={sportId}&from={fromDate}&to={toDate}";
         
-        string? json = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKey, TimeSpan.FromHours(6), () => _httpClient.GetAsync(fixturesUrl, cancellationToken), _logger, cancellationToken);
+        // Short 30s raw JSON TTL coalesces concurrent cache misses without pinning multi-MB strings in RAM for 6 hours alongside parsed DTOs
+        string? json = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKey, TimeSpan.FromSeconds(30), () => _httpClient.GetAsync(fixturesUrl, cancellationToken), _logger, cancellationToken);
         return (json, cacheKey);
     }
 
     private async Task<string?> GetMarketsJsonAsync(int sportId = 10, CancellationToken cancellationToken = default)
     {
         var marketsUrl = $"https://api.oddspapi.io/v4/markets?apiKey={_apiKey}&sportId={sportId}&language=en";
-        return await HttpCacheHelper.GetOrCreateAsync(_cache, $"OddspapiMarketsJson_{sportId}", TimeSpan.FromHours(24), () => _httpClient.GetAsync(marketsUrl, cancellationToken), _logger, cancellationToken);
+        // Short 30s raw JSON TTL coalesces concurrent cache misses without pinning raw market catalogs in RAM for 24 hours
+        return await HttpCacheHelper.GetOrCreateAsync(_cache, $"OddspapiMarketsJson_{sportId}", TimeSpan.FromSeconds(30), () => _httpClient.GetAsync(marketsUrl, cancellationToken), _logger, cancellationToken);
     }
 
     private async Task<List<BettingApp.Models.OddsPapiFixtureDto>?> GetParsedFixturesAsync(int sportId = 10, CancellationToken cancellationToken = default)
     {
+        string fromDate = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-dd");
+        string parsedCacheKey = $"OddspapiFixtures_{sportId}_{fromDate}_Parsed";
+
+        if (_cache.TryGetValue(parsedCacheKey, out List<BettingApp.Models.OddsPapiFixtureDto>? parsedFixtures) && parsedFixtures != null)
+        {
+            return parsedFixtures;
+        }
+
         var (fJson, cacheKey) = await GetFixturesJsonAsync(sportId, cancellationToken);
                 
         if (fJson == null) return null;
+        parsedCacheKey = cacheKey + "_Parsed";
                 
-        if (!_cache.TryGetValue(cacheKey + "_Parsed", out List<BettingApp.Models.OddsPapiFixtureDto>? parsedFixtures) || parsedFixtures == null)
+        if (!_cache.TryGetValue(parsedCacheKey, out parsedFixtures) || parsedFixtures == null)
         {
             using var doc = JsonDocument.Parse(fJson ?? "[]");
             if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
@@ -110,7 +121,8 @@ public class OddsApiService
                         
                 parsedFixtures.Add(dto);
             }
-            _cache.Set(cacheKey + "_Parsed", parsedFixtures, TimeSpan.FromHours(6));
+            _cache.Set(parsedCacheKey, parsedFixtures, TimeSpan.FromHours(6));
+            _cache.Remove($"OddspapiFixtures_{sportId}_{DateTime.UtcNow.AddDays(-2):yyyy-MM-dd}_Parsed");
         }
         return parsedFixtures;
     }
@@ -654,7 +666,7 @@ public class OddsApiService
             
             string cacheKeyOdds = $"OddspapiOdds_{fixtureId}";
             TimeSpan cacheDuration = isLiveRequest ? TimeSpan.FromSeconds(15) : TimeSpan.FromSeconds(75);
-            string? oJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKeyOdds, cacheDuration, () => _httpClient.GetAsync(oddsUrl, cancellationToken), _logger, cancellationToken);
+            string? oJson = await HttpCacheHelper.GetOrCreateAsync(_cache, cacheKeyOdds, TimeSpan.FromSeconds(15), () => _httpClient.GetAsync(oddsUrl, cancellationToken), _logger, cancellationToken);
             
             if (oJson == null) return (null, "Odds API failed or returned 429");
             using var oddsDoc = JsonDocument.Parse(oJson ?? "{}");

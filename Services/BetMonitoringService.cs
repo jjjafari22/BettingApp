@@ -72,23 +72,25 @@ namespace BettingApp.Services
             // This prevents the system from hammering the API with ancient, dormant bets while covering multi-day slips.
             var cutoffForCompleted = DateTime.UtcNow.AddDays(-7);
             
-            var dueBets = await context.Bets
+            var dueBetIds = await context.Bets
+                .AsNoTracking()
                 .Where(b => b.NextCheckTime.HasValue && b.NextCheckTime.Value <= DateTime.UtcNow)
                 .Where(b => b.Status == "Approved" || 
                            ((b.Status == "Won" || b.Status == "Lost" || b.Status == "Void") && b.UpdatedAt >= cutoffForCompleted))
+                .Select(b => b.Id)
                 .ToListAsync(stoppingToken);
 
             bool anyUpdates = false;
             var uiNotifier = scope.ServiceProvider.GetService<UiNotificationService>();
 
             // Execute in parallel (up to 3 concurrent checks to prevent Gemini 429 Rate Limits)
-            await Parallel.ForEachAsync(dueBets, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = stoppingToken }, async (bet, ct) =>
+            await Parallel.ForEachAsync(dueBetIds, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = stoppingToken }, async (betId, ct) =>
             {
                 try
                 {
                     // Refresh bet from DB using a newly scoped context (since DbContext is not thread-safe)
                     using var taskContext = dbFactory.CreateDbContext();
-                    var dbBet = await taskContext.Bets.Include(b => b.Legs).Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == bet.Id, ct);
+                    var dbBet = await taskContext.Bets.Include(b => b.Legs).Include(b => b.AiEvaluation).FirstOrDefaultAsync(b => b.Id == betId, ct);
                     if (dbBet == null || (dbBet.Status != "Approved" && dbBet.Status != "Won" && dbBet.Status != "Lost" && dbBet.Status != "Void")) return;
                     
                     if (dbBet.AiEvaluation == null)
@@ -409,11 +411,11 @@ namespace BettingApp.Services
                 }
                 catch (DbUpdateConcurrencyException ex)
                 {
-                    _logger.LogWarning($"[Bet #{bet.Id}] Concurrency conflict detected: bet was modified by an admin or another process while checking outcome ({ex.Message}). Skipping update; will re-evaluate on next cycle.");
+                    _logger.LogWarning($"[Bet #{betId}] Concurrency conflict detected: bet was modified by an admin or another process while checking outcome ({ex.Message}). Skipping update; will re-evaluate on next cycle.");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"[Bet #{bet.Id}] Unexpected error processing due bet in BetMonitoringService.");
+                    _logger.LogError(ex, $"[Bet #{betId}] Unexpected error processing due bet in BetMonitoringService.");
                 }
             });
             

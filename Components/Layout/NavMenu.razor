@@ -356,14 +356,10 @@
     {
         var twoMinsAgo = DateTime.UtcNow.AddMinutes(-2);
 
-        // 1. Admin Home: pending bets + stuck processing bets + active approved bets
-        var pendingBets = await context.Bets
+        // 1. Admin Home: pending bets + stuck processing bets + active approved bets (covered by IX_Bets_Status)
+        int newAdminHomeTasks = await context.Bets
             .AsNoTracking()
-            .CountAsync(b => b.Status == "Pending" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo));
-        var activeBets = await context.Bets
-            .AsNoTracking()
-            .CountAsync(b => b.Status == "Approved");
-        int newAdminHomeTasks = pendingBets + activeBets;
+            .CountAsync(b => b.Status == "Pending" || b.Status == "Approved" || (b.Status == "Processing" && b.CreatedAt < twoMinsAgo));
 
         // 2. Transactions: pending withdrawals
         int newTransactionTasks = await context.Transactions
@@ -376,13 +372,15 @@
             .CountAsync(u => !u.EmailConfirmed);
 
         // 4. Referrals: active eligible tiers + possible referrals
-        int activeReferralTasks = 0;
-        var activeRefs = await context.Referrals
+        var allRefs = await context.Referrals
             .AsNoTracking()
-            .Where(r => !(r.Tier1Paid && r.Tier2Paid && r.Tier3Paid))
+            .Select(r => new { r.ReferredUserId, r.Tier1Paid, r.Tier2Paid, r.Tier3Paid })
             .ToListAsync();
 
-        if (activeRefs.Any())
+        int activeReferralTasks = 0;
+        var activeRefs = allRefs.Where(r => !(r.Tier1Paid && r.Tier2Paid && r.Tier3Paid)).ToList();
+
+        if (activeRefs.Count > 0)
         {
             var userIds = activeRefs.Select(r => r.ReferredUserId).Distinct().ToList();
             var turnovers = await context.Bets
@@ -398,15 +396,12 @@
             });
         }
 
-        var referredUserIds = await context.Referrals
-            .AsNoTracking()
-            .Select(r => r.ReferredUserId)
-            .ToListAsync();
+        var referredUserIds = allRefs.Select(r => r.ReferredUserId).ToList();
 
         var possibleReferrals = await context.Users
             .AsNoTracking()
-            .Where(u => u.EmailConfirmed 
-                     && !string.IsNullOrEmpty(u.ReferredBy) 
+            .Where(u => u.EmailConfirmed
+                     && !string.IsNullOrEmpty(u.ReferredBy)
                      && !u.IsReferralDiscarded
                      && !referredUserIds.Contains(u.Id))
             .CountAsync();

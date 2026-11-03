@@ -134,9 +134,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasPrecision(18, 2);
 
         // --- NEW: Performance Indexes ---
-        builder.Entity<Bet>().HasIndex(b => b.Status); 
+        builder.Entity<Bet>().HasIndex(b => b.Status).IncludeProperties(b => new { b.UpdatedAt, b.CreatedAt, b.AutoApproveAt }); 
         builder.Entity<Bet>().HasIndex(b => b.UpdatedAt);
-        builder.Entity<Bet>().HasIndex(b => b.UserId);
+        builder.Entity<Bet>().HasIndex(b => b.UserId).IncludeProperties(b => new { b.Status, b.Odds, b.AmountNOK, b.FreeBetAmount, b.UpdatedAt, b.CreatedAt });
+        builder.Entity<Bet>().HasIndex(b => b.NextCheckTime).IncludeProperties(b => new { b.Status, b.UpdatedAt });
         builder.Entity<Transaction>().HasIndex(t => t.UserId);
         builder.Entity<Transaction>().HasIndex(t => new { t.Status, t.UpdatedAt });
         builder.Entity<Transaction>().HasIndex(t => t.Type);

@@ -251,11 +251,19 @@ namespace BettingApp.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("NextCheckTime");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("NextCheckTime"), new[] { "Status", "UpdatedAt" });
+
                     b.HasIndex("Status");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("Status"), new[] { "UpdatedAt", "CreatedAt", "AutoApproveAt" });
 
                     b.HasIndex("UpdatedAt");
 
                     b.HasIndex("UserId");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("UserId"), new[] { "Status", "Odds", "AmountNOK", "FreeBetAmount", "UpdatedAt", "CreatedAt" });
 
                     b.ToTable("Bets");
                 });

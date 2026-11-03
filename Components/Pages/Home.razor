@@ -729,6 +729,7 @@ else
         }
     }
 
+    private static volatile bool _uploadsContainerReady;
     private bool _isPlacingBet = false;
 
     private async Task PlaceBet()
@@ -759,8 +760,11 @@ else
             
             using var context = DbFactory.CreateDbContext();
             var containerClient = BlobService.GetBlobContainerClient("uploads");
-            await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
-            await containerClient.SetAccessPolicyAsync(PublicAccessType.Blob);
+            if (!_uploadsContainerReady)
+            {
+                await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
+                _uploadsContainerReady = true;
+            }
 
             var betsToNotify = new List<Bet>();
             foreach (var file in uploadedFiles)
