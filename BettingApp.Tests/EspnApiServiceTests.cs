@@ -1,4 +1,5 @@
 using System;
+using Microsoft.Extensions.Caching.Memory;
 using Xunit;
 using BettingApp.Services;
 
@@ -161,6 +162,130 @@ namespace BettingApp.Tests
             AiVisionService.ApplyTennisRetirementSafeguards(legs, retiredMap, walkoverMap);
             Assert.Equal("Unknown", legs[0].Outcome);
             Assert.Null(BetSchedulingLogic.DetermineAutoSettleStatus("UNKNOWN", legs));
+        }
+
+        private sealed class FakeHostEnvironment : Microsoft.Extensions.Hosting.IHostEnvironment
+        {
+            public string EnvironmentName { get; set; } = "Production";
+            public string ApplicationName { get; set; } = "BettingApp.Tests";
+            public string ContentRootPath { get; set; } = "";
+            public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!;
+        }
+
+        [Fact]
+        public async System.Threading.Tasks.Task Test_ProdVsDev_PreBetMatchFiltering_And_PostSettlementCheck()
+        {
+            var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+            var emptyScoreboard = @"{""events"":[]}";
+            foreach (var d in new[] { "20261101", "20261102", "20261103", "20261104", "20261105", "20261106", "20261107", "20261108" })
+            {
+                cache.Set($"espn_scoreboard_basketball_nba_{d}", emptyScoreboard);
+            }
+
+            // Game 1 on 20261102 (2026-11-03T00:00Z): STATUS_FINAL (finished 22h before betPlacedAt)
+            cache.Set("espn_scoreboard_basketball_nba_20261102", @"{
+                ""events"": [{
+                    ""id"": ""401909901"",
+                    ""date"": ""2026-11-03T00:00Z"",
+                    ""name"": ""Cleveland Cavaliers at Oklahoma City Thunder"",
+                    ""status"": { ""type"": { ""name"": ""STATUS_FINAL"", ""completed"": true, ""detail"": ""Final"" } },
+                    ""competitions"": [{
+                        ""competitors"": [
+                            { ""homeAway"": ""home"", ""score"": ""115"", ""team"": { ""displayName"": ""Oklahoma City Thunder"", ""name"": ""Thunder"", ""location"": ""Oklahoma City"", ""shortDisplayName"": ""Thunder"", ""abbreviation"": ""OKC"" } },
+                            { ""homeAway"": ""away"", ""score"": ""108"", ""team"": { ""displayName"": ""Cleveland Cavaliers"", ""name"": ""Cavaliers"", ""location"": ""Cleveland"", ""shortDisplayName"": ""Cavaliers"", ""abbreviation"": ""CLE"" } }
+                        ]
+                    }]
+                }]
+            }");
+            cache.Set("espn_summary_basketball_nba_401909901", @"{""header"":{""id"":""401909901""},""boxscore"":{}}");
+
+            // Game 2 on 20261104 (2026-11-05T01:00Z): STATUS_SCHEDULED (upcoming game)
+            cache.Set("espn_scoreboard_basketball_nba_20261104", @"{
+                ""events"": [{
+                    ""id"": ""401909929"",
+                    ""date"": ""2026-11-05T01:00Z"",
+                    ""name"": ""Cleveland Cavaliers at Oklahoma City Thunder"",
+                    ""status"": { ""type"": { ""name"": ""STATUS_SCHEDULED"", ""completed"": false, ""detail"": ""Wed, November 4th at 8:00 PM EST"" } },
+                    ""competitions"": [{
+                        ""competitors"": [
+                            { ""homeAway"": ""home"", ""score"": ""0"", ""team"": { ""displayName"": ""Oklahoma City Thunder"", ""name"": ""Thunder"", ""location"": ""Oklahoma City"", ""shortDisplayName"": ""Thunder"", ""abbreviation"": ""OKC"" } },
+                            { ""homeAway"": ""away"", ""score"": ""0"", ""team"": { ""displayName"": ""Cleveland Cavaliers"", ""name"": ""Cavaliers"", ""location"": ""Cleveland"", ""shortDisplayName"": ""Cavaliers"", ""abbreviation"": ""CLE"" } }
+                        ]
+                    }]
+                }]
+            }");
+
+            var prodEspn = new EspnApiService(
+                new System.Net.Http.HttpClient(),
+                new TeamAliasMappingService(),
+                cache,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<EspnApiService>.Instance,
+                new FakeHostEnvironment { EnvironmentName = "Production" });
+
+            var devEspn = new EspnApiService(
+                new System.Net.Http.HttpClient(),
+                new TeamAliasMappingService(),
+                cache,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<EspnApiService>.Instance,
+                new FakeHostEnvironment { EnvironmentName = "Development" });
+
+            var betPlacedAt = new DateTime(2026, 11, 3, 22, 15, 26, DateTimeKind.Utc);
+            var poisonedStartTime = new DateTime(2026, 11, 3, 0, 0, 0, DateTimeKind.Utc);
+
+            // 1. PROD (Bet #10381): Even if betStartsAt was poisoned with Game 1's 2026-11-03T00:00Z, PROD ignores it,
+            // hard-rejects Game 1, and finds Game 2 (401909929 on 2026-11-05T01:00Z).
+            string? prodRematchJson = await prodEspn.GetMatchStatsJsonAsync(
+                "Oklahoma City Thunder vs Cleveland Cavaliers",
+                "Basketball - NBA",
+                betPlacedAt: betPlacedAt,
+                betStartsAt: poisonedStartTime,
+                betId: 10381);
+            Assert.NotNull(prodRematchJson);
+            Assert.Contains("401909929", prodRematchJson);
+            Assert.Contains("2026-11-05T01:00Z", prodRematchJson);
+
+            // 2. DEV (Bet #1271): Also picks upcoming Game 2 (401909929) over yesterday's finished Game 1 via ranking penalty.
+            string? devRematchJson = await devEspn.GetMatchStatsJsonAsync(
+                "Oklahoma City Thunder vs Cleveland Cavaliers",
+                "Basketball - NBA",
+                betPlacedAt: betPlacedAt,
+                betStartsAt: null,
+                betId: 1271);
+            Assert.NotNull(devRematchJson);
+            Assert.Contains("401909929", devRematchJson);
+
+            // 3. Single finished match from before betPlacedAt (no upcoming rematch):
+            // PROD strictly rejects it (returns null), whereas DEV allows it so finished slips from earlier today can be tested!
+            cache.Set("espn_scoreboard_basketball_nba_20261104", emptyScoreboard);
+
+            string? prodSinglePastJson = await prodEspn.GetMatchStatsJsonAsync(
+                "Oklahoma City Thunder vs Cleveland Cavaliers",
+                "Basketball - NBA",
+                betPlacedAt: betPlacedAt,
+                betStartsAt: poisonedStartTime,
+                betId: 10381);
+            Assert.Null(prodSinglePastJson);
+
+            string? devSinglePastJson = await devEspn.GetMatchStatsJsonAsync(
+                "Oklahoma City Thunder vs Cleveland Cavaliers",
+                "Basketball - NBA",
+                betPlacedAt: betPlacedAt,
+                betStartsAt: poisonedStartTime,
+                betId: 1272);
+            Assert.NotNull(devSinglePastJson);
+            Assert.Contains("401909901", devSinglePastJson);
+
+            // 4. Partly-graded bet post-settlement check in PROD (runs days later, e.g. Nov 6, for a bet uploaded BEFORE Game 1 on Nov 2):
+            // Because Game 1 (2026-11-03T00:00Z) started AFTER betPlacedAt (2026-11-02T20:00Z), PROD still finds and grades Game 1!
+            var earlierBetPlacedAt = new DateTime(2026, 11, 2, 20, 0, 0, DateTimeKind.Utc);
+            string? prodPostSettlementJson = await prodEspn.GetMatchStatsJsonAsync(
+                "Oklahoma City Thunder vs Cleveland Cavaliers",
+                "Basketball - NBA",
+                betPlacedAt: earlierBetPlacedAt,
+                betStartsAt: new DateTime(2026, 11, 3, 0, 0, 0, DateTimeKind.Utc),
+                betId: 10381);
+            Assert.NotNull(prodPostSettlementJson);
+            Assert.Contains("401909901", prodPostSettlementJson);
         }
     }
 }

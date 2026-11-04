@@ -1654,7 +1654,6 @@ namespace BettingApp.Tests
         [InlineData("Will/Will not Score From Header", "Cristian Gabriel Romero - Will Score", "Over Under Player Goals (incl. overtime)", "Romero, Cristian Gabriel", "Over 0.5 (Romero, Cristian Gabriel)")]
         [InlineData("Will/Will not Score: Lautaro Martínez", "Lautaro Martínez - Will Score", "Over Under Player Goals (incl. overtime)", "Martínez, Lautaro", "Over 0.5 (Martínez, Lautaro)")]
         [InlineData("Will Score", "Bilal Njie - Will Score", "Over Under Player Goals (incl. overtime)", "Njie, Bilal", "Over 0.5 (Njie, Bilal)")]
-        [InlineData("To Score During 1st Half", "Erling Haaland - Will Score", "Over Under Player Goals (incl. overtime)", "Haaland, Erling", "Over 0.5 (Haaland, Erling)")]
         // Bet365 / Unibet / Kambi binary player prop phrasing variations
         [InlineData("Anytime Goalscorer", "Erling Haaland", "Over Under Player Goals (incl. overtime)", "Haaland, Erling", "Over 0.5 (Haaland, Erling)")]
         [InlineData("Anytime Goalscorer", "Erling Haaland - Anytime Goalscorer", "Over Under Player Goals (incl. overtime)", "Haaland, Erling", "Over 0.5 (Haaland, Erling)")]
@@ -2567,6 +2566,65 @@ namespace BettingApp.Tests
             Assert.Equal("Unibet", AiVisionService.NormalizeBookmakerName("Unibet"));
             Assert.Equal("Unknown", AiVisionService.NormalizeBookmakerName("Unknown"));
             Assert.Equal("", AiVisionService.NormalizeBookmakerName(null));
+        }
+
+        [Theory]
+        [InlineData("To Score During 1st Half", "Raphinha - Will Score")]
+        [InlineData("To Score During 2nd Half", "Erling Haaland - Will Score")]
+        [InlineData("Player Shots on Target - 1st Half", "Raphinha - Over 0.5")]
+        public void Test_HalfSpecificPlayerProps_DoNotMapToFullMatchPlayerProps(string marketName, string selection)
+        {
+            var opMarkets = new List<OddsPapiMarket>
+            {
+                new() { MarketId = "goals", MarketName = "Over Under Player Goals (incl. overtime)" },
+                new() { MarketId = "ags", MarketName = "Anytime Goal Scorer" },
+                new() { MarketId = "sot", MarketName = "Over Under Player Shots On Goal (incl. overtime)" }
+            };
+
+            var matched = OddsMatchingLogic.FindBestMarket(opMarkets, marketName, "FC Barcelona vs Aston Villa", selection, _marketMapper);
+            Assert.Null(matched);
+        }
+
+        [Fact]
+        public void Test_IceHockey_TeamTotalGoals_MapsToOddsPapiTeamTotalMarkets()
+        {
+            var hockeyMarkets = new List<OddsPapiMarket>
+            {
+                new() { MarketId = "10", MarketName = "Total" },
+                new() { MarketId = "11", MarketName = "Total (incl. overtime and penalties)" },
+                new() { MarketId = "12", MarketName = "Team 1 Total" },
+                new() { MarketId = "13", MarketName = "Team 1 Total (incl. overtime and penalties)" },
+                new() { MarketId = "14", MarketName = "Team 2 Total" },
+                new() { MarketId = "15", MarketName = "Team 2 Total (incl. overtime and penalties)" },
+                new() { MarketId = "16", MarketName = "First Period Team 2 Total" }
+            };
+
+            var m1 = OddsMatchingLogic.FindBestMarket(
+                hockeyMarkets,
+                "Dallas Stars Total Goals - Including Overtime and Shootout",
+                "Washington Capitals vs Dallas Stars",
+                "Over 1.5",
+                _marketMapper);
+            Assert.NotNull(m1);
+            Assert.Equal("Team 2 Total (incl. overtime and penalties)", m1.MarketName);
+
+            var m2 = OddsMatchingLogic.FindBestMarket(
+                hockeyMarkets,
+                "Washington Capitals Total Goals",
+                "Washington Capitals vs Dallas Stars",
+                "Over 2.5",
+                _marketMapper);
+            Assert.NotNull(m2);
+            Assert.Equal("Team 1 Total", m2.MarketName);
+
+            var m3 = OddsMatchingLogic.FindBestMarket(
+                hockeyMarkets,
+                "Dallas Stars Total Goals - 1st Period",
+                "Washington Capitals vs Dallas Stars",
+                "Over 0.5",
+                _marketMapper);
+            Assert.NotNull(m3);
+            Assert.Equal("First Period Team 2 Total", m3.MarketName);
         }
     }
 }

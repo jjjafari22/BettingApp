@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace BettingApp.Services
@@ -16,6 +17,9 @@ namespace BettingApp.Services
         private readonly TeamAliasMappingService _teamAliasMapper;
         private readonly IMemoryCache _cache;
         private readonly ILogger<EspnApiService> _logger;
+        private readonly IHostEnvironment? _env;
+
+        private bool IsProduction => _env != null && !_env.IsDevelopment();
 
         private static readonly SemaphoreSlim _throttleLock = new(1, 1);
         private static DateTime _lastRequestTime = DateTime.MinValue;
@@ -25,12 +29,14 @@ namespace BettingApp.Services
             HttpClient httpClient,
             TeamAliasMappingService teamAliasMapper,
             IMemoryCache cache,
-            ILogger<EspnApiService> logger)
+            ILogger<EspnApiService> logger,
+            IHostEnvironment? env = null)
         {
             _httpClient = httpClient;
             _teamAliasMapper = teamAliasMapper;
             _cache = cache;
             _logger = logger;
+            _env = env;
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         }
 
@@ -111,34 +117,55 @@ namespace BettingApp.Services
 
                 // 2. Determine target dates to inspect. 
                 // ESPN scoreboards are indexed by US Eastern Time (UTC-4/UTC-5), where US evening games (00:00Z-05:00Z) belong to the US calendar date.
-                // If betStartsAt is known, the date is already pinned down (check that date +/- 1 day).
-                // If betStartsAt is unknown (e.g. new bet), inspect today and up to +5 days ahead to discover start times (matching OddsPapi's 5-day future window).
-                var targetTime = betStartsAt ?? betPlacedAt ?? DateTime.UtcNow;
+                // In PROD, any betStartsAt >4.5h before betPlacedAt is stale/hallucinated (e.g. date-only 00:00Z or a poisoned timestamp from an earlier check) and is ignored so the +5d window from betPlacedAt is searched.
+                // In DEV, past betStartsAt is preserved so finished slips from earlier today can be tested, while also expanding to +5d when >4.5h before betPlacedAt.
+                bool hasStalePreBetStartTime = betStartsAt.HasValue && betStartsAt.Value > DateTime.MinValue &&
+                                               betPlacedAt.HasValue && betStartsAt.Value < betPlacedAt.Value.AddHours(-4.5);
+                DateTime? effectiveStartsAt = (betStartsAt.HasValue && betStartsAt.Value > DateTime.MinValue && !(IsProduction && hasStalePreBetStartTime))
+                    ? betStartsAt
+                    : null;
+
+                var targetTime = effectiveStartsAt ?? (betPlacedAt ?? DateTime.UtcNow);
                 var baseDate = targetTime.AddHours(-5).Date;
                 var datesToCheck = new List<string>();
 
-                if (betStartsAt.HasValue)
+                void AddDateIfUnique(string d)
                 {
-                    datesToCheck.Add(baseDate.ToString("yyyyMMdd"));
-                    datesToCheck.Add(baseDate.AddDays(1).ToString("yyyyMMdd"));
-                    datesToCheck.Add(baseDate.AddDays(-1).ToString("yyyyMMdd"));
+                    if (!datesToCheck.Contains(d)) datesToCheck.Add(d);
+                }
+
+                if (effectiveStartsAt.HasValue)
+                {
+                    AddDateIfUnique(baseDate.ToString("yyyyMMdd"));
+                    AddDateIfUnique(baseDate.AddDays(1).ToString("yyyyMMdd"));
+                    AddDateIfUnique(baseDate.AddDays(-1).ToString("yyyyMMdd"));
+
+                    if (hasStalePreBetStartTime && betPlacedAt.HasValue)
+                    {
+                        var placedBaseDate = betPlacedAt.Value.AddHours(-5).Date;
+                        if (sport == "football" && league == "nfl") AddDateIfUnique("");
+                        for (int d = -1; d <= 5; d++)
+                        {
+                            AddDateIfUnique(placedBaseDate.AddDays(d).ToString("yyyyMMdd"));
+                        }
+                    }
                 }
                 else
                 {
                     // For NFL, the default scoreboard endpoint returns the ENTIRE current week of games in 1 single call!
                     if (sport == "football" && league == "nfl")
                     {
-                        datesToCheck.Add(""); // default week endpoint
+                        AddDateIfUnique(""); // default week endpoint
                     }
 
                     // Inspect primary date, then +/- 1, then up to +5 days
-                    datesToCheck.Add(baseDate.ToString("yyyyMMdd"));
-                    datesToCheck.Add(baseDate.AddDays(1).ToString("yyyyMMdd"));
-                    datesToCheck.Add(baseDate.AddDays(-1).ToString("yyyyMMdd"));
-                    datesToCheck.Add(baseDate.AddDays(2).ToString("yyyyMMdd"));
-                    datesToCheck.Add(baseDate.AddDays(3).ToString("yyyyMMdd"));
-                    datesToCheck.Add(baseDate.AddDays(4).ToString("yyyyMMdd"));
-                    datesToCheck.Add(baseDate.AddDays(5).ToString("yyyyMMdd"));
+                    AddDateIfUnique(baseDate.ToString("yyyyMMdd"));
+                    AddDateIfUnique(baseDate.AddDays(1).ToString("yyyyMMdd"));
+                    AddDateIfUnique(baseDate.AddDays(-1).ToString("yyyyMMdd"));
+                    AddDateIfUnique(baseDate.AddDays(2).ToString("yyyyMMdd"));
+                    AddDateIfUnique(baseDate.AddDays(3).ToString("yyyyMMdd"));
+                    AddDateIfUnique(baseDate.AddDays(4).ToString("yyyyMMdd"));
+                    AddDateIfUnique(baseDate.AddDays(5).ToString("yyyyMMdd"));
                 }
 
                 string dateRangeDesc = datesToCheck.Count > 3 ? $"{baseDate:MM-dd} to {baseDate.AddDays(5):MM-dd}" : $"{baseDate:MM-dd}";
@@ -161,9 +188,31 @@ namespace BettingApp.Services
                             {
                                 string evDateStr = ev.TryGetProperty("date", out var d) ? d.GetString() ?? "" : "";
                                 double diff = 0;
-                                if (DateTime.TryParse(evDateStr, out var evDt))
+                                if (DateTime.TryParse(evDateStr, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var evDt))
                                 {
+                                    bool evIsCompleted = ev.TryGetProperty("status", out var evSt) &&
+                                                         evSt.TryGetProperty("type", out var evTyp) &&
+                                                         evTyp.TryGetProperty("completed", out var evComp) &&
+                                                         evComp.ValueKind == JsonValueKind.True;
+
+                                    if (IsProduction && betPlacedAt.HasValue)
+                                    {
+                                        // PROD: Strictly reject any match that started >4.5h before the bet was uploaded,
+                                        // or any already-completed match that started >1.5h before the bet was uploaded.
+                                        if (evDt < betPlacedAt.Value.AddHours(-4.5) || (evIsCompleted && evDt < betPlacedAt.Value.AddHours(-1.5)))
+                                        {
+                                            continue;
+                                        }
+                                    }
+
                                     diff = Math.Abs((evDt - targetTime).TotalMinutes);
+
+                                    if (!IsProduction && evIsCompleted && betPlacedAt.HasValue && evDt < betPlacedAt.Value.AddHours(-1.5))
+                                    {
+                                        // DEV: Apply a ranking penalty (10000 min) to completed pre-bet games so upcoming rematches
+                                        // (e.g. NBA/NHL/MLB series) win when both exist, while still matching finished test slips from earlier today.
+                                        diff += 10000;
+                                    }
                                 }
 
                                 if (diff < minDiffMinutes)
@@ -176,7 +225,7 @@ namespace BettingApp.Services
                         }
                     }
 
-                    // If we found a match within 4 hours of target time, short-circuit
+                    // If we found a non-penalized match within 4 hours of target time, short-circuit
                     if (matchedEvent.HasValue && minDiffMinutes < 240) break;
                 }
 
@@ -750,7 +799,15 @@ namespace BettingApp.Services
                 string playerA = NormalizeTeam(split[0]);
                 string playerB = NormalizeTeam(split[1]);
 
-                var targetTime = betStartsAt ?? betPlacedAt ?? DateTime.UtcNow;
+                bool hasStalePreBetStartTime = betStartsAt.HasValue && betStartsAt.Value > DateTime.MinValue &&
+                                               betPlacedAt.HasValue && betStartsAt.Value < betPlacedAt.Value.AddHours(-6);
+                DateTime? effectiveStartsAt = (betStartsAt.HasValue && betStartsAt.Value > DateTime.MinValue &&
+                    !(IsProduction && hasStalePreBetStartTime) &&
+                    !(betStartsAt.Value.TimeOfDay == TimeSpan.Zero && hasStalePreBetStartTime))
+                    ? betStartsAt
+                    : null;
+
+                var targetTime = effectiveStartsAt ?? betPlacedAt ?? DateTime.UtcNow;
                 var baseDate = targetTime.Date;
                 var datesToCheck = new List<string>
                 {
@@ -759,7 +816,7 @@ namespace BettingApp.Services
                     baseDate.AddDays(-1).ToString("yyyyMMdd")
                 };
 
-                if (!betStartsAt.HasValue)
+                if (!effectiveStartsAt.HasValue)
                 {
                     datesToCheck.Add(baseDate.AddDays(2).ToString("yyyyMMdd"));
                     datesToCheck.Add(baseDate.AddDays(3).ToString("yyyyMMdd"));
@@ -796,13 +853,31 @@ namespace BettingApp.Services
 
                                 foreach (var c in comps.EnumerateArray())
                                 {
-                                    if (IsTennisMatch(c, playerA, playerB))
+                                     if (IsTennisMatch(c, playerA, playerB))
                                     {
                                         string dateStrUtc = c.TryGetProperty("date", out var d) ? d.GetString() ?? "" : "";
                                         double diff = 0;
-                                        if (DateTime.TryParse(dateStrUtc, out var dt))
+                                        if (DateTime.TryParse(dateStrUtc, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var dt))
                                         {
+                                            bool compIsCompleted = c.TryGetProperty("status", out var cSt) &&
+                                                                   cSt.TryGetProperty("type", out var cTyp) &&
+                                                                   cTyp.TryGetProperty("completed", out var cComp) &&
+                                                                   cComp.ValueKind == JsonValueKind.True;
+
+                                            if (IsProduction && betPlacedAt.HasValue)
+                                            {
+                                                if (dt < betPlacedAt.Value.AddHours(-6) || (compIsCompleted && dt < betPlacedAt.Value.AddHours(-2)))
+                                                {
+                                                    continue;
+                                                }
+                                            }
+
                                             diff = Math.Abs((dt - targetTime).TotalMinutes);
+
+                                            if (!IsProduction && betPlacedAt.HasValue && compIsCompleted && dt < betPlacedAt.Value.AddHours(-2))
+                                            {
+                                                diff += 10000;
+                                            }
                                         }
 
                                         if (diff < minDiffMinutes)

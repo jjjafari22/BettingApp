@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace BettingApp.Services
 {
@@ -13,18 +15,23 @@ namespace BettingApp.Services
         private readonly TeamAliasMappingService _teamAliasMapper;
         private readonly ILogger<FotMobScraperService> _logger;
         private readonly IMemoryCache? _cache;
+        private readonly IHostEnvironment? _env;
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
+
+        private bool IsProduction => _env != null && !_env.IsDevelopment();
 
         public FotMobScraperService(
             HttpClient httpClient,
             TeamAliasMappingService teamAliasMapper,
             ILogger<FotMobScraperService> logger,
-            IMemoryCache? cache = null)
+            IMemoryCache? cache = null,
+            IHostEnvironment? env = null)
         {
             _httpClient = httpClient;
             _teamAliasMapper = teamAliasMapper;
             _logger = logger;
             _cache = cache;
+            _env = env;
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
         }
 
@@ -33,7 +40,11 @@ namespace BettingApp.Services
             try
             {
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";
-                DateTime? effectiveTargetDate = (legStartTime.HasValue && legStartTime.Value > DateTime.MinValue) ? legStartTime : betPlacedAt;
+                bool hasStalePreBetStartTime = legStartTime.HasValue && legStartTime.Value > DateTime.MinValue &&
+                                               betPlacedAt.HasValue && legStartTime.Value < betPlacedAt.Value.AddHours(-4.5);
+                DateTime? effectiveTargetDate = (legStartTime.HasValue && legStartTime.Value > DateTime.MinValue && !(IsProduction && hasStalePreBetStartTime))
+                    ? legStartTime
+                    : betPlacedAt;
                 // 1. Clean the match name and extract Home Team for robust searching
                 string[] split = TeamAliasMappingService.SplitMatchTeams(matchName);
                 string homeTeam = _teamAliasMapper.NormalizeTeamName(split[0].Trim(), removeStopWords: false);
@@ -69,7 +80,7 @@ namespace BettingApp.Services
 
                         if (string.IsNullOrEmpty(eventId))
                         {
-                            var resolveResult = await ResolveFotMobEventIdAsync(matchName, homeTeam, awayTeam, effectiveTargetDate, betLabel);
+                            var resolveResult = await ResolveFotMobEventIdAsync(matchName, homeTeam, awayTeam, effectiveTargetDate, betLabel, IsProduction ? betPlacedAt : null);
                             eventId = resolveResult.eventId;
                             if (_cache != null)
                             {
@@ -285,7 +296,7 @@ namespace BettingApp.Services
             return null;
         }
 
-        private async Task<(string? eventId, bool hadHttpError)> ResolveFotMobEventIdAsync(string matchName, string homeTeam, string awayTeam, DateTime? betPlacedAt, string betLabel = "[Test/Manual]")
+        private async Task<(string? eventId, bool hadHttpError)> ResolveFotMobEventIdAsync(string matchName, string homeTeam, string awayTeam, DateTime? betPlacedAt, string betLabel = "[Test/Manual]", DateTime? actualBetPlacedAt = null)
         {
                 int httpErrorFlag = 0;
                 Action markHttpError = () => Interlocked.Exchange(ref httpErrorFlag, 1);
@@ -296,7 +307,7 @@ namespace BettingApp.Services
                     try
                     {
                         using var doc = System.Text.Json.JsonDocument.Parse(json);
-                        var res = ExtractEventIdWithScore(doc, homeTeam, awayTeam, betPlacedAt);
+                        var res = ExtractEventIdWithScore(doc, homeTeam, awayTeam, betPlacedAt, actualBetPlacedAt);
                         if (res.score > bestScore ||
                             (res.score == bestScore && res.score > 0 && (string.IsNullOrEmpty(bestEventId) || res.timeDiff < bestTimeDiff)))
                         {
@@ -324,7 +335,7 @@ namespace BettingApp.Services
                 string? eventId = null;
                 int currentBestScore = 0;
                 TimeSpan bestTimeDiff = TimeSpan.MaxValue;
-                bool HasCloseFullMatch() => currentBestScore >= 200 && bestTimeDiff <= TimeSpan.FromHours(36);
+                bool HasCloseFullMatch() => currentBestScore >= 150 && bestTimeDiff <= TimeSpan.FromHours(36);
 
                 TryUpdateBestFromJson(searchJson, ref eventId, ref currentBestScore, ref bestTimeDiff);
 
@@ -550,8 +561,10 @@ namespace BettingApp.Services
 
                                     if (f.TryGetProperty("status", out var statusProp) && statusProp.TryGetProperty("utcTime", out var utcProp))
                                     {
-                                        if (DateTime.TryParse(utcProp.GetString(), out DateTime fixtureDate))
+                                        if (DateTime.TryParse(utcProp.GetString(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out DateTime fixtureDate))
                                         {
+                                            if (actualBetPlacedAt.HasValue && fixtureDate < actualBetPlacedAt.Value.AddHours(-4.5)) continue;
+
                                             TimeSpan diff = (fixtureDate - targetDate).Duration();
                                             // Reject matches that are completely wildly off
                                             if (diff.TotalDays > 7) continue;
@@ -574,7 +587,7 @@ namespace BettingApp.Services
                         } 
                         catch { markHttpError(); }
                         
-                        if (currentBestScore >= 200 && smallestTimeDiff <= TimeSpan.FromHours(36) && !string.IsNullOrEmpty(eventId)) break; // Found a close full straight match, stop searching teams!
+                        if (currentBestScore >= 150 && smallestTimeDiff <= TimeSpan.FromHours(36) && !string.IsNullOrEmpty(eventId)) break; // Found a close straight match, stop searching teams!
                     }
                 }
 
@@ -857,7 +870,7 @@ namespace BettingApp.Services
             return GetTeamMatchScore(queryHome, queryAway, optHome, optAway, optLeague) > 0;
         }
 
-        private (string? id, int score, TimeSpan timeDiff) ExtractEventIdWithScore(System.Text.Json.JsonDocument doc, string homeTeam, string awayTeam, DateTime? betPlacedAt)
+        private (string? id, int score, TimeSpan timeDiff) ExtractEventIdWithScore(System.Text.Json.JsonDocument doc, string homeTeam, string awayTeam, DateTime? betPlacedAt, DateTime? actualBetPlacedAt = null)
         {
             if (!doc.RootElement.TryGetProperty("matchSuggest", out var matchSuggests) || matchSuggests.GetArrayLength() == 0)
                 return (null, 0, TimeSpan.MaxValue);
@@ -913,8 +926,13 @@ namespace BettingApp.Services
                 // Parse match date to prioritize the closest match (e.g. Leg 1 vs Leg 2)
                 if (payload.TryGetProperty("matchDate", out var matchDateElement))
                 {
-                    if (DateTime.TryParse(matchDateElement.GetString(), out DateTime matchDate))
+                    if (DateTime.TryParse(matchDateElement.GetString(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out DateTime matchDate))
                     {
+                        if (actualBetPlacedAt.HasValue && matchDate < actualBetPlacedAt.Value.AddHours(-4.5))
+                        {
+                            continue;
+                        }
+
                         DateTime targetDate = betPlacedAt ?? DateTime.UtcNow;
                         
                         if (parsedTargetDate.HasValue)

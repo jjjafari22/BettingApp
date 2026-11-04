@@ -196,12 +196,24 @@ namespace BettingApp.Services
                 return new List<string> { "2Up - Full Time Result" };
             }
             
-            // Detect if the market explicitly specifies a half
+            // Detect if the market explicitly specifies a half or period
             string halfSuffix = "";
             if (clean.Contains("1st Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("First Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("1. Half", StringComparison.OrdinalIgnoreCase))
                 halfSuffix = " First Half";
             else if (clean.Contains("2nd Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("Second Half", StringComparison.OrdinalIgnoreCase) || clean.Contains("2. Half", StringComparison.OrdinalIgnoreCase))
                 halfSuffix = " Second Half";
+
+            string periodPrefix = "";
+            if (System.Text.RegularExpressions.Regex.IsMatch(clean, @"\b(?:1st|first|1\.)\s+period\b|\bperiod\s*1\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                periodPrefix = "First Period ";
+            else if (System.Text.RegularExpressions.Regex.IsMatch(clean, @"\b(?:2nd|second|2\.)\s+period\b|\bperiod\s*2\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                periodPrefix = "Second Period ";
+            else if (System.Text.RegularExpressions.Regex.IsMatch(clean, @"\b(?:3rd|third|3\.)\s+period\b|\bperiod\s*3\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                periodPrefix = "Third Period ";
+
+            bool hasSubPeriodModifier = !string.IsNullOrEmpty(halfSuffix) ||
+                                        !string.IsNullOrEmpty(periodPrefix) ||
+                                        System.Text.RegularExpressions.Regex.IsMatch(clean, @"\b(?:1st|2nd|3rd|4th|first|second|third|fourth|1\.|2\.|3\.|4\.)\s*(?:quarter|qtr|period|inning|half)\b|\b(?:q[1-4]|p[1-3])\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
             // Detect if the market specifies a Tennis set ordinal (First Set .. Fifth Set)
             string setOrdinal = TryResolveTennisSetOrdinal(clean);
@@ -331,28 +343,74 @@ namespace BettingApp.Services
                         }
                     }
 
-                    // Goals Team 1/2
-                    if ((clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goals", StringComparison.OrdinalIgnoreCase)) &&
+                    // Goals / Team Total Team 1/2
+                    bool isOtherTeamStat = clean.Contains("Corner", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Card", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Booking", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Save", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Foul", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Shot", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Tackle", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Offside", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Set", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Game", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Ace", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Fault", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Break", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Point", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Assist", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Block", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Shutout", StringComparison.OrdinalIgnoreCase);
+
+                    if ((clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) ||
+                         clean.Contains("Goals", StringComparison.OrdinalIgnoreCase) ||
+                         (!isOtherTeamStat && clean.Contains("Total", StringComparison.OrdinalIgnoreCase) && (IsTeam1Target() || IsTeam2Target()))) &&
                         !clean.Contains("Player", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("Handicap", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("Both", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("Result", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("1X2", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Exact", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("Odd", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("First Goal", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("Last Goal", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("Next Goal", StringComparison.OrdinalIgnoreCase))
                     {
+                        bool includesOvertime = clean.Contains("incl. overtime", StringComparison.OrdinalIgnoreCase) ||
+                                                clean.Contains("including overtime", StringComparison.OrdinalIgnoreCase) ||
+                                                clean.Contains("incl. ot", StringComparison.OrdinalIgnoreCase) ||
+                                                clean.Contains("including ot", StringComparison.OrdinalIgnoreCase) ||
+                                                clean.Contains("shootout", StringComparison.OrdinalIgnoreCase) ||
+                                                clean.Contains("penalties", StringComparison.OrdinalIgnoreCase);
+
                         if (IsTeam1Target())
-                            return new List<string> { "Over Under Team 1" + halfSuffix };
+                        {
+                            if (!string.IsNullOrEmpty(periodPrefix))
+                                return new List<string> { $"{periodPrefix}Team 1 Total" };
+                            if (!string.IsNullOrEmpty(halfSuffix))
+                                return new List<string> { "Over Under Team 1" + halfSuffix };
+                            if (includesOvertime)
+                                return new List<string> { "Team 1 Total (incl. overtime and penalties)", "Over Under Team 1", "Team 1 Total" };
+                            return new List<string> { "Over Under Team 1", "Team 1 Total" };
+                        }
                         if (IsTeam2Target())
-                            return new List<string> { "Over Under Team 2" + halfSuffix };
+                        {
+                            if (!string.IsNullOrEmpty(periodPrefix))
+                                return new List<string> { $"{periodPrefix}Team 2 Total" };
+                            if (!string.IsNullOrEmpty(halfSuffix))
+                                return new List<string> { "Over Under Team 2" + halfSuffix };
+                            if (includesOvertime)
+                                return new List<string> { "Team 2 Total (incl. overtime and penalties)", "Over Under Team 2", "Team 2 Total" };
+                            return new List<string> { "Over Under Team 2", "Team 2 Total" };
+                        }
                             
                         // Otherwise, generic total goals for the match
                         if (clean.Contains("Total Goals", StringComparison.OrdinalIgnoreCase) ||
-                            (!string.IsNullOrEmpty(halfSuffix) && clean.Contains("Goals", StringComparison.OrdinalIgnoreCase)))
+                            ((!string.IsNullOrEmpty(halfSuffix) || !string.IsNullOrEmpty(periodPrefix)) && clean.Contains("Goals", StringComparison.OrdinalIgnoreCase)))
                         {
+                            if (!string.IsNullOrEmpty(periodPrefix)) return new List<string> { $"{periodPrefix}Total" };
                             if (!string.IsNullOrEmpty(halfSuffix)) return new List<string> { "Over Under" + halfSuffix };
-                            if (clean.Contains("incl. overtime", StringComparison.OrdinalIgnoreCase) || clean.Contains("including overtime", StringComparison.OrdinalIgnoreCase))
+                            if (includesOvertime)
                             {
                                 return new List<string> { "Total (incl. overtime and penalties)", "Total", "Total Goals", "Over Under Full Time" };
                             }
@@ -633,7 +691,8 @@ namespace BettingApp.Services
                 return new List<string> { mappedBase };
             }
 
-            if ((cleanBase.Equals("Total Points", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Total Points", StringComparison.OrdinalIgnoreCase)) && 
+            if (!hasSubPeriodModifier &&
+                (cleanBase.Equals("Total Points", StringComparison.OrdinalIgnoreCase) || clean.StartsWith("Total Points", StringComparison.OrdinalIgnoreCase)) && 
                 !string.IsNullOrEmpty(selectionName) && HasPlayerName(selectionName))
             {
                 return new List<string> { "Over Under Player Points (incl. overtime)", "Player Points (incl. overtime)", "Player Points" };
@@ -752,166 +811,170 @@ namespace BettingApp.Services
             }
 
             // --- Dynamic Player Prop Catch-Alls (handles when AI appends player names to the market) ---
-            bool isExplicitPlayerProp = clean.Contains("Player", StringComparison.OrdinalIgnoreCase) ||
-                                        clean.Contains("Player's", StringComparison.OrdinalIgnoreCase);
-
-            bool isTeamOrTotalStat = !isExplicitPlayerProp && (
-                                     clean.Contains("Team 1", StringComparison.OrdinalIgnoreCase) ||
-                                     clean.Contains("Team 2", StringComparison.OrdinalIgnoreCase) ||
-                                     ((clean.Contains("Team", StringComparison.OrdinalIgnoreCase) ||
-                                       clean.Contains("Home", StringComparison.OrdinalIgnoreCase) ||
-                                       clean.Contains("Away", StringComparison.OrdinalIgnoreCase) ||
-                                       clean.Contains("Total", StringComparison.OrdinalIgnoreCase)) && 
-                                      !HasPlayerName(selectionName) && !HasPlayerName(clean)));
-
-            // Combined Goal or Assist / Score or Assist (distinct from pure goals or pure assists)
-            // Note: OddsPapi does not provide odds for combined Goal OR Assist props (it only provides pure Goals or pure Assists).
-            // Do NOT fall back to pure Goals or pure Assists when the bet is for a combined Goal or Assist.
-            bool isGoalOrAssist = ((clean.Contains("Score", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal", StringComparison.OrdinalIgnoreCase)) &&
-                                  clean.Contains("Assist", StringComparison.OrdinalIgnoreCase)) ||
-                                  (!string.IsNullOrEmpty(selectionName) &&
-                                  (selectionName.Contains("Score", StringComparison.OrdinalIgnoreCase) || selectionName.Contains("Goal", StringComparison.OrdinalIgnoreCase)) &&
-                                  selectionName.Contains("Assist", StringComparison.OrdinalIgnoreCase));
-
-            if (isGoalOrAssist)
+            // Do NOT map 1st/2nd Half, Period, or Quarter player props (e.g. "To Score During 1st Half") to full-match player prop markets.
+            if (!hasSubPeriodModifier)
             {
-                return new List<string> { "Over Under Player Goals or Assists (incl. overtime)", "Player Goal or Assist", "To Score or Assist", "Goal or Assist" };
-            }
+                bool isExplicitPlayerProp = clean.Contains("Player", StringComparison.OrdinalIgnoreCase) ||
+                                            clean.Contains("Player's", StringComparison.OrdinalIgnoreCase);
 
-            if (!isTeamOrTotalStat && (clean.Contains("Points", StringComparison.OrdinalIgnoreCase) || clean.Contains("Point", StringComparison.OrdinalIgnoreCase)))
-            {
-                if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName) || 
-                    clean.Contains("to record", StringComparison.OrdinalIgnoreCase) || 
-                    clean.Contains("to score", StringComparison.OrdinalIgnoreCase) ||
-                    clean.Contains("at least", StringComparison.OrdinalIgnoreCase) ||
-                    clean.Contains("over under", StringComparison.OrdinalIgnoreCase))
+                bool isTeamOrTotalStat = !isExplicitPlayerProp && (
+                                         clean.Contains("Team 1", StringComparison.OrdinalIgnoreCase) ||
+                                         clean.Contains("Team 2", StringComparison.OrdinalIgnoreCase) ||
+                                         ((clean.Contains("Team", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Home", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Away", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Total", StringComparison.OrdinalIgnoreCase)) && 
+                                          !HasPlayerName(selectionName) && !HasPlayerName(clean)));
+
+                // Combined Goal or Assist / Score or Assist (distinct from pure goals or pure assists)
+                // Note: OddsPapi does not provide odds for combined Goal OR Assist props (it only provides pure Goals or pure Assists).
+                // Do NOT fall back to pure Goals or pure Assists when the bet is for a combined Goal or Assist.
+                bool isGoalOrAssist = ((clean.Contains("Score", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal", StringComparison.OrdinalIgnoreCase)) &&
+                                      clean.Contains("Assist", StringComparison.OrdinalIgnoreCase)) ||
+                                      (!string.IsNullOrEmpty(selectionName) &&
+                                      (selectionName.Contains("Score", StringComparison.OrdinalIgnoreCase) || selectionName.Contains("Goal", StringComparison.OrdinalIgnoreCase)) &&
+                                      selectionName.Contains("Assist", StringComparison.OrdinalIgnoreCase));
+
+                if (isGoalOrAssist)
                 {
-                    if (clean.Contains("Power Play", StringComparison.OrdinalIgnoreCase) || clean.Contains("Powerplay", StringComparison.OrdinalIgnoreCase) || System.Text.RegularExpressions.Regex.IsMatch(clean, @"\bPPP\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    return new List<string> { "Over Under Player Goals or Assists (incl. overtime)", "Player Goal or Assist", "To Score or Assist", "Goal or Assist" };
+                }
+
+                if (!isTeamOrTotalStat && (clean.Contains("Points", StringComparison.OrdinalIgnoreCase) || clean.Contains("Point", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName) || 
+                        clean.Contains("to record", StringComparison.OrdinalIgnoreCase) || 
+                        clean.Contains("to score", StringComparison.OrdinalIgnoreCase) ||
+                        clean.Contains("at least", StringComparison.OrdinalIgnoreCase) ||
+                        clean.Contains("over under", StringComparison.OrdinalIgnoreCase))
                     {
-                        return new List<string> { "Over Under Player Power Play Points (incl. overtime)", "Player Power Play Points (incl. overtime)" };
+                        if (clean.Contains("Power Play", StringComparison.OrdinalIgnoreCase) || clean.Contains("Powerplay", StringComparison.OrdinalIgnoreCase) || System.Text.RegularExpressions.Regex.IsMatch(clean, @"\bPPP\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                        {
+                            return new List<string> { "Over Under Player Power Play Points (incl. overtime)", "Player Power Play Points (incl. overtime)" };
+                        }
+                        return new List<string> { "Over Under Player Points (incl. overtime)", "Player Points (incl. overtime)", "Player Points" };
                     }
-                    return new List<string> { "Over Under Player Points (incl. overtime)", "Player Points (incl. overtime)", "Player Points" };
                 }
-            }
 
-            if ((clean.Contains("Score", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal", StringComparison.OrdinalIgnoreCase)) &&
-                (clean.Contains("Book", StringComparison.OrdinalIgnoreCase) || clean.Contains("Card", StringComparison.OrdinalIgnoreCase)))
-            {
-                return new List<string> { "Player to Score or be Booked", "Player to Score or Carded", "To Score or be Booked", "Score or Booked" };
-            }
-
-            bool isFirstLastOrNextGoalscorer = System.Text.RegularExpressions.Regex.IsMatch(
-                clean,
-                @"\b(?:first|last|next|1st|2nd|3rd)\s+(?:goal\s*scorer|player\s+to\s+score|to\s+score)\b|\bGoal\s+\d+\b",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-            if (!isFirstLastOrNextGoalscorer &&
-                !clean.Contains("Assist", StringComparison.OrdinalIgnoreCase) &&
-                !clean.Contains("Point", StringComparison.OrdinalIgnoreCase) &&
-                !clean.Contains("Book", StringComparison.OrdinalIgnoreCase) &&
-                !clean.Contains("Card", StringComparison.OrdinalIgnoreCase) &&
-               (clean.Contains("Goalscorer", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Scorer", StringComparison.OrdinalIgnoreCase) || 
-               (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Both", StringComparison.OrdinalIgnoreCase)) ||
-               clean.Contains("Will/Will not Score", StringComparison.OrdinalIgnoreCase) ||
-               clean.Equals("Will Score", StringComparison.OrdinalIgnoreCase) ||
-               (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Goal", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Goalkeeper", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Shot", StringComparison.OrdinalIgnoreCase))))
-            {
-                return new List<string> { "Over Under Player Goals (incl. overtime)", "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals", "Goals", "Goal" };
-            }
-            if (!isTeamOrTotalStat && (clean.Contains("Shots on Target", StringComparison.OrdinalIgnoreCase) || clean.Contains("Shots On Goal", StringComparison.OrdinalIgnoreCase)))
-            {
-                if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
+                if ((clean.Contains("Score", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal", StringComparison.OrdinalIgnoreCase)) &&
+                    (clean.Contains("Book", StringComparison.OrdinalIgnoreCase) || clean.Contains("Card", StringComparison.OrdinalIgnoreCase)))
                 {
-                    return new List<string> { "Over Under Player Shots On Goal (incl. overtime)", "Player Shots On Goal (incl. overtime)", "Player's shot on target", "Player Shots on Target", "Player Shots on Target (incl. overtime)", "Shots on Target", "Shots On Goal" };
+                    return new List<string> { "Player to Score or be Booked", "Player to Score or Carded", "To Score or be Booked", "Score or Booked" };
                 }
-                return new List<string> { clean };
-            }
-            if (!isTeamOrTotalStat && (clean.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase)))
-            {
-                if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
-                {
-                    return new List<string> { "Over Under Player Goalkeeper Saves (incl. overtime)", "Player Goalkeeper Saves (incl. overtime)", "Player Goalkeeper Saves", "Goalkeeper Saves", "Goal Keeper Saves", "Saves" };
-                }
-                return new List<string> { clean };
-            }
-            if (!isTeamOrTotalStat && clean.Contains("Shots", StringComparison.OrdinalIgnoreCase))
-            {
-                if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
-                {
-                    return new List<string> { "Over Under Player Shots (incl. overtime)", "Player Shots (incl. overtime)", "Player Shots", "Shots", "Shot" };
-                }
-                return new List<string> { clean };
-            }
-            bool isFoulsWonOrDrawn = ((clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) || clean.Contains("Foul", StringComparison.OrdinalIgnoreCase)) &&
-                                      (clean.Contains("Suffered", StringComparison.OrdinalIgnoreCase) ||
-                                       clean.Contains("Won", StringComparison.OrdinalIgnoreCase) ||
-                                       clean.Contains("Drawn", StringComparison.OrdinalIgnoreCase) ||
-                                       System.Text.RegularExpressions.Regex.IsMatch(clean, @"\bwin\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))) ||
-                                     clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase);
 
-            if (!isTeamOrTotalStat && isFoulsWonOrDrawn)
-            {
-                if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName) ||
-                    clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase))
+                bool isFirstLastOrNextGoalscorer = System.Text.RegularExpressions.Regex.IsMatch(
+                    clean,
+                    @"\b(?:first|last|next|1st|2nd|3rd)\s+(?:goal\s*scorer|player\s+to\s+score|to\s+score)\b|\bGoal\s+\d+\b",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                if (!isFirstLastOrNextGoalscorer &&
+                    !clean.Contains("Assist", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Contains("Point", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Contains("Book", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Contains("Card", StringComparison.OrdinalIgnoreCase) &&
+                   (clean.Contains("Goalscorer", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Scorer", StringComparison.OrdinalIgnoreCase) || 
+                   (clean.Contains("To Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Team", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Both", StringComparison.OrdinalIgnoreCase)) ||
+                   clean.Contains("Will/Will not Score", StringComparison.OrdinalIgnoreCase) ||
+                   clean.Equals("Will Score", StringComparison.OrdinalIgnoreCase) ||
+                   (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && clean.Contains("Goal", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Goalkeeper", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Shot", StringComparison.OrdinalIgnoreCase))))
                 {
-                    return new List<string>
+                    return new List<string> { "Over Under Player Goals (incl. overtime)", "Anytime Goal Scorer", "Player Goals (incl. overtime)", "Player Goals", "Goals", "Goal" };
+                }
+                if (!isTeamOrTotalStat && (clean.Contains("Shots on Target", StringComparison.OrdinalIgnoreCase) || clean.Contains("Shots On Goal", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
                     {
-                        "Over Under Player Fouls Won (incl. overtime)",
-                        "Player Fouls Won (incl. overtime)",
-                        "Player To Win A Foul (incl. overtime)",
-                        "Player Fouls Won",
-                        "Over Under Player Fouls Drawn (incl. overtime)",
-                        "Player Fouls Drawn (incl. overtime)",
-                        "Player Fouls Drawn",
-                        "Over Under Player Fouls Suffered (incl. overtime)",
-                        "Player Fouls Suffered (incl. overtime)",
-                        "Player Fouls Suffered",
-                        "Over Under Player To Be Fouled (incl. overtime)",
-                        "Player To Be Fouled (incl. overtime)",
-                        "Player To Be Fouled",
-                        "Fouls Won",
-                        "Fouls Drawn",
-                        "Fouls Suffered"
-                    };
+                        return new List<string> { "Over Under Player Shots On Goal (incl. overtime)", "Player Shots On Goal (incl. overtime)", "Player's shot on target", "Player Shots on Target", "Player Shots on Target (incl. overtime)", "Shots on Target", "Shots On Goal" };
+                    }
+                    return new List<string> { clean };
                 }
-                return new List<string> { clean };
-            }
+                if (!isTeamOrTotalStat && (clean.Contains("Goalkeeper Saves", StringComparison.OrdinalIgnoreCase) || clean.Contains("Goal Keeper Saves", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
+                    {
+                        return new List<string> { "Over Under Player Goalkeeper Saves (incl. overtime)", "Player Goalkeeper Saves (incl. overtime)", "Player Goalkeeper Saves", "Goalkeeper Saves", "Goal Keeper Saves", "Saves" };
+                    }
+                    return new List<string> { clean };
+                }
+                if (!isTeamOrTotalStat && clean.Contains("Shots", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
+                    {
+                        return new List<string> { "Over Under Player Shots (incl. overtime)", "Player Shots (incl. overtime)", "Player Shots", "Shots", "Shot" };
+                    }
+                    return new List<string> { clean };
+                }
+                bool isFoulsWonOrDrawn = ((clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) || clean.Contains("Foul", StringComparison.OrdinalIgnoreCase)) &&
+                                          (clean.Contains("Suffered", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Won", StringComparison.OrdinalIgnoreCase) ||
+                                           clean.Contains("Drawn", StringComparison.OrdinalIgnoreCase) ||
+                                           System.Text.RegularExpressions.Regex.IsMatch(clean, @"\bwin\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase))) ||
+                                         clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase);
 
-            if (!isTeamOrTotalStat && clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) &&
-                !clean.Contains("Suffered", StringComparison.OrdinalIgnoreCase) &&
-                !clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase) &&
-                !clean.Contains("Won", StringComparison.OrdinalIgnoreCase) &&
-                !clean.Contains("Drawn", StringComparison.OrdinalIgnoreCase))
-            {
-                if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
+                if (!isTeamOrTotalStat && isFoulsWonOrDrawn)
                 {
-                    return new List<string> { "Over Under Player Fouls Committed (incl. overtime)", "Player Fouls Committed (incl. overtime)", "Player Fouls Committed", "Fouls Committed", "Fouls", "Foul" };
+                    if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName) ||
+                        clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new List<string>
+                        {
+                            "Over Under Player Fouls Won (incl. overtime)",
+                            "Player Fouls Won (incl. overtime)",
+                            "Player To Win A Foul (incl. overtime)",
+                            "Player Fouls Won",
+                            "Over Under Player Fouls Drawn (incl. overtime)",
+                            "Player Fouls Drawn (incl. overtime)",
+                            "Player Fouls Drawn",
+                            "Over Under Player Fouls Suffered (incl. overtime)",
+                            "Player Fouls Suffered (incl. overtime)",
+                            "Player Fouls Suffered",
+                            "Over Under Player To Be Fouled (incl. overtime)",
+                            "Player To Be Fouled (incl. overtime)",
+                            "Player To Be Fouled",
+                            "Fouls Won",
+                            "Fouls Drawn",
+                            "Fouls Suffered"
+                        };
+                    }
+                    return new List<string> { clean };
                 }
-                return new List<string> { clean };
-            }
-            if (!clean.Contains("Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Goal", StringComparison.OrdinalIgnoreCase) &&
-               (clean.Contains("Assists", StringComparison.OrdinalIgnoreCase) || clean.Contains("Assist", StringComparison.OrdinalIgnoreCase)))
-            {
-                return new List<string> { "Over Under Player Assists (incl. overtime)", "Player Assists (incl. overtime)", "Player Assists", "To Provide An Assist", "Anytime Assist", "Assists", "Assist" };
-            }
-            if (!isTeamOrTotalStat && (clean.Contains("Tackles", StringComparison.OrdinalIgnoreCase) || clean.Contains("Tackle", StringComparison.OrdinalIgnoreCase)))
-            {
-                if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
+
+                if (!isTeamOrTotalStat && clean.Contains("Fouls", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Contains("Suffered", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Contains("Fouled", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Contains("Won", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Contains("Drawn", StringComparison.OrdinalIgnoreCase))
                 {
-                    return new List<string> { "Over Under Player Tackles (incl. overtime)", "Player Tackles (incl. overtime)", "Player Tackles", "Tackles", "Tackle" };
+                    if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
+                    {
+                        return new List<string> { "Over Under Player Fouls Committed (incl. overtime)", "Player Fouls Committed (incl. overtime)", "Player Fouls Committed", "Fouls Committed", "Fouls", "Foul" };
+                    }
+                    return new List<string> { clean };
                 }
-                return new List<string> { clean };
-            }
-            if (!clean.Contains("Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Goal", StringComparison.OrdinalIgnoreCase) &&
-               (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) ||
-                clean.Contains("To Be Carded", StringComparison.OrdinalIgnoreCase) ||
-                clean.Contains("To Receive a Card", StringComparison.OrdinalIgnoreCase) ||
-                clean.Contains("To Get a Card", StringComparison.OrdinalIgnoreCase) ||
-                clean.Contains("Shown a Card", StringComparison.OrdinalIgnoreCase) ||
-                clean.Contains("get Booked", StringComparison.OrdinalIgnoreCase) ||
-                (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && (clean.Contains("Card", StringComparison.OrdinalIgnoreCase) || clean.Contains("Book", StringComparison.OrdinalIgnoreCase)))))
-            {
-                return new List<string> { "Player To Be Carded (incl. overtime)", "Player To Be Carded", "Player Cards", "To Be Carded", "To Be Booked", "Cards", "Card" };
+                if (!clean.Contains("Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Goal", StringComparison.OrdinalIgnoreCase) &&
+                   (clean.Contains("Assists", StringComparison.OrdinalIgnoreCase) || clean.Contains("Assist", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return new List<string> { "Over Under Player Assists (incl. overtime)", "Player Assists (incl. overtime)", "Player Assists", "To Provide An Assist", "Anytime Assist", "Assists", "Assist" };
+                }
+                if (!isTeamOrTotalStat && (clean.Contains("Tackles", StringComparison.OrdinalIgnoreCase) || clean.Contains("Tackle", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (isExplicitPlayerProp || HasPlayerName(clean) || HasPlayerName(selectionName))
+                    {
+                        return new List<string> { "Over Under Player Tackles (incl. overtime)", "Player Tackles (incl. overtime)", "Player Tackles", "Tackles", "Tackle" };
+                    }
+                    return new List<string> { clean };
+                }
+                if (!clean.Contains("Score", StringComparison.OrdinalIgnoreCase) && !clean.Contains("Goal", StringComparison.OrdinalIgnoreCase) &&
+                   (clean.Contains("To Be Booked", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("To Be Carded", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("To Receive a Card", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("To Get a Card", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("Shown a Card", StringComparison.OrdinalIgnoreCase) ||
+                    clean.Contains("get Booked", StringComparison.OrdinalIgnoreCase) ||
+                    (clean.Contains("Player", StringComparison.OrdinalIgnoreCase) && (clean.Contains("Card", StringComparison.OrdinalIgnoreCase) || clean.Contains("Book", StringComparison.OrdinalIgnoreCase)))))
+                {
+                    return new List<string> { "Player To Be Carded (incl. overtime)", "Player To Be Carded", "Player Cards", "To Be Carded", "To Be Booked", "Cards", "Card" };
+                }
             }
             // -----------------------------------------------------------------------------------------
 

@@ -188,6 +188,39 @@ namespace BettingApp.Services
 
                 if (string.IsNullOrEmpty(dbBet.AiEvaluation.AiVisionResultJson)) return;
 
+                // Ensure any per-leg StartTime already stored on dbBet.Legs is synced into AiVisionResultJson
+                // before ConfirmOutcomeAsync runs, so multi-day / partly-graded bets never fall back to another leg's MatchStartTime.
+                if (dbBet.Legs != null && dbBet.Legs.Count > 0)
+                {
+                    try
+                    {
+                        var preVision = System.Text.Json.JsonSerializer.Deserialize<BettingApp.Services.AiVisionExtractionResult>(
+                            dbBet.AiEvaluation.AiVisionResultJson,
+                            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (preVision?.Legs != null)
+                        {
+                            bool synced = false;
+                            var orderedDbLegs = dbBet.Legs.OrderBy(l => l.Id).ToList();
+                            for (int i = 0; i < orderedDbLegs.Count && i < preVision.Legs.Count; i++)
+                            {
+                                var dLeg = orderedDbLegs[i];
+                                var vLeg = preVision.Legs[i];
+                                if (dLeg.StartTime.HasValue && dLeg.StartTime.Value > DateTime.MinValue &&
+                                    (vLeg.StartTime == null || vLeg.StartTime == DateTime.MinValue))
+                                {
+                                    vLeg.StartTime = dLeg.StartTime.Value;
+                                    synced = true;
+                                }
+                            }
+                            if (synced)
+                            {
+                                dbBet.AiEvaluation.AiVisionResultJson = System.Text.Json.JsonSerializer.Serialize(preVision);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
                 string? result = await _aiVisionService.ConfirmOutcomeAsync(dbBet.AiEvaluation.AiVisionResultJson, dbBet.CreatedAt, dbBet.MatchStartTime, dbBet.Id);
                 
                 // If AiEvaluation was newly instantiated in memory, verify if another process created it in DB during the AI call
@@ -256,9 +289,20 @@ namespace BettingApp.Services
                                 
                                 if (parsedLeg != null)
                                 {
-                                    dbLeg.Outcome = string.IsNullOrEmpty(parsedLeg.Outcome) ? "Pending" : parsedLeg.Outcome;
-                                    dbLeg.Stats = parsedLeg.Stats ?? "";
-                                    dbLeg.VerificationSource = string.IsNullOrEmpty(parsedLeg.VerificationSource) ? "Unknown" : parsedLeg.VerificationSource;
+                                    string newOutcome = string.IsNullOrEmpty(parsedLeg.Outcome) ? "Pending" : parsedLeg.Outcome;
+                                    bool wasAlreadyGraded = string.Equals(dbLeg.Outcome, "Won", StringComparison.OrdinalIgnoreCase) ||
+                                                            string.Equals(dbLeg.Outcome, "Lost", StringComparison.OrdinalIgnoreCase) ||
+                                                            string.Equals(dbLeg.Outcome, "Void", StringComparison.OrdinalIgnoreCase);
+                                    bool isNewNonDefinitive = string.Equals(newOutcome, "Pending", StringComparison.OrdinalIgnoreCase) ||
+                                                              string.Equals(newOutcome, "Unknown", StringComparison.OrdinalIgnoreCase);
+
+                                    // On multi-day or post-settlement checks, never overwrite an already-graded leg (Won/Lost/Void) with Pending/Unknown
+                                    if (!(wasAlreadyGraded && isNewNonDefinitive))
+                                    {
+                                        dbLeg.Outcome = newOutcome;
+                                        dbLeg.Stats = parsedLeg.Stats ?? "";
+                                        dbLeg.VerificationSource = string.IsNullOrEmpty(parsedLeg.VerificationSource) ? "Unknown" : parsedLeg.VerificationSource;
+                                    }
                                     
                                     if (!string.IsNullOrEmpty(parsedLeg.MatchStartTimeIso) && DateTime.TryParse(parsedLeg.MatchStartTimeIso, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime st))
                                     {
@@ -324,7 +368,10 @@ namespace BettingApp.Services
                                         {
                                             foreach (var vLeg in currentAiVision.Legs.Where(l => !string.IsNullOrEmpty(l.Match) && string.Equals(l.Match, parsedLeg.Match, StringComparison.OrdinalIgnoreCase)))
                                             {
-                                                if (vLeg.StartTime == null || vLeg.StartTime == DateTime.MinValue)
+                                                bool isExistingStale = vLeg.StartTime.HasValue && vLeg.StartTime.Value > DateTime.MinValue &&
+                                                                       vLeg.StartTime.Value < dbBet.CreatedAt.AddHours(-4.5) &&
+                                                                       parsedUtc >= dbBet.CreatedAt.AddHours(-4.5);
+                                                if (vLeg.StartTime == null || vLeg.StartTime == DateTime.MinValue || isExistingStale)
                                                 {
                                                     vLeg.StartTime = parsedUtc;
                                                     aiVisionUpdated = true;

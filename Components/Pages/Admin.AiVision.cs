@@ -373,7 +373,10 @@ public partial class Admin
                                             {
                                                 foreach (var vLeg in currentAiVision.Legs.Where(l => !string.IsNullOrEmpty(l.Match) && string.Equals(l.Match, parsedLeg.Match, StringComparison.OrdinalIgnoreCase)))
                                                 {
-                                                    if (vLeg.StartTime == null || vLeg.StartTime == DateTime.MinValue)
+                                                    bool isExistingStale = vLeg.StartTime.HasValue && vLeg.StartTime.Value > DateTime.MinValue &&
+                                                                           vLeg.StartTime.Value < dbBet.CreatedAt.AddHours(-4.5) &&
+                                                                           parsedUtc >= dbBet.CreatedAt.AddHours(-4.5);
+                                                    if (vLeg.StartTime == null || vLeg.StartTime == DateTime.MinValue || isExistingStale)
                                                     {
                                                         vLeg.StartTime = parsedUtc;
                                                         aiVisionUpdated = true;
