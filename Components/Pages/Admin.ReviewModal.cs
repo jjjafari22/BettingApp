@@ -374,6 +374,19 @@ public partial class Admin
                     mergeCandidatePendingBets = dbCandidates;
                 }
             }
+            else if (activeBetId.HasValue)
+            {
+                var dbFreeBetAmount = await context.Bets
+                    .AsNoTracking()
+                    .Where(b => b.Id == activeBetId.Value)
+                    .Select(b => (decimal?)b.FreeBetAmount)
+                    .FirstOrDefaultAsync();
+                if (dbFreeBetAmount.HasValue)
+                {
+                    if (reviewingBetModel?.Id == activeBetId.Value) reviewingBetModel.FreeBetAmount = dbFreeBetAmount.Value;
+                    if (originalBetModel?.Id == activeBetId.Value) originalBetModel.FreeBetAmount = dbFreeBetAmount.Value;
+                }
+            }
 
             await InvokeAsync(StateHasChanged);
         } catch { }

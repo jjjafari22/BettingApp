@@ -103,29 +103,22 @@ namespace BettingApp.Services
                     }
                 }
 
-                if (!wasStaked && willBeStaked)
-                {
-                    var currentBal = dbUser.Balance;
-                    var freeBetBal = isFirstApproval ? dbUser.FreeBetBalance : Math.Min(dbBet.FreeBetAmount, dbUser.FreeBetBalance);
-                    var creditLimit = (decimal)dbUser.CreditLimit;
-                    
-                    var availableCredit = currentBal + freeBetBal + creditLimit - newAmount;
-                    if (availableCredit < 0)
-                    {
-                        return (false, $"Insufficient funds. Available: {(currentBal + freeBetBal + creditLimit):N0} kr. Required: {newAmount:N0} kr.", true);
-                    }
-                }
+                decimal maxFreeBetForBet = isFirstApproval
+                    ? newAmount
+                    : Math.Min(dbBet.FreeBetAmount + Math.Max(0m, newAmount - dbAmount), newAmount);
 
-                if (wasStaked && willBeStaked && newAmount > dbAmount)
+                decimal requiredAmount = wasStaked ? (newAmount - dbAmount) : newAmount;
+                if (willBeStaked && requiredAmount > 0)
                 {
-                    var currentBal = dbUser.Balance;
-                    var creditLimit = (decimal)dbUser.CreditLimit;
-                    var additionalAmount = newAmount - dbAmount;
-                    
-                    var availableCredit = currentBal + creditLimit - additionalAmount;
-                    if (availableCredit < 0)
+                    var freeBetBal = wasStaked ? dbUser.FreeBetBalance : Math.Min(maxFreeBetForBet, dbUser.FreeBetBalance);
+                    var availableFunds = dbUser.Balance + freeBetBal + (decimal)dbUser.CreditLimit;
+
+                    if (availableFunds < requiredAmount)
                     {
-                        return (false, $"Insufficient funds for stake increase. Available: {(currentBal + creditLimit):N0} kr. Additional Required: {additionalAmount:N0} kr.", true);
+                        string errorMsg = wasStaked
+                            ? $"Insufficient funds for stake increase. Available: {availableFunds:N0} kr. Additional Required: {requiredAmount:N0} kr."
+                            : $"Insufficient funds. Available: {availableFunds:N0} kr. Required: {requiredAmount:N0} kr.";
+                        return (false, errorMsg, true);
                     }
                 }
 
@@ -186,16 +179,7 @@ namespace BettingApp.Services
                     dbBet.AutoApproveReason = $"⏹️ {newStatus} manually by {adminName}{tierSuffix}";
                 }
 
-                if (isFirstApproval)
-                {
-                    // Automatic consumption if user has free bet balance
-                    dbBet.FreeBetAmount = Math.Min(newAmount, dbUser.FreeBetBalance);
-                }
-                else 
-                {
-                     // Safety: Capping free bet amount if admin reduced the total stake or if refunded free bet was already spent
-                     dbBet.FreeBetAmount = Math.Min(Math.Min(dbBet.FreeBetAmount, newAmount), dbUser.FreeBetBalance);
-                }
+                dbBet.FreeBetAmount = Math.Min(maxFreeBetForBet, dbUser.FreeBetBalance);
 
                 // APPLY NEW STATUS IMPACT
                 // Statuses that should deduct balance: Approved, Won, Lost

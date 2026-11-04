@@ -120,6 +120,38 @@ namespace BettingApp.Tests
         }
 
         [Fact]
+        public void StakeIncrease_WithAvailableFreeBet_ConsumesFreeBetFirst()
+        {
+            decimal originalStake = 100m;
+            decimal originalFreeBet = 100m;
+            decimal newStake = 1200m; // Increased by 1,100 kr
+
+            decimal userBalance = -5000m;
+            decimal creditLimit = 5000m; // 0 kr cash credit remaining
+            decimal userFreeBalance = 1100m; // 1,100 kr FB available
+
+            decimal requiredAmount = newStake - originalStake; // 1,100 kr
+            decimal availableFunds = userBalance + userFreeBalance + creditLimit; // 1,100 kr
+            Assert.True(availableFunds >= requiredAmount);
+
+            // Revert old:
+            userBalance += (originalStake - originalFreeBet);
+            userFreeBalance += originalFreeBet; // 1,200 kr FB after reverting old impact
+
+            // Calculate new FreeBetAmount using BetProcessingService rule:
+            decimal maxFreeBetForBet = Math.Min(originalFreeBet + Math.Max(0m, newStake - originalStake), newStake);
+            decimal newFreeBetAmount = Math.Min(maxFreeBetForBet, userFreeBalance);
+            Assert.Equal(1200m, newFreeBetAmount);
+
+            // Apply new:
+            userBalance -= (newStake - newFreeBetAmount);
+            userFreeBalance -= newFreeBetAmount;
+
+            Assert.Equal(-5000m, userBalance); // Cash balance untouched
+            Assert.Equal(0m, userFreeBalance); // All 1,100 kr additional FB consumed
+        }
+
+        [Fact]
         public void WonBetCorrection_ReversesPayoutAndAppliesLossCorrectly()
         {
             decimal stake = 500m;
