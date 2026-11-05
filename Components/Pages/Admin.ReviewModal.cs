@@ -256,6 +256,10 @@ public partial class Admin
         if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing")
         {
             reviewingBetModel.Odds = (bet.HasExtraScreenshots && bet.Odds > 1.0m) ? bet.Odds : 0;
+            if (bet.MatchStartTime.HasValue && (bet.MatchStartTime.Value - DateTime.UtcNow).TotalMinutes <= 60)
+            {
+                PendingBetsNotificationService.SuppressAlarmForBet(bet.Id);
+            }
         }
 
         showModalDropdown = false;

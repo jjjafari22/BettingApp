@@ -414,7 +414,7 @@ public class DiscordNotificationService : IHostedService
         if (string.IsNullOrEmpty(webhookUrl)) return;
 
         string baseUrl = _config["BaseUrl"] ?? "https://localhost:7143"; 
-        string adminUrl = $"{baseUrl}/admin";
+        string adminUrl = $"{baseUrl}/admin?ReviewBetId={bet.Id}";
 
         string userDisplayName = bet.UserName;
         try
@@ -446,10 +446,17 @@ public class DiscordNotificationService : IHostedService
         {
             var client = _httpClientFactory.CreateClient();
 
+            int minutesLeft = bet.MatchStartTime.HasValue
+                ? Math.Max(1, (int)Math.Round((bet.MatchStartTime.Value - DateTime.UtcNow).TotalMinutes))
+                : 60;
+
+            string titleTime = minutesLeft >= 55 ? "1 Hour" : $"{minutesLeft} Min{(minutesLeft == 1 ? "" : "s")}";
+            string descTime = minutesLeft >= 55 ? "1 hour" : $"{minutesLeft} minute{(minutesLeft == 1 ? "" : "s")}";
+
             var embed = new
             {
-                title = "⚠️ Action Required: Match Starts in 1 Hour",
-                description = $"Bet **#{bet.Id}** from **{userDisplayName}** starts in roughly 1 hour. Final review needed!\n\n[Go to Admin Dashboard]({adminUrl})",
+                title = $"⚠️ Action Required: Match Starts in {titleTime}",
+                description = $"Bet **#{bet.Id}** from **{userDisplayName}** starts in roughly {descTime}. Final review needed!\n\n[Go to Admin Dashboard]({adminUrl})",
                 color = 16711680, // Red/High Priority
                 footer = new { text = "BettingApp Admin Bot" },
                 timestamp = DateTime.UtcNow.ToString("o")

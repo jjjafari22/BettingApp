@@ -18,7 +18,19 @@ public class PendingBetsNotificationService : BackgroundService
     private readonly ILogger<PendingBetsNotificationService> _logger;
 
     // Track bets that have already triggered or bypassed the 1-hour alarm
-    private readonly ConcurrentDictionary<int, bool> _oneHourAlarmsSent = new();
+    private static readonly ConcurrentDictionary<int, bool> _oneHourAlarmsSent = new();
+
+    private const double MatchStartWindowMinutes = 60.0;
+    private const double PendingGracePeriodMinutes = 15.0;
+
+    /// <summary>
+    /// Marks a bet as already seen/handled by an admin when it is already within the 1-hour window,
+    /// preventing a redundant Discord wake-up alarm while the admin is actively reviewing it.
+    /// </summary>
+    public static void SuppressAlarmForBet(int betId)
+    {
+        _oneHourAlarmsSent[betId] = true;
+    }
 
     // Flag to track the first run after application startup to prevent restart notification spam
     private bool _isFirstRun = true;
@@ -73,35 +85,52 @@ public class PendingBetsNotificationService : BackgroundService
 
         foreach (var bet in scheduledPendingBets)
         {
-            // Calculate time until match starts
-            var timeUntilStart = bet.MatchStartTime!.Value - now;
-            var minutesUntilStart = timeUntilStart.TotalMinutes;
-
             // Have we already processed this bet for the alarm?
             if (_oneHourAlarmsSent.ContainsKey(bet.Id))
             {
                 continue;
             }
 
-            // Exactly 1 hour window: between 55 and 65 minutes
-            if (minutesUntilStart <= 65 && minutesUntilStart >= 55)
-            {
-                // We mark it as processed
-                _oneHourAlarmsSent[bet.Id] = true;
+            // Calculate time until match starts
+            var timeUntilStart = bet.MatchStartTime!.Value - now;
+            var minutesUntilStart = timeUntilStart.TotalMinutes;
 
-                // Send the alert (but only if it's not the first boot, to prevent spam on server restarts)
-                if (!_isFirstRun)
-                {
-                    await _discordService.SendWakeUpAlarmAsync(bet);
-                }
-            }
-            // 47-minute edge case: Admin clicks lookup and the match is ALREADY less than 55 minutes away.
-            // In this case, we just silently mark it as processed and bypass sending an alert!
-            else if (minutesUntilStart < 55)
+            // If the match has already started, mark it as processed so we don't send a pre-match alarm
+            if (minutesUntilStart <= 0)
             {
                 _oneHourAlarmsSent[bet.Id] = true;
+                continue;
             }
-            // If it's > 65 minutes away, we do nothing. It will be evaluated on future runs.
+
+            // Never alert while an Auto-Approval countdown timer is actively running
+            if (bet.AutoApproveAt != null)
+            {
+                continue;
+            }
+
+            // Only consider bets whose match starts within 60 minutes
+            if (minutesUntilStart > MatchStartWindowMinutes)
+            {
+                continue;
+            }
+
+            // Enforce a 15-minute grace period from when the bet arrived in the Pending queue
+            var pendingSince = bet.ArrivedPendingAt ?? bet.CreatedAt;
+            var minutesInPending = (now - pendingSince).TotalMinutes;
+            if (minutesInPending < PendingGracePeriodMinutes)
+            {
+                continue;
+            }
+
+            // Both conditions are met: match starts in <= 60 minutes AND bet has been pending for >= 15 minutes.
+            // Mark as processed so this alarm only ever triggers ONCE per bet.
+            _oneHourAlarmsSent[bet.Id] = true;
+
+            // Send the alert (but skip on the very first run after app startup to prevent restart notification spam)
+            if (!_isFirstRun)
+            {
+                await _discordService.SendWakeUpAlarmAsync(bet);
+            }
         }
 
         if (_isFirstRun)

@@ -199,6 +199,10 @@ public partial class Admin
                         }
                     }
                     await context.SaveChangesAsync();
+                    if (dbBet.Status == "Pending" && dbBet.MatchStartTime.HasValue && (dbBet.MatchStartTime.Value - DateTime.UtcNow).TotalMinutes <= 60)
+                    {
+                        PendingBetsNotificationService.SuppressAlarmForBet(dbBet.Id);
+                    }
                     if (startTimeChanged)
                     {
                         UiNotifier.NotifyAdmin("PendingUpdate");
