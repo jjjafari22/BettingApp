@@ -402,6 +402,7 @@ namespace BettingApp.Services
                             // Option B: Merged multi-screenshot bets and odds-mismatched bets still fill in FotMob/ESPN leg scores as a visual helper,
                             // but NEVER auto-settle. Leaving NextCheckTime = null stops polling and triggers PendingSettlementReminderService.
                             bool canAutoSettle = !dbBet.HasExtraScreenshots &&
+                                                 AutoApprovalService.TryValidateBetLegsHaveMatchNames(dbBet.Legs, out _) &&
                                                  AutoApprovalService.TryValidateBetLegsOddsConsistency(dbBet.Odds, dbBet.Legs, out _);
                             string? targetStatus = !canAutoSettle
                                 ? null

@@ -197,7 +197,7 @@ public partial class Admin
                         return;
                     }
 
-                    string teamToSearch = leg.Match ?? leg.Selection ?? "";
+                    string teamToSearch = leg.Match ?? "";
                     bool isLive = AiVisionResult?.IsLive ?? false;
 
                     var (apiResult, error) = await OddsApi.SearchOddsComparisonAsync(teamToSearch, runningBetId, isLive, leg.Sport, ct);

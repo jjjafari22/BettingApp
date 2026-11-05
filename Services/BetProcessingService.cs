@@ -72,6 +72,10 @@ namespace BettingApp.Services
                     {
                         return (false, $"Merged multi-screenshot Bet #{betId} requires manual admin processing.", true);
                     }
+                    if (!AutoApprovalService.TryValidateBetLegsHaveMatchNames(dbBet.Legs, out string? autoMatchError))
+                    {
+                        return (false, $"Bet #{betId} requires manual admin processing: {autoMatchError}", true);
+                    }
                     if (!AutoApprovalService.TryValidateBetLegsOddsConsistency(newOdds, dbBet.Legs, out string? autoOddsError))
                     {
                         return (false, $"Bet #{betId} requires manual admin processing: {autoOddsError}", true);

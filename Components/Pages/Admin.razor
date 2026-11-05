@@ -364,7 +364,7 @@ else
                                                 for (int i = 0; i < AiVisionResult!.Legs.Count; i++)
                                                 {
                                                     var leg = AiVisionResult!.Legs[i];
-                                                    string matchName = leg.Match ?? "Unknown Match";
+                                                    string matchName = string.IsNullOrWhiteSpace(leg.Match) ? "Unknown Match" : leg.Match;
                                                     
                                                     bool isSameMatch = currentGroup != null && matchName == currentMatch;
                                                     bool isSameOdds = isSameMatch && (string.IsNullOrEmpty(leg.Odds) || string.IsNullOrEmpty(currentGroupOdds) || leg.Odds == currentGroupOdds);
@@ -388,7 +388,7 @@ else
                                             {
                                                 var firstItem = group.First();
                                                 bool hasActive = group.Any(x => x.Leg == ActiveLookupLeg);
-                                                string groupKey = firstItem.Leg.Match ?? "Unknown Match";
+                                                string groupKey = string.IsNullOrWhiteSpace(firstItem.Leg.Match) ? "Unknown Match" : firstItem.Leg.Match;
                                                 
                                                 <div class="card mb-2 @(hasActive ? "border-primary shadow" : "shadow-sm border-0")">
                                                     <div class="card-header bg-white p-2 d-flex justify-content-between align-items-center border-bottom">
@@ -919,6 +919,13 @@ else
                             {
                                 <div class="alert alert-info py-1 px-2 mb-3 small">
                                     <i class="bi bi-gift-fill me-1"></i> This bet used <strong>@reviewingBetModel.FreeBetAmount.ToString("N0") kr</strong> from Free Bet balance.
+                                </div>
+                            }
+
+                            @if (!BettingApp.Services.AutoApprovalService.TryValidateBetLegsHaveMatchNames(reviewingBetModel.Legs, out string? uiMissingMatchWarning))
+                            {
+                                <div class="alert alert-warning py-1 px-2 mb-2 small">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i> <strong>Missing Match:</strong> @uiMissingMatchWarning
                                 </div>
                             }
 

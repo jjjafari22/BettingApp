@@ -90,6 +90,7 @@ namespace BettingApp.Services
         /// </summary>
         public async Task<string?> GetMatchStatsJsonAsync(string matchName, string sportName, DateTime? betPlacedAt = null, DateTime? betStartsAt = null, int? betId = null)
         {
+            if (string.IsNullOrWhiteSpace(matchName)) return null;
             var mapping = ResolveEspnSportAndLeague(sportName);
             if (!mapping.HasValue)
             {

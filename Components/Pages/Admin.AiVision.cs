@@ -457,6 +457,7 @@ public partial class Admin
 
                                 // --- GATEKEEPER AUTO-SETTLEMENT LOGIC ---
                                 if (isFinished && dbBet.Status == "Approved" && !dbBet.HasExtraScreenshots &&
+                                    BettingApp.Services.AutoApprovalService.TryValidateBetLegsHaveMatchNames(dbBet.Legs, out _) &&
                                     BettingApp.Services.AutoApprovalService.TryValidateBetLegsOddsConsistency(dbBet.Odds, dbBet.Legs, out _))
                                 {
                                     targetAutoSettleStatus = BettingApp.Services.BetSchedulingLogic.DetermineAutoSettleStatus(parsedData.OverallStatus, parsedData.Legs);

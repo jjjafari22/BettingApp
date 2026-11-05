@@ -183,6 +183,50 @@ public partial class AutoApprovalService
         return TryValidateBetLegsOddsConsistency(totalBetOdds, pairs, out mismatchReason);
     }
 
+    public static bool TryValidateBetLegsHaveMatchNames(
+        IReadOnlyList<BetLeg>? legs,
+        out string? missingMatchReason)
+    {
+        missingMatchReason = null;
+        if (legs == null || legs.Count == 0)
+        {
+            return true;
+        }
+
+        for (int i = 0; i < legs.Count; i++)
+        {
+            if (string.IsNullOrWhiteSpace(legs[i]?.Match))
+            {
+                missingMatchReason = $"Leg {i + 1} is missing its match/team name on the screenshot.";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static bool TryValidateBetLegsHaveMatchNames(
+        IReadOnlyList<AiVisionLeg>? legs,
+        out string? missingMatchReason)
+    {
+        missingMatchReason = null;
+        if (legs == null || legs.Count == 0)
+        {
+            return true;
+        }
+
+        for (int i = 0; i < legs.Count; i++)
+        {
+            if (string.IsNullOrWhiteSpace(legs[i]?.Match))
+            {
+                missingMatchReason = $"Leg {i + 1} is missing its match/team name on the screenshot.";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static bool TryValidateBetLegsOddsConsistency(
         decimal totalBetOdds,
         IReadOnlyList<(string? Match, string? Odds)>? legs,

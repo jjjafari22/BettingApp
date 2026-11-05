@@ -54,7 +54,7 @@ public partial class AutoApprovalService
         for (int i = 0; i < aiVision!.Legs.Count; i++)
         {
             var leg = aiVision.Legs[i];
-            string teamToSearch = !string.IsNullOrWhiteSpace(leg.Match) ? leg.Match : (leg.Selection ?? "");
+            string teamToSearch = leg.Match ?? "";
             string cacheKey = $"{leg.Sport ?? ""}||{teamToSearch}";
 
             if (!matchLookupCache.TryGetValue(cacheKey, out var lookup))
@@ -211,6 +211,12 @@ public partial class AutoApprovalService
             {
                 legDecimalOddsList.Add(legOdds);
             }
+        }
+
+        if (!TryValidateBetLegsHaveMatchNames(aiVision.Legs, out string? missingMatchReason))
+        {
+            failureReason = $"❌ {missingMatchReason}";
+            return false;
         }
 
         if (!TryValidateBetLegsOddsConsistency(dbBet.Odds, aiVision.Legs, out string? totalOddsMismatchReason))

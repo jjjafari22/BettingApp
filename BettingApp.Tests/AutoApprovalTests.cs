@@ -259,6 +259,20 @@ namespace BettingApp.Tests
                 new BetLeg { Match = "SønderjyskE vs FC Copenhagen", Odds = "1.56" }
             };
             Assert.False(AutoApprovalService.TryValidateBetLegsOddsConsistency(13.30m, partialBbLegs, out _));
+
+            // 4. Cut-off leg missing its match/team name (Bet #1285 scenario before multi-screenshot merge):
+            //    - TryValidateBetLegsHaveMatchNames flags the missing match name
+            //    - TryValidateBetLegsOddsConsistency STILL validates the product of all legs (2.28 * 1.40 = 3.19) and never bypasses the product check!
+            var missingMatchLegs = new List<BetLeg>
+            {
+                new BetLeg { Match = "AEK Athens vs Real Madrid", Odds = "2.28" },
+                new BetLeg { Match = "", Odds = "1.40" }
+            };
+            Assert.False(AutoApprovalService.TryValidateBetLegsHaveMatchNames(missingMatchLegs, out string? missingMatchReason));
+            Assert.Contains("missing its match/team name", missingMatchReason);
+            Assert.True(AutoApprovalService.TryValidateBetLegsOddsConsistency(3.19m, missingMatchLegs, out _));
+            Assert.False(AutoApprovalService.TryValidateBetLegsOddsConsistency(46.84m, missingMatchLegs, out string? productReason));
+            Assert.Contains("46.84", productReason);
         }
     }
 }

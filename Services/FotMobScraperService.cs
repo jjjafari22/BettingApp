@@ -37,6 +37,7 @@ namespace BettingApp.Services
 
         public async Task<string?> GetMatchStatsJsonAsync(string matchName, DateTime? betPlacedAt = null, int? betId = null, DateTime? legStartTime = null)
         {
+            if (string.IsNullOrWhiteSpace(matchName)) return null;
             try
             {
                 string betLabel = betId.HasValue ? $"[Bet #{betId.Value}]" : "[Test/Manual]";

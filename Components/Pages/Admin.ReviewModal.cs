@@ -586,6 +586,20 @@ public partial class Admin
         bool isFirstApproval = originalStatus == "Pending" || originalStatus == "Processing" || originalStatus == "Rejected" || originalStatus == "Cancelled";
         bool isOddsNewOrModified = willBeStaked && (isFirstApproval || (matchingOriginal != null && bet.Odds != matchingOriginal.Odds));
 
+        if (!isAutoSettled && isFirstApproval && willBeStaked &&
+            !BettingApp.Services.AutoApprovalService.TryValidateBetLegsHaveMatchNames(bet.Legs, out string? missingMatchReason))
+        {
+            bool confirmedMissingMatch = await DialogService.ConfirmAsync(
+                $"⚠️ Missing Match Warning (Bet #{bet.Id})\n\n" +
+                $"{missingMatchReason}\n\n" +
+                $"If this bet spans multiple screenshots, merge them before approving! If you force-approve, Auto-Settle will be disabled for this bet.\n\n" +
+                $"Are you sure you want to proceed?");
+            if (!confirmedMissingMatch)
+            {
+                return;
+            }
+        }
+
         bool allowOddsMismatchOverride = false;
         if (!isAutoSettled && isOddsNewOrModified &&
             !BettingApp.Services.AutoApprovalService.TryValidateBetLegsOddsConsistency(bet.Odds, bet.Legs, out string? oddsMismatchReason))

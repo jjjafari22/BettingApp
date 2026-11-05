@@ -119,6 +119,11 @@ namespace BettingApp.Services
                 if (r.Legs == null) continue;
                 foreach (var leg in r.Legs)
                 {
+                    if (leg == null || (string.IsNullOrWhiteSpace(leg.Market) && string.IsNullOrWhiteSpace(leg.Selection)))
+                    {
+                        continue;
+                    }
+
                     string key = GetLegDeduplicationKey(leg.Match, leg.Market, leg.Selection, leg.Odds);
                     if (!seenLegs.TryGetValue(key, out var existing))
                     {
@@ -139,6 +144,28 @@ namespace BettingApp.Services
                     {
                         existing.StartTime = leg.StartTime;
                     }
+                }
+            }
+
+            // If a leg at the edge of one screenshot had its Match header cut off (Match == ""),
+            // drop it when another screenshot in the merge has the complete leg with the exact same (Market, Selection, Odds) and a valid Match.
+            for (int i = combined.Legs.Count - 1; i >= 0; i--)
+            {
+                var leg = combined.Legs[i];
+                if (!string.IsNullOrWhiteSpace(leg.Match)) continue;
+
+                string matchlessKey = GetLegDeduplicationKey("", leg.Market, leg.Selection, leg.Odds);
+                var completeMatchLeg = combined.Legs.FirstOrDefault(other =>
+                    !string.IsNullOrWhiteSpace(other.Match) &&
+                    GetLegDeduplicationKey("", other.Market, other.Selection, other.Odds) == matchlessKey);
+
+                if (completeMatchLeg != null)
+                {
+                    if ((completeMatchLeg.StartTime == null || completeMatchLeg.StartTime <= DateTime.MinValue) && leg.StartTime > DateTime.MinValue)
+                    {
+                        completeMatchLeg.StartTime = leg.StartTime;
+                    }
+                    combined.Legs.RemoveAt(i);
                 }
             }
 
@@ -497,6 +524,25 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
 
                     if (result != null && result.Legs != null)
                     {
+                        // Drop cropped header-only ghost legs that have neither a Market nor a Selection (e.g. top edge of a scrolled screenshot)
+                        result.Legs.RemoveAll(l => l == null || (string.IsNullOrWhiteSpace(l.Market) && string.IsNullOrWhiteSpace(l.Selection)));
+
+                        foreach (var l in result.Legs)
+                        {
+                            if (string.IsNullOrWhiteSpace(l.Match) ||
+                                l.Match.Trim().Equals("Unknown Match", StringComparison.OrdinalIgnoreCase) ||
+                                l.Match.Trim().Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                            {
+                                l.Match = "";
+                            }
+                            else
+                            {
+                                l.Match = TeamAliasMappingService.NormalizeMatchSeparator(l.Match);
+                            }
+                        }
+
+                        bool anyPrintedMatchHeader = result.Legs.Any(l => !string.IsNullOrWhiteSpace(l.Match));
+
                         // Group contiguous legs that belong to the same Bet Builder (shared odds: subsequent legs have empty Odds).
                         // A leg with its own explicit Odds (like a second leg on a combo slip) starts a new group so it resolves its own match!
                         var legGroups = new List<List<AiVisionLeg>>();
@@ -506,11 +552,6 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                         {
                             var leg = result.Legs[i];
                             if (leg == null) continue;
-
-                            if (!string.IsNullOrWhiteSpace(leg.Match))
-                            {
-                                leg.Match = TeamAliasMappingService.NormalizeMatchSeparator(leg.Match);
-                            }
 
                             bool startNewGroup = currentLegGroup == null
                                 || !string.IsNullOrWhiteSpace(leg.Odds)
@@ -564,11 +605,17 @@ Analyze this betting slip screenshot carefully. Your highest directive is absolu
                         }).ToList();
 
                         var resolvedGroupMatches = await Task.WhenAll(groupResolutionTasks);
-                        string? fallbackSharedMatch = resolvedGroupMatches.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m));
+                        var distinctResolvedMatches = resolvedGroupMatches
+                            .Where(m => !string.IsNullOrWhiteSpace(m))
+                            .Select(m => m!.Trim())
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
 
-                        // Final fallback: If any leg still has no match (e.g. a non-player market like 'Over 2.5 Goals' with its own odds), inherit fallbackSharedMatch
-                        if (!string.IsNullOrEmpty(fallbackSharedMatch))
+                        // Final fallback ONLY when no match headers were printed on the slip at all (single-match player-special Bet Builder):
+                        // Never copy Leg 1's match onto a cut-off leg on a slip that already has printed match headers!
+                        if (!anyPrintedMatchHeader && distinctResolvedMatches.Count == 1)
                         {
+                            string fallbackSharedMatch = distinctResolvedMatches[0];
                             foreach (var leg in result.Legs.Where(l => l != null && string.IsNullOrWhiteSpace(l.Match)))
                             {
                                 leg.Match = fallbackSharedMatch;
@@ -872,6 +919,11 @@ When evaluating matches without API JSON (e.g. European hockey, lower leagues, M
                     foreach (var group in groupedLegs)
                     {
                         string matchName = group.Key ?? "";
+                        if (string.IsNullOrWhiteSpace(matchName))
+                        {
+                            allLegsConfirmedUnstarted = false;
+                            continue;
+                        }
                         string legSport = group.FirstOrDefault()?.Sport ?? "Soccer";
 
                         string? rawJson = null;
