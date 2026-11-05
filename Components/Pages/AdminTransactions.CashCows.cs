@@ -544,7 +544,7 @@ public partial class AdminTransactions
         else
         {
             ccSortColumn = column;
-            ccSortAscending = false;
+            ccSortAscending = column == "Name";
         }
     }
 
@@ -573,7 +573,16 @@ public partial class AdminTransactions
         }
 
         IOrderedEnumerable<CashCow> ordered;
-        if (ccSortColumn == "LifetimeBalance")
+        if (ccSortColumn == "Name")
+        {
+            ordered = ccSortAscending
+                ? query.OrderBy(c => c.FirstName?.Trim() ?? "", CashCowNameComparer)
+                       .ThenBy(c => c.LastName?.Trim() ?? "", CashCowNameComparer)
+                : query.OrderByDescending(c => c.FirstName?.Trim() ?? "", CashCowNameComparer)
+                       .ThenByDescending(c => c.LastName?.Trim() ?? "", CashCowNameComparer);
+            return ordered.ThenBy(c => c.Id, StringComparer.Ordinal);
+        }
+        else if (ccSortColumn == "LifetimeBalance")
         {
             ordered = ccSortAscending ? query.OrderBy(c => c.Balance) : query.OrderByDescending(c => c.Balance);
         }
@@ -588,7 +597,10 @@ public partial class AdminTransactions
                 ? query.OrderBy(c => ccLastUpdated.TryGetValue(c.Id, out var d) ? (d ?? DateTime.MinValue) : DateTime.MinValue)
                 : query.OrderByDescending(c => ccLastUpdated.TryGetValue(c.Id, out var d) ? (d ?? DateTime.MinValue) : DateTime.MinValue);
         }
-        return ordered.ThenBy(c => FormatFullName(c.FirstName, c.LastName), StringComparer.OrdinalIgnoreCase).ThenBy(c => c.Id);
+        return ordered
+            .ThenBy(c => c.FirstName?.Trim() ?? "", CashCowNameComparer)
+            .ThenBy(c => c.LastName?.Trim() ?? "", CashCowNameComparer)
+            .ThenBy(c => c.Id, StringComparer.Ordinal);
     }
 
     private DateTime GetCashCowBaseTime()

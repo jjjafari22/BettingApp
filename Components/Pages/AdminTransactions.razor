@@ -734,7 +734,9 @@ else
                                     <th style="cursor: pointer; user-select: none;" @onclick='() => SortCashCows("LastUpdated")'>
                                         Last Updated @GetSortIcon("LastUpdated")
                                     </th>
-                                    <th>Name</th>
+                                    <th style="cursor: pointer; user-select: none;" @onclick='() => SortCashCows("Name")'>
+                                        Name @GetSortIcon("Name")
+                                    </th>
                                     <th>Contact / Details</th>
                                     <th style="cursor: pointer; user-select: none;" @onclick='() => SortCashCows("LifetimeBalance")'>
                                         Lifetime Balance @GetSortIcon("LifetimeBalance")
