@@ -20,6 +20,7 @@ public partial class AutoApprovalService : BackgroundService
     private readonly OddsApiService _oddsApi;
     private readonly MarketMappingService _marketMapper;
     private readonly UiNotificationService _uiNotifier;
+    private readonly DiscordNotificationService _discord;
     private readonly ILogger<AutoApprovalService> _logger;
 
     private static readonly SemaphoreSlim _wakeSignal = new(0, int.MaxValue);
@@ -31,6 +32,7 @@ public partial class AutoApprovalService : BackgroundService
         OddsApiService oddsApi,
         MarketMappingService marketMapper,
         UiNotificationService uiNotifier,
+        DiscordNotificationService discord,
         ILogger<AutoApprovalService> logger)
     {
         _scopeFactory = scopeFactory;
@@ -38,6 +40,7 @@ public partial class AutoApprovalService : BackgroundService
         _oddsApi = oddsApi;
         _marketMapper = marketMapper;
         _uiNotifier = uiNotifier;
+        _discord = discord;
         _logger = logger;
     }
 
@@ -68,6 +71,16 @@ public partial class AutoApprovalService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"[Bet #{betId}] [Auto-Approve] Error in background initial evaluation.");
+                try
+                {
+                    using var fallbackCtx = _dbFactory.CreateDbContext();
+                    var fallbackBet = await fallbackCtx.Bets.AsNoTracking().FirstOrDefaultAsync(b => b.Id == betId);
+                    if (fallbackBet != null && fallbackBet.Status == "Pending")
+                    {
+                        await _discord.NotifyAdminNewPickAsync(fallbackBet);
+                    }
+                }
+                catch { }
             }
         });
     }
@@ -168,8 +181,14 @@ public partial class AutoApprovalService : BackgroundService
                 .ThenInclude(l => l.BookmakerOdds)
                 .FirstOrDefaultAsync(b => b.Id == betId, ct);
 
-            if (dbBet == null || dbBet.Status != "Pending" || dbBet.HasExtraScreenshots)
+            if (dbBet == null || dbBet.Status != "Pending")
             {
+                return;
+            }
+
+            if (dbBet.HasExtraScreenshots)
+            {
+                await _discord.NotifyAdminNewPickAsync(dbBet);
                 return;
             }
 
@@ -186,8 +205,14 @@ public partial class AutoApprovalService : BackgroundService
                 .ThenInclude(l => l.BookmakerOdds)
                 .FirstOrDefaultAsync(b => b.Id == betId, ct);
 
-            if (freshBet == null || freshBet.Status != "Pending" || freshBet.HasExtraScreenshots)
+            if (freshBet == null || freshBet.Status != "Pending")
             {
+                return;
+            }
+
+            if (freshBet.HasExtraScreenshots)
+            {
+                await _discord.NotifyAdminNewPickAsync(freshBet);
                 return;
             }
 
@@ -211,6 +236,7 @@ public partial class AutoApprovalService : BackgroundService
                 {
                     _uiNotifier.NotifyAdmin("PendingUpdate");
                 }
+                await _discord.NotifyAdminNewPickAsync(freshBet);
                 return;
             }
 
@@ -244,6 +270,7 @@ public partial class AutoApprovalService : BackgroundService
                 else
                 {
                     _logger.LogWarning($"[Bet #{betId}] [Auto-Approve] Immediate approval failed: {procRes.ErrorMessage}");
+                    await _discord.NotifyAdminNewPickAsync(freshBet);
                 }
                 return;
             }
@@ -316,6 +343,7 @@ public partial class AutoApprovalService : BackgroundService
 
                 _logger.LogInformation($"[Bet #{betId}] [Auto-Approve] Cancelled at 0s re-check: {cleanReason}");
                 _uiNotifier.NotifyAdmin("PendingUpdate");
+                await _discord.NotifyAdminNewPickAsync(freshBet);
                 return;
             }
 
@@ -357,6 +385,7 @@ public partial class AutoApprovalService : BackgroundService
                     failBet.AutoApproveReason = $"❌ Cancelled at 0s: {procRes.ErrorMessage}";
                     await failCtx.SaveChangesAsync(ct);
                     _uiNotifier.NotifyAdmin("PendingUpdate");
+                    await _discord.NotifyAdminNewPickAsync(failBet);
                 }
                 _logger.LogWarning($"[Bet #{betId}] [Auto-Approve] ProcessBetAsync failed at 0s: {procRes.ErrorMessage}");
             }

@@ -1028,7 +1028,6 @@ else
 
                                         uiNotifier.NotifyAdmin($"New pick submitted by {displayUserName}");
                                         autoApproval.EnqueuePendingBet(dbBet.Id);
-                                        await discord.NotifyAdminNewPickAsync(dbBet);
                                     }
                                     break;
                                 }

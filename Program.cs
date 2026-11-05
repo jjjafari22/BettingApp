@@ -28,7 +28,38 @@ builder.Services.Configure<Microsoft.AspNetCore.Components.Server.CircuitOptions
 // -----------------------------------------------------
 
 builder.Services.AddMemoryCache();
-builder.Services.AddHttpClient();
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddHttpClient(Microsoft.Extensions.Options.Options.DefaultName).ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler
+    {
+        AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate | System.Net.DecompressionMethods.Brotli,
+        ConnectCallback = async (ctx, ct) =>
+        {
+            var allIps = await System.Net.Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host, ct);
+            var ipv4Ips = allIps.Where(ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).ToArray();
+            var candidateIps = ipv4Ips.Length > 0 ? ipv4Ips : allIps;
+
+            var socket = new System.Net.Sockets.Socket(System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp)
+            {
+                NoDelay = true
+            };
+            try
+            {
+                await socket.ConnectAsync(candidateIps, ctx.DnsEndPoint.Port, ct);
+                return new System.Net.Sockets.NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+    });
+}
+else
+{
+    builder.Services.AddHttpClient();
+}
 builder.Services.AddHealthChecks();
 
 // --- FIX 2: Relax SignalR Timeouts for Mobile Data ---
