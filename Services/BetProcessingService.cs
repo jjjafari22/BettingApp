@@ -36,7 +36,8 @@ namespace BettingApp.Services
             string? customAuditDetails = null,
             bool isAutoSettled = false,
             bool isAutoApproved = false,
-            string? autoApproveReason = null)
+            string? autoApproveReason = null,
+            bool allowOddsMismatchOverride = false)
         {
             const int maxConcurrencyAttempts = 3;
 
@@ -65,9 +66,16 @@ namespace BettingApp.Services
                     return (false, $"Action aborted: Bet #{betId} was already updated to '{dbBet.Status}' by Admin {otherAdminName}.", false);
                 }
 
-                if ((isAutoSettled || isAutoApproved) && dbBet.HasExtraScreenshots)
+                if (isAutoSettled || isAutoApproved)
                 {
-                    return (false, $"Merged multi-screenshot Bet #{betId} requires manual admin processing.", true);
+                    if (dbBet.HasExtraScreenshots)
+                    {
+                        return (false, $"Merged multi-screenshot Bet #{betId} requires manual admin processing.", true);
+                    }
+                    if (!AutoApprovalService.TryValidateBetLegsOddsConsistency(newOdds, dbBet.Legs, out string? autoOddsError))
+                    {
+                        return (false, $"Bet #{betId} requires manual admin processing: {autoOddsError}", true);
+                    }
                 }
 
                 string originalStatus = dbBet.Status;
@@ -100,6 +108,13 @@ namespace BettingApp.Services
                             decimal maxBetAmount = Math.Floor(userLimit / (newOdds - 1m));
                             return (false, $"Net liability exceeds limit ({userLimit:N0} kr). Max bet for {newOdds} odds is {maxBetAmount:N0} kr.", true);
                         }
+                    }
+
+                    bool isOddsNewOrModified = willBeStaked && (isFirstApproval || newOdds != dbBet.Odds);
+                    if (isOddsNewOrModified && !allowOddsMismatchOverride &&
+                        !AutoApprovalService.TryValidateBetLegsOddsConsistency(newOdds, dbBet.Legs, out string? oddsMismatchError))
+                    {
+                        return (false, oddsMismatchError!, true);
                     }
                 }
 

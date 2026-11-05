@@ -582,6 +582,26 @@ public partial class Admin
             }
         }
 
+        bool willBeStaked = newStatus == "Approved" || newStatus == "Won" || newStatus == "Lost";
+        bool isFirstApproval = originalStatus == "Pending" || originalStatus == "Processing" || originalStatus == "Rejected" || originalStatus == "Cancelled";
+        bool isOddsNewOrModified = willBeStaked && (isFirstApproval || (matchingOriginal != null && bet.Odds != matchingOriginal.Odds));
+
+        bool allowOddsMismatchOverride = false;
+        if (!isAutoSettled && isOddsNewOrModified &&
+            !BettingApp.Services.AutoApprovalService.TryValidateBetLegsOddsConsistency(bet.Odds, bet.Legs, out string? oddsMismatchReason))
+        {
+            bool confirmedMismatch = await DialogService.ConfirmAsync(
+                $"⚠️ Odds Mismatch Warning (Bet #{bet.Id})\n\n" +
+                $"{oddsMismatchReason}\n\n" +
+                $"If this bet spans multiple screenshots, merge them before approving! If you force-approve, Auto-Settle will be disabled for this bet.\n\n" +
+                $"Are you sure you want to proceed with {bet.Odds:N2} total odds?");
+            if (!confirmedMismatch)
+            {
+                return;
+            }
+            allowOddsMismatchOverride = true;
+        }
+
         if (showOverlay)
         {
             isSavingBet = true;
@@ -606,7 +626,8 @@ public partial class Admin
             newAmount: (decimal)(bet.AmountNOK ?? 0),
             newOdds: bet.Odds,
             customAuditDetails: customAuditDetails,
-            isAutoSettled: isAutoSettled
+            isAutoSettled: isAutoSettled,
+            allowOddsMismatchOverride: allowOddsMismatchOverride
         );
 
         if (!result.Success)

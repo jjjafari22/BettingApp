@@ -213,19 +213,10 @@ public partial class AutoApprovalService
             }
         }
 
-        if (!isBetBuilder)
+        if (!TryValidateBetLegsOddsConsistency(dbBet.Odds, aiVision.Legs, out string? totalOddsMismatchReason))
         {
-            if (!allLegsHaveValidOdds)
-            {
-                failureReason = $"❌ {legOddsError}";
-                return false;
-            }
-
-            if (!IsTotalOddsConsistentWithLegs(dbBet.Odds, legDecimalOddsList, out string? totalOddsMismatchReason))
-            {
-                failureReason = $"❌ {totalOddsMismatchReason}";
-                return false;
-            }
+            failureReason = $"❌ {totalOddsMismatchReason}";
+            return false;
         }
 
         return true;

@@ -399,9 +399,11 @@ namespace BettingApp.Services
                             dbBet.NextCheckTime = null;
 
                             // --- GATEKEEPER AUTO-SETTLEMENT LOGIC ---
-                            // Option B: Merged multi-screenshot bets still fill in FotMob/ESPN leg scores as a visual helper,
+                            // Option B: Merged multi-screenshot bets and odds-mismatched bets still fill in FotMob/ESPN leg scores as a visual helper,
                             // but NEVER auto-settle. Leaving NextCheckTime = null stops polling and triggers PendingSettlementReminderService.
-                            string? targetStatus = dbBet.HasExtraScreenshots
+                            bool canAutoSettle = !dbBet.HasExtraScreenshots &&
+                                                 AutoApprovalService.TryValidateBetLegsOddsConsistency(dbBet.Odds, dbBet.Legs, out _);
+                            string? targetStatus = !canAutoSettle
                                 ? null
                                 : BetSchedulingLogic.DetermineAutoSettleStatus(parsedData.OverallStatus, parsedData.Legs);
                             

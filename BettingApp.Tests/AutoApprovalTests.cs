@@ -212,8 +212,8 @@ namespace BettingApp.Tests
                 IsBetBuilder = true,
                 Legs = new List<AiVisionLeg>
                 {
-                    // Bet Builders typically have no individual leg odds on the screenshot
-                    new AiVisionLeg { Match = "Arsenal vs Chelsea", Market = "1X2", Selection = "Arsenal", Odds = "" },
+                    // Bet Builders output the shared Bet Builder odds on the first leg and empty on subsequent legs
+                    new AiVisionLeg { Match = "Arsenal vs Chelsea", Market = "1X2", Selection = "Arsenal", Odds = "4.00" },
                     new AiVisionLeg { Match = "Arsenal vs Chelsea", Market = "Over/Under", Selection = "Over 2.5", Odds = "" }
                 }
             };
@@ -230,6 +230,35 @@ namespace BettingApp.Tests
             AutoApprovalService.EvaluateTierWaterfall(betBuilderBet, settings, betBuilderVision, legOdds, allValid, legErr, eval);
             Assert.True(eval.CanAutoApprove);
             Assert.Equal(3, eval.MatchedTier);
+        }
+
+        [Fact]
+        public void TryValidateBetLegsOddsConsistency_HandlesStandardAndBetBuilderCombos()
+        {
+            // 1. Bet #1276 scenario: non-BetBuilder with 1 extracted leg (1.80) but total odds 8.55 -> fails
+            var bet1276Legs = new List<BetLeg>
+            {
+                new BetLeg { Match = "AEK Athens vs Real Madrid", Odds = "1.80" }
+            };
+            Assert.False(AutoApprovalService.TryValidateBetLegsOddsConsistency(8.55m, bet1276Legs, out string? reason1276));
+            Assert.Contains("8.55", reason1276);
+
+            // 2. Bet #1277 scenario: 2-leg Bet Builder (4.75 shared odds) + 1 single leg (1.80) = 8.55 total odds -> passes!
+            var bet1277Legs = new List<BetLeg>
+            {
+                new BetLeg { Match = "RB Leipzig vs Manchester City", Odds = "4.75" },
+                new BetLeg { Match = "RB Leipzig vs Manchester City", Odds = "" },
+                new BetLeg { Match = "AEK Athens vs Real Madrid", Odds = "1.80" }
+            };
+            Assert.True(AutoApprovalService.TryValidateBetLegsOddsConsistency(8.55m, bet1277Legs, out _));
+
+            // 3. Partial screenshot of a Bet Builder combo (only 1.56 BB extracted, but total odds is 13.30) -> fails!
+            var partialBbLegs = new List<BetLeg>
+            {
+                new BetLeg { Match = "SønderjyskE vs FC Copenhagen", Odds = "" },
+                new BetLeg { Match = "SønderjyskE vs FC Copenhagen", Odds = "1.56" }
+            };
+            Assert.False(AutoApprovalService.TryValidateBetLegsOddsConsistency(13.30m, partialBbLegs, out _));
         }
     }
 }

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using BettingApp.Data;
 using BettingApp.Models;
 
 namespace BettingApp.Services;
@@ -142,6 +143,90 @@ public partial class AutoApprovalService
         }
 
         return true;
+    }
+
+    public static bool TryValidateBetLegsOddsConsistency(
+        decimal totalBetOdds,
+        IReadOnlyList<BetLeg>? legs,
+        out string? mismatchReason)
+    {
+        if (legs == null || legs.Count == 0)
+        {
+            mismatchReason = "No legs extracted from the screenshot.";
+            return false;
+        }
+
+        var pairs = new (string? Match, string? Odds)[legs.Count];
+        for (int i = 0; i < legs.Count; i++)
+        {
+            pairs[i] = (legs[i]?.Match, legs[i]?.Odds);
+        }
+        return TryValidateBetLegsOddsConsistency(totalBetOdds, pairs, out mismatchReason);
+    }
+
+    public static bool TryValidateBetLegsOddsConsistency(
+        decimal totalBetOdds,
+        IReadOnlyList<AiVisionLeg>? legs,
+        out string? mismatchReason)
+    {
+        if (legs == null || legs.Count == 0)
+        {
+            mismatchReason = "No legs extracted from the screenshot.";
+            return false;
+        }
+
+        var pairs = new (string? Match, string? Odds)[legs.Count];
+        for (int i = 0; i < legs.Count; i++)
+        {
+            pairs[i] = (legs[i]?.Match, legs[i]?.Odds);
+        }
+        return TryValidateBetLegsOddsConsistency(totalBetOdds, pairs, out mismatchReason);
+    }
+
+    public static bool TryValidateBetLegsOddsConsistency(
+        decimal totalBetOdds,
+        IReadOnlyList<(string? Match, string? Odds)>? legs,
+        out string? mismatchReason)
+    {
+        mismatchReason = null;
+        if (legs == null || legs.Count == 0)
+        {
+            mismatchReason = "No legs extracted from the screenshot.";
+            return false;
+        }
+
+        var presentOdds = new List<decimal>(legs.Count);
+        var matchHasOdds = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        var matchFirstLegIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < legs.Count; i++)
+        {
+            string rawMatch = string.IsNullOrWhiteSpace(legs[i].Match) ? $"__leg_{i}" : legs[i].Match!.Trim();
+            string normMatch = TeamAliasMappingService.NormalizeMatchSeparator(rawMatch);
+
+            if (!matchHasOdds.ContainsKey(normMatch))
+            {
+                matchHasOdds[normMatch] = false;
+                matchFirstLegIndex[normMatch] = i + 1;
+            }
+
+            if (TryParseOddsDecimal(legs[i].Odds, out decimal parsed) && parsed > 1.0m)
+            {
+                presentOdds.Add(parsed);
+                matchHasOdds[normMatch] = true;
+            }
+        }
+
+        foreach (var kvp in matchHasOdds)
+        {
+            if (!kvp.Value)
+            {
+                mismatchReason = $"Leg {matchFirstLegIndex[kvp.Key]} is missing valid individual odds on the screenshot.";
+                return false;
+            }
+        }
+
+        return IsTotalOddsConsistentWithLegs(totalBetOdds, presentOdds, out mismatchReason);
     }
 
     public static EvaluatedLegOdds EvaluateLegOdds(

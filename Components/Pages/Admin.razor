@@ -922,6 +922,13 @@ else
                                 </div>
                             }
 
+                            @if (reviewingBetModel.Odds > 1m && !BettingApp.Services.AutoApprovalService.TryValidateBetLegsOddsConsistency(reviewingBetModel.Odds, reviewingBetModel.Legs, out string? uiOddsMismatchWarning))
+                            {
+                                <div class="alert alert-warning py-1 px-2 mb-3 small">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i> <strong>Odds Mismatch:</strong> @uiOddsMismatchWarning
+                                </div>
+                            }
+
                            @if (reviewingBetModel.Status == "Pending" || reviewingBetModel.Status == "Processing") {
                              
                                <div class="row g-3">
