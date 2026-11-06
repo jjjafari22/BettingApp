@@ -51,12 +51,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!hasFetchedOffset)
+        if (firstRender && !hasFetchedOffset)
         {
+            hasFetchedOffset = true;
             try
             {
                 timezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
-                hasFetchedOffset = true;
             }
             catch { }
         }

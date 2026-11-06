@@ -621,13 +621,16 @@ else
         {
             try
             {
-                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
-                if (!string.IsNullOrEmpty(userId))
+                if (!_isDisposed && CircuitTracker.IsConnected)
+                {
+                    TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+                }
+                if (!_isDisposed && !string.IsNullOrEmpty(userId))
                 {
                     await LoadData();
                 }
             }
-            catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex.Message.Contains("circuit has disconnected") || ex.Message.Contains("disposed"))
+            catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex is InvalidOperationException || ex.Message.Contains("circuit has disconnected") || ex.Message.Contains("disposed") || ex.Message.Contains("no browser renderer"))
             {
                 /* Ignore normal disconnects when user navigates away or closes tab */
             }
@@ -638,9 +641,9 @@ else
             }
             finally
             {
-                if (!_isDisposed)
+                IsLoading = false;
+                if (!_isDisposed && CircuitTracker.IsConnected)
                 {
-                    IsLoading = false;
                     StateHasChanged();
                 }
             }
@@ -649,7 +652,10 @@ else
         if (shouldFocusModal)
         {
             shouldFocusModal = false;
-            try { await viewModalRef.FocusAsync(); } catch { }
+            if (!_isDisposed && CircuitTracker.IsConnected)
+            {
+                try { await viewModalRef.FocusAsync(); } catch { }
+            }
         }
     }
 

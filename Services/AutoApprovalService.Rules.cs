@@ -237,21 +237,24 @@ public partial class AutoApprovalService
         string? legOddsError,
         AutoApprovalEvaluationResult eval)
     {
-        // Universal post-lookup match status checks (Finished / Live)
+        // Universal post-lookup match status checks (Fixture must exist in OddsPapi and not be Finished / disallowed Live)
         for (int i = 0; i < aiVision.Legs.Count; i++)
         {
-            if (!eval.LegResults.TryGetValue(i, out var legEval) || legEval.SearchResult == null)
+            var leg = aiVision.Legs[i];
+            string teamToSearch = !string.IsNullOrWhiteSpace(leg.Match) ? leg.Match : (leg.Selection ?? "");
+
+            if (!eval.LegResults.TryGetValue(i, out var legEval) || legEval.SearchResult == null || string.IsNullOrEmpty(legEval.SearchResult.FixtureId))
             {
-                continue;
+                string err = legEval?.WarningMessage ?? legEval?.ErrorMessage ?? "Match not found in OddsPapi";
+                eval.CanAutoApprove = false;
+                eval.Reason = $"❌ Leg {i + 1} ('{teamToSearch}'): {err}";
+                return;
             }
 
             var apiResult = legEval.SearchResult;
-            if (string.IsNullOrEmpty(apiResult.FixtureId))
-            {
-                continue;
-            }
+            bool isStaleFinished = apiResult.StatusId != 1 && apiResult.StartTime > DateTime.MinValue && apiResult.StartTime < DateTime.UtcNow.AddHours(-4);
 
-            if (apiResult.StatusId == 2)
+            if (apiResult.StatusId == 2 || isStaleFinished)
             {
                 eval.CanAutoApprove = false;
                 eval.Reason = $"❌ Leg {i + 1} ('{apiResult.MatchName}') has already finished.";

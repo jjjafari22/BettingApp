@@ -315,7 +315,10 @@ public partial class Admin
                             reviewingBetModel.AiVisionError = null;
                             AiVisionResult = result;
                             AiVisionError = null;
-                            StateHasChanged();
+                            if (!_isDisposed && CircuitTracker.IsConnected)
+                            {
+                                StateHasChanged();
+                            }
                         }
                     });
                 }
@@ -556,7 +559,10 @@ public partial class Admin
                                 await LoadPendingBets();
                                 await LoadApprovedBets();
                                 await LoadCompletedBets();
-                                StateHasChanged();
+                                if (!_isDisposed && CircuitTracker.IsConnected)
+                                {
+                                    StateHasChanged();
+                                }
                             }
                         }
                     });
@@ -591,7 +597,10 @@ public partial class Admin
                             errBet.AiVisionError = errText;
                             await errContext.SaveChangesAsync();
                         }
-                        StateHasChanged();
+                        if (!_isDisposed && CircuitTracker.IsConnected)
+                        {
+                            StateHasChanged();
+                        }
                     });
                 }
             }
@@ -606,7 +615,10 @@ public partial class Admin
                         {
                             ConfirmingOutcomeBetIds.Remove(capturingBetId);
                             shouldFocusReviewModal = true;
-                            StateHasChanged();
+                            if (!_isDisposed && CircuitTracker.IsConnected)
+                            {
+                                StateHasChanged();
+                            }
                         });
                     }
                 }

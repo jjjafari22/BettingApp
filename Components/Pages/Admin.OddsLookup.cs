@@ -202,7 +202,7 @@ public partial class Admin
 
                     var (apiResult, error) = await OddsApi.SearchOddsComparisonAsync(teamToSearch, runningBetId, isLive, leg.Sport, ct);
 
-                    if (ct.IsCancellationRequested || reviewingBetModel == null || reviewingBetModel.Id != runningBetId)
+                    if (_isDisposed || ct.IsCancellationRequested || reviewingBetModel == null || reviewingBetModel.Id != runningBetId)
                     {
                         return;
                     }
@@ -212,27 +212,34 @@ public partial class Admin
 
                     await InvokeAsync(() =>
                     {
-                        if (ct.IsCancellationRequested || reviewingBetModel == null || reviewingBetModel.Id != runningBetId)
+                        if (_isDisposed || ct.IsCancellationRequested || reviewingBetModel == null || reviewingBetModel.Id != runningBetId)
                         {
                             return;
                         }
 
                         LegOddsCache[i] = legResult;
                         CheckedLegsCount++;
-                        StateHasChanged();
+                        if (CircuitTracker.IsConnected)
+                        {
+                            StateHasChanged();
+                        }
                     });
                 }).ToList();
 
                 await Task.WhenAll(tasks);
 
-                if (!ct.IsCancellationRequested && reviewingBetModel != null && reviewingBetModel.Id == runningBetId)
+                if (!_isDisposed && !ct.IsCancellationRequested && reviewingBetModel != null && reviewingBetModel.Id == runningBetId)
                 {
                     await InvokeAsync(() =>
                     {
+                        if (_isDisposed) return;
                         IsCheckingAllOdds = false;
                         SaveAiVisionResultToDatabase();
-                        StateHasChanged();
-                        try { _ = reviewModalRef.FocusAsync(); } catch { }
+                        if (CircuitTracker.IsConnected)
+                        {
+                            StateHasChanged();
+                            try { _ = reviewModalRef.FocusAsync(); } catch { }
+                        }
                     });
                 }
             }
@@ -249,10 +256,13 @@ public partial class Admin
                     {
                         await InvokeAsync(() =>
                         {
-                            if (reviewingBetModel?.Id == runningBetId)
+                            if (!_isDisposed && reviewingBetModel?.Id == runningBetId)
                             {
                                 IsCheckingAllOdds = false;
-                                StateHasChanged();
+                                if (CircuitTracker.IsConnected)
+                                {
+                                    StateHasChanged();
+                                }
                             }
                         });
                     }

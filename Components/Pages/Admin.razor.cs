@@ -180,96 +180,93 @@ public partial class Admin
         if (firstRender)
         {
             CircuitTracker.OnConnectionRestored += HandleConnectionRestored;
+            UiNotifier.OnAdminNotification += HandleAdminNotification;
 
-            try
+            int tickCount = 0;
+            uiRefreshTimer = new System.Timers.Timer(1000); // 1 second for live auto-approval countdowns
+            uiRefreshTimer.Elapsed += async (s, e) =>
             {
-                var value = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "openInNativeApp");
-                if (!string.IsNullOrEmpty(value)) openInNativeApp = value == "true";
-
-                var pkg = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "unibetPwaPackageName");
-                if (!string.IsNullOrEmpty(pkg)) unibetPwaPackageName = pkg;
-
-                var pkgPin = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "pinnaclePwaPackageName");
-                if (!string.IsNullOrEmpty(pkgPin)) pinnaclePwaPackageName = pkgPin;
-
-                var pkgBetsson = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "betssonPwaPackageName");
-                if (!string.IsNullOrEmpty(pkgBetsson)) betssonPwaPackageName = pkgBetsson;
-
-                var pkgBet365 = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "bet365PwaPackageName");
-                if (!string.IsNullOrEmpty(pkgBet365)) bet365PwaPackageName = pkgBet365;
-
-                var pkgCoolbet = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "coolbetPwaPackageName");
-                if (!string.IsNullOrEmpty(pkgCoolbet)) coolbetPwaPackageName = pkgCoolbet;
-
-                
-                var ua = await JSRuntime.InvokeAsync<string>("eval", "navigator.userAgent");
-                var uaLower = ua.ToLowerInvariant();
-                isDesktop = !uaLower.Contains("mobi") && !uaLower.Contains("android") && !uaLower.Contains("iphone");
-                isAndroid = uaLower.Contains("android");
-            }
-            catch { }
-
-            try
-            {
-                TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
-                
-                int tickCount = 0;
-                uiRefreshTimer = new System.Timers.Timer(1000); // 1 second for live auto-approval countdowns
-                uiRefreshTimer.Elapsed += async (s, e) =>
+                if (_isDisposed || !CircuitTracker.IsConnected)
                 {
-                    if (_isDisposed || !CircuitTracker.IsConnected)
-                    {
-                        return;
-                    }
+                    return;
+                }
 
-                    if (System.Threading.Interlocked.CompareExchange(ref _isTimerTickInFlight, 1, 0) != 0)
-                    {
-                        return;
-                    }
+                if (System.Threading.Interlocked.CompareExchange(ref _isTimerTickInFlight, 1, 0) != 0)
+                {
+                    return;
+                }
 
-                    try
+                try
+                {
+                    tickCount++;
+                    bool hasActiveCountdown = (reviewingBetModel?.Status == "Pending" && reviewingBetModel?.AutoApproveAt != null) ||
+                                              (pendingBets != null && pendingBets.Any(b => b.Status == "Pending" && b.AutoApproveAt != null));
+                    if (!_isDisposed && CircuitTracker.IsConnected && (hasActiveCountdown || tickCount % 15 == 0))
                     {
-                        tickCount++;
-                        bool hasActiveCountdown = (reviewingBetModel?.Status == "Pending" && reviewingBetModel?.AutoApproveAt != null) ||
-                                                  (pendingBets != null && pendingBets.Any(b => b.Status == "Pending" && b.AutoApproveAt != null));
-                        if (!_isDisposed && CircuitTracker.IsConnected && (hasActiveCountdown || tickCount % 15 == 0))
+                        await InvokeAsync(() =>
                         {
-                            await InvokeAsync(() =>
+                            if (!_isDisposed && CircuitTracker.IsConnected)
                             {
-                                if (!_isDisposed && CircuitTracker.IsConnected)
-                                {
-                                    StateHasChanged();
-                                }
-                            });
-                        }
+                                StateHasChanged();
+                            }
+                        });
                     }
-                    catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex is ObjectDisposedException || ex is InvalidOperationException)
-                    {
-                        // Circuit disconnected or disposed mid-tick; safe to ignore
-                    }
-                    catch { }
-                    finally
-                    {
-                        System.Threading.Interlocked.Exchange(ref _isTimerTickInFlight, 0);
-                    }
-                };
-                uiRefreshTimer.Start();
-                
-                if (!_isDisposed && CircuitTracker.IsConnected)
+                }
+                catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex is ObjectDisposedException || ex is InvalidOperationException)
                 {
-                    StateHasChanged();
+                    // Circuit disconnected or disposed mid-tick; safe to ignore
+                }
+                catch { }
+                finally
+                {
+                    System.Threading.Interlocked.Exchange(ref _isTimerTickInFlight, 0);
+                }
+            };
+            uiRefreshTimer.Start();
+
+            if (!_isDisposed && CircuitTracker.IsConnected)
+            {
+                try
+                {
+                    var value = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "openInNativeApp");
+                    if (!string.IsNullOrEmpty(value)) openInNativeApp = value == "true";
+
+                    var pkg = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "unibetPwaPackageName");
+                    if (!string.IsNullOrEmpty(pkg)) unibetPwaPackageName = pkg;
+
+                    var pkgPin = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "pinnaclePwaPackageName");
+                    if (!string.IsNullOrEmpty(pkgPin)) pinnaclePwaPackageName = pkgPin;
+
+                    var pkgBetsson = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "betssonPwaPackageName");
+                    if (!string.IsNullOrEmpty(pkgBetsson)) betssonPwaPackageName = pkgBetsson;
+
+                    var pkgBet365 = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "bet365PwaPackageName");
+                    if (!string.IsNullOrEmpty(pkgBet365)) bet365PwaPackageName = pkgBet365;
+
+                    var pkgCoolbet = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "coolbetPwaPackageName");
+                    if (!string.IsNullOrEmpty(pkgCoolbet)) coolbetPwaPackageName = pkgCoolbet;
+
+                    var ua = await JSRuntime.InvokeAsync<string>("eval", "navigator.userAgent");
+                    var uaLower = ua.ToLowerInvariant();
+                    isDesktop = !uaLower.Contains("mobi") && !uaLower.Contains("android") && !uaLower.Contains("iphone");
+                    isAndroid = uaLower.Contains("android");
+
+                    TimezoneOffset = await JSRuntime.InvokeAsync<int>("getBrowserTimeZoneOffset");
+
+                    if (!_isDisposed && CircuitTracker.IsConnected)
+                    {
+                        StateHasChanged();
+                    }
+                }
+                catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex is InvalidOperationException || ex.Message.Contains("circuit has disconnected") || ex.Message.Contains("disposed") || ex.Message.Contains("no browser renderer"))
+                {
+                    /* Ignore normal disconnects when user navigates away or closes tab */
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Could not fetch timezone offset");
                 }
             }
-            catch (Exception ex) when (ex is TaskCanceledException || ex is JSDisconnectedException || ex.Message.Contains("circuit has disconnected") || ex.Message.Contains("disposed"))
-            {
-                /* Ignore normal disconnects when user navigates away or closes tab */
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "Could not fetch timezone offset");
-            }
-
-            UiNotifier.OnAdminNotification += HandleAdminNotification;
         }
         if (shouldFocusReviewModal)
         {

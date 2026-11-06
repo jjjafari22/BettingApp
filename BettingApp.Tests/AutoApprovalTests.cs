@@ -150,7 +150,7 @@ namespace BettingApp.Tests
         }
 
         [Fact]
-        public void TierWaterfall_NoBookmakerOddsAtAll_ApprovesViaTier3WhenStakeWithin200Kr()
+        public void TierWaterfall_NoBookmakerOddsAtAll_ApprovesViaTier3OnlyWhenFixtureVerifiedInOddsPapi()
         {
             var settings = new SystemSetting
             {
@@ -172,24 +172,42 @@ namespace BettingApp.Tests
             {
                 Legs = new List<AiVisionLeg>
                 {
-                    new AiVisionLeg { Match = "Obscure Match", Market = "Player Special", Selection = "Player X", Odds = "3.50" }
+                    new AiVisionLeg { Match = "Arsenal vs Chelsea", Market = "Player Special", Selection = "Player X", Odds = "3.50" }
                 }
             };
 
             Assert.True(AutoApprovalService.ValidatePreLookupGuardrails(bet, user, settings, vision, out var legOdds, out bool allValid, out string? legErr, out _));
 
-            // Match not even found in OddsPapi
-            var eval = new AutoApprovalService.AutoApprovalEvaluationResult();
-            eval.LegResults[0] = new AutoApprovalService.EvaluatedLegOdds
+            // 1. Match not found in OddsPapi (e.g. NBA or old finished match) -> Rejected even in Tier 3!
+            var unverifiedEval = new AutoApprovalService.AutoApprovalEvaluationResult();
+            unverifiedEval.LegResults[0] = new AutoApprovalService.EvaluatedLegOdds
             {
                 ErrorMessage = "No OddsPapi matches found."
             };
 
-            AutoApprovalService.EvaluateTierWaterfall(bet, settings, vision, legOdds, allValid, legErr, eval);
+            AutoApprovalService.EvaluateTierWaterfall(bet, settings, vision, legOdds, allValid, legErr, unverifiedEval);
+            Assert.False(unverifiedEval.CanAutoApprove);
+            Assert.Contains("No OddsPapi matches found", unverifiedEval.Reason);
 
-            Assert.True(eval.CanAutoApprove);
-            Assert.Equal(3, eval.MatchedTier);
-            Assert.Equal("Tier 3: Small Stake", eval.MatchedTierName);
+            // 2. Match fixture verified in OddsPapi as upcoming, even when market has no bookmaker odds -> Approved via Tier 3!
+            var verifiedEval = new AutoApprovalService.AutoApprovalEvaluationResult();
+            verifiedEval.LegResults[0] = new AutoApprovalService.EvaluatedLegOdds
+            {
+                SearchResult = new OddsPapiSearchResult
+                {
+                    FixtureId = "fix2",
+                    MatchName = "Arsenal vs Chelsea",
+                    StatusId = 0,
+                    StartTime = DateTime.UtcNow.AddHours(2)
+                },
+                ErrorMessage = "Market not found in OddsPapi."
+            };
+
+            AutoApprovalService.EvaluateTierWaterfall(bet, settings, vision, legOdds, allValid, legErr, verifiedEval);
+
+            Assert.True(verifiedEval.CanAutoApprove);
+            Assert.Equal(3, verifiedEval.MatchedTier);
+            Assert.Equal("Tier 3: Small Stake", verifiedEval.MatchedTierName);
         }
 
         [Fact]
@@ -222,11 +240,22 @@ namespace BettingApp.Tests
             Assert.False(AutoApprovalService.ValidatePreLookupGuardrails(betBuilderBet, user, settings, betBuilderVision, out _, out _, out _, out string? failReason));
             Assert.Contains("Bet Builder", failReason);
 
-            // 2. Allowed via Tier 3 when AutoApprovalAllowBetBuilders == true and stake <= 200 kr
+            // 2. Allowed via Tier 3 when AutoApprovalAllowBetBuilders == true, fixture is verified, and stake <= 200 kr
             settings.AutoApprovalAllowBetBuilders = true;
             Assert.True(AutoApprovalService.ValidatePreLookupGuardrails(betBuilderBet, user, settings, betBuilderVision, out var legOdds, out bool allValid, out string? legErr, out _));
 
+            var verifiedFixture = new OddsPapiSearchResult
+            {
+                FixtureId = "fix3",
+                MatchName = "Arsenal vs Chelsea",
+                StatusId = 0,
+                StartTime = DateTime.UtcNow.AddHours(2)
+            };
+
             var eval = new AutoApprovalService.AutoApprovalEvaluationResult();
+            eval.LegResults[0] = new AutoApprovalService.EvaluatedLegOdds { SearchResult = verifiedFixture };
+            eval.LegResults[1] = new AutoApprovalService.EvaluatedLegOdds { SearchResult = verifiedFixture };
+
             AutoApprovalService.EvaluateTierWaterfall(betBuilderBet, settings, betBuilderVision, legOdds, allValid, legErr, eval);
             Assert.True(eval.CanAutoApprove);
             Assert.Equal(3, eval.MatchedTier);
