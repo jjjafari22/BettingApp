@@ -31,6 +31,7 @@ public partial class Admin
         public string? HighlightedOutcome { get; set; }
         public DateTime? LookedUpAt { get; set; }
         public Dictionary<string, BettingApp.Models.OddsData> MatchedBookieOdds { get; set; } = new();
+        public Dictionary<string, (BettingApp.Models.OddsData Data, string LineLabel)> ClosestBookieOdds { get; set; } = new();
     }
 
     // --- Odds Lookup & Deep Link State ---
@@ -49,6 +50,7 @@ public partial class Admin
     private string? OddsLookupErrorMessage = null;
     private string? OddsLookupWarningMessage = null;
     private string? ManualMatchedOutcome = null;
+    private string? ManualClosestOutcome = null;
 
     private bool openInNativeApp = false;
     private bool isDesktop = false;
@@ -395,20 +397,52 @@ public partial class Admin
                     }
                 }
 
+                var targets = new[] { "pinnacle+30", "unibet.se", "coolbet", "bet365", "betsson" };
                 if (!string.IsNullOrEmpty(bestOutcome))
                 {
-                    var targets = new[] { "pinnacle+30", "unibet.se", "coolbet", "bet365", "betsson" };
                     foreach (var tb in targets)
                     {
                         if (bookiesDict.TryGetValue(tb, out var bData) && bData.TryGetValue(bestOutcome, out var pd))
                         {
                             resultData.MatchedBookieOdds[tb] = pd;
+                            if (pd.IsSuspended &&
+                                BettingApp.Services.OddsMatchingLogic.TryFindClosestOutcomeForBookie(
+                                    bestMatch, bData, ctx, out _, out var activeClosestPd, out var activeLineLabel, requireActive: true, excludeOutcome: bestOutcome))
+                            {
+                                resultData.ClosestBookieOdds[tb] = (activeClosestPd, activeLineLabel);
+                            }
+                        }
+                        else if (bookiesDict.TryGetValue(tb, out var bDataForClosest) &&
+                                 BettingApp.Services.OddsMatchingLogic.TryFindClosestOutcomeForBookie(
+                                     bestMatch, bDataForClosest, ctx, out _, out var closestPd, out var lineLabel))
+                        {
+                            resultData.ClosestBookieOdds[tb] = (closestPd, lineLabel);
                         }
                     }
                 }
-                else if (string.IsNullOrEmpty(resultData.WarningMessage))
+                else
                 {
-                    resultData.WarningMessage = $"OddsPapi doesn't offer selection '{leg.Selection}' for '{bestMatch.MarketName}'.";
+                    foreach (var tb in targets)
+                    {
+                        if (bookiesDict.TryGetValue(tb, out var bDataForClosest) &&
+                            BettingApp.Services.OddsMatchingLogic.TryFindClosestOutcomeForBookie(
+                                bestMatch, bDataForClosest, ctx, out _, out var closestPd, out var lineLabel))
+                        {
+                            resultData.ClosestBookieOdds[tb] = (closestPd, lineLabel);
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(resultData.WarningMessage))
+                    {
+                        if (resultData.ClosestBookieOdds.Count > 0)
+                        {
+                            resultData.WarningMessage = $"Exact line '{leg.Selection}' not offered; showing each bookmaker's closest line below.";
+                        }
+                        else
+                        {
+                            resultData.WarningMessage = $"OddsPapi doesn't offer selection '{leg.Selection}' for '{bestMatch.MarketName}'.";
+                        }
+                    }
                 }
             }
         }
@@ -751,6 +785,7 @@ public partial class Admin
     private void UpdateManualMatchedOutcome()
     {
         ManualMatchedOutcome = null;
+        ManualClosestOutcome = null;
         if (string.IsNullOrEmpty(SelectedPapiMarketId) || PapiSearchResult == null || ActiveLookupLeg == null) return;
         var selectedMarket = PapiSearchResult.Markets.FirstOrDefault(m => m.MarketId == SelectedPapiMarketId);
         if (selectedMarket == null) return;
@@ -769,6 +804,28 @@ public partial class Admin
             {
                 ManualMatchedOutcome = oName;
                 break;
+            }
+        }
+
+        if (ManualMatchedOutcome == null &&
+            PapiSearchResult.BookmakerOdds.TryGetValue(selectedMarket.MarketId, out var bookiesDict))
+        {
+            var combinedOutcomes = new Dictionary<string, BettingApp.Models.OddsData>();
+            foreach (var bDict in bookiesDict.Values)
+            {
+                foreach (var kvp in bDict)
+                {
+                    if (!combinedOutcomes.TryGetValue(kvp.Key, out var existing) || (existing.IsSuspended && !kvp.Value.IsSuspended))
+                    {
+                        combinedOutcomes[kvp.Key] = kvp.Value;
+                    }
+                }
+            }
+
+            if (BettingApp.Services.OddsMatchingLogic.TryFindClosestOutcomeForBookie(
+                selectedMarket, combinedOutcomes, ctx, out var closestKey, out _, out _))
+            {
+                ManualClosestOutcome = closestKey;
             }
         }
     }

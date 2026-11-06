@@ -55,6 +55,11 @@ namespace BettingApp.Services
         {
             if (string.IsNullOrEmpty(text)) return "";
             string s = text;
+            s = Regex.Replace(
+                s,
+                @"\b3\s*-\s*point(?:er)?s?(?:\s+fg|\s+field\s+goals?|\s+made)?\b|\b3\s+pointers?(?:\s+fg|\s+field\s+goals?|\s+made)?\b|\b3\s+point(?:\s+fg|\s+field\s+goals?|\s+made|\s+shots?)?\b|\b3\s*(?:pt|fg)s?(?:\s+fg|\s+made)?\b",
+                "threepoint",
+                RegexOptions.IgnoreCase);
             s = Regex.Replace(s, @"\b(?:a\s+)?hat(?:\s*-\s*|\s+)?trick\b", "3 or more", RegexOptions.IgnoreCase);
             s = Regex.Replace(s, @"\b(?:a\s+)?brace\b", "2 or more", RegexOptions.IgnoreCase);
             s = Regex.Replace(s, @"\b(at\s+least\s+)one(?!\s+half)\b", "${1}1", RegexOptions.IgnoreCase);
@@ -370,7 +375,7 @@ namespace BettingApp.Services
                 string fullLegText = $"{normLineMkt} {normLineSel}";
                 HasHigherLineReq = Regex.IsMatch(
                     fullLegText,
-                    @"(?:\bat\s+least\s+([2-9]|\d{2,})\b|\b([2-9]|\d{2,})\s*(?:\+(?!\d)|or\s+more\b|\s*(?:points?|goals?|assists?|shots?|saves?|cards?|tackles?|fouls?|games?|sets?|aces?|faults?|breaks?)\b)|\bover\s*(?:0\.[6-9]|[1-9]|\d{2,}|[1-9]\.\d+)\b)",
+                    @"(?:\bat\s+least\s+([2-9]|\d{2,})\b|\b([2-9]|\d{2,})\s*(?:\+(?!\d)|or\s+more\b|\s*(?:points?|pts|rebounds?|rebs?|assists?|asts?|steals?|stls?|blocks?|blks?|turnovers?|tovs?|threes?|threepoint|goals?|shots?|saves?|cards?|tackles?|fouls?|games?|sets?|aces?|faults?|breaks?)\b)|\bover\s*(?:0\.[6-9]|[1-9]|\d{2,}|[1-9]\.\d+)\b)",
                     RegexOptions.IgnoreCase);
 
                 // Target Line: prefer Selection line over Market line
@@ -401,7 +406,7 @@ namespace BettingApp.Services
                 {
                     var fallbackLineMatch = Regex.Match(
                         $"{normLineSel} {normLineMkt}",
-                        @"(?:\b(?:total\s+(?:goals?|games?|sets?|aces?|double\s+faults?|breaks?)|total|goals?|games?|sets?|aces?|faults?|breaks?|mål|mal|o\/u|line)\s*(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:goals?|games?|sets?|aces?|faults?|breaks?|mål|mal)\b|(?<![+-])\b(\d+\.\d+)\b)",
+                        @"(?:\b(?:total\s+(?:points?|rebounds?|assists?|steals?|blocks?|turnovers?|threes?|threepoint|goals?|games?|sets?|aces?|double\s+faults?|breaks?)|total|points?|rebounds?|assists?|steals?|blocks?|turnovers?|threes?|threepoint|goals?|games?|sets?|aces?|faults?|breaks?|mål|mal|o\/u|line)\s*(\d+(?:\.\d+)?)\b|\b(\d+(?:\.\d+)?)\s*(?:points?|pts|rebounds?|rebs?|assists?|asts?|steals?|stls?|blocks?|blks?|turnovers?|tovs?|threes?|threepoint|goals?|games?|sets?|aces?|faults?|breaks?|mål|mal)\b|(?<![+-])\b(\d+\.\d+)\b)",
                         RegexOptions.IgnoreCase);
 
                     if (fallbackLineMatch.Success)

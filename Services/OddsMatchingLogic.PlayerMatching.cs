@@ -111,7 +111,7 @@ namespace BettingApp.Services
             string normSel = TeamAliasMappingService.RemoveDiacritics(sel).ToLowerInvariant();
             string cleanFirst = TeamAliasMappingService.RemoveDiacritics(firstNameFromOdds).ToLowerInvariant().Replace(".", "").Replace(" ", "").Replace("-", "");
 
-            string cleanSel = Regex.Replace(normSel, @"\b(over|under|yes|no|total|points?|goals?|assists?|shots?|saves?)\b", " ");
+            string cleanSel = Regex.Replace(normSel, @"\b(over|under|yes|no|total|points?|pts|rebounds?|rebs?|assists?|asts?|steals?|stls?|blocks?|blks?|turnovers?|tovs?|threes?|threepoint|pointers?|pointer|fg|double|triple|pra|stocks|quarter|quarters|qtr|goals?|shots?|saves?)\b", " ");
             cleanSel = Regex.Replace(cleanSel, @"\d+(?:\.\d+)?", " ");
             cleanSel = Regex.Replace(cleanSel, @"[.+\-/:()"",]", " ");
 
@@ -241,9 +241,15 @@ namespace BettingApp.Services
                 "player", "players", "shots", "shot", "target", "score", "scorer", "scoring",
                 "anytime", "goalscorer", "goal", "goals", "mal",
                 "fouls", "foul", "committed", "suffered", "won", "drawn", "fouled", "win",
-                "assists", "assist", "give", "provide",
+                "assists", "assist", "asts", "ast", "give", "provide",
                 "cards", "card", "booked", "carded", "booking", "bookings", "shown", "receive", "yellow", "red",
-                "points", "point", "pts", "ppp",
+                "points", "point", "pts", "ppp", "pra", "stocks",
+                "rebounds", "rebound", "rebs", "reb",
+                "steals", "steal", "stls", "stl",
+                "blocks", "block", "blks", "blk", "blocked",
+                "turnovers", "turnover", "tovs", "tov",
+                "threes", "three", "threepoint", "pointer", "pointers", "fg", "field", "made",
+                "double", "triple", "basket", "quarter", "quarters", "qtr", "third", "fourth",
                 "saves", "save", "goalkeeper", "keeper",
                 "tackles", "tackle", "offsides", "offside", "passes", "pass",
                 "make", "have", "get", "record", "hit",

@@ -426,7 +426,7 @@ namespace BettingApp.Services
             if (legTeam != 0 &&
                 !normOp.Contains("participant1") && !normOp.Contains("participant2") &&
                 !normOp.Contains("team1") && !normOp.Contains("team2") &&
-                (normOp == "totalgamesoverunder" || normOp == "totalaces" || normOp == "totaldoublefaults" ||
+                (normOp == "overunder(incl.overtime)" || normOp == "totalgamesoverunder" || normOp == "totalaces" || normOp == "totaldoublefaults" ||
                  normOp == "totalbreaks" || normOp == "totalbreakpoints" || normOp == "totalservicegames"))
             {
                 return false;
@@ -448,7 +448,7 @@ namespace BettingApp.Services
             string selRemaining = ctx.NormSelRaw ?? "";
             selRemaining = Regex.Replace(
                 selRemaining,
-                @"\b(?:over|under|o\/u|yes|no|ja|nei|goals?|mål|mal|scoringer|points?|poeng|pts|cards?|kort|corners?|hjørnespark|hjornespark|shots?|skudd|saves?|redninger|tackles?|taklinger|fouls?|frispark|runs?|games?|sets?|aces?|double\s+faults?|faults?|breaks?|service|tie\s*breaks?|tiebreaks?|innings?|frames?|power\s*sub|super\s*sub|total|totalt|antall|full\s*time|ft|regular\s*time|incl|overtime|penalties|ot|at\s+least|or\s+more|1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth|match|player\s*[12]|participant\s*[12]|won|number|of|in)\b",
+                @"\b(?:over|under|o\/u|yes|no|ja|nei|goals?|mål|mal|scoringer|points?|poeng|pts|rebounds?|rebs?|assists?|asts?|steals?|stls?|blocks?|blks?|turnovers?|tovs?|threes?|threepoint|3\s*(?:-\s*|\s+)?point(?:er)?s?|3pt|fg|pra|stocks|cards?|kort|corners?|hjørnespark|hjornespark|shots?|skudd|saves?|redninger|tackles?|taklinger|fouls?|frispark|runs?|games?|sets?|aces?|double\s+faults?|faults?|breaks?|service|tie\s*breaks?|tiebreaks?|innings?|frames?|power\s*sub|super\s*sub|total|totalt|antall|full\s*time|ft|regular\s*time|incl|including|overtime|penalties|ot|at\s+least|or\s+more|1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth|quarter|quarters|qtr|q[1-4]|1h|2h|spread|match|player\s*[12]|participant\s*[12]|won|number|of|in)\b",
                 " ",
                 RegexOptions.IgnoreCase);
             selRemaining = Regex.Replace(selRemaining, @"\d+(?:\.\d+)?", " ");
@@ -712,6 +712,200 @@ namespace BettingApp.Services
             }
 
             return false;
+        }
+
+        public static bool TryFindClosestOutcomeForBookie(
+            OddsPapiMarket market,
+            Dictionary<string, OddsData> bookieOutcomes,
+            OutcomeMatchingContext ctx,
+            out string closestOutcomeKey,
+            out OddsData closestOddsData,
+            out string lineLabel,
+            bool requireActive = false,
+            string? excludeOutcome = null)
+        {
+            closestOutcomeKey = "";
+            closestOddsData = new OddsData();
+            lineLabel = "";
+
+            if (market == null || bookieOutcomes == null || bookieOutcomes.Count == 0 || ctx == null || ctx.Leg == null)
+            {
+                return false;
+            }
+
+            double? expectedHc = ctx.AiHc ?? (ctx.HasSelHc ? ctx.SelHcVal : null);
+            bool isThreeWayHc = (ctx.OpMarketName?.Contains("3-Way", StringComparison.OrdinalIgnoreCase) ?? false) ||
+                                (ctx.Leg.Market?.Contains("3-Way", StringComparison.OrdinalIgnoreCase) ?? false) ||
+                                (ctx.Leg.Market?.Contains("3 Way", StringComparison.OrdinalIgnoreCase) ?? false);
+            bool isHandicap = !isThreeWayHc && expectedHc.HasValue && (ctx.AiTarget == "1" || ctx.AiTarget == "2");
+
+            // 1. Handicap / Point Spread closest line (e.g. "+4.5" when exact "+3.5" is not offered by this bookmaker)
+            if (isHandicap)
+            {
+                double targetHc = expectedHc!.Value;
+                double bestDiff = double.MaxValue;
+                bool bestIsActive = false;
+
+                foreach (var kvp in bookieOutcomes)
+                {
+                    if (!string.IsNullOrEmpty(excludeOutcome) && kvp.Key == excludeOutcome) continue;
+                    if (kvp.Value.Price <= 1.0) continue;
+                    if (requireActive && kvp.Value.IsSuspended) continue;
+
+                    string displayOName = market.OutcomeNames.TryGetValue(kvp.Key, out var d) ? d : kvp.Key;
+                    var m = Regex.Match(displayOName.Trim(), @"^([12xX])\s*\(([^)]+)\)$");
+                    if (!m.Success) continue;
+
+                    string opTeam = m.Groups[1].Value.ToUpperInvariant();
+                    if (opTeam != ctx.AiTarget) continue;
+
+                    if (!TryParseOddsPapiHandicap(opTeam, m.Groups[2].Value.Trim(), out double opHc)) continue;
+
+                    double diff = Math.Abs(opHc - targetHc);
+                    if (diff > 15.0) continue;
+
+                    bool isActive = !kvp.Value.IsSuspended;
+                    if (string.IsNullOrEmpty(closestOutcomeKey) ||
+                        (isActive && !bestIsActive) ||
+                        (isActive == bestIsActive && diff < bestDiff - 0.0001))
+                    {
+                        bestIsActive = isActive;
+                        bestDiff = diff;
+                        closestOutcomeKey = kvp.Key;
+                        closestOddsData = kvp.Value;
+                        string hcFormatted = opHc > 0
+                            ? $"+{opHc.ToString("0.##", CultureInfo.InvariantCulture)}"
+                            : opHc.ToString("0.##", CultureInfo.InvariantCulture);
+                        lineLabel = hcFormatted;
+                    }
+                }
+
+                return !string.IsNullOrEmpty(closestOutcomeKey);
+            }
+
+            if (!ctx.TargetLine.HasValue)
+            {
+                return false;
+            }
+
+            double targetLine = ctx.TargetLine.Value;
+            string selRemaining = GetRemainingSelectionTextWithoutTotalKeywords(ctx);
+            bool hasPlayerInSel = selRemaining.Length > 2;
+
+            // 2. Pure Over/Under Totals & Team Totals closest line (e.g. "O 214.5" when exact "Over 211.5" is not offered)
+            if (!hasPlayerInSel)
+            {
+                string combinedLeg = $"{(ctx.Leg.Market ?? "")} {(ctx.Leg.Selection ?? "")}";
+                int legTeam = TeamAliasMappingService.ResolveTeamSelection(combinedLeg, ctx.NormT1, ctx.NormT2, ctx.TargetOp1, ctx.TargetOp2);
+                string normOp = ctx.NormOpMarket ?? "";
+                if (legTeam == 1 && (normOp.Contains("team2") || normOp.Contains("participant2"))) return false;
+                if (legTeam == 2 && (normOp.Contains("team1") || normOp.Contains("participant1"))) return false;
+                if (legTeam == 0 && (normOp.Contains("participant1") || normOp.Contains("participant2"))) return false;
+
+                double bestDiff = double.MaxValue;
+                bool bestIsActive = false;
+
+                foreach (var kvp in bookieOutcomes)
+                {
+                    if (!string.IsNullOrEmpty(excludeOutcome) && kvp.Key == excludeOutcome) continue;
+                    if (kvp.Value.Price <= 1.0) continue;
+                    if (requireActive && kvp.Value.IsSuspended) continue;
+
+                    string displayOName = market.OutcomeNames.TryGetValue(kvp.Key, out var d) ? d : kvp.Key;
+                    var opMatch = Regex.Match(displayOName.Trim(), @"^(over|under)\s+(\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
+                    if (!opMatch.Success) continue;
+
+                    bool opIsUnder = opMatch.Groups[1].Value.Equals("under", StringComparison.OrdinalIgnoreCase);
+                    if (opIsUnder != ctx.WantsUnder) continue;
+
+                    if (!double.TryParse(opMatch.Groups[2].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out double opLine)) continue;
+
+                    double diff = Math.Abs(opLine - targetLine);
+                    if (diff > 25.0) continue;
+
+                    bool isActive = !kvp.Value.IsSuspended;
+                    if (string.IsNullOrEmpty(closestOutcomeKey) ||
+                        (isActive && !bestIsActive) ||
+                        (isActive == bestIsActive && diff < bestDiff - 0.0001))
+                    {
+                        bestIsActive = isActive;
+                        bestDiff = diff;
+                        closestOutcomeKey = kvp.Key;
+                        closestOddsData = kvp.Value;
+                        lineLabel = $"{(ctx.WantsUnder ? "U" : "O")} {opLine.ToString("0.##", CultureInfo.InvariantCulture)}";
+                    }
+                }
+
+                return !string.IsNullOrEmpty(closestOutcomeKey);
+            }
+
+            // 3. Player Prop Over/Under closest line (e.g. "O 24.5" for same player when exact "Over 23.5" is not offered)
+            {
+                double bestDiff = double.MaxValue;
+                bool bestIsActive = false;
+                bool bestIsTwoWay = false;
+
+                string expectedDirWord = ctx.WantsUnder ? "Under" : "Over";
+                string expectedTargetStr = targetLine.ToString("0.0", CultureInfo.InvariantCulture);
+
+                foreach (var kvp in bookieOutcomes)
+                {
+                    if (!string.IsNullOrEmpty(excludeOutcome) && kvp.Key == excludeOutcome) continue;
+                    if (kvp.Value.Price <= 1.0) continue;
+                    if (requireActive && kvp.Value.IsSuspended) continue;
+
+                    string displayOName = market.OutcomeNames.TryGetValue(kvp.Key, out var d) ? d : kvp.Key;
+                    var parenMatch = _parenMatchRegex.Match(displayOName);
+                    if (!parenMatch.Success) continue;
+
+                    string outcomePart = displayOName.Substring(0, parenMatch.Index).Trim();
+                    string playerPart = $"{parenMatch.Groups[1].Value.Trim()}, {parenMatch.Groups[2].Value.Trim()}";
+
+                    double opLine;
+                    bool isTwoWayOutcome = false;
+                    var ouMatch = Regex.Match(outcomePart, @"^(over|under)\s*(\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
+                    if (ouMatch.Success)
+                    {
+                        bool opIsUnder = ouMatch.Groups[1].Value.Equals("under", StringComparison.OrdinalIgnoreCase);
+                        if (opIsUnder != ctx.WantsUnder) continue;
+                        if (!double.TryParse(ouMatch.Groups[2].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out opLine)) continue;
+                        isTwoWayOutcome = true;
+                    }
+                    else if (!ctx.WantsUnder)
+                    {
+                        var plusMatch = Regex.Match(outcomePart, @"^(\d+)\+$");
+                        if (!plusMatch.Success || !int.TryParse(plusMatch.Groups[1].Value, out int plusVal) || plusVal < 1) continue;
+                        opLine = plusVal - 0.5;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    double diff = Math.Abs(opLine - targetLine);
+                    if (diff > 15.0) continue;
+
+                    // Verify this outcome belongs to the exact same player using TryMatchPlayerProp on a synthetic target-line outcome
+                    string syntheticOutcome = $"{expectedDirWord} {expectedTargetStr} ({playerPart})";
+                    if (TryMatchPlayerProp(syntheticOutcome, syntheticOutcome, ctx) != true) continue;
+
+                    bool isActive = !kvp.Value.IsSuspended;
+                    if (string.IsNullOrEmpty(closestOutcomeKey) ||
+                        (isActive && !bestIsActive) ||
+                        (isActive == bestIsActive && diff < bestDiff - 0.0001) ||
+                        (isActive == bestIsActive && Math.Abs(diff - bestDiff) <= 0.0001 && isTwoWayOutcome && !bestIsTwoWay))
+                    {
+                        bestIsActive = isActive;
+                        bestDiff = diff;
+                        bestIsTwoWay = isTwoWayOutcome;
+                        closestOutcomeKey = kvp.Key;
+                        closestOddsData = kvp.Value;
+                        lineLabel = $"{(ctx.WantsUnder ? "U" : "O")} {opLine.ToString("0.##", CultureInfo.InvariantCulture)}";
+                    }
+                }
+
+                return !string.IsNullOrEmpty(closestOutcomeKey);
+            }
         }
     }
 }

@@ -500,7 +500,7 @@ else
                                                                                                 @bookie.Item2
                                                                                             }
                                                                                         </div>
-                                                                                        <div class="fw-bold @(legResult.MatchedBookieOdds.ContainsKey(bookie.Item1) ? "text-dark" : "text-muted")" style="font-size: 0.85em;">
+                                                                                        <div class="fw-bold @(legResult.MatchedBookieOdds.ContainsKey(bookie.Item1) || legResult.ClosestBookieOdds.ContainsKey(bookie.Item1) ? "text-dark" : "text-muted")" style="font-size: 0.85em;">
                                                                                             @if (legResult.MatchedBookieOdds.TryGetValue(bookie.Item1, out var p)) {
                                                                                                 <div class="d-flex flex-column align-items-center justify-content-center">
                                                                                                     <div class="d-flex align-items-center justify-content-center">
@@ -510,8 +510,27 @@ else
                                                                                                             <span class="text-success ms-1" style="font-size: 0.7em;" title="Max Bet Limit">€@p.Limit.Value.ToString("0")</span>
                                                                                                         }
                                                                                                     </div>
+                                                                                                    @if (p.IsSuspended && legResult.ClosestBookieOdds.TryGetValue(bookie.Item1, out var altWhenSusp)) {
+                                                                                                        <div class="text-secondary fw-semibold" style="font-size: 0.65em; margin-top: 2px;" title="Closest active line on @bookie.Item2">
+                                                                                                            @altWhenSusp.Data.Price.ToString("0.00") <span class="text-muted">(@altWhenSusp.LineLabel)</span>
+                                                                                                        </div>
+                                                                                                    }
                                                                                                     @if (p.ChangedAt.HasValue) {
                                                                                                         <div class="text-muted fw-normal" style="font-size: 0.5em; margin-top: 2px;">@ToUserLocal(p.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
+                                                                                                    }
+                                                                                                </div>
+                                                                                            } else if (legResult.ClosestBookieOdds.TryGetValue(bookie.Item1, out var closest)) {
+                                                                                                <div class="d-flex flex-column align-items-center justify-content-center" title="Closest line offered by @bookie.Item2 (@closest.LineLabel)">
+                                                                                                    <div class="d-flex align-items-center justify-content-center">
+                                                                                                        @if (closest.Data.IsSuspended) { <i class="bi bi-lock-fill text-warning me-1" style="font-size: 0.7em;"></i> }
+                                                                                                        <span class="text-secondary">@closest.Data.Price.ToString("0.00")</span>
+                                                                                                        @if (closest.Data.Limit.HasValue) {
+                                                                                                            <span class="text-success ms-1" style="font-size: 0.7em;" title="Max Bet Limit">€@closest.Data.Limit.Value.ToString("0")</span>
+                                                                                                        }
+                                                                                                    </div>
+                                                                                                    <div class="badge bg-warning-subtle text-dark border border-warning-subtle fw-semibold" style="font-size: 0.55em; padding: 1px 3px; margin-top: 2px;">@closest.LineLabel</div>
+                                                                                                    @if (closest.Data.ChangedAt.HasValue) {
+                                                                                                        <div class="text-muted fw-normal" style="font-size: 0.5em; margin-top: 2px;">@ToUserLocal(closest.Data.ChangedAt.Value).ToString("dd/MM HH:mm")</div>
                                                                                                     }
                                                                                                 </div>
                                                                                             } else {
@@ -730,12 +749,17 @@ else
                                                                 var oName = kvp.Value;
                                                                 string displayOName = BettingApp.Services.OddsMatchingLogic.GetTranslatedOutcomeName(oName, PapiSearchResult?.MatchName ?? "");
                                                                 bool isMatch = !string.IsNullOrEmpty(ManualMatchedOutcome) && (oName == ManualMatchedOutcome || displayOName == ManualMatchedOutcome);
+                                                                bool isClosestMatch = !isMatch && string.IsNullOrEmpty(ManualMatchedOutcome) && !string.IsNullOrEmpty(ManualClosestOutcome) && (oName == ManualClosestOutcome || displayOName == ManualClosestOutcome);
 
-                                                                <tr id="@(isMatch ? "highlighted-odds-row" : "")" class="@(isMatch ? "table-warning" : "") align-top">
-                                                                    <td class="text-start fw-bold @(isMatch ? "text-dark" : "")">
+                                                                <tr id="@(isMatch || isClosestMatch ? "highlighted-odds-row" : "")" class="@(isMatch ? "table-warning" : (isClosestMatch ? "table-info" : "")) align-top">
+                                                                    <td class="text-start fw-bold @(isMatch || isClosestMatch ? "text-dark" : "")">
                                                                         @if (isMatch)
                                                                         {
                                                                             <i class="bi bi-star-fill text-warning me-1"></i>
+                                                                        }
+                                                                        else if (isClosestMatch)
+                                                                        {
+                                                                            <i class="bi bi-arrows-collapse text-info me-1" title="Closest available line"></i>
                                                                         }
                                                                         @displayOName
                                                                     </td>

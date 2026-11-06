@@ -2017,11 +2017,16 @@ namespace BettingApp.Tests
         [InlineData("Soccer", 10)]
         [InlineData("Ice Hockey", 15)]
         [InlineData("Tennis", 12)]
+        [InlineData("Basketball", 11)]
+        [InlineData("NBA", 11)]
+        [InlineData("EuroLeague", 11)]
+        [InlineData("NCAAB", 11)]
+        [InlineData("NCAAF", -1)]
+        [InlineData("eBasketball", -1)]
         [InlineData("Table Tennis", -1)]
         [InlineData("Bordtennis", -1)]
         [InlineData("American Football", -1)]
         [InlineData("NFL", -1)]
-        [InlineData("Basketball", -1)]
         public void ResolveSportId_MapsSportsCorrectly(string sport, int expectedSportId)
         {
             Assert.Equal(expectedSportId, OddsApiService.ResolveSportId(sport));
@@ -2625,6 +2630,260 @@ namespace BettingApp.Tests
                 _marketMapper);
             Assert.NotNull(m3);
             Assert.Equal("First Period Team 2 Total", m3.MarketName);
+        }
+
+        [Fact]
+        public void Test_Basketball_TeamAndMatchMarkets_MapAndMatchCorrectly()
+        {
+            var bballMarkets = new List<OddsPapiMarket>
+            {
+                new() { MarketId = "111", MarketName = "Full Time Result" },
+                new() { MarketId = "127", MarketName = "Winner (incl. overtime)" },
+                new() { MarketId = "105", MarketName = "Handicap (incl. overtime)" },
+                new() { MarketId = "104", MarketName = "Over Under (incl. overtime)" },
+                new() { MarketId = "102", MarketName = "Over Under Team 1 (incl. overtime)" },
+                new() { MarketId = "103", MarketName = "Over Under Team 2 (incl. overtime)" },
+                new() { MarketId = "151", MarketName = "First Half Winner" },
+                new() { MarketId = "107", MarketName = "Handicap First Half" },
+                new() { MarketId = "106", MarketName = "Over Under First Half" },
+                new() { MarketId = "128", MarketName = "Over Under Team 1 First Half" },
+                new() { MarketId = "129", MarketName = "Over Under Team 2 First Half" },
+                new() { MarketId = "153", MarketName = "First Quarter Winner" },
+                new() { MarketId = "117", MarketName = "Handicap First Quarter" },
+                new() { MarketId = "116", MarketName = "Over Under First Quarter" },
+                new() { MarketId = "130", MarketName = "Over Under Team 1 First Quarter" },
+                new() { MarketId = "135", MarketName = "Over Under Team 2 Third Quarter" }
+            };
+
+            string match = "Philadelphia 76ers vs Los Angeles Lakers";
+
+            // Moneyline -> Winner (incl. overtime)
+            var ml = OddsMatchingLogic.FindBestMarket(bballMarkets, "Moneyline", match, "Philadelphia 76ers", _marketMapper);
+            Assert.NotNull(ml);
+            Assert.Equal("Winner (incl. overtime)", ml.MarketName);
+
+            // Point Spread / Handicap -> Handicap (incl. overtime)
+            var spread = OddsMatchingLogic.FindBestMarket(bballMarkets, "Point Spread", match, "76ers -4.5", _marketMapper);
+            Assert.NotNull(spread);
+            Assert.Equal("Handicap (incl. overtime)", spread.MarketName);
+
+            // Match Total Points -> Over Under (incl. overtime)
+            var total = OddsMatchingLogic.FindBestMarket(bballMarkets, "Total Points", match, "Over 211.5", _marketMapper);
+            Assert.NotNull(total);
+            Assert.Equal("Over Under (incl. overtime)", total.MarketName);
+
+            // Team Total Points -> Over Under Team 1 / Team 2 (incl. overtime)
+            var t1Total = OddsMatchingLogic.FindBestMarket(bballMarkets, "Philadelphia 76ers Total Points", match, "Over 110.5", _marketMapper);
+            Assert.NotNull(t1Total);
+            Assert.Equal("Over Under Team 1 (incl. overtime)", t1Total.MarketName);
+
+            var t2Total = OddsMatchingLogic.FindBestMarket(bballMarkets, "Los Angeles Lakers Total Points (incl. overtime)", match, "Under 108.5", _marketMapper);
+            Assert.NotNull(t2Total);
+            Assert.Equal("Over Under Team 2 (incl. overtime)", t2Total.MarketName);
+
+            // 1st Half Spread & Total
+            var h1Spread = OddsMatchingLogic.FindBestMarket(bballMarkets, "1st Half Point Spread", match, "Philadelphia 76ers -2.5", _marketMapper);
+            Assert.NotNull(h1Spread);
+            Assert.Equal("Handicap First Half", h1Spread.MarketName);
+
+            var h1Total = OddsMatchingLogic.FindBestMarket(bballMarkets, "1st Half Total Points", match, "Over 105.5", _marketMapper);
+            Assert.NotNull(h1Total);
+            Assert.Equal("Over Under First Half", h1Total.MarketName);
+
+            var h1TeamTotal = OddsMatchingLogic.FindBestMarket(bballMarkets, "Philadelphia 76ers 1st Half Total Points", match, "Over 54.5", _marketMapper);
+            Assert.NotNull(h1TeamTotal);
+            Assert.Equal("Over Under Team 1 First Half", h1TeamTotal.MarketName);
+
+            // Quarter markets
+            var q1Winner = OddsMatchingLogic.FindBestMarket(bballMarkets, "1st Quarter Winner", match, "Philadelphia 76ers", _marketMapper);
+            Assert.NotNull(q1Winner);
+            Assert.Equal("First Quarter Winner", q1Winner.MarketName);
+
+            var q1Spread = OddsMatchingLogic.FindBestMarket(bballMarkets, "1st Quarter Spread", match, "Los Angeles Lakers +1.5", _marketMapper);
+            Assert.NotNull(q1Spread);
+            Assert.Equal("Handicap First Quarter", q1Spread.MarketName);
+
+            var q1Total = OddsMatchingLogic.FindBestMarket(bballMarkets, "1st Quarter Total Points", match, "Over 53.5", _marketMapper);
+            Assert.NotNull(q1Total);
+            Assert.Equal("Over Under First Quarter", q1Total.MarketName);
+
+            var q3TeamTotal = OddsMatchingLogic.FindBestMarket(bballMarkets, "Lakers 3rd Quarter Total Points", match, "Over 27.5", _marketMapper);
+            Assert.NotNull(q3TeamTotal);
+            Assert.Equal("Over Under Team 2 Third Quarter", q3TeamTotal.MarketName);
+
+            // Verify "76ers" does not falsely match "Los Angeles Lakers" ("ers")
+            var searchResult = new OddsPapiSearchResult { MatchName = match };
+            var leg76ers = new AiVisionLeg
+            {
+                Sport = "Basketball",
+                Match = match,
+                Market = "Point Spread",
+                Selection = "76ers -4.5"
+            };
+            string disp1 = OddsMatchingLogic.GetTranslatedOutcomeName("1 (-4.5)", match);
+            string disp2 = OddsMatchingLogic.GetTranslatedOutcomeName("2 (-4.5)", match);
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("1 (-4.5)", disp1, leg76ers, searchResult, "Handicap (incl. overtime)"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("2 (-4.5)", disp2, leg76ers, searchResult, "Handicap (incl. overtime)"));
+
+            // Verify "T-Wolves" and "SA Spurs" NBA team aliases
+            Assert.Equal(1, TeamAliasMappingService.ResolveTeamSelection("T-Wolves -3.5", "Minnesota Timberwolves", "Denver Nuggets"));
+            Assert.Equal(2, TeamAliasMappingService.ResolveTeamSelection("SA Spurs +5.5", "Houston Rockets", "San Antonio Spurs"));
+        }
+
+        [Fact]
+        public void Test_Basketball_PlayerPropsAndCombos_MapAndMatchWithoutCrossContamination()
+        {
+            var bballPlayerMarkets = new List<OddsPapiMarket>
+            {
+                new() { MarketId = "1165", MarketName = "Over Under Player Points (incl. overtime)" },
+                new() { MarketId = "1166", MarketName = "Over Under Player Rebounds (incl. overtime)" },
+                new() { MarketId = "1163", MarketName = "Over Under Player Assists (incl. overtime)" },
+                new() { MarketId = "1162", MarketName = "Over Under Player 3 Point FG (incl. overtime)" },
+                new() { MarketId = "1169", MarketName = "Over Under Player Points + Assists + Rebounds (incl. overtime)" },
+                new() { MarketId = "1172", MarketName = "Over Under Player Points + Rebounds (incl. overtime)" },
+                new() { MarketId = "1167", MarketName = "Over Under Player Points + Assists (incl. overtime)" },
+                new() { MarketId = "1164", MarketName = "Over Under Player Assists + Rebounds (incl. overtime)" },
+                new() { MarketId = "1173", MarketName = "Over Under Player Steals (incl. overtime)" },
+                new() { MarketId = "1175", MarketName = "Over Under Player Blocks (incl. overtime)" },
+                new() { MarketId = "1174", MarketName = "Over Under Player Steals + Blocks (incl. overtime)" },
+                new() { MarketId = "1176", MarketName = "Over Under Player Turnovers (incl. overtime)" },
+                new() { MarketId = "1195", MarketName = "Player Double - Double" },
+                new() { MarketId = "1196", MarketName = "Player Triple - Double" },
+                new() { MarketId = "1189", MarketName = "Over Under Player Points First Quarter" }
+            };
+
+            string match = "Golden State Warriors vs Los Angeles Lakers";
+
+            // Combo props must NOT be rejected by IsCombinationMarket
+            Assert.False(MarketMappingService.IsCombinationMarket("Player Points + Rebounds + Assists", match));
+            Assert.False(MarketMappingService.IsCombinationMarket("Points, Rebounds & Assists", match));
+            Assert.False(MarketMappingService.IsCombinationMarket("Player Steals + Blocks", match));
+
+            var pra = OddsMatchingLogic.FindBestMarket(bballPlayerMarkets, "Points, Rebounds & Assists", match, "LeBron James Over 40.5", _marketMapper);
+            Assert.NotNull(pra);
+            Assert.Equal("Over Under Player Points + Assists + Rebounds (incl. overtime)", pra.MarketName);
+
+            var pr = OddsMatchingLogic.FindBestMarket(bballPlayerMarkets, "Player Points + Rebounds", match, "Anthony Davis Over 36.5", _marketMapper);
+            Assert.NotNull(pr);
+            Assert.Equal("Over Under Player Points + Rebounds (incl. overtime)", pr.MarketName);
+
+            var pa = OddsMatchingLogic.FindBestMarket(bballPlayerMarkets, "Player Points + Assists", match, "Stephen Curry Over 31.5", _marketMapper);
+            Assert.NotNull(pa);
+            Assert.Equal("Over Under Player Points + Assists (incl. overtime)", pa.MarketName);
+
+            var ra = OddsMatchingLogic.FindBestMarket(bballPlayerMarkets, "Player Rebounds + Assists", match, "Draymond Green Over 12.5", _marketMapper);
+            Assert.NotNull(ra);
+            Assert.Equal("Over Under Player Assists + Rebounds (incl. overtime)", ra.MarketName);
+
+            var threes = OddsMatchingLogic.FindBestMarket(bballPlayerMarkets, "Player Made Threes", match, "Stephen Curry Over 4.5 3-Pointers", _marketMapper);
+            Assert.NotNull(threes);
+            Assert.Equal("Over Under Player 3 Point FG (incl. overtime)", threes.MarketName);
+
+            var dd = OddsMatchingLogic.FindBestMarket(bballPlayerMarkets, "Double-Double", match, "Anthony Davis - Yes", _marketMapper);
+            Assert.NotNull(dd);
+            Assert.Equal("Player Double - Double", dd.MarketName);
+
+            var q1Pts = OddsMatchingLogic.FindBestMarket(bballPlayerMarkets, "1st Quarter Player Points", match, "Stephen Curry Over 7.5", _marketMapper);
+            Assert.NotNull(q1Pts);
+            Assert.Equal("Over Under Player Points First Quarter", q1Pts.MarketName);
+
+            // Verify "Stephen Curry Over 4.5 3-Pointers" extracts line 4.5 (not 3 from "3-Pointers")
+            var searchResult = new OddsPapiSearchResult { MatchName = match };
+            var curryLeg = new AiVisionLeg
+            {
+                Sport = "Basketball",
+                Match = match,
+                Market = "Player 3-Pointers",
+                Selection = "Stephen Curry Over 4.5 3-Pointers"
+            };
+            Assert.True(OddsMatchingLogic.IsOutcomeMatch("Over 4.5 (Curry, Stephen)", "Over 4.5 (Curry, Stephen)", curryLeg, searchResult, "Over Under Player 3 Point FG (incl. overtime)"));
+            Assert.False(OddsMatchingLogic.IsOutcomeMatch("Over 2.5 (Curry, Stephen)", "Over 2.5 (Curry, Stephen)", curryLeg, searchResult, "Over Under Player 3 Point FG (incl. overtime)"));
+        }
+
+        [Fact]
+        public void Test_TryFindClosestOutcomeForBookie_FindsClosestTotalSpreadAndPlayerLines()
+        {
+            string match = "Boston Celtics vs New York Knicks";
+            var searchResult = new OddsPapiSearchResult { MatchName = match };
+
+            // 1. Total Points: leg wants Over 211.5, bookie only offers Over 213.5 and Over 214.5
+            var totalMarket = new OddsPapiMarket
+            {
+                MarketId = "104",
+                MarketName = "Over Under (incl. overtime)",
+                OutcomeNames = new Dictionary<string, string>
+                {
+                    ["Over 213.5"] = "Over 213.5",
+                    ["Under 213.5"] = "Under 213.5",
+                    ["Over 214.5"] = "Over 214.5",
+                    ["Under 214.5"] = "Under 214.5"
+                }
+            };
+            var totalBookie = new Dictionary<string, OddsData>
+            {
+                ["Over 213.5"] = new OddsData { Price = 1.85, IsSuspended = false },
+                ["Under 213.5"] = new OddsData { Price = 1.95, IsSuspended = false },
+                ["Over 214.5"] = new OddsData { Price = 1.92, IsSuspended = false }
+            };
+            var totalLeg = new AiVisionLeg { Sport = "Basketball", Match = match, Market = "Total Points", Selection = "Over 211.5" };
+            var totalCtx = new OddsMatchingLogic.OutcomeMatchingContext(totalLeg, searchResult, totalMarket.MarketName);
+
+            Assert.True(OddsMatchingLogic.TryFindClosestOutcomeForBookie(totalMarket, totalBookie, totalCtx, out var closestTotalKey, out var closestTotalData, out var totalLabel));
+            Assert.Equal("Over 213.5", closestTotalKey);
+            Assert.Equal(1.85, closestTotalData.Price);
+            Assert.Equal("O 213.5", totalLabel);
+
+            // 2. Handicap / Point Spread: leg wants Boston Celtics -3.5, bookie only offers -4.5 and -5.5
+            var hcMarket = new OddsPapiMarket
+            {
+                MarketId = "105",
+                MarketName = "Handicap (incl. overtime)",
+                OutcomeNames = new Dictionary<string, string>
+                {
+                    ["1 (-4.5)"] = "1 (-4.5)",
+                    ["2 (+4.5)"] = "2 (+4.5)",
+                    ["1 (-5.5)"] = "1 (-5.5)"
+                }
+            };
+            var hcBookie = new Dictionary<string, OddsData>
+            {
+                ["1 (-4.5)"] = new OddsData { Price = 1.90, IsSuspended = false },
+                ["2 (+4.5)"] = new OddsData { Price = 1.90, IsSuspended = false },
+                ["1 (-5.5)"] = new OddsData { Price = 2.05, IsSuspended = false }
+            };
+            var hcLeg = new AiVisionLeg { Sport = "Basketball", Match = match, Market = "Point Spread", Selection = "Boston Celtics -3.5" };
+            var hcCtx = new OddsMatchingLogic.OutcomeMatchingContext(hcLeg, searchResult, hcMarket.MarketName);
+
+            Assert.True(OddsMatchingLogic.TryFindClosestOutcomeForBookie(hcMarket, hcBookie, hcCtx, out var closestHcKey, out var closestHcData, out var hcLabel));
+            Assert.Equal("1 (-4.5)", closestHcKey);
+            Assert.Equal(1.90, closestHcData.Price);
+            Assert.Equal("-4.5", hcLabel);
+
+            // 3. Player Prop: leg wants Jayson Tatum Over 26.5, bookie offers Jayson Tatum Over 27.5 and Jaylen Brown Over 26.5
+            var playerMarket = new OddsPapiMarket
+            {
+                MarketId = "1165",
+                MarketName = "Over Under Player Points (incl. overtime)",
+                OutcomeNames = new Dictionary<string, string>
+                {
+                    ["Over 26.5 (Brown, Jaylen)"] = "Over 26.5 (Brown, Jaylen)",
+                    ["Over 27.5 (Tatum, Jayson)"] = "Over 27.5 (Tatum, Jayson)",
+                    ["Under 27.5 (Tatum, Jayson)"] = "Under 27.5 (Tatum, Jayson)"
+                }
+            };
+            var playerBookie = new Dictionary<string, OddsData>
+            {
+                ["Over 26.5 (Brown, Jaylen)"] = new OddsData { Price = 1.88, IsSuspended = false },
+                ["Over 27.5 (Tatum, Jayson)"] = new OddsData { Price = 1.91, IsSuspended = false },
+                ["Under 27.5 (Tatum, Jayson)"] = new OddsData { Price = 1.87, IsSuspended = false }
+            };
+            var playerLeg = new AiVisionLeg { Sport = "Basketball", Match = match, Market = "Player Points", Selection = "Jayson Tatum Over 26.5" };
+            var playerCtx = new OddsMatchingLogic.OutcomeMatchingContext(playerLeg, searchResult, playerMarket.MarketName);
+
+            Assert.True(OddsMatchingLogic.TryFindClosestOutcomeForBookie(playerMarket, playerBookie, playerCtx, out var closestPlayerKey, out var closestPlayerData, out var playerLabel));
+            Assert.Equal("Over 27.5 (Tatum, Jayson)", closestPlayerKey);
+            Assert.Equal(1.91, closestPlayerData.Price);
+            Assert.Equal("O 27.5", playerLabel);
         }
     }
 }

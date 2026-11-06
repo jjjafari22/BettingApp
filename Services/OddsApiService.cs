@@ -39,10 +39,27 @@ public class OddsApiService
     {
         if (string.IsNullOrWhiteSpace(sport)) return 10; // Default Soccer
         if (sport.Contains("American Football", StringComparison.OrdinalIgnoreCase) ||
-            sport.Contains("NFL", StringComparison.OrdinalIgnoreCase)) return -1;
+            sport.Contains("NFL", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("NCAAF", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("College Football", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("NCAA Football", StringComparison.OrdinalIgnoreCase)) return -1;
         if (sport.Contains("Table Tennis", StringComparison.OrdinalIgnoreCase) ||
             sport.Contains("Bordtennis", StringComparison.OrdinalIgnoreCase) ||
             sport.Contains("Ping Pong", StringComparison.OrdinalIgnoreCase)) return -1;
+        if (sport.Contains("eBasketball", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("3x3", StringComparison.OrdinalIgnoreCase)) return -1;
+        if (sport.Contains("Basketball", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("Basket", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("NBA", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("WNBA", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("NCAAB", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("NCAA", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("EuroLeague", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("EuroCup", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("BBL", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("ACB", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("CBA", StringComparison.OrdinalIgnoreCase) ||
+            sport.Contains("NBL", StringComparison.OrdinalIgnoreCase)) return 11;
         if (sport.Contains("Tennis", StringComparison.OrdinalIgnoreCase)) return 12;
         if (sport.Contains("Hockey", StringComparison.OrdinalIgnoreCase)) return 15;
         if (sport.Contains("Soccer", StringComparison.OrdinalIgnoreCase) || 
@@ -107,7 +124,7 @@ public class OddsApiService
                 dto.NormP2 = NormalizeTeamName(dto.Participant2Name);
                 dto.HasModifier = sportId == 12
                     ? HasTennisSpecialModifier(dto.Participant1Name, dto.Participant2Name, dto.TournamentName)
-                    : (HasSpecialModifier(dto.Participant1Name) || HasSpecialModifier(dto.Participant2Name) || HasSpecialModifier(dto.TournamentName) || dto.Participant1Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || dto.Participant2Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase));
+                    : (HasSpecialModifier(dto.Participant1Name) || HasSpecialModifier(dto.Participant2Name) || HasSpecialModifier(dto.TournamentName) || dto.Participant1Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || dto.Participant2Name.Contains("Esoccer", StringComparison.OrdinalIgnoreCase) || dto.Participant1Name.Contains("Ebasketball", StringComparison.OrdinalIgnoreCase) || dto.Participant2Name.Contains("Ebasketball", StringComparison.OrdinalIgnoreCase));
 
                 if (f.TryGetProperty("startTime", out var st) && DateTime.TryParse(st.GetString(), null, System.Globalization.DateTimeStyles.AdjustToUniversal, out var dt))
                 {
@@ -127,10 +144,10 @@ public class OddsApiService
         return parsedFixtures;
     }
 
-    private async Task<(Dictionary<string, string> rawMarketIdToBaseName, Dictionary<string, BettingApp.Models.OddsPapiMarket> cachedBaseMarketDict)?> GetParsedMarketsAsync(int sportId = 10, CancellationToken cancellationToken = default)
+    private async Task<(Dictionary<string, string> rawMarketIdToBaseName, Dictionary<string, BettingApp.Models.OddsPapiMarket> cachedBaseMarketDict, HashSet<string> mergedMilestoneMarketIds)?> GetParsedMarketsAsync(int sportId = 10, CancellationToken cancellationToken = default)
     {
-        string parsedCacheKey = $"OddspapiMarketsParsed_{sportId}";
-        if (!_cache.TryGetValue(parsedCacheKey, out (Dictionary<string, string> rawMarketIdToBaseName, Dictionary<string, BettingApp.Models.OddsPapiMarket> cachedBaseMarketDict) cachedMarkets))
+        string parsedCacheKey = $"OddspapiMarketsParsed2_{sportId}";
+        if (!_cache.TryGetValue(parsedCacheKey, out (Dictionary<string, string> rawMarketIdToBaseName, Dictionary<string, BettingApp.Models.OddsPapiMarket> cachedBaseMarketDict, HashSet<string> mergedMilestoneMarketIds) cachedMarkets))
         {
             string? mJson = await GetMarketsJsonAsync(sportId, cancellationToken);
                 
@@ -138,6 +155,7 @@ public class OddsApiService
                 
             var newRawMarketIdToBaseName = new Dictionary<string, string>();
             var newBaseMarketDict = new Dictionary<string, BettingApp.Models.OddsPapiMarket>();
+            var newMergedMilestoneMarketIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var rawCatalogMarketNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 
             if (!string.IsNullOrEmpty(mJson) && mJson != "[]")
@@ -181,6 +199,7 @@ public class OddsApiService
                         bool isPlayerPointsMerge = false;
                         bool isPlayerShotsMerge = false;
                         bool isPlayerFoulsMerge = false;
+                        bool isPlayerBasketballMerge = false;
 
                         if (baseName.Equals("Player Shots On Goal (incl. overtime)", StringComparison.OrdinalIgnoreCase) ||
                             baseName.Equals("Player Shots on Goal", StringComparison.OrdinalIgnoreCase))
@@ -225,6 +244,7 @@ public class OddsApiService
                         else if (baseName.Equals("Player Shots (incl. overtime)", StringComparison.OrdinalIgnoreCase))
                         {
                             baseName = "Over Under Player Shots (incl. overtime)";
+                            isPlayerShotsMerge = true;
                         }
                         else if (baseName.Equals("Player Assists (incl. overtime)", StringComparison.OrdinalIgnoreCase))
                         {
@@ -246,6 +266,62 @@ public class OddsApiService
                         {
                             baseName = "Over Under Player Goals (incl. overtime)";
                             isPlayerGoalsMerge = true;
+                        }
+                        else if (baseName.Equals("Player Rebounds (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Rebounds (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+                        else if (baseName.Equals("Player 3 Point FG (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player 3 Point FG (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+                        else if (baseName.Equals("Player Points + Rebounds (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Points + Rebounds (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+                        else if (baseName.Equals("Player Points + Assists (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Points + Assists (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+                        else if (baseName.Equals("Player Assists + Rebounds (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Assists + Rebounds (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+                        else if (baseName.Equals("Player Points + Assists + Rebounds (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Points + Assists + Rebounds (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+                        else if (baseName.Equals("Player Steals (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Steals (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+                        else if (baseName.Equals("Player Blocks (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Blocks (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+                        else if (baseName.Equals("Player Steals + Blocks (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Steals + Blocks (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+                        else if (baseName.Equals("Player Turnovers (incl. overtime)", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = "Over Under Player Turnovers (incl. overtime)";
+                            isPlayerBasketballMerge = true;
+                        }
+
+                        bool isMergedMilestone = isPlayerGoalsMerge || isPlayerAssistsMerge || isPlayerTacklesMerge || isPlayerPointsMerge || isPlayerShotsMerge || isPlayerFoulsMerge || isPlayerBasketballMerge;
+                        if (isMergedMilestone)
+                        {
+                            newMergedMilestoneMarketIds.Add(mId);
                         }
 
                         newRawMarketIdToBaseName[mId] = baseName;
@@ -272,7 +348,7 @@ public class OddsApiService
                                 }
 
                                 string outcomeHandicapSuffix = handicapSuffix;
-                                if ((isPlayerGoalsMerge || isPlayerAssistsMerge || isPlayerTacklesMerge || isPlayerPointsMerge || isPlayerShotsMerge || isPlayerFoulsMerge) && string.IsNullOrEmpty(outcomeHandicapSuffix))
+                                if (isMergedMilestone && string.IsNullOrEmpty(outcomeHandicapSuffix))
                                 {
                                     if (oName == "1" || oName.Equals("Yes", StringComparison.OrdinalIgnoreCase))
                                     {
@@ -300,7 +376,7 @@ public class OddsApiService
                 await NotifyIfNewMarketsDetectedAsync(sportId, rawCatalogMarketNames);
             }
                 
-            cachedMarkets = (newRawMarketIdToBaseName, newBaseMarketDict);
+            cachedMarkets = (newRawMarketIdToBaseName, newBaseMarketDict, newMergedMilestoneMarketIds);
             _cache.Set(parsedCacheKey, cachedMarkets, TimeSpan.FromHours(24));
         }
         return cachedMarkets;
@@ -313,7 +389,7 @@ public class OddsApiService
             var newMarkets = OddsPapiMarketCatalogTracker.DetectAndRecordNewMarkets(sportId, rawCatalogMarketNames);
             if (newMarkets.Count == 0) return;
 
-            string sportLabel = sportId == 15 ? "Ice Hockey" : (sportId == 12 ? "Tennis" : (sportId == 10 ? "Soccer" : $"Sport {sportId}"));
+            string sportLabel = sportId == 15 ? "Ice Hockey" : (sportId == 12 ? "Tennis" : (sportId == 11 ? "Basketball" : (sportId == 10 ? "Soccer" : $"Sport {sportId}")));
             var mapper = _marketMapper ?? new MarketMappingService();
 
             var evaluatedMarkets = newMarkets
@@ -361,7 +437,7 @@ public class OddsApiService
 
     public async Task WarmupCacheAsync(int? specificSportId = null)
     {
-        var sportsToWarm = specificSportId.HasValue ? new[] { specificSportId.Value } : new[] { 10, 15, 12 };
+        var sportsToWarm = specificSportId.HasValue ? new[] { specificSportId.Value } : new[] { 10, 15, 12, 11 };
         
         for (int i = 0; i < sportsToWarm.Length; i++)
         {
@@ -371,7 +447,7 @@ public class OddsApiService
                 await Task.Delay(1500);
             }
 
-            string sportLabel = sportId == 15 ? "Ice Hockey" : (sportId == 12 ? "Tennis" : "Soccer");
+            string sportLabel = sportId == 15 ? "Ice Hockey" : (sportId == 12 ? "Tennis" : (sportId == 11 ? "Basketball" : "Soccer"));
             _logger.LogInformation($"OddsPapi: Background worker warming up cache for {sportLabel} (sportId={sportId}) Fixtures (6h) and Markets (24h)...");
             try
             {
@@ -650,16 +726,9 @@ public class OddsApiService
             var cachedMarkets = parsedMarkets.Value;
 
             var rawMarketIdToBaseName = cachedMarkets.rawMarketIdToBaseName;
-            var baseMarketDict = new Dictionary<string, BettingApp.Models.OddsPapiMarket>();
-            foreach (var kvp in cachedMarkets.cachedBaseMarketDict)
-            {
-                baseMarketDict[kvp.Key] = new BettingApp.Models.OddsPapiMarket 
-                { 
-                    MarketId = kvp.Value.MarketId, 
-                    MarketName = kvp.Value.MarketName, 
-                    OutcomeNames = new Dictionary<string, string>(kvp.Value.OutcomeNames, StringComparer.OrdinalIgnoreCase) 
-                };
-            }
+            var catalogBaseMarketDict = cachedMarkets.cachedBaseMarketDict;
+            var mergedMilestoneMarketIds = cachedMarkets.mergedMilestoneMarketIds;
+            var activeMarketsByName = new Dictionary<string, BettingApp.Models.OddsPapiMarket>(StringComparer.OrdinalIgnoreCase);
 
             // 3. Fetch Odds for Unibet SE, Betsson, Bet365, Pinnacle, Coolbet
             var oddsUrl = $"https://api.oddspapi.io/v4/odds?apiKey={_apiKey}&fixtureId={fixtureId}&bookmakers=unibet.se,betsson,bet365,pinnacle%2B30,coolbet";
@@ -703,19 +772,20 @@ public class OddsApiService
                             var mId = market.Name;
                             
                             string baseName = rawMarketIdToBaseName.ContainsKey(mId) ? rawMarketIdToBaseName[mId] : $"Market {mId}";
+                            bool isMilestoneMerge = mergedMilestoneMarketIds.Contains(mId);
                             
                             // Initialize market dict if not exist
                             if (!result.BookmakerOdds.ContainsKey(baseName))
                             {
                                 result.BookmakerOdds[baseName] = new Dictionary<string, Dictionary<string, BettingApp.Models.OddsData>>(StringComparer.OrdinalIgnoreCase);
-                                if (baseMarketDict.TryGetValue(baseName, out var mObj))
+                                var activeMarketObj = new BettingApp.Models.OddsPapiMarket
                                 {
-                                    result.Markets.Add(mObj);
-                                }
-                                else
-                                {
-                                    result.Markets.Add(new BettingApp.Models.OddsPapiMarket { MarketId = baseName, MarketName = baseName });
-                                }
+                                    MarketId = baseName,
+                                    MarketName = baseName,
+                                    OutcomeNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                                };
+                                activeMarketsByName[baseName] = activeMarketObj;
+                                result.Markets.Add(activeMarketObj);
                             }
                             
                             if (!result.BookmakerOdds[baseName].ContainsKey(bmName))
@@ -723,13 +793,17 @@ public class OddsApiService
                                 result.BookmakerOdds[baseName][bmName] = new Dictionary<string, BettingApp.Models.OddsData>(StringComparer.OrdinalIgnoreCase);
                             }
 
+                            var currentBmOutcomes = result.BookmakerOdds[baseName][bmName];
+                            var currentMarketObj = activeMarketsByName[baseName];
+                            catalogBaseMarketDict.TryGetValue(baseName, out var catalogMarketObj);
+
                             if (market.Value.TryGetProperty("outcomes", out var outcomes))
                             {
                                 foreach (var outcome in outcomes.EnumerateObject())
                                 {
                                     var oId = outcome.Name;
                                     string oName = oId;
-                                    if (baseMarketDict.TryGetValue(baseName, out var bmObj) && bmObj.OutcomeNames.TryGetValue(oId, out var mappedName))
+                                    if (catalogMarketObj != null && catalogMarketObj.OutcomeNames.TryGetValue(oId, out var mappedName))
                                     {
                                         oName = mappedName;
                                     }
@@ -792,20 +866,15 @@ public class OddsApiService
                                                     finalOName = $"{oName} ({pName})";
                                                 }
 
-                                                result.BookmakerOdds[baseName][bmName][finalOName] = oddsData;
-                                                
-                                                // Also make sure to add it to OutcomeNames so it shows up in UI tables
-                                                if (baseMarketDict.TryGetValue(baseName, out var baseMarketObj) && !baseMarketObj.OutcomeNames.ContainsKey(finalOName))
+                                                // Do not let a merged 1-way N+ milestone market overwrite an existing 2-way Over/Under line price for the same bookmaker
+                                                if (!isMilestoneMerge || !currentBmOutcomes.ContainsKey(finalOName))
                                                 {
-                                                    baseMarketObj.OutcomeNames[finalOName] = finalOName;
+                                                    currentBmOutcomes[finalOName] = oddsData;
                                                 }
-                                                else if (!baseMarketDict.TryGetValue(baseName, out _) && !result.Markets.Any(m => m.MarketName == baseName && m.OutcomeNames.ContainsKey(finalOName)))
+
+                                                if (!currentMarketObj.OutcomeNames.ContainsKey(finalOName))
                                                 {
-                                                    var marketObj = result.Markets.FirstOrDefault(m => m.MarketName == baseName);
-                                                    if (marketObj != null && !marketObj.OutcomeNames.ContainsKey(finalOName))
-                                                    {
-                                                        marketObj.OutcomeNames[finalOName] = finalOName;
-                                                    }
+                                                    currentMarketObj.OutcomeNames[finalOName] = finalOName;
                                                 }
                                             }
                                         }
@@ -820,13 +889,7 @@ public class OddsApiService
             // Deduplicate outcome names and sort markets by name
             foreach (var market in result.Markets)
             {
-                // Prune outcomes that have no odds at all (e.g. empty generic markets)
-                var activeOutcomes = market.OutcomeNames.Where(kv => 
-                    result.BookmakerOdds.TryGetValue(market.MarketName, out var bmDict) && 
-                    bmDict.Any(bm => bm.Value.ContainsKey(kv.Value))
-                ).ToList();
-
-                market.OutcomeNames = activeOutcomes
+                market.OutcomeNames = market.OutcomeNames
                     .GroupBy(x => x.Value)
                     .Select(g => g.First())
                     .OrderBy(x => 

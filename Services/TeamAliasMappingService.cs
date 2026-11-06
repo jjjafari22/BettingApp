@@ -386,7 +386,28 @@ namespace BettingApp.Services
             { "wien", "vienna" },
             { "moskva", "moscow" },
             { "kyiv", "kiev" },
-            { "plzen", "pilsen" }
+            { "plzen", "pilsen" },
+            { "la clippers", "los angeles clippers" },
+            { "l.a. clippers", "los angeles clippers" },
+            { "la lakers", "los angeles lakers" },
+            { "l.a. lakers", "los angeles lakers" },
+            { "gs warriors", "golden state warriors" },
+            { "gsw", "golden state warriors" },
+            { "ny knicks", "new york knicks" },
+            { "no pelicans", "new orleans pelicans" },
+            { "okc thunder", "oklahoma city thunder" },
+            { "okc", "oklahoma city thunder" },
+            { "sa spurs", "san antonio tottenham hotspur" },
+            { "s.a. spurs", "san antonio tottenham hotspur" },
+            { "phila 76ers", "philadelphia 76ers" },
+            { "philly 76ers", "philadelphia 76ers" },
+            { "sixers", "philadelphia 76ers" },
+            { "cavs", "cleveland cavaliers" },
+            { "mavs", "dallas mavericks" },
+            { "blazers", "portland trail blazers" },
+            { "t wolves", "minnesota timberwolves" },
+            { "twolves", "minnesota timberwolves" },
+            { "minnesota wolves", "minnesota timberwolves" }
         };
 
         private static readonly System.Text.RegularExpressions.Regex _aliasesCombinedRegex = new(
@@ -667,8 +688,8 @@ namespace BettingApp.Services
             // Strip line numbers, handicaps, prop conditions to isolate team candidate
             // e.g. "PSG (+1.5)" -> "PSG", "PSG Over 1.5 Goals" -> "PSG", "Manchester City -1" -> "Manchester City"
             string candidate = System.Text.RegularExpressions.Regex.Replace(sel, @"\([+-]?\d+(?:\.\d+)?\)", " ").Trim();
-            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"[+-]?\d+(?:\.\d+)?", " ").Trim();
-            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\b(over|under|o\/u|total|goals?|corners?|cards?|bookings?|points?|shots?|on|target|saves?|goalkeeper|goal\s*keeper|fouls?|committed|tackles?|offsides?|aces?|double\s+faults?|faults?|games?|sets?|breaks?|service|tie\s*breaks?|tiebreaks?|won|number|of|1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth|half|halves|either|both|at|least|one|team|player|participant|most|more|to|win|starts?|including|incl|overtime|ot|penalties|penalty|shootouts?|so|and|&|or|eller|draw|tie|ties|oavgjort|uavgjort|kryss|likt|full|time|regular)\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"[+-]?\d+(?:\.\d+)?(?![a-zA-Z])", " ").Trim();
+            candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\b(over|under|o\/u|total|goals?|corners?|cards?|bookings?|points?|rebounds?|steals?|blocks?|turnovers?|threes?|shots?|on|target|saves?|goalkeeper|goal\s*keeper|fouls?|committed|tackles?|offsides?|aces?|double\s+faults?|faults?|games?|sets?|breaks?|service|tie\s*breaks?|tiebreaks?|won|number|of|1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth|half|halves|quarter|quarters|qtr|spread|either|both|at|least|one|team|player|participant|most|more|to|win|starts?|including|incl|overtime|ot|penalties|penalty|shootouts?|so|and|&|or|eller|draw|tie|ties|oavgjort|uavgjort|kryss|likt|full|time|regular)\b", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
             candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"[^\w\s]", " ").Trim();
             candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\s+", " ").Trim();
             if (string.IsNullOrWhiteSpace(candidate)) return 0;

@@ -39,11 +39,18 @@ namespace BettingApp.Services
                              .Replace("goals", "goal")
                              .Replace("corners", "corner")
                              .Replace("halves", "half")
+                             .Replace("quarters", "quarter")
                              .Replace("sets", "set")
                              .Replace("games", "game")
                              .Replace("aces", "ace")
                              .Replace("faults", "fault")
                              .Replace("breaks", "break")
+                             .Replace("rebounds", "rebound")
+                             .Replace("assists", "assist")
+                             .Replace("steals", "steal")
+                             .Replace("blocks", "block")
+                             .Replace("turnovers", "turnover")
+                             .Replace("points", "point")
                              .Replace("tie-breaks", "tiebreak")
                              .Replace("tie-break", "tiebreak")
                              .Replace("tiebreaks", "tiebreak")
@@ -63,17 +70,38 @@ namespace BettingApp.Services
 
             if (bestMatch == null)
             {
-                var statKeywords = new[] { "corner", "booking", "card", "foul", "save", "goalkeeper", "shot", "tackle", "offside", "ace", "fault", "tiebreak" };
+                var statKeywords = new[] { "corner", "booking", "card", "foul", "save", "goalkeeper", "shot", "tackle", "offside", "ace", "fault", "tiebreak", "rebound", "assist", "steal", "block", "turnover", "3point" };
+                var subPeriodTokens = new[] { "firstquarter", "secondquarter", "thirdquarter", "fourthquarter", "firsthalf", "secondhalf", "firstperiod", "secondperiod", "thirdperiod", "firstset", "secondset", "thirdset", "fourthset", "fifthset" };
+                var playerComboStats = new[] { "rebound", "assist", "steal", "block", "turnover", "3point" };
 
                 foreach (var target in simplifiedTargets)
                 {
-                    if (target == "winner" || target == "correctscore") continue;
+                    if (target == "winner" || target == "winnerinclovertime" || target == "correctscore") continue;
 
                     var targetStats = statKeywords.Where(kw => target.Contains(kw)).ToList();
 
                     var potentialMatches = markets.Where(m =>
                     {
                         string simM = Simplify(m.MarketName);
+
+                        // Never cross-match sub-period qualifiers (e.g., First Quarter vs Full Game)
+                        foreach (var sp in subPeriodTokens)
+                        {
+                            if (target.Contains(sp) != simM.Contains(sp)) return false;
+                        }
+
+                        // For player markets, ensure exact stat combination alignment so single-stat never matches combo-stat (e.g. Points vs Points + Rebounds)
+                        if (target.Contains("player") || simM.Contains("player"))
+                        {
+                            string targetNo3Pt = target.Replace("3point", "").Replace("breakpoint", "").Replace("powerplaypoint", "");
+                            string simNo3Pt = simM.Replace("3point", "").Replace("breakpoint", "").Replace("powerplaypoint", "");
+                            if (targetNo3Pt.Contains("point") != simNo3Pt.Contains("point")) return false;
+                            foreach (var pStat in playerComboStats)
+                            {
+                                if (target.Contains(pStat) != simM.Contains(pStat)) return false;
+                            }
+                        }
+
                         if (targetStats.Any())
                         {
                             bool hasMatchingStat = targetStats.Any(kw =>
